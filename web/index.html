@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Valey — офис</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="alternate icon" type="image/png" sizes="32x32" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon-128.png">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="markdown.css">
+<link rel="stylesheet" href="highlight.css">
+</head>
+<body>
+  <div id="hud"></div>
+  <div id="stage"><canvas id="game"></canvas></div>
+  <div id="toasts"></div>
+  <div id="dialog" hidden></div>
+  <div id="roster" hidden></div>
+  <div id="dress" hidden></div>
+  <div id="sky" hidden></div>
+  <div id="skin" hidden></div>
+  <div id="lift" hidden></div>
+  <div id="invite" hidden></div>
+  <div id="viewer" hidden></div>
+  <div id="title" hidden></div>
+  <div id="notes" hidden></div>
+  <div id="help"></div>
+  <!-- Карта импортов: /web/… это то же самое, что /… .
+       Модуль лежит рядом с web/, а не внутри него, поэтому импорт ядра из
+       модуля пишется как ../../web/i18n.js — так он правдив на диске, и по
+       нему модуль запускается в Node из своего теста. В браузере тот же путь
+       превратился бы во ВТОРОЙ экземпляр ядра: свой i18n со своим языком и
+       пустым словарём, отчего подсказка модуля показывала бы «hint.cabinet»
+       вместо текста. Поймано 1 сентября 2026 на первом же модуле, и поймано
+       только приборами: на вид офис работал. Карта склеивает оба пути в один
+       модуль. -->
+  <script type="importmap">{ "imports": { "/web/": "/" } }</script>
+  <script type="module" src="main.js"></script>
+</body>
+</html>

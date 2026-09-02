@@ -1,0 +1,126 @@
+// node tools/test-presence.mjs — присутствие людей в офисе.
+//
+// Поднимает настоящий сервер на своём порту и разговаривает с ним по HTTP:
+// проверять тут нечего в чистых функциях, вся логика — в реестре и в том, что
+// он отдаёт наружу. Порт свой и высокий, гасится по PID своего процесса —
+// чужие офисы на 5177 и соседних не трогаются.
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const PORT = Number(process.env.PRESENCE_PORT || 5391);
+const base = `http://127.0.0.1:${PORT}`;
+
+let bad = 0;
+const ok = (name, cond, got) => {
+  if (cond) console.log('ok    |', name);
+  else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
+};
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const srv = spawn(process.execPath, ['server/index.js'], {
+  cwd: ROOT, env: { ...process.env, PORT: String(PORT) }, stdio: 'ignore',
+});
+const stop = () => { try { srv.kill(); } catch { /* уже мёртв */ } };
+process.on('exit', stop);
+process.on('SIGINT', () => { stop(); process.exit(130); });
+
+const post = (p, body) => fetch(base + p, {
+  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+}).then((r) => r.json().then((j) => ({ status: r.status, j })));
+const state = () => fetch(base + '/api/state').then((r) => r.json());
+
+try {
+  // ждём, пока поднимется
+  let up = false;
+  for (let i = 0; i < 60 && !up; i++) {
+    try { await fetch(base + '/api/state'); up = true; } catch { await wait(150); }
+  }
+  if (!up) throw new Error(`сервер не поднялся на ${PORT} — занят?`);
+
+  // ------------------------------------------------------------- пришли
+  await post('/api/here', { id: 'aaa', name: 'Сергей', look: { shirt: '#4fa89a' }, x: 100.6, y: 200.4, dir: -1, moving: true, room: 'ai-valey' });
+  await post('/api/here', { id: 'bbb', name: 'Костя', look: {}, x: 300, y: 400, dir: 1, moving: false, room: null });
+  let s = await state();
+  ok('оба человека в снимке', (s.people || []).length === 2, (s.people || []).map((p) => p.id));
+  const a = (s.people || []).find((p) => p.id === 'aaa');
+  ok('имя и комната доехали', a && a.name === 'Сергей' && a.room === 'ai-valey', a);
+  ok('координаты округлены', a && a.x === 101 && a.y === 200, a && [a.x, a.y]);
+  ok('направление и движение сохранены', a && a.dir === -1 && a.moving === true, a);
+
+  // ---------------------------------------------------------- поток людей
+  const ctl = new AbortController();
+  const res = await fetch(base + '/api/stream', { signal: ctl.signal });
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '', got = null;
+  const until = Date.now() + 4000;
+  while (Date.now() < until && !got) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    // берём последний целиком пришедший блок события people
+    const blocks = buf.split('\n\n');
+    for (const b of blocks) {
+      if (!b.startsWith('event: people')) continue;
+      const line = b.split('\n').find((l) => l.startsWith('data: '));
+      if (line) { try { got = JSON.parse(line.slice(6)); } catch { /* половина кадра */ } }
+    }
+    if (!got) await wait(50);
+  }
+  ctl.abort();
+  ok('поток присылает событие people', Array.isArray(got) && got.length === 2, got && got.length);
+
+  // ---------------------------------------------------------- мусор наружу
+  const bigName = await post('/api/here', { id: 'ccc', name: 'я'.repeat(200), x: 1, y: 1 });
+  ok('длинное имя обрезано', bigName.status === 200, bigName.status);
+  s = await state();
+  const c = (s.people || []).find((p) => p.id === 'ccc');
+  ok('имя не длиннее 24 символов', c && c.name.length === 24, c && c.name.length);
+  ok('нечисловые координаты становятся нулём',
+    (await post('/api/here', { id: 'ddd', x: 'нет', y: null })).status === 200
+      && (await state()).people.find((p) => p.id === 'ddd').x === 0, null);
+
+  // ------------------------------------------------- внешность просеивается
+  await post('/api/here', {
+    id: 'eee', name: 'мусорный',
+    look: {
+      skin: 'javascript:alert(1)', shirt: '#zzzzzz', hair: 123, boots: '#2a2118',
+      glasses: 'да', style: 99, tall: -7, head: 'cap', face: 'x'.repeat(50),
+      evil: 'ничего тут не делает', pants: '#3f4a63',
+    },
+    x: 5, y: 5,
+  });
+  const e = (await state()).people.find((p) => p.id === 'eee');
+  ok('годные цвета проходят', e.look.boots === '#2a2118' && e.look.pants === '#3f4a63', e.look);
+  ok('негодные цвета отброшены', !('skin' in e.look) && !('shirt' in e.look) && !('hair' in e.look), e.look);
+  ok('не-булево у очков отброшено', !('glasses' in e.look), e.look);
+  ok('числа зажаты в границы', e.look.style === 4 && e.look.tall === 0, [e.look.style, e.look.tall]);
+  ok('слишком длинное слово отброшено', !('face' in e.look) && e.look.head === 'cap', e.look);
+  ok('незнакомый ключ не проходит вовсе', !('evil' in e.look), Object.keys(e.look));
+
+  const noId = await post('/api/here', { name: 'без id' });
+  ok('без id не пускает', noId.status === 400, noId.status);
+  const junk = await fetch(base + '/api/here', { method: 'POST', body: 'не json' }).then((r) => r.status);
+  ok('мусор вместо json не роняет сервер', junk === 400, junk);
+
+  // ------------------------------------------------------------- ушли
+  await post('/api/gone', { id: 'bbb' });
+  s = await state();
+  ok('ушедший исчезает сразу', !(s.people || []).some((p) => p.id === 'bbb'), (s.people || []).map((p) => p.id));
+  ok('остальные на месте', (s.people || []).some((p) => p.id === 'aaa'), null);
+
+  // ------------------------------------------------- ничего лишнего наружу
+  const fields = Object.keys((await state()).people[0]).sort().join(',');
+  ok('в проекции человека только присутствие',
+    fields === 'at,dir,id,look,moving,name,room,x,y', fields);
+} catch (e) {
+  bad += 1;
+  console.log('УПАЛ  | стенд не доехал →', e.message);
+} finally {
+  stop();
+}
+
+console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+process.exit(bad ? 1 : 0);

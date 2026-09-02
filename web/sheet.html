@@ -1,0 +1,111 @@
+<!doctype html><meta charset="utf-8"><title>Лист состояний · Valey</title>
+<!--
+  Служебная страница: лист всех состояний человечка для дизайн-библиотеки.
+  Снимается той же командой, что и офис:
+    node tools/shot.mjs --url http://localhost:5177/sheet.html --out .shots/sheet.png
+  Смысл в том, что лист СЧИТАЕТСЯ тем же кодом, что рисует офис. Копировать
+  человечков в макет руками нельзя: их никто не рисовал, их собирает drawPerson,
+  и ручная копия разошлась бы с движком на первой правке спрайтов.
+-->
+<style>
+  html,body{margin:0;background:#171009}
+  canvas{display:block;image-rendering:pixelated;width:1880px;height:2240px}
+</style>
+<canvas id="c" width="470" height="560"></canvas>
+<script type="module">
+import { drawPerson, normalizeLook, HEADS, FACES, HANDS, BOOTS } from './sprites.js';
+import { pxText } from './office.js';
+import { drawBubble } from './badges.js';
+
+const ctx = document.getElementById('c').getContext('2d');
+ctx.imageSmoothingEnabled = false;
+ctx.fillStyle = '#171009'; ctx.fillRect(0, 0, 470, 560);
+
+const BASE = normalizeLook({ skin: '#f4c9a0', hair: '#3a2a20', shirt: '#4a7fa8', pants: '#3f4a63', boots: BOOTS[0] });
+const cap = (x, y, s) => pxText(ctx, s, x, y, '#c9b391', 7);
+const head = (y, s) => { pxText(ctx, s, 8, y, '#ffd166', 7); ctx.fillStyle = '#3a2c20'; ctx.fillRect(8, y + 3, 454, 1); };
+// t для мигающих значков фиксировано: лист должен быть одинаковым при каждой
+// пересъёмке, иначе два прогона подряд дают разные картинки и diff бесполезен.
+const T = 0;
+
+let y = 14;
+head(y, 'ПОЗЫ'); y += 26;
+const poses = [
+  ['стоит ←', { pose: 'stand', dir: -1 }], ['стоит', { pose: 'stand', dir: 0 }], ['стоит →', { pose: 'stand', dir: 1 }],
+  ['шаг 0', { pose: 'walk', frame: 0 }], ['шаг 1', { pose: 'walk', frame: 1 }],
+  ['шаг 2', { pose: 'walk', frame: 2 }], ['шаг 3', { pose: 'walk', frame: 3 }],
+  ['сидит', { pose: 'sit' }],
+];
+poses.forEach(([name, o], i) => {
+  const x = 24 + i * 54;
+  drawPerson(ctx, x, y + 26, BASE, o);
+  cap(x - 16, y + 36, name);
+});
+y += 62;
+
+head(y, 'ЗНАЧОК НАД ГОЛОВОЙ'); y += 26;
+const badges = [
+  ['ждёт ответа', { status: 'awaiting' }],
+  ['лимит кончился', { limited: { resets: '14:00' } }],
+  ['дремлет', { status: 'idle' }],
+  ['раб · design', { status: 'working', mood: 'design' }],
+  ['раб · test', { status: 'working', mood: 'test' }],
+  ['раб · build', { status: 'working', mood: 'build' }],
+];
+badges.forEach(([name, agent], i) => {
+  const x = 34 + i * 72;
+  drawPerson(ctx, x, y + 26, BASE, { pose: 'stand' });
+  drawBubble(ctx, x + 14, y, agent, T);
+  cap(x - 26, y + 36, name);
+});
+y += 62;
+
+head(y, 'ГОЛОВА'); y += 26;
+HEADS.forEach((h, i) => {
+  const x = 24 + i * 54;
+  drawPerson(ctx, x, y + 26, normalizeLook({ ...BASE, head: h }), { pose: 'stand' });
+  cap(x - 16, y + 36, h);
+});
+HEADS.forEach((h, i) => {   // то же в очках
+  const x = 260 + i * 46;
+  drawPerson(ctx, x, y + 26, normalizeLook({ ...BASE, head: h, glasses: true }), { pose: 'stand' });
+  cap(x - 16, y + 36, h + '+очки');
+});
+y += 62;
+
+head(y, 'ЛИЦО И РУКИ'); y += 26;
+FACES.forEach((f, i) => {
+  const x = 24 + i * 54;
+  drawPerson(ctx, x, y + 26, normalizeLook({ ...BASE, face: f }), { pose: 'stand' });
+  cap(x - 16, y + 36, f);
+});
+HANDS.forEach((h, i) => {
+  const x = 260 + i * 54;
+  drawPerson(ctx, x, y + 26, normalizeLook({ ...BASE, hands: h }), { pose: 'stand' });
+  cap(x - 16, y + 36, 'руки: ' + h);
+});
+y += 62;
+
+head(y, 'РОСТ И ОБУВЬ'); y += 26;
+[0, 1].forEach((tall, i) => {
+  const x = 24 + i * 54;
+  drawPerson(ctx, x, y + 26, normalizeLook({ ...BASE, tall }), { pose: 'stand' });
+  cap(x - 16, y + 36, 'рост ' + tall);
+});
+BOOTS.forEach((b, i) => {
+  const x = 180 + i * 62;
+  drawPerson(ctx, x, y + 26, normalizeLook({ ...BASE, boots: b }), { pose: 'stand' });
+  cap(x - 20, y + 36, 'обувь ' + i);
+});
+y += 62;
+
+head(y, 'ЦВЕТА ОДЕЖДЫ'); y += 26;
+[['#4a7fa8', '#3f4a63'], ['#a85a4a', '#3a3a3a'], ['#6aa86a', '#4a3a2a'], ['#c9a13c', '#2f3a4a'], ['#8a6ab0', '#3a2f4a']]
+  .forEach(([shirt, pants], i) => {
+    const x = 28 + i * 62;
+    drawPerson(ctx, x, y + 26, normalizeLook({ ...BASE, shirt, pants }), { pose: 'stand' });
+    cap(x - 20, y + 36, 'пара ' + i);
+  });
+
+pxText(ctx, 'Считается кодом офиса: drawPerson + drawBubble. Пересобрать — node tools/shot.mjs --url .../sheet.html', 8, 552, '#7a6a58', 7);
+</script>

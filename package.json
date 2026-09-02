@@ -1,0 +1,14 @@
+{
+  "name": "valey",
+  "version": "0.2.0",
+  "type": "module",
+  "description": "A pixel-art office for the agents you already run",
+  "homepage": "https://valey.dev",
+  "license": "AGPL-3.0-only",
+  "author": "Sergei Goriugin (xoyk)",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "test": "for t in tools/test-*.mjs modules/*/test-*.mjs; do node \"$t\" || exit 1; done"
+  }
+}

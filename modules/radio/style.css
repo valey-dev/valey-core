@@ -1,0 +1,62 @@
+/* Приёмник и его панель — стили модуля. Каркас панели (.vwrap, .vhead)
+   остаётся ядру: рамка у панелей офиса одна на всех. */
+#radio{position:fixed; left:50%; top:50%; z-index:28;
+  transform:translate(-50%,-50%) translateY(140vh); opacity:0; pointer-events:none;
+  transition:transform .18s steps(4), opacity .18s}
+#radio.open{transform:translate(-50%,-50%); opacity:1; pointer-events:auto}
+.radiowrap{width:min(420px,92vw)}
+.radiobody{padding:12px; display:flex; flex-direction:column; gap:10px}
+.radiocab{background:linear-gradient(var(--cab),var(--cab2)); border:3px solid var(--cab-edge);
+  box-shadow:inset 0 0 0 2px var(--cab-in); padding:8px}
+.radiodial{background:var(--field); border:2px solid var(--cab-dial); color:var(--warn);
+  font-size:11px; letter-spacing:.08em; padding:2px 8px; text-align:center;
+  text-overflow:ellipsis; overflow:hidden; white-space:nowrap}
+.radioglass{margin:8px 0; background:var(--bg-deep); border:2px solid var(--wood-hi); min-height:152px; overflow:hidden}
+.radioglass iframe{display:block; border:0; width:100%}
+.radioknobs{display:flex; gap:6px; justify-content:center}
+.radioknobs button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:12px "JetBrains Mono", "Courier New",monospace; padding:3px 10px; cursor:pointer}
+.radioknobs button:hover{background:var(--wood-lit); color:var(--warn)}
+.radioknobs button.big{min-width:130px}
+.radioknobs button.on{background:#3f5c48; border-color:var(--accent); color:var(--accent)}
+.radiolist{list-style:none; margin:0; padding:0; max-height:120px; overflow:auto}
+.radiolist li{display:flex; align-items:center; gap:6px; border-bottom:1px solid var(--wood-hi)}
+.radiolist .rst{flex:1; text-align:left; background:none; border:none; color:var(--ink-dim);
+  font:12px "JetBrains Mono", "Courier New",monospace; padding:4px 6px; cursor:pointer}
+.radiolist li.now .rst{color:var(--accent)}
+.radiolist .rst:hover{background:var(--wood); color:var(--ink)}
+.radiolist .rdel{background:none; border:none; color:var(--muted-dim); cursor:pointer; padding:0 6px}
+.radiolist .rdel:hover{color:#ff9f8f}
+.radioadd{display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--ink-dim)}
+.radioadd input{background:var(--field); color:var(--ink); border:2px solid var(--frame);
+  font:12px "JetBrains Mono", "Courier New",monospace; padding:5px}
+.radioadd input:focus{outline:none; border-color:var(--warn)}
+.radioface{margin:8px 0; min-height:34px; display:flex; align-items:center; gap:12px;
+  padding:8px; background:var(--bg-deep); border:2px solid var(--wood-hi);
+  color:var(--warn); font-size:12px; line-height:1.4}
+.radioart{width:120px; height:120px; flex:none; image-rendering:pixelated;
+  border:2px solid var(--wood-hi); background:var(--bg)}
+.radioface[hidden]{display:none}
+.radioglass[hidden]{display:none}
+.radiovol{display:flex; align-items:center; gap:8px; margin-top:8px; font-size:11px; color:#e0cba6}
+.radiovol[hidden]{display:none}
+.radiovol input{flex:1; accent-color:var(--accent)}
+.radioauth{display:flex; flex-direction:column; gap:6px}
+.radioauth a{color:var(--warn)}
+.radioauth code{color:var(--accent); word-break:break-all}
+.radioauth .warn{color:var(--warn); font-size:11px; margin:0}
+.radioauth .ok{color:var(--accent); font-size:11px}
+.radiorow{display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+.radiorow input{flex:1; min-width:160px; background:var(--field); color:var(--ink);
+  border:2px solid var(--frame); font:12px "JetBrains Mono", "Courier New",monospace; padding:5px}
+.radiorow button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:12px "JetBrains Mono", "Courier New",monospace; padding:4px 10px; cursor:pointer}
+.radiorow button:hover{background:var(--wood-lit); color:var(--warn)}
+.radiorow button.thin{border-color:var(--frame-dim); color:var(--muted)}
+/* Обводка фокуса на ручках приёмника. Была в общем правиле ядра вместе с
+   чужими селекторами: обводка одна на офис, а перечисление — у того, кто
+   рисует кнопки. */
+.radioknobs button.focus, .rst.focus, .rdel.focus,
+#radiovol.focus, #radiouri.focus, .radioauth button.focus{
+  outline:2px solid var(--warn); outline-offset:-2px}
+#dialog, #toasts, .vwrap, .rwrap, .radiowrap{zoom:var(--ui, 1)}

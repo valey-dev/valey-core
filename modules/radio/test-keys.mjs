@@ -1,0 +1,257 @@
+// node modules/radio/test-keys.mjs — клавиши приёмника.
+//
+// Уехал сюда из tools/test-panel-keys.mjs вместе с радио: тест панели живёт
+// рядом с панелью, иначе ядро продолжает знать про модуль хотя бы тестом.
+// DOM подставной, как и в остальных клавиатурных стендах: проверяется не
+// вёрстка, а состояние фокуса — куда он встаёт, как ходит и что нажимает.
+
+function node(cls = '', props = {}) {
+  const classes = new Set(cls.split(' ').filter(Boolean));
+  return {
+    disabled: false, textContent: '', innerHTML: '', scrollTop: 0,
+    clicked: 0, focused: 0, dataset: {}, tagName: 'BUTTON', title: '',
+    classList: {
+      add: (c) => classes.add(c),
+      remove: (c) => classes.delete(c),
+      contains: (c) => classes.has(c),
+      toggle: (c, on) => (on === undefined ? (classes.has(c) ? classes.delete(c) : classes.add(c)) : (on ? classes.add(c) : classes.delete(c))),
+    },
+    has: (c) => classes.has(c),
+    click() { this.clicked += 1; },
+    focus() { this.focused += 1; },
+    scrollIntoView() {},
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    getContext: () => fakeCtx,
+    style: {},
+    ...props,
+  };
+}
+
+const stub = node();
+let roster = null;
+let radioBox = null;
+let notes = null;
+let dress = null;
+let sky = null;
+let skin = null;
+
+function makeRoster(n) {
+  const gos = Array.from({ length: n }, () => node('go'));
+  return {
+    hidden: false, innerHTML: '', gos,
+    querySelector: (sel) => (sel === '.rbody' ? node('rbody') : null),
+    querySelectorAll: (sel) => (sel === '.go' || sel === '[data-go]' ? gos : []),
+  };
+}
+
+// Порядок такой же, как в разметке панели: ручки, волны, громкость, своя волна.
+function makeRadio(waves = 2) {
+  const ctl = [
+    node('', { id: 'radioprev' }), node('big', { id: 'radiotoggle' }), node('', { id: 'radionext' }),
+  ];
+  for (let i = 0; i < waves; i++) { ctl.push(node('rst')); ctl.push(node('rdel')); }
+  ctl.push(node('', { id: 'radiovol', tagName: 'INPUT', type: 'range', value: '50' }));
+  ctl.push(node('', { id: 'radiouri', tagName: 'INPUT', type: 'text' }));
+  const classes = new Set(['open']);
+  return {
+    ctl, innerHTML: '',
+    classList: {
+      add: (c) => classes.add(c), remove: (c) => classes.delete(c),
+      contains: (c) => classes.has(c),
+      toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)),
+    },
+    querySelector: () => null,
+    querySelectorAll: () => ctl,
+  };
+}
+
+// портрет в «переодеться» рисуется на канвасе — стенду хватит заглушки
+const fakeCtx = {
+  imageSmoothingEnabled: false, fillStyle: '',
+  fillRect() {}, save() {}, restore() {}, scale() {}, translate() {},
+  beginPath() {}, ellipse() {}, fill() {}, fillText() {},
+};
+
+// Слот одежды — строка с ◀ и ▶ внутри, а не кнопка. Стрелки в стороны должны
+// жать эти кнопки, а не перескакивать на соседний слот.
+function makeDress(slots) {
+  const rows = [];
+  const name = node('namerow');
+  const input = node('', { tagName: 'INPUT' });
+  name.querySelector = (sel) => (sel === 'input' ? input : null);
+  name.input = input;
+  rows.push(name);
+  for (let i = 0; i < slots; i++) {
+    const prev = node(), next = node();
+    const row = node('drow');
+    row.querySelector = (sel) => (sel === '[data-d="-1"]' ? prev : sel === '[data-d="1"]' ? next : null);
+    row.prev = prev; row.next = next;
+    rows.push(row);
+  }
+  return {
+    hidden: false, innerHTML: '', rows,
+    querySelector: () => null,
+    querySelectorAll: (sel) => (sel === '.namerow, .drow' ? rows : []),
+  };
+}
+
+// Плоское кольцо: окно в мир и цвет офиса устроены одинаково.
+function makeRing(items) {
+  const btns = items.map((it) => node('', it));
+  return {
+    hidden: false, innerHTML: '', btns,
+    querySelector: () => null,
+    querySelectorAll: () => btns,
+  };
+}
+
+function makeNotes(n) {
+  const btns = [];
+  for (let i = 0; i < n; i++) { btns.push(node('ngo')); btns.push(node('ndel')); }
+  return {
+    hidden: false, innerHTML: '', btns,
+    querySelector: () => null,
+    querySelectorAll: (sel) => (
+      sel === '.ngo, .ndel' ? btns
+      : sel === '[data-go]' ? btns.filter((b) => b.has('ngo'))
+      : sel === '[data-del]' ? btns.filter((b) => b.has('ndel'))
+      : []),
+  };
+}
+
+globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+const withStyle = (n) => Object.assign(n, { style: { setProperty: () => {}, removeProperty: () => {} } });
+// initUI запоминает узлы один раз, поэтому за ним стоит постоянная обёртка, а
+// свежий подставной DOM подсовывается уже за ней
+const notesProxy = {
+  get hidden() { return notes.hidden; },
+  set hidden(v) { notes.hidden = v; },
+  set innerHTML(v) { notes.innerHTML = v; },
+  get innerHTML() { return notes.innerHTML; },
+  querySelector: (s2) => notes.querySelector(s2),
+  querySelectorAll: (s2) => notes.querySelectorAll(s2),
+};
+
+const proxy = (get) => ({
+  get hidden() { return get().hidden; },
+  set hidden(v) { get().hidden = v; },
+  set innerHTML(v) { get().innerHTML = v; },
+  get innerHTML() { return get().innerHTML; },
+  querySelector: (s2) => get().querySelector(s2),
+  querySelectorAll: (s2) => get().querySelectorAll(s2),
+});
+const dressProxy = proxy(() => dress);
+const skyProxy = proxy(() => sky);
+const skinProxy = proxy(() => skin);
+
+const rosterProxy = {
+  get hidden() { return roster.hidden; },
+  set hidden(v) { roster.hidden = v; },
+  set innerHTML(v) { roster.innerHTML = v; },
+  get innerHTML() { return roster.innerHTML; },
+  querySelector: (s2) => roster.querySelector(s2),
+  querySelectorAll: (s2) => roster.querySelectorAll(s2),
+};
+
+globalThis.document = {
+  querySelector: (sel) => (sel === '#roster' ? rosterProxy
+    : sel === '#notes' ? notesProxy
+    : sel === '#dress' ? dressProxy
+    : sel === '#sky' ? skyProxy
+    : sel === '#skin' ? skinProxy
+    : stub),
+  querySelectorAll: () => [],
+  addEventListener: () => {},
+  documentElement: withStyle(node()),
+  body: withStyle(node()),
+  createElement: () => withStyle(node()),
+};
+globalThis.window = globalThis;
+globalThis.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
+globalThis.addEventListener = () => {};
+
+const CORE = await import('../../web/ui.js');
+const UI = await import('./client.js');
+const { addDict } = await import('../../web/i18n.js');
+const hooks = {};
+UI.register({ id: 'radio', on: (n, f) => (hooks[n] = f), i18n: (d) => addDict(d) });
+
+const agents = (n) => Array.from({ length: n }, (_, i) => ({
+  id: 'a' + i, name: 'Агент ' + i, project: 'AI valey', status: 'awaiting',
+  title: 'задача', lastSaid: 'ждёт', idleFor: 60, roleKey: 'code',
+}));
+const state = { agents: [], looks: new Map(), settings: {}, delivery: {}, visited: new Set() };
+roster = makeRoster(0);
+notes = makeNotes(0);
+dress = makeDress(0);
+sky = makeRing([]);
+skin = makeRing([]);
+CORE.initUI(state, { guideTo: () => {} });
+
+let failed = 0;
+const check = (name, ok, got) => {
+  if (ok) console.log('ok    |', name);
+  else { failed++; console.log('ПЛОХО |', name, '→', got); }
+};
+
+// Кто из кнопок держит фокус — тот же помощник, что и в тесте панелей ядра.
+const at = (list) => list.findIndex((b) => b.has('focus'));
+
+// ------------------------------------------------------------------- радио
+// el.radio ставится внутри buildRadio, поэтому подсовываем его тем же путём,
+// каким его достаёт код панели
+document.querySelector = (sel) => (sel === '#radio' ? radioBox
+  : sel === '#roster' ? rosterProxy
+  : sel === '#notes' ? notesProxy
+  : stub);
+radioBox = makeRadio(2);
+// openRadio по пути трогает живой плеер и DRM браузера — на голом node это
+// падает. Но el.radio и класс open проставляются в самом начале, до этого
+// места, поэтому разбор клавиш к моменту падения уже рабочий. Ловим и идём
+// дальше: проверяем именно клавиши, а не сборку разметки.
+try { UI.openRadio(); } catch { /* плеера здесь нет и не должно быть */ }
+// Падение случается до конца openRadio, поэтому подсветку кладём тем же вызовом,
+// каким её кладёт живая панель на каждую перерисовку.
+UI.repaintRadioFocus();
+
+const ctl = radioBox.ctl;
+check('радио: фокус встаёт на первую ручку', at(ctl) === 0, at(ctl));
+check('стрелка вправо обработана', UI.radioKey('ArrowRight') === true, 'не обработана');
+check('и переводит на «включить»', ctl[1].id === 'radiotoggle' && at(ctl) === 1, at(ctl));
+UI.radioKey('Enter');
+check('Enter нажимает «включить»', ctl[1].clicked === 1, ctl[1].clicked);
+
+// волны и их крестики стоят в том же кольце: удалить волну без мыши тоже надо
+UI.radioKey('ArrowRight'); UI.radioKey('ArrowRight');
+check('фокус доходит до списка волн', ctl[at(ctl)].has('rst'), at(ctl));
+
+// громкость: в стороны крутится сама, вверх-вниз уводят с неё
+const vol = ctl.find((b) => b.id === 'radiovol');
+let volSet = 0;
+vol.oninput = () => { volSet += 1; };
+while (ctl[at(ctl)] !== vol) UI.radioKey('ArrowDown');
+UI.radioKey('ArrowRight');
+check('на громкости вправо крутит её, а не уводит', ctl[at(ctl)] === vol && Number(vol.value) === 55, `${vol.value}, фокус ${at(ctl)}`);
+check('и дёргает обработчик ползунка', volSet === 1, volSet);
+UI.radioKey('ArrowLeft'); UI.radioKey('ArrowLeft');
+check('влево крутит обратно и не уходит ниже нуля не сразу', Number(vol.value) === 45, vol.value);
+UI.radioKey('ArrowDown');
+check('вниз с громкости всё-таки уводит', ctl[at(ctl)] !== vol, 'застряли');
+
+// своя волна — поле ввода: Enter должен отдать ему настоящий фокус, а не
+// «нажать» его, иначе печатать в него с клавиатуры по-прежнему нельзя
+const uri = ctl.find((b) => b.id === 'radiouri');
+while (ctl[at(ctl)] !== uri) UI.radioKey('ArrowDown');
+UI.radioKey('Enter');
+check('Enter на своей волне отдаёт полю фокус', uri.focused === 1, uri.focused);
+check('и не жмёт его как кнопку', uri.clicked === 0, uri.clicked);
+
+// закрытая панель клавиши не забирает
+UI.closeRadio();
+check('закрытое радио стрелки не ест', UI.radioKey('ArrowDown') === false, 'съело');
+
+
+
+console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
+process.exit(failed ? 1 : 0);

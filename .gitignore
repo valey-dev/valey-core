@@ -1,0 +1,10 @@
+.shots/
+node_modules/
+.settings.json
+
+# правила этого репозитория лежат в .claude/settings.json и коммитятся;
+# личные послабления приложение пишет сюда, и они остаются на машине
+.claude/settings.local.json
+
+# сборка лендинга для Cloudflare Pages — собирается на их стороне
+_site/

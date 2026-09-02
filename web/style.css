@@ -1,0 +1,569 @@
+/* Шрифт едет файлом в репозитории, а не с CDN: офис работает без интернета, и
+   единственное, что он спрашивает у внешнего мира, — погоду по прямому выбору
+   человека. Лицензия рядом, fonts/OFL.txt — она обязана ехать вместе со
+   шрифтом. Начертаний два: обычное и жирное, курсива в офисе нет.
+
+   Шаг глифа у JetBrains Mono — 0.6 em, ровно как у Courier New (померено по
+   hmtx/head в TTF 2.304). Это то, на чём держится арифметика надписей на
+   холсте: табличка над стойкой считалась как «6px, шаг 3.6», и с этим шрифтом
+   она считается так же.
+
+   swap, а не block: пока шрифт едет, офис рисуется запасным Courier. Ждать
+   загрузки перед первым кадром не нужно и специального кода под это нет —
+   холст перерисовывается каждый кадр, а все четыре measureText считаются в
+   том же кадре, а не кешируются. Шрифт доезжает — следующий кадр уже его.
+   Единственный одноразовый холст — обложка радио, теперь в модуле, — без текста. */
+@font-face{
+  font-family:"JetBrains Mono"; font-style:normal; font-weight:400; font-display:swap;
+  src:url("fonts/JetBrainsMono-Regular.woff2") format("woff2");
+}
+@font-face{
+  font-family:"JetBrains Mono"; font-style:normal; font-weight:700; font-display:swap;
+  src:url("fonts/JetBrainsMono-Bold.woff2") format("woff2");
+}
+
+/* Палитра. Коричневые тона выставляет theme.js — здесь запасные значения на
+   случай, если модуль не успел отработать; акценты ролей остаются как есть. */
+:root{
+  --bg:#1b120c; --bg-hi:#2c1e15; --bg-deep:#140d08; --field:#1f150f;
+  --wood-dark:#2a1d15; --wood-hi:#3a2a1e; --wood:#4a3325; --wood-lit:#6b4a2e;
+  --frame:#8a6247; --frame-dim:#6d5040;
+  --muted:#8c7660; --muted-dim:#6d5a48;
+  --ink:#f6e3c0; --ink-dim:#c9b391;
+  --cab:#8a5f3a; --cab2:#6b472a; --cab-edge:#a9784c; --cab-in:#5e3f27; --cab-dial:#c9a06a;
+  --accent:#9fe0a8; --warn:#ffd166;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg);
+  background-image:radial-gradient(circle at 50% 30%, var(--bg-hi) 0%, var(--bg-deep) 70%);
+  color:var(--ink); font:13px/1.5 "JetBrains Mono", "Courier New", ui-monospace, monospace;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  overflow:hidden; user-select:none;
+}
+canvas{image-rendering:pixelated; display:block; border:3px solid var(--frame);
+  box-shadow:0 0 0 3px var(--wood-dark), 0 18px 50px rgba(0,0,0,.6);}
+/* nowrap обрезал шапку с обеих сторон, стоило окну стать уже неё — а зум ровно
+   это и делает. Теперь переносится по чипам и держится внутри окна.
+   width:max-content обязателен: при left:50% ширина под усадку считается как
+   «окно минус left», то есть половина окна, и шапка ломалась на две строки
+   посреди пустого места. transform сдвигает уже после переноса и не помогает. */
+#hud{position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:5;
+  width:max-content; max-width:calc(100vw - 20px); background:rgba(26,18,12,.9);
+  border:2px solid var(--frame); padding:4px 12px;
+  letter-spacing:.06em; font-size:12px; text-align:center;}
+.chip{display:inline-block; white-space:nowrap}
+#hud b{color:var(--warn); letter-spacing:.14em}
+.chip{margin-left:10px; color:var(--ink-dim)}
+.chip.work{color:var(--accent)} .chip.wait{color:var(--warn)}
+/* left:50% отдавал подсказке только половину окна, и она ломалась на четыре
+   строки. Растягиваем на всю ширину и центрируем текстом. */
+#help{position:fixed; bottom:8px; left:0; right:0; text-align:center;
+  padding:0 16px; color:var(--muted); font-size:11px; letter-spacing:.05em}
+
+/* ---- dialog ---- */
+#dialog{position:fixed; left:50%; bottom:46px; transform:translateX(-50%); z-index:20;
+  width:min(720px, 92vw); display:flex; gap:12px; padding:12px;
+  background:linear-gradient(var(--wood-hi),var(--wood-dark)); border:3px solid var(--frame);
+  box-shadow:0 0 0 3px var(--bg), 0 14px 40px rgba(0,0,0,.7);}
+#dialog[hidden]{display:none}
+.portrait canvas{width:72px; height:72px; image-rendering:pixelated; border:2px solid var(--frame)}
+.content{flex:1; min-width:0}
+.who b{color:var(--warn); font-size:15px; letter-spacing:.05em}
+.role{font-size:10px; padding:1px 6px; border:1px solid var(--frame-dim); margin-left:6px; color:var(--ink-dim)}
+.role.r-design{color:#c39bff;border-color:#5a4478} .role.r-research{color:#8fc8ff;border-color:#3f5c78}
+.role.r-plan{color:var(--warn);border-color:#6d5a2a} .role.r-code{color:var(--accent);border-color:#3f6a48}
+.role.r-qa{color:#ff9b8f;border-color:#78453f} .role.r-release{color:#7fd4d0;border-color:#35625f}
+.meta{display:block; color:var(--muted); font-size:11px; margin-top:2px}
+.act{color:var(--ink-dim); font-size:12px; margin:6px 0 4px; border-left:3px solid var(--frame); padding-left:8px}
+.body{min-height:64px; max-height:min(300px,40vh); overflow:auto; padding-right:6px}
+.q{color:#8fc8ff; margin:6px 0 4px}
+.say{white-space:pre-wrap; margin:0; color:var(--ink); font-size:13px}
+.hint{color:var(--muted); font-size:11px}
+.files{list-style:none; margin:4px 0; padding:0; columns:2}
+.files li{cursor:pointer; padding:2px 4px; color:var(--ink-dim); break-inside:avoid}
+.files li:hover{background:var(--wood); color:var(--ink)}
+/* Тот же контур, что у «дочитать»: клавиатурный фокус в теле карточки выглядит
+   одинаково, куда бы он ни встал. */
+.files li.focus{background:var(--wood-lit); color:var(--ink); outline:2px solid var(--warn);
+  outline-offset:-2px}
+.ic{margin-right:6px; color:var(--accent)}
+textarea{width:100%; background:var(--field); color:var(--ink); border:2px solid var(--frame);
+  font:13px/1.4 "JetBrains Mono", "Courier New", monospace; padding:6px; resize:vertical}
+textarea:focus{outline:none; border-color:var(--warn)}
+.acts{display:flex; gap:6px; margin-top:10px; flex-wrap:wrap}
+.acts button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 10px; cursor:pointer}
+.acts button:hover{background:var(--wood-lit); color:#fff}
+.acts button.on{background:var(--wood-lit); color:var(--warn); border-color:var(--warn)}
+kbd{color:var(--muted); font-size:10px}
+
+/* ---- viewer ---- */
+#viewer{position:fixed; inset:0; z-index:30; background:rgba(12,8,5,.86);
+  display:flex; align-items:center; justify-content:center}
+#viewer[hidden]{display:none}
+.vwrap{width:min(1000px,94vw); max-height:90vh; display:flex; flex-direction:column;
+  background:var(--wood-dark); border:3px solid var(--frame); box-shadow:0 0 0 3px var(--bg-deep)}
+.vhead{flex:0 0 auto; display:flex; justify-content:space-between; align-items:center; padding:8px 12px;
+  background:var(--wood-hi); color:var(--warn); letter-spacing:.06em}
+.vhead button{background:none;border:none;color:var(--ink);font-size:16px;cursor:pointer}
+.grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; padding:14px; overflow:auto}
+.grid figure{margin:0; cursor:pointer; background:var(--field); border:2px solid var(--wood); padding:6px}
+.grid figure:hover{border-color:var(--warn)}
+.thumb{height:96px; display:flex; align-items:center; justify-content:center; background:var(--bg-deep); color:var(--muted-dim); font-size:28px; overflow:hidden}
+.thumb img{max-width:100%; max-height:100%; image-rendering:auto}
+figcaption{font-size:11px; margin-top:6px; color:var(--ink); word-break:break-all}
+figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2px}
+.single{overflow:auto; padding:14px}
+.single .full{max-width:100%; display:block; margin:0 auto}
+.single pre{white-space:pre-wrap; font-size:12px; color:var(--ink-dim); margin:0}
+.vpath{padding:6px 12px; font-size:10px; color:var(--muted-dim); border-top:2px solid var(--wood); word-break:break-all}
+.empty{padding:30px; color:var(--muted); text-align:center}
+
+/* ---- toasts ---- */
+#toasts{position:fixed; left:14px; bottom:52px; z-index:25; display:flex; flex-direction:column; gap:6px}
+.toast{background:rgba(26,18,12,.94); border:2px solid var(--frame); border-left:4px solid var(--accent);
+  padding:5px 10px; font-size:12px; color:var(--ink); max-width:280px; animation:slide .25s ease-out}
+.toast.wait{border-left-color:var(--warn)} .toast.news{border-left-color:#c39bff}
+.toast.out{opacity:0; transition:opacity .6s}
+@keyframes slide{from{transform:translateX(-14px);opacity:0}to{transform:none;opacity:1}}
+.chip.room{color:#c39bff} .chip.dim{color:var(--muted-dim)}
+.notes{list-style:none;margin:6px 0 0;padding:0;font-size:11px;color:var(--muted)}
+.notes li{padding:1px 0}
+
+/* ---- roster / dress ---- */
+/* Панели перечислены поимённо, и это единственное место, где они центрируются.
+   Новая панель, забытая здесь, не ломается, а просто ложится обычным блоком в
+   конец страницы и уезжает под нижний край — так 30 августа 2026 приехало
+   приглашение. Правило [hidden] тем же списком: без него display:flex
+   перебивает атрибут, и спрятанная панель остаётся на экране. */
+#roster,#dress,#sky,#skin,#lift,#notes,#invite{position:fixed; inset:0; z-index:28; background:rgba(12,8,5,.8); display:flex;
+  align-items:center; justify-content:center}
+#roster[hidden],#dress[hidden],#sky[hidden],#skin[hidden],#lift[hidden],#notes[hidden],#invite[hidden]{display:none}
+.rwrap{width:min(680px,92vw); max-height:84vh; display:flex; flex-direction:column;
+  background:var(--wood-dark); border:3px solid var(--frame); box-shadow:0 0 0 3px var(--bg-deep)}
+.rbody{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:10px 14px}
+.rgroup h4{margin:10px 0 4px; color:#c39bff; font-size:12px; letter-spacing:.08em; font-weight:normal}
+.rrow{display:flex; align-items:center; gap:10px; padding:4px 6px; border-bottom:1px solid var(--wood-hi)}
+.rrow.done{opacity:.45}
+.rname{color:var(--warn); width:120px; flex:none; font-size:12px}
+.rwhat{flex:1; color:var(--muted); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.go{background:var(--wood); color:var(--ink); border:2px solid var(--frame); font:11px "JetBrains Mono", "Courier New",monospace;
+  padding:2px 8px; cursor:pointer}
+.go:hover{background:var(--wood-lit); color:var(--warn)}
+.dresswrap{width:min(700px,94vw)}
+.dbody{display:flex; gap:18px; padding:14px; flex-wrap:wrap}
+#me{image-rendering:pixelated; border:2px solid var(--frame); width:108px; height:129px}
+.rows{flex:1; min-width:240px}
+.dcap{margin:0 0 2px; font-size:11px; color:var(--muted)}
+.dname{flex:1; text-align:left; color:var(--muted)}
+.dval{color:var(--warn); text-align:right}
+.sw{width:17px; height:17px; border:2px solid var(--frame)}
+.namerow{display:block; font-size:11px; color:var(--muted); margin-bottom:8px}
+.namerow input{width:100%; background:var(--field); color:var(--warn); border:2px solid var(--frame);
+  font:13px "JetBrains Mono", "Courier New",monospace; padding:3px 6px; margin-top:3px}
+.drow{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:3px 0; font-size:12px}
+.drow button{background:var(--wood); color:var(--ink); border:2px solid var(--frame); width:28px;
+  font:12px "JetBrains Mono", "Courier New",monospace; cursor:pointer}
+.drow button:hover{background:var(--wood-lit); color:var(--warn)}
+.zhint{font-size:10px; color:var(--muted); margin-left:auto; margin-right:10px}
+.zoomwrap{overflow:auto; max-height:70vh}
+.full.pixel{image-rendering:pixelated; transform:scale(2); transform-origin:top left}
+
+.chip.sky{color:#8fc8ff}
+
+/* ---- window on the world ---- */
+.skywrap{width:min(460px,92vw)}
+.skybody{padding:14px; display:flex; flex-direction:column; gap:10px}
+.skyrow{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.skybody button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:12px "JetBrains Mono", "Courier New",monospace; padding:4px 10px; cursor:pointer}
+.skybody button:hover{background:var(--wood-lit); color:var(--warn)}
+.skybody button.on{background:#3f5c48; border-color:var(--accent); color:var(--accent)}
+.skyplace{color:var(--warn); font-size:12px}
+.skystatus{margin:0; color:var(--ink-dim); font-size:12px; border-left:3px solid var(--frame); padding-left:8px}
+.skysearch{display:block; font-size:11px; color:var(--muted)}
+.skysearch input{width:100%; margin-top:4px; background:var(--field); color:var(--ink);
+  border:2px solid var(--frame); font:13px "JetBrains Mono", "Courier New",monospace; padding:4px 6px}
+.skysearch input:focus{outline:none; border-color:var(--warn)}
+.skyresults{display:flex; flex-direction:column; gap:4px; max-height:150px; overflow:auto}
+.skyhit{text-align:left; display:flex; justify-content:space-between; gap:10px}
+.skyhit span{color:var(--muted); font-size:11px}
+
+.warnnote{color:#c98a5e; font-size:11px}
+
+/* ---- sending a task ---- */
+.sendrow{display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap}
+.sendrow button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:12px "JetBrains Mono", "Courier New",monospace; padding:4px 10px; cursor:pointer}
+.sendrow button:hover:not(:disabled){background:var(--wood-lit); color:var(--warn)}
+.sendrow button:disabled{opacity:.45; cursor:not-allowed}
+.sendrow button.arm{background:#7a3a2e; border-color:#c9694b; color:#ffd9c0}
+.modepick{font-size:11px; color:var(--muted); margin-left:auto}
+.modepick select{background:var(--field); color:var(--ink); border:2px solid var(--frame);
+  font:11px "JetBrains Mono", "Courier New",monospace; padding:2px 4px; margin-left:4px}
+.notes li{display:flex; gap:6px; align-items:baseline; flex-wrap:wrap}
+.ntail{color:var(--muted-dim); font-size:10px}
+.ntail.ok{color:var(--accent)} .ntail.bad{color:#e08a6a}
+
+.chatname{display:block; color:#8fc8ff; font-size:11px; margin-top:2px}
+.rwhat b{color:var(--ink); font-weight:normal}
+.rwhat i{display:block; color:var(--muted-dim); font-style:normal; font-size:10px}
+.rrow{align-items:flex-start}
+
+.ntail.warn{color:#ffd166}
+.retry{background:#7a5a2e; color:#ffe9b8; border:2px solid #c9a04b; font:10px "JetBrains Mono", "Courier New",monospace;
+  padding:1px 6px; cursor:pointer; margin-left:4px}
+.retry:hover{background:#96702f}
+.retry:disabled{opacity:.5; cursor:default}
+
+/* ---- handing a note from the desk over to the chat ---- */
+.tochat{background:var(--wood); color:var(--ink); border:2px solid var(--frame); font:10px "JetBrains Mono", "Courier New",monospace;
+  padding:1px 6px; cursor:pointer; margin-left:auto}
+.tochat:hover{background:var(--wood-lit); color:var(--warn)}
+.tochat.arm{background:#7a3a2e; border-color:#c9694b; color:#ffd9c0}
+.tochat:disabled{opacity:.5; cursor:default}
+
+/* ---- the button the arrows are standing on ---- */
+.acts button.focus{outline:2px solid var(--ink); outline-offset:2px; color:#fff}
+.acts button.focus.on{outline-color:var(--warn); color:var(--warn)}
+
+/* ---- the tile the arrows are standing on ---- */
+.grid figure.sel{border-color:var(--warn); box-shadow:0 0 0 2px rgba(255,209,102,.3)}
+.grid figure.sel figcaption{color:var(--warn)}
+.grid figure.sel .thumb{background:var(--field)}
+
+.hint.dim{color:var(--muted-dim); font-size:10px; border-top:1px solid var(--wood-hi); padding-top:4px; margin-top:6px}
+
+/* ---- reading a whole conversation ---- */
+.linky{background:none; border:none; color:#8fc8ff; font:11px "JetBrains Mono", "Courier New",monospace;
+  cursor:pointer; padding:2px 0; margin-top:4px}
+.linky:hover{color:var(--warn); text-decoration:underline}
+.chatlog{max-height:72vh}
+.msg{border-left:3px solid var(--wood); padding:2px 0 8px 10px; margin-bottom:12px}
+.msg.user{border-left-color:#3f5c78}
+.msg.assistant{border-left-color:#3f6a48}
+.mwho{color:var(--warn); font-size:11px; letter-spacing:.06em; margin-bottom:4px;
+  display:flex; justify-content:space-between; gap:10px}
+.msg.user .mwho{color:#8fc8ff}
+.mwho span{color:var(--muted-dim)}
+/* max-width:72ch из markdown.css — мера строки для чтения документа, и там она
+   на месте. В транскрипте тот же класс висит на теле реплики, и получалось, что
+   шапка со временем растянута во всю ширину блока, а текст под ней обрывается
+   на две трети: ≈560 пикселей текста и ≈390 пустоты справа. Внутри реплики
+   ширину задаёт сам блок с его левой кромкой, а не мера абзаца. */
+.msg .md{color:var(--ink); font-size:13px; line-height:1.55; max-width:none}
+.say{cursor:pointer}
+
+.linky.more{color:var(--warn); font-weight:bold}
+.linky.more:hover{color:#fff}
+/* стрелка вверх ставит фокус сюда — видно так же, как на кнопках внизу */
+.linky.focus{color:#fff; background:var(--wood-lit); outline:2px solid var(--warn);
+  outline-offset:1px; text-decoration:none}
+
+/* Закрытая панель уезжает за экран, а не исчезает: display:none оборвал бы Spotify. */
+
+.facetext{min-width:0; display:flex; flex-direction:column; gap:3px}
+.facetext b{color:var(--warn); font-size:13px; overflow-wrap:anywhere}
+.facetext span{color:var(--ink-dim); font-size:11px; overflow-wrap:anywhere}
+.facetext #facealbum{color:var(--muted)}
+
+.limitline{color:var(--warn)}
+
+/* ---- цвет офиса ---- */
+/* ---- ресепшен ---- */
+.recwrap{width:min(520px,92vw)}
+.recbody{padding:14px; display:flex; flex-direction:column; gap:10px}
+.recgreet{margin:0; color:var(--ink); font-size:13px; line-height:1.5}
+.recrow{display:flex; align-items:center; gap:10px; padding:6px 8px;
+  background:var(--field); border:2px solid var(--wood)}
+.reccol{flex:1; min-width:0}
+.reccol b{display:block; color:#c39bff; font-size:12px; font-weight:normal}
+.reccol i{display:block; color:var(--muted-dim); font-size:10px; font-style:normal;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.reccnt{flex:none; color:var(--ink-dim); font-size:11px}
+.recwait{flex:none; color:var(--muted-dim); font-size:11px}
+.recwait.on{color:var(--warn)}
+.recgo{flex:none; background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:11px "JetBrains Mono", "Courier New",monospace; padding:3px 8px; cursor:pointer}
+.recgo:hover{background:var(--wood-lit); color:var(--warn)}
+
+/* ---- лифт ---- */
+.liftwrap{width:min(420px,92vw)}
+.liftbody{padding:14px; display:flex; flex-direction:column; gap:6px}
+/* приглашение: та же коробка, что у лифта, только шире — в ней живёт ссылка,
+   а она не переносится */
+.invwrap{width:min(560px,92vw)}
+.invbody{padding:14px; display:flex; flex-direction:column; gap:8px}
+.invbody input{flex:1; min-width:0; font:inherit; color:var(--ink); background:#1f150f;
+  border:1px solid #6b4a2e; padding:4px 8px}
+.invbody .hint.warn{color:#ffd166}
+.liftbtn{display:flex; align-items:baseline; gap:10px; text-align:left;
+  background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:12px "JetBrains Mono", "Courier New",monospace; padding:6px 10px; cursor:pointer}
+/* Тот же янтарный контур, что у фокуса в карточке агента: клавиатурный фокус
+   в офисе выглядит одинаково, в какой бы панели он ни стоял. */
+.liftbtn.focus, .recgo.focus{outline:2px solid var(--warn); outline-offset:-2px}
+/* Контур клавиатурного фокуса один на весь офис: панели модулей берут его же. */
+.rrow .go.focus{outline:2px solid var(--warn); outline-offset:-2px}
+.ngo.focus, .ndel.focus{outline:2px solid var(--warn); outline-offset:-2px}
+.namerow.focus, .drow.focus, #skytoggle.focus, #skyq.focus, .skyhit.focus, #skygeo.focus,
+.swatch.focus, #skinhue.focus, #skinsat.focus, #skinacc.focus,
+[data-size].focus, #skinreset.focus{outline:2px solid var(--warn); outline-offset:-2px}
+#mdtoggle.focus, #htmlscripts.focus{outline:2px solid var(--warn); outline-offset:-2px}
+/* Кнопки на записках внутри карточки агента. Без этой строки кольцо фокуса по
+   ним ходит, но на экране не видно ничего — и кадр 30 августа 2026 показал
+   именно это: тесты зелёные, подсветки нет. */
+[data-send].focus, [data-retry].focus, [data-edit].focus, [data-del].focus{
+  outline:2px solid var(--warn); outline-offset:-2px}
+.liftbtn:hover{background:var(--wood-lit); color:var(--warn)}
+.liftbtn.here{border-color:var(--accent); color:var(--accent)}
+.liftbtn b{font-weight:normal; flex:none; width:64px}
+.liftbtn span{color:var(--muted); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.liftbtn.here span{color:var(--accent)}
+
+.skinwrap{width:min(460px,92vw)}
+.skinbody{padding:14px; display:flex; flex-direction:column; gap:12px}
+.swatches{display:flex; gap:6px; flex-wrap:wrap}
+.swatch{width:52px; height:38px; border:2px solid var(--frame); cursor:pointer; padding:0;
+  position:relative; font:9px "JetBrains Mono", "Courier New",monospace; color:var(--ink); background:var(--wood)}
+.swatch:hover{border-color:var(--warn)}
+.swatch.on{border-color:var(--warn); box-shadow:0 0 0 2px rgba(255,209,102,.3)}
+.skinrow{display:flex; align-items:center; gap:10px; font-size:11px; color:var(--muted)}
+.skinrow input[type=range]{flex:1; accent-color:var(--warn)}
+.skinrow input[type=color]{width:44px; height:26px; background:var(--field);
+  border:2px solid var(--frame); padding:0; cursor:pointer}
+.skinval{width:38px; text-align:right; color:var(--ink-dim)}
+.skinbody button.thin{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:12px "JetBrains Mono", "Courier New",monospace; padding:4px 10px; cursor:pointer; align-self:flex-start}
+.skinbody button.thin:hover{background:var(--wood-lit); color:var(--warn)}
+
+.tally{margin:2px 0 8px; font-size:11px; color:#8c7660}
+
+/* Реплики, приехавшие по R: видно, докуда было прочитано. */
+.msg.fresh{border-left-color:var(--warn); background:rgba(255,209,102,.05)}
+.msg.fresh .mwho{color:var(--warn)}
+
+/* ---- заметки к репликам ----
+   Жёлтая кромка вместо синей и зелёной: заметка — твоя, а не часть транскрипта,
+   и с первого взгляда должно быть видно, где чужие слова, а где свои. */
+.note{border-left:3px solid var(--warn); background:var(--field);
+  padding:6px 10px 8px; margin:0 0 12px}
+.nhead{display:flex; align-items:center; gap:8px; font-size:11px; color:var(--warn)}
+.nhead b{flex:1; font-weight:normal}
+.nhead button{background:none; border:none; color:var(--muted); cursor:pointer;
+  font:12px "JetBrains Mono", "Courier New",monospace; padding:0 2px}
+.nhead button:hover{color:var(--warn)}
+.nhead .ndel.arm{color:#e08a6a}
+.nanchor{display:block; font-style:normal; font-size:10px; color:var(--muted-dim); margin-top:2px}
+.nbody{color:var(--ink-dim); font-size:13px; line-height:1.55; white-space:pre-wrap; margin-top:3px}
+
+/* реплика, к которой сейчас пишется заметка */
+.msg.anchored{background:rgba(255,209,102,.07); outline:2px solid var(--warn); outline-offset:2px}
+
+.noteed{border:2px solid var(--warn); background:var(--field); padding:8px 10px; margin:0 0 12px}
+.noteed b{display:block; font-weight:normal; font-size:11px; color:var(--warn); margin-bottom:6px}
+.noteed textarea{width:100%; background:var(--bg-deep); color:var(--ink);
+  border:2px solid var(--frame); font:13px/1.5 "JetBrains Mono", "Courier New",monospace; padding:6px; resize:vertical}
+.noteed textarea:focus{outline:none; border-color:var(--warn)}
+.noteed i{display:block; font-style:normal; font-size:10px; color:var(--muted); margin-top:6px}
+
+/* заметки, чья реплика уехала за пределы окна: терять их молча нельзя */
+.orphans{border:2px solid var(--frame-dim); background:rgba(31,21,15,.6);
+  padding:8px 10px 2px; margin:0 0 14px}
+.ohead{display:flex; align-items:center; gap:10px; font-size:11px; color:var(--ink-dim); margin-bottom:6px}
+.ohead i{font-style:normal; font-size:10px; color:var(--muted-dim); margin-left:auto}
+.orphans .note{margin-bottom:8px}
+
+.ncount{float:right; color:var(--warn)}
+
+/* ---- экран входа ---- */
+/* Оверлей привязан к прямоугольнику холста (координаты ставит layoutTitle),
+   поэтому меню стоит у двери на любом размере окна, а не уезжает по вьюпорту. */
+#title{position:fixed; z-index:26; pointer-events:none}
+#title[hidden]{display:none}
+#title > *{pointer-events:auto}
+
+.tmenu{position:absolute; left:7%; top:46%; display:flex; flex-direction:column; gap:8px; width:26%; min-width:180px}
+.tbtn{display:flex; align-items:center; gap:10px; background:var(--wood); color:var(--ink);
+  border:3px solid var(--frame); font:15px "JetBrains Mono", "Courier New",monospace; padding:9px 12px; cursor:pointer;
+  text-align:left}
+.tbtn kbd{margin-left:auto; color:var(--muted); font-size:11px}
+.tbtn:hover{background:var(--wood-lit); color:var(--warn)}
+.tbtn.main{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
+.tbtn.focus{outline:2px solid var(--ink); outline-offset:2px}
+.tbtn.main.focus{outline-color:var(--warn)}
+/* Меню не держит фокус, пока к нему не подошли: у экрана входа есть свой
+   коридор, и меню в нём — предмет на стене, а не панель поверх всего. */
+.tmenu.away{opacity:.5}
+.tmenu.away .tbtn.main{background:var(--wood); border-color:var(--frame); color:var(--ink)}
+
+/* Карточка уехала из середины правого края наверх: там теперь пол, по которому
+   ходят, и человек, дошедший до правой стены, скрывался бы за ней целиком.
+   Шире прежней намеренно: над головой у переключателя висит подсказка, и
+   карточка обязана кончаться выше неё. По-английски «8 are waiting on an
+   answer» в прежние 26% не влезало, карточка вырастала на строку и накрывала
+   подсказку ровно в тот момент, когда человек подошёл её прочитать. */
+.tcard{position:absolute; right:4%; top:4%; width:30%; min-width:180px; display:flex; flex-direction:column;
+  gap:4px; background:rgba(26,18,12,.92); border:3px solid var(--frame); padding:12px 14px}
+.tcard.dim{border-color:var(--frame-dim)}
+.tcard b{color:var(--ink); font-size:20px; font-weight:normal}
+.tlabel{color:var(--muted); font-size:11px; letter-spacing:.12em}
+.twait{color:var(--warn); font-size:13px}
+.twork{color:var(--accent); font-size:13px}
+.tidle{color:var(--ink-dim); font-size:13px}
+.thint{color:var(--muted); font-size:11px; margin:0}
+
+.tnote{position:absolute; left:7%; bottom:9%; width:46%; display:flex; flex-direction:column; gap:5px;
+  background:rgba(26,18,12,.92); border:3px solid var(--frame); border-left-width:5px; padding:10px 14px}
+.tnote b{color:var(--warn); font-size:13px; font-weight:normal}
+.tnote span{color:var(--ink-dim); font-size:11px; line-height:1.5}
+.tnote code{color:var(--accent)}
+
+.tmeta{position:absolute; bottom:3%; color:var(--muted-dim); font-size:11px}
+.tmeta.left{left:3%} .tmeta.right{right:3%}
+.tmeta.center{left:50%; transform:translateX(-50%)}
+
+.trooms{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:min(560px,80%);
+  background:var(--wood-dark); border:3px solid var(--frame); box-shadow:0 0 0 3px var(--bg-deep)}
+.throoms{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 14px;
+  background:var(--wood-hi); color:var(--warn); font-size:13px; letter-spacing:.05em}
+.throoms button{background:none; border:none; color:var(--muted); font:11px "JetBrains Mono", "Courier New",monospace; cursor:pointer}
+.trow{display:flex; align-items:center; gap:10px; padding:8px 14px; cursor:pointer;
+  border-bottom:1px solid var(--wood-hi); font-size:12px}
+.trow:last-of-type{border-bottom:none}
+.trow.focus{background:var(--wood); outline:2px solid var(--warn); outline-offset:-2px}
+.tname{color:var(--ink); flex:1}
+.tcount{color:var(--muted); width:90px; flex:none}
+.trooms .thint{padding:8px 14px}
+/* Пока открыт экран входа, шапка и подсказка офиса не нужны: у экрана свои.
+   Именно visibility, а не display:none — fit() меряет их высоту, чтобы
+   отвести место под полосы. С display холст на входе раздувался бы, а при
+   «Войти» прыгал обратно и налезал на шапку до ближайшего resize. */
+body.titling #hud, body.titling #help{visibility:hidden}
+
+/* ---- размер текста панелей ---- */
+/* zoom, а не font-size: панель растёт целиком — вместе с отступами, рамками и
+   полями ввода, — поэтому на 150% текст не упирается в неизменившийся край.
+   Холст не трогаем, у него свой масштаб на + и 0.
+   Шапка, нижняя подсказка и экран входа исключены намеренно: fit() меряет их
+   offsetHeight, а под zoom он возвращает неотмасштабированную высоту — холст
+   полез бы на них, ровно как в баге с браузерным зумом. Оверлей входа вдобавок
+   позиционируется в пикселях от рамки холста, и zoom увёл бы его от двери. */
+/* vh внутри отмасштабированной панели считается в её единицах, а не экранных,
+   поэтому делим — иначе на 150% окно просмотра выше экрана */
+.vwrap{max-height:calc(90vh / var(--ui, 1))}
+.rwrap{max-height:calc(84vh / var(--ui, 1))}
+.chatlog{max-height:calc(72vh / var(--ui, 1))}
+.zoomwrap{max-height:calc(70vh / var(--ui, 1))}
+.body{max-height:min(300px, calc(40vh / var(--ui, 1)))}
+
+.sizes{display:flex; gap:4px; flex:1}
+.szbtn{flex:1; background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:11px "JetBrains Mono", "Courier New",monospace; padding:3px 0; cursor:pointer}
+.szbtn:hover{background:var(--wood-lit); color:var(--warn)}
+.szbtn.on{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
+
+/* мольберт: кружок статуса фичи и строка о том, почему Figma молчит */
+
+/* ---- все заметки разом ----
+   Панель как у обхода: тот же каркас, та же прокрутка. Отличие одно — строка
+   знает, жив ли ещё её разговор, и показывает либо кнопку, либо цитату. */
+.noteswrap{width:min(720px,92vw)}
+.nsearch{flex:0 0 auto; padding:10px 14px 4px}
+.nsearch input{width:100%; background:var(--field); color:var(--ink);
+  border:2px solid var(--frame); font:12px "JetBrains Mono", "Courier New",monospace; padding:6px 8px}
+.nsearch input:focus{outline:none; border-color:var(--warn)}
+.ngroup h4{margin:12px 0 4px; color:#c39bff; font-size:12px; letter-spacing:.08em; font-weight:normal}
+.nrow{border-left:3px solid var(--warn); padding:6px 0 8px 10px;
+  border-bottom:1px solid var(--wood-hi)}
+.nline{display:flex; align-items:baseline; gap:10px}
+.ntext{flex:1; color:var(--ink); font-size:13px; line-height:1.5}
+.nline i{font-style:normal; font-size:10px; color:var(--muted-dim); flex:none}
+.nmeta{display:flex; align-items:center; gap:8px; margin-top:3px}
+.nmeta span{flex:1; font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis}
+.ngo{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:10px "JetBrains Mono", "Courier New",monospace; padding:2px 8px; cursor:pointer; flex:none}
+.ngo:hover{background:var(--wood-lit); color:var(--warn)}
+/* разговор закрыт — открывать нечего, и кнопки быть не должно */
+.ndead{flex:none; font-size:10px; color:var(--muted-dim); border:2px solid var(--wood-hi); padding:2px 8px}
+.nmeta .ndel{background:none; border:none; color:var(--muted-dim); cursor:pointer;
+  font:11px "JetBrains Mono", "Courier New",monospace; flex:none}
+.nmeta .ndel:hover{color:#e08a6a}
+.nmeta .ndel.arm{color:#e08a6a}
+.rbody .empty span{display:block; margin-top:8px; font-size:11px; line-height:1.6}
+/* мольберт, третья ступень: один кадр во всю панель со стрелками по бокам.
+
+   max-height делится на --ui по той же причине, что и .vwrap выше: vh внутри
+   отмасштабированной панели считается в её единицах, а не экранных. Здесь это
+   забыли, и на 175% выходило так: окну просмотра можно 90vh/1.75 = 51.4vh, а
+   картинка просила 60vh — то есть была выше того, во что её кладут.
+
+   Дальше срабатывала вторая половина: align-items:center при overflow:auto
+   выпускает переполнение В ОБЕ стороны, и верх картинки уезжает под шапку,
+   куда прокрутка уже не достаёт. Поэтому не center, а flex-start плюс
+   margin:auto на самой картинке — так она центрируется, пока место есть, и
+   упирается в верх, когда места нет. safe center сделал бы то же самое одной
+   строкой, но при отсутствии поддержки правило отбрасывается целиком и
+   align-items падает в stretch, растягивая кадр. */
+
+/* Ссылка в Figma — деревянная кнопка офиса, а не синий подчёркнутый текст
+   браузера: в макете она набрана акцентом на плашке, и голый <a> выбивался
+   из панели единственным цветом, которого в палитре офиса нет. */
+
+/* Сетка мольберта — не сетка работ. Там полторы сотни мелких файлов и колонки
+   набиваются по minmax(150px), тут четыре карточки, и каждая должна показывать
+   макет, а не квадратик 96 пикселей: превью — половина ширины панели. */
+/* Одна фича растягивалась на всю ширину, а высота превью считается от неё же
+   пропорцией — карточка уезжала за нижний край, подпись вместе с ней, и список
+   из одного элемента приходилось скроллить. Половина ширины — ровно столько же,
+   сколько занимает карточка, когда их две, так что список из одного элемента
+   выглядит как список; высоту превью держит окно. */
+/* Превью — полоса из двух кадров (кадр 148:39), а не один кадр во всю ширину.
+   При 16/10 на одну картинку карточка выходила вдвое выше макета: 348 пикселей
+   против 244, потому что широкий макет Figma набирал высоту пустыми полями.
+   Пропорция полосы фиксирована, поэтому карточки в сетке одной высоты
+   независимо от того, один у фичи экран или пять. */
+/* Кадры делят полосу поровну, что бы в них ни лежало. Базис 50% этого не давал:
+   у картинки min-width по умолчанию auto, то есть не меньше собственной ширины
+   при height:100%, — и широкий кадр отказывался ужиматься до половины, а узкий
+   съезжал под свою. У «Постера кино» это было 140 и 421 пиксель вместо двух по
+   276. min-width:0 снимает этот пол, flex:1 1 0 делит поровну и заодно
+   заполняет полосу: с flex-grow:0 остаток просто пустовал.
+   Потолок в половину полосы — для фичи с одним экраном: без него единственный
+   кадр разъезжался во всю ширину и карточка переставала быть похожей на
+   соседние. Одна картинка занимает ровно ту половину, что заняла бы первой из
+   двух. */
+/* окно бывает узким — тогда одна колонка честнее двух обрезанных */
+
+
+/* ------------------------------------------------------------ тестовый стенд
+   Видна только когда сервер запущен с VALEY_STAND. Жёлтая рамка и угол экрана
+   выбраны затем, чтобы её нельзя было спутать с интерфейсом офиса: это
+   строительные леса, а не деталь продукта. */
+#stand{position:fixed; top:8px; left:8px; z-index:60; max-width:340px;
+  background:rgba(20,13,8,.92); border:2px solid var(--warn); padding:8px 10px;
+  font:11px/1.5 var(--mono, monospace); color:var(--ink-dim,#c9b391)}
+/* Кликается только переключатель: остальная табличка не должна ловить мышь,
+   иначе она закроет собой угол офиса. */
+#stand{pointer-events:none}
+#stand .stand-mods{pointer-events:auto; display:flex; flex-wrap:wrap; gap:4px; margin:5px 0 3px}
+.stand-mod{font:11px/1.3 var(--mono, monospace); color:var(--ink,#f6e3c0); cursor:pointer;
+  background:rgba(255,209,102,.12); border:1px solid var(--frame,#8a6247);
+  padding:5px 9px; display:flex; flex-direction:column; align-items:flex-start; gap:2px}
+.stand-mod b{font-weight:400}
+.stand-mod i{font-style:normal; font-size:9px; letter-spacing:.14em; color:var(--accent,#9fe0a8)}
+.stand-mod:hover{border-color:var(--warn,#ffd166)}
+.stand-mod:disabled{opacity:.6; cursor:default}
+/* Выключенный виден и цветом, и словом, и рамкой: одного признака мало, на
+   одном значке уже промахнулись. */
+.stand-mod.off{color:var(--muted,#8c7660); background:none; border-style:dashed}
+.stand-mod.off i{color:#c2795f}
+.stand-mod.broken{border-color:#ff9f8f; color:#ff9f8f}
+.stand-mod.broken i{color:#ff9f8f}
+.stand-fine{font-size:9px; opacity:.65; margin-top:2px}
+.stand-tag{color:var(--warn,#ffd166); letter-spacing:.18em; font-size:9px}
+.stand-what{color:var(--ink,#f6e3c0); font-size:12px; margin:3px 0 4px}
+.stand-where{font-size:10px; opacity:.8}
+.stand-bad{color:#ff9f8f; font-size:10px; margin-top:3px}

@@ -1,0 +1,293 @@
+// node tools/test-panel-keys.mjs — клавиши в панелях офиса.
+//
+// Радио уехало отсюда в modules/radio/test-keys.mjs вместе с самим радио.
+// DOM подставной, как и в остальных клавиатурных стендах: проверяется не
+// вёрстка, а состояние фокуса — куда он встаёт, как ходит и что нажимает.
+
+function node(cls = '', props = {}) {
+  const classes = new Set(cls.split(' ').filter(Boolean));
+  return {
+    disabled: false, textContent: '', innerHTML: '', scrollTop: 0,
+    clicked: 0, focused: 0, dataset: {}, tagName: 'BUTTON', title: '',
+    classList: {
+      add: (c) => classes.add(c),
+      remove: (c) => classes.delete(c),
+      contains: (c) => classes.has(c),
+      toggle: (c, on) => (on === undefined ? (classes.has(c) ? classes.delete(c) : classes.add(c)) : (on ? classes.add(c) : classes.delete(c))),
+    },
+    has: (c) => classes.has(c),
+    click() { this.clicked += 1; },
+    focus() { this.focused += 1; },
+    scrollIntoView() {},
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    getContext: () => fakeCtx,
+    style: {},
+    ...props,
+  };
+}
+
+const stub = node();
+let roster = null;
+let radioBox = null;
+let notes = null;
+let dress = null;
+let sky = null;
+let skin = null;
+
+function makeRoster(n) {
+  const gos = Array.from({ length: n }, () => node('go'));
+  return {
+    hidden: false, innerHTML: '', gos,
+    querySelector: (sel) => (sel === '.rbody' ? node('rbody') : null),
+    querySelectorAll: (sel) => (sel === '.go' || sel === '[data-go]' ? gos : []),
+  };
+}
+
+// Порядок такой же, как в разметке панели: ручки, волны, громкость, своя волна.
+function makeRadio(waves = 2) {
+  const ctl = [
+    node('', { id: 'radioprev' }), node('big', { id: 'radiotoggle' }), node('', { id: 'radionext' }),
+  ];
+  for (let i = 0; i < waves; i++) { ctl.push(node('rst')); ctl.push(node('rdel')); }
+  ctl.push(node('', { id: 'radiovol', tagName: 'INPUT', type: 'range', value: '50' }));
+  ctl.push(node('', { id: 'radiouri', tagName: 'INPUT', type: 'text' }));
+  const classes = new Set(['open']);
+  return {
+    ctl, innerHTML: '',
+    classList: {
+      add: (c) => classes.add(c), remove: (c) => classes.delete(c),
+      contains: (c) => classes.has(c),
+      toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)),
+    },
+    querySelector: () => null,
+    querySelectorAll: () => ctl,
+  };
+}
+
+// портрет в «переодеться» рисуется на канвасе — стенду хватит заглушки
+const fakeCtx = {
+  imageSmoothingEnabled: false, fillStyle: '',
+  fillRect() {}, save() {}, restore() {}, scale() {}, translate() {},
+  beginPath() {}, ellipse() {}, fill() {}, fillText() {},
+};
+
+// Слот одежды — строка с ◀ и ▶ внутри, а не кнопка. Стрелки в стороны должны
+// жать эти кнопки, а не перескакивать на соседний слот.
+function makeDress(slots) {
+  const rows = [];
+  const name = node('namerow');
+  const input = node('', { tagName: 'INPUT' });
+  name.querySelector = (sel) => (sel === 'input' ? input : null);
+  name.input = input;
+  rows.push(name);
+  for (let i = 0; i < slots; i++) {
+    const prev = node(), next = node();
+    const row = node('drow');
+    row.querySelector = (sel) => (sel === '[data-d="-1"]' ? prev : sel === '[data-d="1"]' ? next : null);
+    row.prev = prev; row.next = next;
+    rows.push(row);
+  }
+  return {
+    hidden: false, innerHTML: '', rows,
+    querySelector: () => null,
+    querySelectorAll: (sel) => (sel === '.namerow, .drow' ? rows : []),
+  };
+}
+
+// Плоское кольцо: окно в мир и цвет офиса устроены одинаково.
+function makeRing(items) {
+  const btns = items.map((it) => node('', it));
+  return {
+    hidden: false, innerHTML: '', btns,
+    querySelector: () => null,
+    querySelectorAll: () => btns,
+  };
+}
+
+function makeNotes(n) {
+  const btns = [];
+  for (let i = 0; i < n; i++) { btns.push(node('ngo')); btns.push(node('ndel')); }
+  return {
+    hidden: false, innerHTML: '', btns,
+    querySelector: () => null,
+    querySelectorAll: (sel) => (
+      sel === '.ngo, .ndel' ? btns
+      : sel === '[data-go]' ? btns.filter((b) => b.has('ngo'))
+      : sel === '[data-del]' ? btns.filter((b) => b.has('ndel'))
+      : []),
+  };
+}
+
+globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+const withStyle = (n) => Object.assign(n, { style: { setProperty: () => {}, removeProperty: () => {} } });
+// initUI запоминает узлы один раз, поэтому за ним стоит постоянная обёртка, а
+// свежий подставной DOM подсовывается уже за ней
+const notesProxy = {
+  get hidden() { return notes.hidden; },
+  set hidden(v) { notes.hidden = v; },
+  set innerHTML(v) { notes.innerHTML = v; },
+  get innerHTML() { return notes.innerHTML; },
+  querySelector: (s2) => notes.querySelector(s2),
+  querySelectorAll: (s2) => notes.querySelectorAll(s2),
+};
+
+const proxy = (get) => ({
+  get hidden() { return get().hidden; },
+  set hidden(v) { get().hidden = v; },
+  set innerHTML(v) { get().innerHTML = v; },
+  get innerHTML() { return get().innerHTML; },
+  querySelector: (s2) => get().querySelector(s2),
+  querySelectorAll: (s2) => get().querySelectorAll(s2),
+});
+const dressProxy = proxy(() => dress);
+const skyProxy = proxy(() => sky);
+const skinProxy = proxy(() => skin);
+
+const rosterProxy = {
+  get hidden() { return roster.hidden; },
+  set hidden(v) { roster.hidden = v; },
+  set innerHTML(v) { roster.innerHTML = v; },
+  get innerHTML() { return roster.innerHTML; },
+  querySelector: (s2) => roster.querySelector(s2),
+  querySelectorAll: (s2) => roster.querySelectorAll(s2),
+};
+
+globalThis.document = {
+  querySelector: (sel) => (sel === '#roster' ? rosterProxy
+    : sel === '#notes' ? notesProxy
+    : sel === '#dress' ? dressProxy
+    : sel === '#sky' ? skyProxy
+    : sel === '#skin' ? skinProxy
+    : stub),
+  querySelectorAll: () => [],
+  addEventListener: () => {},
+  documentElement: withStyle(node()),
+  body: withStyle(node()),
+  createElement: () => withStyle(node()),
+};
+globalThis.window = globalThis;
+globalThis.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
+globalThis.addEventListener = () => {};
+
+const UI = await import('../web/ui.js');
+
+const agents = (n) => Array.from({ length: n }, (_, i) => ({
+  id: 'a' + i, name: 'Агент ' + i, project: 'AI valey', status: 'awaiting',
+  title: 'задача', lastSaid: 'ждёт', idleFor: 60, roleKey: 'code',
+}));
+const state = { agents: [], looks: new Map(), settings: {}, delivery: {}, visited: new Set() };
+roster = makeRoster(0);
+notes = makeNotes(0);
+dress = makeDress(0);
+sky = makeRing([]);
+skin = makeRing([]);
+UI.initUI(state, { guideTo: () => {} });
+
+let failed = 0;
+const check = (name, ok, got) => {
+  if (ok) console.log('ok    |', name);
+  else { failed++; console.log('ПЛОХО |', name, '→', got); }
+};
+
+// ------------------------------------------------------------------- обход
+const at = (list) => list.findIndex((b) => b.has('focus'));
+
+state.agents = agents(3);
+roster = makeRoster(3);
+UI.renderRoster();
+check('обход: фокус встаёт на первую строку', at(roster.gos) === 0, at(roster.gos));
+check('стрелка вниз обработана', UI.rosterKey('ArrowDown') === true, 'не обработана');
+check('и переводит на вторую', at(roster.gos) === 1, at(roster.gos));
+UI.rosterKey('Enter');
+check('Enter ведёт к выбранному, а не к первому', roster.gos[1].clicked === 1, roster.gos.map((b) => b.clicked).join(','));
+
+UI.rosterKey('ArrowUp'); UI.rosterKey('ArrowUp');
+check('список закольцован', at(roster.gos) === 2, at(roster.gos));
+
+// закрытая панель не должна забирать стрелки — иначе после первого же обхода
+// по офису перестанет ходить игрок
+roster.hidden = true;
+check('закрытый обход стрелки не ест', UI.rosterKey('ArrowDown') === false, 'съел');
+
+// пустой обход: ждущих нет, нажимать нечего
+state.agents = [];
+roster = makeRoster(0);
+UI.renderRoster();
+check('пустой обход стрелки не ест', UI.rosterKey('ArrowDown') === false, 'съел');
+check('и Enter не ест', UI.rosterKey('Enter') === false, 'съел');
+
+// ----------------------------------------------------------------- заметки
+notes = makeNotes(2);            // две заметки: у каждой «открыть» и ✕
+UI.renderNotes();
+const nb = notes.btns;
+check('заметки: фокус встаёт на первую кнопку', at(nb) === 0, at(nb));
+check('стрелка вниз идёт на ✕ той же строки', UI.notesKey('ArrowDown') === true && at(nb) === 1, at(nb));
+UI.notesKey('ArrowDown');
+check('и дальше — на следующую заметку', at(nb) === 2 && nb[2].has('ngo'), at(nb));
+UI.notesKey('Enter');
+check('Enter нажимает выбранную кнопку', nb[2].clicked === 1, nb.map((b) => b.clicked).join(','));
+check('и только её', nb.filter((b) => b.clicked).length === 1, nb.filter((b) => b.clicked).length);
+
+UI.notesKey('ArrowUp'); UI.notesKey('ArrowUp'); UI.notesKey('ArrowUp');
+check('кольцо замкнуто', at(nb) === 3, at(nb));
+
+// закрытая панель клавиши не забирает
+UI.closeNotes();
+check('закрытые заметки стрелки не едят', UI.notesKey('ArrowDown') === false, 'съели');
+
+// пустая панель: нажимать нечего, стрелки должны уйти в офис
+notes = makeNotes(0);
+UI.renderNotes();
+check('пустые заметки стрелки не едят', UI.notesKey('ArrowDown') === false, 'съели');
+
+// ------------------------------------------------------------- переодеться
+dress = makeDress(3);            // строка имени плюс три слота
+const rows = dress.rows;
+const focusRow = () => rows.findIndex((r) => r.has('focus'));
+UI.dressKey('ArrowDown');
+check('переодеться: фокус пошёл со строки имени на первый слот', focusRow() === 1, focusRow());
+check('и подсвечена ровно одна строка', rows.filter((r) => r.has('focus')).length === 1, rows.filter((r) => r.has('focus')).length);
+UI.dressKey('ArrowRight');
+check('вправо жмёт ▶ этого слота, а не уводит', rows[1].next.clicked === 1 && rows[1].has('focus'), `${rows[1].next.clicked}`);
+UI.dressKey('ArrowLeft');
+check('влево жмёт ◀ того же слота', rows[1].prev.clicked === 1, rows[1].prev.clicked);
+check('соседний слот не тронут', rows[2].next.clicked === 0 && rows[2].prev.clicked === 0, 'тронут');
+UI.dressKey('Enter');
+check('Enter на слоте делает то же, что ▶', rows[1].next.clicked === 2, rows[1].next.clicked);
+
+// имя — поле ввода: Enter должен отдать ему фокус, иначе с клавиатуры не набрать
+UI.dressKey('ArrowUp');
+UI.dressKey('Enter');
+check('Enter на имени отдаёт полю фокус', rows[0].input.focused === 1, rows[0].input.focused);
+
+UI.closeDress();
+check('закрытое переодевание стрелки не ест', UI.dressKey('ArrowDown') === false, 'съело');
+
+// ------------------------------------------- окно в мир и цвет офиса (кольцо)
+sky = makeRing([{ id: 'skytoggle' }, { id: 'skyq', tagName: 'INPUT' }, { id: 'skygeo' }]);
+check('окно в мир: стрелка обработана', UI.skyKey('ArrowDown') === true, 'нет');
+UI.skyKey('Enter');
+check('Enter на поле города отдаёт ему настоящий фокус', sky.btns[1].focused === 1, sky.btns[1].focused);
+check('и не жмёт его как кнопку', sky.btns[1].clicked === 0, sky.btns[1].clicked);
+UI.closeSky();
+check('закрытое окно в мир стрелки не ест', UI.skyKey('ArrowDown') === false, 'съело');
+
+// ползунок оттенка: стрелки в стороны крутят его, а не уводят фокус
+skin = makeRing([
+  { className: 'swatch' },
+  { id: 'skinhue', tagName: 'INPUT', type: 'range', min: '0', max: '359', value: '100' },
+  { id: 'skinreset' },
+]);
+let hueSet = 0;
+skin.btns[1].oninput = () => { hueSet += 1; };
+UI.skinKey('ArrowDown');
+check('цвет офиса: дошли до ползунка', skin.btns[1].has('focus'), 'нет');
+UI.skinKey('ArrowRight');
+check('вправо крутит ползунок, а не уводит', skin.btns[1].has('focus') && Number(skin.btns[1].value) > 100, skin.btns[1].value);
+check('и дёргает его обработчик', hueSet === 1, hueSet);
+UI.skinKey('ArrowDown');
+check('вниз с ползунка всё-таки уводит', !skin.btns[1].has('focus'), 'застряли');
+
+console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
+process.exit(failed ? 1 : 0);

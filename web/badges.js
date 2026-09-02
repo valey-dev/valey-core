@@ -1,0 +1,39 @@
+// Значок над головой: чем человек занят прямо сейчас. Жил внутри main.js и был
+// не достижим ниоткуда — а лист состояний для дизайн-библиотеки обязан рисовать
+// ровно тот же значок, что и офис. Копия в макете разошлась бы с движком молча,
+// поэтому значок вынесен сюда и рисуется одной функцией в обоих местах.
+import { pxText } from './office.js';
+
+export function drawBubble(ctx, x, y, agent, t) {
+  const w = 16, h = 12;
+  ctx.fillStyle = 'rgba(28,22,18,0.85)';
+  ctx.fillRect(x - w / 2, y - h, w, h);
+  ctx.fillRect(x - 2, y, 4, 3);
+  ctx.fillStyle = '#f6e3c0';
+  ctx.fillRect(x - w / 2, y - h, w, 1); ctx.fillRect(x - w / 2, y - 1, w, 1);
+  ctx.fillRect(x - w / 2, y - h, 1, h); ctx.fillRect(x + w / 2 - 1, y - h, 1, h);
+  if (agent.limited) {
+    // песочные часы: работать нечем, ждём сброса лимита
+    const flip = Math.floor(t / 900) % 2;
+    ctx.fillStyle = '#ffd166';
+    ctx.fillRect(x - 3, y - 11, 6, 1); ctx.fillRect(x - 3, y - 3, 6, 1);
+    ctx.fillRect(x - 2, y - 10, 4, 1); ctx.fillRect(x - 2, y - 4, 4, 1);
+    ctx.fillRect(x - 1, y - 9, 2, 1); ctx.fillRect(x - 1, y - 5, 2, 1);
+    ctx.fillRect(x, y - 8, 1, 3);
+    ctx.fillStyle = '#e8a33c';
+    ctx.fillRect(x - 2, flip ? y - 9 : y - 5, 4, 1);
+  } else if (agent.status === 'awaiting') {
+    const blink = Math.sin(t / 260) > -0.3;
+    ctx.fillStyle = blink ? '#ffd166' : '#8a6a2a';
+    ctx.fillRect(x - 1, y - 10, 2, 5); ctx.fillRect(x - 1, y - 4, 2, 2);
+  } else if (agent.status === 'idle') {
+    pxText(ctx, 'z z', x - 6, y - 3, '#9fb4c8');
+  } else {
+    const col = { design: '#c39bff', research: '#8fc8ff', plan: '#ffd166', test: '#ff9f8f', build: '#ffc48f' }[agent.mood] || '#9fe0a8';
+    for (let i = 0; i < 3; i++) {
+      const on = (Math.floor(t / 220) % 3) === i;
+      ctx.fillStyle = on ? col : 'rgba(255,255,255,0.22)';
+      ctx.fillRect(x - 5 + i * 4, y - 7 - (on ? 1 : 0), 2, 2);
+    }
+  }
+}
