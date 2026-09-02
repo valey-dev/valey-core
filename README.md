@@ -99,6 +99,8 @@ people, your changes are theirs to read too — the same deal you get here.
 Contributions need a signed agreement; see [CONTRIBUTING.md](CONTRIBUTING.md)
 for what it says and why.
 
+What changed between releases is in [CHANGELOG.md](CHANGELOG.md).
+
 ## Not affiliated with Anthropic
 
 Claude Code is Anthropic's. This is an independent project that reads the
