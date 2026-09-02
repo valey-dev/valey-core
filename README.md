@@ -15,10 +15,32 @@ all look the same, you glance at a floor and see who needs you.
 npm start
 ```
 
-Then open <http://localhost:5177>. Node 18+ and nothing else — there are no
-dependencies to install. The only foreign thing in this repository is the
-JetBrains Mono font in `web/fonts/`, shipped as files under the OFL, because
-the office works without internet.
+Then open <http://localhost:5177>.
+
+**There is no install step.** Not a missing instruction — the project has no
+dependencies, so there is no `npm install` to run and no `node_modules` to
+appear. The only foreign thing in this repository is the JetBrains Mono font in
+`web/fonts/`, shipped as files under the OFL, because the office works without
+internet.
+
+### If you do not have Node
+
+Node is the one thing you need. Check with:
+
+```bash
+node -v
+```
+
+It should print `v18` or higher. If it prints nothing, or a smaller number:
+
+* **macOS** — `brew install node`, or the installer from [nodejs.org](https://nodejs.org).
+* **Windows** — `winget install OpenJS.NodeJS.LTS`, or the same installer.
+* **Linux** — your package manager's `nodejs` package, or [nvm](https://github.com/nvm-sh/nvm)
+  if you would rather not touch the system one.
+
+npm comes with Node, so there is nothing else to fetch. If `node -v` works and
+`npm start` still does not, run `node server/index.js` — the error it prints is
+the useful one.
 
 ## What it shows
 

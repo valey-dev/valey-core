@@ -47,14 +47,18 @@ const commits = git('log', range, '--no-merges', '--format=%h%x00%s')
 if (!commits.length) die(`после ${range.split('..')[0]} нет коммитов`);
 
 const TYPES = [
-  ['feat', 'Новое'], ['fix', 'Починено'], ['perf', 'Быстрее'],
+  // Заголовки английские с 2 сентября 2026: сами записи — это темы коммитов,
+  // а они английские с 29 августа, и русская шапка над английским списком
+  // читалась половиной перевода. Разделы выше этой даты остаются русскими —
+  // тот же раскол, что и в истории, и по той же причине.
+  ['feat', 'Added'], ['fix', 'Fixed'], ['perf', 'Faster'],
 ];
 const RE = /^(\w+)(?:\(([^)]*)\))?!?:\s*(.+)$/;
 const groups = new Map(TYPES.map(([t]) => [t, []]));
 const other = [];
 for (const c of commits) {
   const m = RE.exec(c.subject);
-  // Всё, что не разобралось или не из трёх видимых типов, идёт в «Прочее».
+  // Всё, что не разобралось или не из трёх видимых типов, идёт в Other.
   // Молча терять коммит нельзя: раздел тогда врёт про объём релиза.
   if (m && groups.has(m[1])) groups.get(m[1]).push({ ...c, scope: m[2], text: m[3] });
   else other.push(c);
@@ -75,7 +79,7 @@ for (const [type, title] of TYPES) {
   lines.push('');
 }
 if (other.length) {
-  lines.push('### Прочее', '');
+  lines.push('### Other', '');
   for (const c of other) lines.push(`- ${c.subject} (${c.hash})`);
   lines.push('');
 }

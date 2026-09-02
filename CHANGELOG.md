@@ -1,18 +1,19 @@
 # Changelog
 
-Что менялось от релиза к релизу, новое сверху. Разделы собираются из
-конвенциональных префиксов коммитов — `node tools/release.mjs minor`.
+What changed from release to release, newest first. The sections are assembled
+from conventional commit prefixes — `node tools/release.mjs minor`.
 
-Три вещи, чтобы файл не вводил в заблуждение. **Хеши ведут в историю проекта, а
-не в этот репозиторий**: он начат с одного коммита, и найти по ним ничего
-нельзя. **Часть записей описывает модули, которых здесь нет** — офис состоит из
-ядра и папки `modules/`, и не все модули лежат рядом с ядром. И **записи про
-внутренние документы вырезаны**: они указывали на файлы, которых в публичном
-репозитории нет, и читателю не говорили ничего.
+Three things, so the file does not mislead. **The hashes lead into the
+project's own history, not this repository**: it starts at a single commit, and
+nothing here can be found by them. **Some entries describe modules that are not
+here** — the office is a core plus a `modules/` folder, and not every module
+sits next to the core. And **entries about internal documents were cut**: they
+pointed at files this repository does not contain, and said nothing to a reader
+of it.
 
-## v0.2.0 — 30 августа 2026
+## v0.2.0 — 30 August 2026
 
-### Новое
+### Added
 
 - **sheet:** a state sheet the code draws, not a hand copy (dce61be)
 - **office:** the lounge moves down to the service tier (cccbd00)
@@ -33,7 +34,7 @@
 - **office:** hang the night-shift poster in the control room (0065520)
 - **shot:** record the walk, not just one frame of it (0e6a879)
 
-### Починено
+### Fixed
 
 - **release:** the last tag is not the last release (94bf6d4)
 - **shot:** F9 works while the cameras are on, and the letter keys exist (cf4ab69)
@@ -45,20 +46,22 @@
 - **office:** the floor sign's second line was drawn off its plate (bbd115d)
 - **easel:** a tall frame no longer hides its top under the header (d9eb989)
 
-### Прочее
+### Other
 
 - refactor(storage): browser keys drop the AI, like the product (7a3d6cc)
 - refactor(ui): four panels share one focus ring (7f516be)
 - refactor(layout): service rooms live in rooms, not beside it (a2ef66e)
 - Стол закрепляется за сессией и переживает перезапуск (d007573)
 
-## v0.1.0 — 30 августа 2026
+## v0.1.0 — 30 August 2026
 
-Первый закреплённый релиз: 79 коммитов от 25 августа, всё до этой строки.
-Пиксельный офис, живые агенты Claude Code, записки на столе и отправка задания
-в чат, картины и мольберт, титульный экран, лифт, погода в окне.
+The first pinned release: 79 commits since 25 August, everything above this
+line. The pixel office, live Claude Code agents, notes on the desk and a task
+sent into a chat, paintings and the easel, the title screen, the lift, weather
+in the window.
 
-Раздел написан руками, а не генератором, и это единственный такой. Префиксы
-коммитов введены 29 августа, из 79 коммитов размечены единицы — сборка выдала
-бы семьдесят строк «Прочее» вместо описания. Со следующего релиза история
-размечена целиком и собирается сама.
+This section was written by hand rather than by the generator, and it is the
+only one. Conventional prefixes arrived on 29 August; of those 79 commits only
+a handful carry one, and the generator would have produced seventy lines of
+"Other" instead of a description. From the next release the history is tagged
+throughout and assembles itself.
