@@ -135,6 +135,70 @@ kbd{
 .pad .act{grid-column:span 3; height:40px; align-self:end}
 @media (pointer:coarse){.pad{display:flex}}
 
+/* ---------- доска и просмотр работы ----------
+   Оформление то же, что у офисных панелей: страница показывает механику, а не
+   похожий на неё виджет. Разметку в просмотре рисует web/markdown.js — тот же
+   рендерер, что в офисе. */
+.board, .view{
+  position:absolute; inset:46px 60px 49px; display:flex; flex-direction:column;
+  background:var(--panel); border:2px solid var(--frame);
+  box-shadow:0 14px 34px rgba(0,0,0,.7); font-size:12px;
+}
+.board[hidden], .view[hidden]{display:none}
+.bd-head, .vw-head{
+  display:flex; align-items:center; gap:8px; padding:11px 14px;
+  background:var(--panel-hi); color:var(--ink);
+}
+.bd-head b, .vw-head b{color:var(--warn); font-weight:600}
+.bd-head .dot{color:var(--muted)}
+.bd-head .spacer, .vw-head .spacer{flex:1}
+.bd-head .hint, .vw-head .hint{color:var(--muted); font-size:11px}
+.bd-grid{
+  flex:1; min-height:0; display:grid; gap:14px; padding:14px; overflow:auto;
+  grid-template-columns:repeat(auto-fill,minmax(190px,1fr));
+  grid-auto-rows:min-content;
+}
+.bd-card{
+  display:flex; flex-direction:column; background:#1c130d;
+  border:1px solid var(--frame-dim); cursor:pointer; text-align:left; padding:0; font:inherit;
+}
+.bd-card[aria-current="true"]{border:2px solid var(--warn)}
+.bd-card .thumb{height:120px; display:grid; place-items:center; background:#160f0a}
+.bd-card .glyph{width:48px; height:56px; border:2px solid #6b5744; background:#2b2118;
+  display:grid; align-content:center; gap:8px; padding:0 10px}
+.bd-card .glyph i{display:block; height:3px; background:#6b5744}
+.bd-card.img .glyph{border-color:#8fc8ff; background:#3f5c78}
+.bd-card.img .glyph i{background:#8fc8ff}
+.bd-card .meta{padding:10px 11px; display:grid; gap:5px}
+.bd-card .name{color:var(--ink); font-weight:600; font-size:12.5px; overflow-wrap:anywhere}
+.bd-card .who{color:var(--muted); font-size:11px}
+.bd-foot, .vw-foot{
+  display:flex; align-items:center; gap:8px; padding:9px 14px;
+  background:#1a120c; color:var(--muted); font-size:11px;
+}
+.bd-foot b{color:var(--warn); font-weight:600; margin-left:6px}
+.bd-foot b:first-child{margin-left:0}
+.vw-body{flex:1; min-height:0; overflow:auto; padding:18px 22px; color:var(--ink-dim); line-height:1.55}
+/* max-width и балансировку строк надо гасить явно: панель лежит внутри секции
+   hero, и правило .hero h1{max-width:17ch} достаёт до заголовков в разметке
+   открытого файла — «Лендинг: семь блоков» ломался пополам на 173 пикселях. */
+.vw-body h1, .vw-body h2, .vw-body h3{
+  font-family:var(--mono); color:var(--warn); margin:0 0 10px;
+  max-width:none; text-wrap:initial;
+}
+.vw-body h1{font-size:17px} .vw-body h2{font-size:14px; color:var(--accent)} .vw-body h3{font-size:13px}
+.vw-body p, .vw-body ul{margin:0 0 12px; font-size:12.5px}
+.vw-body ul{padding-left:18px}
+.vw-body pre{background:#160f0a; border:1px solid var(--frame-dim); border-left-width:3px;
+  padding:9px 12px; margin:0 0 12px; overflow:auto}
+.vw-body code{color:var(--accent); font-size:12px}
+.vw-body img{display:block; image-rendering:pixelated; border:1px solid var(--frame-dim)}
+.vw-foot{font-size:10.5px}
+
+/* строка под экраном: этаж демонстрационный, и это должно быть видно, а не
+   только слышно скринридерам */
+.demo-note{margin:10px 0 0; text-align:center; font-size:12px; color:var(--muted); line-height:1.5}
+
 /* ---------- кто ты в офисе ---------- */
 .cast{
   display:flex; align-items:center; gap:22px; margin-top:14px; padding:18px;
@@ -276,6 +340,27 @@ footer .dom a:hover{text-decoration:underline}
           <div class="esc" data-t="escHint"></div>
         </div>
       </div>
+      <div class="board" id="board" hidden>
+        <div class="bd-head">
+          <span data-t="bdBoard"></span><span class="dot">·</span><b id="bd-room"></b><span class="dot">·</span><span id="bd-count"></span>
+          <span class="spacer"></span>
+          <span class="hint" data-t="bdClose"></span>
+        </div>
+        <div class="bd-grid" id="bd-grid"></div>
+        <div class="bd-foot">
+          <b>&larr; &rarr;</b><span data-t="bdPick"></span>
+          <b data-t="keySpace"></b><span data-t="bdOpen"></span>
+        </div>
+      </div>
+      <div class="view" id="view" hidden>
+        <div class="vw-head">
+          <b id="vw-name"></b>
+          <span class="spacer"></span>
+          <span class="hint" id="vw-nav"></span>
+        </div>
+        <div class="vw-body" id="vw-body"></div>
+        <div class="vw-foot" id="vw-path"></div>
+      </div>
       <div class="pad" aria-hidden="true">
         <div>
           <button data-k="ArrowLeft">←</button><button data-k="ArrowUp">↑</button><button data-k="ArrowRight">→</button>
@@ -296,6 +381,7 @@ footer .dom a:hover{text-decoration:underline}
       <span><kbd data-t="keySpace"></kbd><span data-t="keyTalk"></span></span>
       <span><kbd>ESC</kbd><span data-t="keyBack"></span></span>
     </div>
+    <p class="demo-note" data-t="demoNote"></p>
     <div class="cast">
       <canvas id="cast-face" width="30" height="34" aria-hidden="true"></canvas>
       <div class="cast-body">
@@ -421,6 +507,11 @@ var I18N = {
     enterHint: 'WASD or arrows to walk, SPACE to talk to an agent',
     keyWalk: 'walk', keyRun: 'run', keySpace: 'SPACE', keyTalk: 'talk', keyBack: 'back',
     canvasLabel: 'Demo office: walk the floor and talk to the agents',
+    bdBoard: 'Board', bdClose: 'ESC — close', bdPick: 'pick', bdOpen: 'open',
+    bdWorks: (n) => n + (n === 1 ? ' work' : ' works'),
+    vwNav: (i, n) => i + ' of ' + n + ' \u00b7 \u2190 \u2192 flip \u00b7 ESC — back to the board',
+    vwFake: 'an invented file, like the agents',
+    demoNote: 'A demo floor — the agents here are invented. Your own office reads ~/.claude and never leaves your machine.',
     castEyebrow: 'who are you in this office',
     castBtn: 'roll again',
     castHint: 'You walk the demo floor as them. Their face is not drawn \u2014 it is derived from the name, exactly like every agent on this floor.',
@@ -475,6 +566,12 @@ var I18N = {
     enterHint: 'WASD или стрелки — походить, ПРОБЕЛ — заговорить с агентом',
     keyWalk: 'ходить', keyRun: 'бежать', keySpace: 'ПРОБЕЛ', keyTalk: 'заговорить', keyBack: 'назад',
     canvasLabel: 'Демо-офис: походить по этажу и поговорить с агентами',
+    bdBoard: 'Доска', bdClose: 'ESC — закрыть', bdPick: 'выбрать', bdOpen: 'открыть',
+    bdWorks: (n) => n + ' ' + (n % 10 === 1 && n % 100 !== 11 ? 'работа'
+      : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? 'работы' : 'работ'),
+    vwNav: (i, n) => i + ' из ' + n + ' \u00b7 \u2190 \u2192 листать \u00b7 ESC — к доске',
+    vwFake: 'выдуманный файл, как и агенты',
+    demoNote: 'Демо-этаж, агенты выдуманы. Твой офис читает ~/.claude и никуда с машины не уходит.',
     castEyebrow: 'кто ты в этом офисе',
     castBtn: 'ещё раз',
     castHint: 'По этажу ты ходишь именно им. Лицо не нарисовано — оно выведено из имени, ровно как у каждого агента на этом этаже.',
@@ -557,6 +654,7 @@ document.addEventListener('DOMContentLoaded', () => { PRISTINE = document.docume
    ============================================================ */
 import { createFloor, AGENTS } from './landing.js';
 import { lookOf, drawPerson } from './sprites.js';
+import { renderMarkdown } from './markdown.js';
 
 const view = document.getElementById('floor');
 const talk = document.getElementById('talk');
@@ -579,7 +677,86 @@ function openTalk(a) {
   talk.hidden = false;
 }
 function closeTalk() { floor.close(); talk.hidden = true; }
-document.addEventListener('langchange', () => { const a = floor.talking(); if (a) openTalk(a); });
+
+/* ---------- доска и просмотр работы ----------
+   Панели показывают то, что страница обещает вторым столбом: готовое висит на
+   стене, и его можно открыть. Файлы выдуманные, и подвал говорит об этом. */
+const board = document.getElementById('board');
+const viewer = document.getElementById('view');
+const grid = document.getElementById('bd-grid');
+let shelf = { room: null, files: [], i: 0 };
+
+function boardOpen() { return !board.hidden || !viewer.hidden; }
+function closeBoard() { board.hidden = true; viewer.hidden = true; shelf = { room: null, files: [], i: 0 }; }
+
+function openBoard(room, files) {
+  shelf = { room, files, i: 0 };
+  viewer.hidden = true;
+  document.getElementById('bd-room').textContent = room.title;
+  document.getElementById('bd-count').textContent = t('bdWorks')(files.length);
+  grid.textContent = '';
+  files.forEach((f, i) => {
+    const card = document.createElement('button');
+    card.className = 'bd-card' + (f.image ? ' img' : '');
+    card.type = 'button';
+    card.setAttribute('aria-current', String(i === shelf.i));
+    const thumb = document.createElement('div'); thumb.className = 'thumb';
+    const glyph = document.createElement('div'); glyph.className = 'glyph';
+    for (let k = 0; k < 3; k++) glyph.appendChild(document.createElement('i'));
+    thumb.appendChild(glyph);
+    const meta = document.createElement('div'); meta.className = 'meta';
+    const name = document.createElement('div'); name.className = 'name'; name.textContent = f.path;
+    const who = document.createElement('div'); who.className = 'who';
+    who.textContent = f.who + ' \u00b7 ' + room.key;
+    meta.append(name, who);
+    card.append(thumb, meta);
+    card.addEventListener('click', () => { shelf.i = i; openFile(); });
+    grid.appendChild(card);
+  });
+  board.hidden = false;
+}
+
+function markCurrent() {
+  [...grid.children].forEach((c, i) => c.setAttribute('aria-current', String(i === shelf.i)));
+}
+
+function openFile() {
+  const f = shelf.files[shelf.i];
+  if (!f) return;
+  document.getElementById('vw-name').textContent = f.path;
+  document.getElementById('vw-nav').textContent = t('vwNav')(shelf.i + 1, shelf.files.length);
+  document.getElementById('vw-path').textContent = shelf.room.key + ' / ' + f.path + ' \u00b7 ' + t('vwFake');
+  const body = document.getElementById('vw-body');
+  body.textContent = '';
+  if (f.image) {
+    // Картинки на выдуманной доске нет и быть не может: рисуем ту же заглушку,
+    // что и на карточке, вместо того чтобы подсовывать чужой скриншот.
+    const ph = document.createElement('div');
+    ph.className = 'bd-card img';
+    ph.style.cssText = 'width:180px;border:1px solid var(--frame-dim)';
+    const th = document.createElement('div'); th.className = 'thumb';
+    const g = document.createElement('div'); g.className = 'glyph';
+    for (let k = 0; k < 3; k++) g.appendChild(document.createElement('i'));
+    th.appendChild(g); ph.appendChild(th);
+    body.appendChild(ph);
+  } else {
+    body.innerHTML = renderMarkdown(f.body || '');
+  }
+  board.hidden = true;
+  viewer.hidden = false;
+}
+
+function shelfStep(dir) {
+  if (!shelf.files.length) return;
+  shelf.i = (shelf.i + dir + shelf.files.length) % shelf.files.length;
+  if (viewer.hidden) markCurrent(); else openFile();
+}
+document.addEventListener('langchange', () => {
+  const a = floor.talking(); if (a) openTalk(a);
+  // подписи в панелях тоже переводятся: счётчик работ, «N из M», «выдуманный файл»
+  if (!viewer.hidden) openFile();
+  else if (!board.hidden && shelf.room) { const i = shelf.i; openBoard(shelf.room, shelf.files); shelf.i = i; markCurrent(); }
+});
 
 const enter = () => { veil.hidden = true; floor.focus(true); view.focus(); };
 const leave = () => { veil.hidden = false; floor.focus(false); closeTalk(); };
@@ -592,8 +769,25 @@ window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (veil.hidden === false || !OWNED.has(k)) return;
   e.preventDefault();
-  if (k === 'escape') { if (floor.talking()) closeTalk(); else view.blur(); return; }
-  if (k === ' ') { const a = floor.act(); if (a) openTalk(a); else talk.hidden = true; return; }
+  if (k === 'escape') {
+    if (!viewer.hidden) { viewer.hidden = true; board.hidden = false; markCurrent(); return; }
+    if (!board.hidden) { closeBoard(); return; }
+    if (floor.talking()) closeTalk(); else view.blur();
+    return;
+  }
+  if (k === ' ') {
+    if (!viewer.hidden) { viewer.hidden = true; board.hidden = false; markCurrent(); return; }
+    if (!board.hidden) { openFile(); return; }
+    const hit = floor.act();
+    if (hit && hit.kind === 'agent') openTalk(hit.agent);
+    else if (hit && hit.kind === 'board') openBoard(hit.room, hit.files);
+    else talk.hidden = true;
+    return;
+  }
+  if (boardOpen()) {
+    if (k === 'arrowleft' || k === 'arrowright') shelfStep(k === 'arrowleft' ? -1 : 1);
+    return;   // при открытой панели по этажу не ходим
+  }
   floor.key(k, true);
 });
 window.addEventListener('keyup', (e) => floor.key(e.key.toLowerCase(), false));
@@ -601,8 +795,14 @@ window.addEventListener('keyup', (e) => floor.key(e.key.toLowerCase(), false));
 for (const b of document.querySelectorAll('.pad button[data-k]')) {
   const k = b.dataset.k.toLowerCase();
   const down = (e) => { e.preventDefault(); veil.hidden = true; floor.focus(true);
-    if (k === ' ') { const a = floor.act(); if (a) openTalk(a); else talk.hidden = true; }
-    else floor.key(k, true); };
+    if (k === ' ') {
+      if (!viewer.hidden) { viewer.hidden = true; board.hidden = false; markCurrent(); return; }
+      if (!board.hidden) { openFile(); return; }
+      const hit = floor.act();
+      if (hit && hit.kind === 'agent') openTalk(hit.agent);
+      else if (hit && hit.kind === 'board') openBoard(hit.room, hit.files);
+      else talk.hidden = true;
+    } else if (!boardOpen()) floor.key(k, true); };
   const up = (e) => { e.preventDefault(); floor.key(k, false); };
   b.addEventListener('pointerdown', down);
   b.addEventListener('pointerup', up);

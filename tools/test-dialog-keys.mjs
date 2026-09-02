@@ -246,6 +246,19 @@ UI.pressDialogFocus();
 check('исчезнувший файл не жмётся', current.files[0].clicked === 0, current.files[0].clicked);
 check('и Enter уходит на кнопку', current.buttons.some((b) => b.clicked === 1), current.buttons.map((b) => b.clicked).join(','));
 
+// --- 16. цифра переключает вкладку карточки ---
+// Та же клавиша, что и в инвентаре: 1 «чем занят», 2 «показать работу»,
+// 3 «дать задание». «Закрыть» номера не получает — у неё есть Esc.
+current = makeDialog();
+state.dialogOpen = true;
+check('цифра 2 обработана карточкой', UI.dialogNumber('2') === true, 'не обработана');
+check('и нажала «показать работу»', current.buttons[1].clicked === 1, current.buttons[1].clicked);
+check('соседние вкладки не тронуты',
+  current.buttons[0].clicked === 0 && current.buttons[2].clicked === 0, 'тронуты');
+check('«закрыть» цифрой не нажимается', UI.dialogNumber('4') === false, 'нажимается');
+check('и кнопка закрытия цела', current.buttons[3].clicked === 0, current.buttons[3].clicked);
+state.dialogOpen = false;
+check('при закрытой карточке цифра уходит в офис', UI.dialogNumber('1') === false, 'осталась');
 
 console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
 process.exit(failed ? 1 : 0);

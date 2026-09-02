@@ -32,6 +32,11 @@
   --ink:#f6e3c0; --ink-dim:#c9b391;
   --cab:#8a5f3a; --cab2:#6b472a; --cab-edge:#a9784c; --cab-in:#5e3f27; --cab-dial:#c9a06a;
   --accent:#9fe0a8; --warn:#ffd166;
+  /* Плитка комнаты из web/office.js. Единственный цвет здесь, который НЕ
+     крутится вместе с тоном офиса, и намеренно: на ней лежат предметы из
+     инвентаря, а холст перекраска интерфейса не трогает. Тёмная кепка на
+     тёмной клетке пропадала целиком — нашлось на первом же живом кадре. */
+  --tile:#4b433c;
 }
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -64,7 +69,7 @@ canvas{image-rendering:pixelated; display:block; border:3px solid var(--frame);
 
 /* ---- dialog ---- */
 #dialog{position:fixed; left:50%; bottom:46px; transform:translateX(-50%); z-index:20;
-  width:min(720px, 92vw); display:flex; gap:12px; padding:12px;
+  width:min(720px, calc(92vw / var(--ui, 1))); display:flex; gap:12px; padding:12px;
   background:linear-gradient(var(--wood-hi),var(--wood-dark)); border:3px solid var(--frame);
   box-shadow:0 0 0 3px var(--bg), 0 14px 40px rgba(0,0,0,.7);}
 #dialog[hidden]{display:none}
@@ -103,7 +108,7 @@ kbd{color:var(--muted); font-size:10px}
 #viewer{position:fixed; inset:0; z-index:30; background:rgba(12,8,5,.86);
   display:flex; align-items:center; justify-content:center}
 #viewer[hidden]{display:none}
-.vwrap{width:min(1000px,94vw); max-height:90vh; display:flex; flex-direction:column;
+.vwrap{width:min(1000px, calc(94vw / var(--ui, 1))); max-height:90vh; display:flex; flex-direction:column;
   background:var(--wood-dark); border:3px solid var(--frame); box-shadow:0 0 0 3px var(--bg-deep)}
 .vhead{flex:0 0 auto; display:flex; justify-content:space-between; align-items:center; padding:8px 12px;
   background:var(--wood-hi); color:var(--warn); letter-spacing:.06em}
@@ -132,16 +137,16 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .notes{list-style:none;margin:6px 0 0;padding:0;font-size:11px;color:var(--muted)}
 .notes li{padding:1px 0}
 
-/* ---- roster / dress ---- */
+/* ---- roster / inventory ---- */
 /* Панели перечислены поимённо, и это единственное место, где они центрируются.
    Новая панель, забытая здесь, не ломается, а просто ложится обычным блоком в
    конец страницы и уезжает под нижний край — так 30 августа 2026 приехало
    приглашение. Правило [hidden] тем же списком: без него display:flex
    перебивает атрибут, и спрятанная панель остаётся на экране. */
-#roster,#dress,#sky,#skin,#lift,#notes,#invite{position:fixed; inset:0; z-index:28; background:rgba(12,8,5,.8); display:flex;
+#roster,#bag,#sky,#skin,#lift,#notes,#invite{position:fixed; inset:0; z-index:28; background:rgba(12,8,5,.8); display:flex;
   align-items:center; justify-content:center}
-#roster[hidden],#dress[hidden],#sky[hidden],#skin[hidden],#lift[hidden],#notes[hidden],#invite[hidden]{display:none}
-.rwrap{width:min(680px,92vw); max-height:84vh; display:flex; flex-direction:column;
+#roster[hidden],#bag[hidden],#sky[hidden],#skin[hidden],#lift[hidden],#notes[hidden],#invite[hidden]{display:none}
+.rwrap{width:min(680px, calc(92vw / var(--ui, 1))); max-height:84vh; display:flex; flex-direction:column;
   background:var(--wood-dark); border:3px solid var(--frame); box-shadow:0 0 0 3px var(--bg-deep)}
 .rbody{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:10px 14px}
 .rgroup h4{margin:10px 0 4px; color:#c39bff; font-size:12px; letter-spacing:.08em; font-weight:normal}
@@ -152,7 +157,46 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .go{background:var(--wood); color:var(--ink); border:2px solid var(--frame); font:11px "JetBrains Mono", "Courier New",monospace;
   padding:2px 8px; cursor:pointer}
 .go:hover{background:var(--wood-lit); color:var(--warn)}
-.dresswrap{width:min(700px,94vw)}
+.bagwrap{width:min(700px,94vw)}
+
+/* Вкладки инвентаря. Переключаются цифрой, а не стрелкой: стрелки внутри
+   вкладки уже заняты — на «на себе» они крутят слот, на «вещах» ходят по
+   сетке, и третьего смысла у них не осталось. */
+.btabs{display:flex; align-items:center; gap:8px; padding:7px 14px;
+  background:var(--bg-deep); border-bottom:2px solid var(--wood-hi)}
+.btab{display:flex; align-items:center; gap:6px; background:var(--field); color:var(--ink-dim);
+  border:1px solid var(--frame-dim); padding:3px 10px; cursor:pointer;
+  font:12px "JetBrains Mono", "Courier New",monospace}
+.btab:hover{background:var(--wood); color:var(--ink)}
+.btab.on{background:var(--wood); color:var(--warn); border:2px solid var(--accent); padding:2px 9px}
+.btab kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted-dim)}
+.rst kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted-dim)}
+.btab.on kbd{color:var(--ink-dim)}
+.bhint{margin-left:auto; font-size:11px; color:var(--muted-dim)}
+
+/* Вещи — сетка, а не список: предмет надо видеть, а не читать про него. */
+.bbody{padding:14px; display:flex; flex-direction:column; gap:12px}
+.bcat{display:flex; flex-direction:column; gap:4px}
+.brow{display:flex; gap:8px; flex-wrap:wrap}
+.bcell{width:52px; height:52px; padding:0; cursor:pointer; display:flex;
+  align-items:center; justify-content:center;
+  background:var(--tile); border:2px solid var(--frame-dim)}
+.bcell canvas{image-rendering:pixelated; width:48px; height:48px}
+.bcell:hover{filter:brightness(1.15)}
+.bcell.on{background:var(--wood-hi); border-color:var(--accent)}
+.bcell.focus{border-color:var(--warn)}
+.dcap .dim{color:var(--muted-dim)}
+
+/* Вкладка «офис»: переключатель дресс-кода и адреса остальных настроек. */
+.oseg{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.obtn{background:var(--field); color:var(--ink-dim); border:1px solid var(--frame-dim);
+  padding:4px 12px; cursor:pointer; font:12px "JetBrains Mono", "Courier New",monospace}
+.obtn:hover{background:var(--wood); color:var(--ink)}
+.obtn.on{background:var(--wood); color:var(--warn); border:2px solid var(--accent); padding:3px 11px}
+.orow{display:flex; align-items:center; gap:10px; background:var(--field); padding:6px 8px}
+.orow b{font-weight:normal; color:var(--ink)}
+.orow span{flex:1; font-size:11px; color:var(--muted)}
+.orow i{font-style:normal; font-size:11px; color:var(--ink-dim)}
 .dbody{display:flex; gap:18px; padding:14px; flex-wrap:wrap}
 #me{image-rendering:pixelated; border:2px solid var(--frame); width:108px; height:129px}
 .rows{flex:1; min-width:240px}
@@ -317,6 +361,10 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
    именно это: тесты зелёные, подсветки нет. */
 [data-send].focus, [data-retry].focus, [data-edit].focus, [data-del].focus{
   outline:2px solid var(--warn); outline-offset:-2px}
+/* Та же история второй раз, 31 августа 2026: в сетке вещей фокус ходил рамкой
+   в два пикселя и на экране не читался вовсе — «стрелка вниз ничего не делает».
+   Клетка и кнопки вкладки «офис» подсвечиваются так же, как всё остальное. */
+.bcell.focus, .obtn.focus{outline:2px solid var(--warn); outline-offset:-2px}
 .liftbtn:hover{background:var(--wood-lit); color:var(--warn)}
 .liftbtn.here{border-color:var(--accent); color:var(--accent)}
 .liftbtn b{font-weight:normal; flex:none; width:64px}
@@ -408,6 +456,16 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .tcard{position:absolute; right:4%; top:4%; width:30%; min-width:180px; display:flex; flex-direction:column;
   gap:4px; background:rgba(26,18,12,.92); border:3px solid var(--frame); padding:12px 14px}
 .tcard.dim{border-color:var(--frame-dim)}
+/* Пинок стоит слева, в колонке меню, а не под «за дверью». Столбиком справа
+   он стоял ровно один день: в макете карточка кончалась там, где начинается
+   человечек-переключатель, а на живом холсте она опускается ниже и закрывает
+   и его, и фонарь над ним целиком — то есть предмет, к которому подходят и
+   жмут ПРОБЕЛ, пропадал вместе со своим светом. Перекрывать фонарь было
+   решено осознанно; съедать человечка — нет.
+   Правый край — по левому краю таблички VALEY (37% ширины холста), поэтому
+   ширина та же 30%, что и справа. Цена размена — окно: карточка закрывает
+   его почти целиком. Это декорация против предмета, и выбор такой. */
+.tcard.release{border-color:var(--warn); left:7%; right:auto; top:4%}
 .tcard b{color:var(--ink); font-size:20px; font-weight:normal}
 .tlabel{color:var(--muted); font-size:11px; letter-spacing:.12em}
 .twait{color:var(--warn); font-size:13px}
@@ -451,6 +509,14 @@ body.titling #hud, body.titling #help{visibility:hidden}
    offsetHeight, а под zoom он возвращает неотмасштабированную высоту — холст
    полез бы на них, ровно как в баге с браузерным зумом. Оверлей входа вдобавок
    позиционируется в пикселях от рамки холста, и zoom увёл бы его от двери. */
+#dialog, #toasts, .vwrap, .rwrap{zoom:var(--ui, 1)}
+/* У всех пятерых ширина в vw поделена на --ui там, где она задаётся. Иначе
+   ограничитель не ограничивает: vw внутри zoom меряется от окна и потом
+   умножается на масштаб, и min(1000px, 94vw) при 175% даёт 1750 px в окне
+   1440. Видно это было не везде — панель, которую есть чему сжать, ужимается
+   до окна и просто теряет поля (мольберт 2 сентября 2026: ровно 1440 из 1440),
+   а панель с неупругим содержимым вроде дерева гита или кода вылезает за оба
+   края разом. */
 /* vh внутри отмасштабированной панели считается в её единицах, а не экранных,
    поэтому делим — иначе на 150% окно просмотра выше экрана */
 .vwrap{max-height:calc(90vh / var(--ui, 1))}
@@ -464,8 +530,6 @@ body.titling #hud, body.titling #help{visibility:hidden}
   font:11px "JetBrains Mono", "Courier New",monospace; padding:3px 0; cursor:pointer}
 .szbtn:hover{background:var(--wood-lit); color:var(--warn)}
 .szbtn.on{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
-
-/* мольберт: кружок статуса фичи и строка о том, почему Figma молчит */
 
 /* ---- все заметки разом ----
    Панель как у обхода: тот же каркас, та же прокрутка. Отличие одно — строка
@@ -494,6 +558,8 @@ body.titling #hud, body.titling #help{visibility:hidden}
 .nmeta .ndel.arm{color:#e08a6a}
 .rbody .empty span{display:block; margin-top:8px; font-size:11px; line-height:1.6}
 /* мольберт, третья ступень: один кадр во всю панель со стрелками по бокам.
+   Кадр: Prod → «08 · Мольберт и фичи» → «Панель · Экран во весь экран ·
+   высокий кадр», принят 2 сентября 2026; «как было» лежит в Legacy.
 
    max-height делится на --ui по той же причине, что и .vwrap выше: vh внутри
    отмасштабированной панели считается в её единицах, а не экранных. Здесь это
@@ -567,3 +633,89 @@ body.titling #hud, body.titling #help{visibility:hidden}
 .stand-what{color:var(--ink,#f6e3c0); font-size:12px; margin:3px 0 4px}
 .stand-where{font-size:10px; opacity:.8}
 .stand-bad{color:#ff9f8f; font-size:10px; margin-top:3px}
+/* ---- дерево гита ----
+   Две ступени в одном оверлее: история с графом и диф. Рельсы — абсолютные
+   прямоугольники внутри .grail, а не svg: холст офиса пиксельный, и линия в
+   два пикселя должна остаться линией в два пикселя при любом масштабе. */
+/* Ширину делит масштаб интерфейса, и это не украшение. Панели увеличиваются
+   через zoom, а vw внутри zoom меряется от окна и потом умножается на масштаб:
+   96vw при 175% превращаются в 1890 px в окне 1440 и вылезают за оба края
+   сразу. 31 августа 2026 граф так уехал за левый край целиком — панель была на
+   месте, а колонки с рельсами не было видно вовсе. Делим сами. */
+.gitwrap{width:min(1080px, calc(96vw / var(--ui, 1)))}
+/* Высота фиксированная, а не по содержимому. Диф в один файл делал панель
+   низкой, диф на сотню строк — во весь экран, и при переходе между коммитами
+   окно прыгало под руками: строка, на которую целишься, уезжала. Списки внутри
+   и так прокручиваются, так что терять нечего. Отказные экраны — «нет
+   коммитов» и «git не ответил» — остаются по содержимому: пустое окно в
+   пол-экрана ради двух строк текста читается как поломка. */
+.gitwrap.tall{height:calc(88vh / var(--ui, 1))}
+.gitbar{flex:0 0 auto; display:flex; align-items:center; gap:10px; padding:6px 12px;
+  border-bottom:2px solid var(--wood-hi); font-size:11px; color:var(--muted)}
+.gbranch{background:var(--wood); border:2px solid var(--accent); color:var(--accent);
+  padding:1px 8px; font-size:11px}
+.gnote{margin-left:auto; color:var(--muted-dim); font-size:10px}
+.gnote.warn{color:var(--warn)}
+
+.gitbody{flex:1 1 auto; display:flex; min-height:0; overflow:hidden}
+.glist{flex:0 0 58%; overflow:auto; padding:6px 0 10px}
+.gcard{flex:1 1 auto; border-left:2px solid var(--wood-hi); padding:12px 14px;
+  overflow:auto; font-size:11px; color:var(--muted)}
+
+.grow{display:flex; align-items:center; gap:8px; height:34px; padding:0 10px 0 6px; cursor:pointer}
+.grow:hover{background:var(--wood-hi)}
+.grow.sel{background:var(--wood)}
+.grow.dirty{cursor:default; color:var(--muted)}
+.grow.dirty:hover{background:none}
+.grail{position:relative; flex:0 0 auto; height:34px}
+.grail i{position:absolute; display:block}
+.gdot{position:absolute; display:block}
+/* Слияние — ромб: в восемь пикселей это единственная форма, которую видно
+   отдельно от квадрата. Рабочее дерево — полый квадрат: его в истории нет. */
+.gdot.merge{transform:rotate(45deg)}
+.gdot.hollow{background:none; border:2px solid var(--muted)}
+.ghash{flex:0 0 auto; color:var(--muted-dim); font-size:11px}
+.gup{flex:0 0 auto; color:var(--warn); font-size:11px}
+.gref{flex:0 0 auto; background:var(--wood); border:1px solid var(--muted);
+  color:var(--muted); padding:0 6px; font-size:10px; white-space:nowrap}
+.gref.head{border-color:var(--accent); color:var(--accent)}
+.gref.tag{border-color:var(--warn); color:var(--warn)}
+.gsubj{flex:1 1 auto; color:var(--ink-dim); font-size:12px; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis}
+.grow.sel .gsubj{color:var(--ink)}
+.gwhen{flex:0 0 auto; color:var(--muted-dim); font-size:10px}
+.gmore{margin:8px 0 0 16px; color:var(--muted-dim); font-size:10px}
+
+.gchash{margin:0; color:var(--warn); font-size:13px; display:flex; gap:8px; align-items:baseline}
+.gcsubj{margin:6px 0 0; color:var(--ink); font-size:12px; line-height:1.5}
+.gcbody{margin:10px 0 0; color:var(--muted); font-size:11px; line-height:1.5; white-space:pre-wrap}
+.gcwho{margin:12px 0 0; padding-top:10px; border-top:1px solid var(--wood-hi); font-size:11px}
+.gagent{margin:8px 0 0; display:inline-block; background:var(--wood);
+  border:1px solid var(--accent); color:var(--accent); padding:1px 8px; font-size:10px}
+.gclabel{margin:14px 0 4px; color:var(--muted-dim); font-size:10px}
+.gcfiles{list-style:none; margin:0; padding:0}
+.gcfiles li{display:flex; gap:8px; padding:2px 0; color:var(--ink-dim); font-size:11px}
+.gcfiles li span{flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.gcard .ghint{margin:16px 0 0; color:var(--muted-dim); font-size:10px}
+.add{color:var(--accent)} .del{color:#ff9f8f}
+
+.gitempty{padding:26px 20px}
+.gbig{margin:0; color:var(--ink); font-size:13px}
+.gsaid{margin:10px 0 0; padding:6px 10px; background:var(--field); color:#ff9f8f; font-size:11px}
+.gwhy{margin:10px 0 0; color:var(--muted); font-size:11px; line-height:1.5}
+
+/* ---- диф ---- */
+.gitbody.diff .gfiles{flex:0 0 240px; overflow:auto; padding:6px 0}
+.gfile{display:flex; gap:8px; padding:4px 10px; font-size:11px; color:var(--ink-dim); cursor:pointer}
+.gfile span{flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left}
+.gfile:hover{background:var(--wood-hi)}
+.gfile.sel{background:var(--wood); color:var(--ink); box-shadow:inset 2px 0 0 var(--accent)}
+.gcode{flex:1 1 auto; overflow:auto; border-left:2px solid var(--wood-hi); padding:4px 0 12px}
+.dl{display:flex; align-items:baseline; gap:0; font-size:11px; line-height:16px; white-space:pre}
+.dl code{padding-right:14px}
+.dl.add{background:rgba(159,224,168,.10)}
+.dl.del{background:rgba(255,159,143,.10)}
+.dl.hunk{background:var(--field); color:var(--muted); font-size:10px; line-height:20px; padding-left:10px}
+.dn{flex:0 0 34px; text-align:right; padding-right:6px; color:var(--muted-dim); font-size:9px}
+.dp{flex:0 0 16px; text-align:center; color:var(--muted-dim)}
+.dl.add .dp{color:var(--accent)} .dl.del .dp{color:#ff9f8f}

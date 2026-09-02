@@ -16,6 +16,14 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
+// VALEY_SETTINGS перебивает и VALEY_CONFIG_DIR, и всё остальное: это «весь файл
+// в сторону» одной переменной. Стенд заводит себе временный каталог, но если
+// переменная досталась ему из окружения — а она достаётся, когда в соседнем
+// ворктри поднимали офис своей командой, — тест проверяет чужой файл и падает
+// на ровном месте. Найдено 2 сентября 2026: переезд «не состоялся», потому что
+// на новом месте лежал файл другой ветки.
+delete process.env.VALEY_SETTINGS;
+
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    | ' + name);
@@ -27,6 +35,13 @@ const ok = (name, cond, got) => {
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const LEGACY = path.join(ROOT, '.settings.json');
 const legacyExisted = await fsp.readFile(LEGACY, 'utf8').catch(() => null);
+
+// VALEY_SETTINGS уводит файл настроек целиком в сторону — и AGENTS.md прямо
+// велит ставить его каждому воркtree. Со включённой переменной этот стенд
+// проверял чужой файл и падал так, будто сломан переезд: 1 сентября 2026 на
+// этом потерялось время, хотя код был ни при чём. Стенд отвечает за свои
+// временные каталоги, поэтому переменную снимает с себя сам.
+delete process.env.VALEY_SETTINGS;
 
 const fresh = async () => {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-cfg-'));

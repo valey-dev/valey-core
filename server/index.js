@@ -8,7 +8,9 @@ import { fileURLToPath } from 'node:url';
 import { snapshot, fileAllowed, conversation } from './agents.js';
 import { realWeather, forgetWeather, geocode } from './weather.js';
 import { getSettings, patchSettings, publicSettings, ownerToken } from './settings.js';
+import { gitLog, gitCommit } from './git.js';
 import { deliver, deliveryStatus, isBusy, MODES } from './deliver.js';
+import { releaseNudge } from './release.js';
 import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleAll, setModuleOff } from './modules.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -31,6 +33,12 @@ const MIME = {
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 
 let last = { now: 0, agents: [], version: VERSION };
+// Комната -> каталог на диске. Единственный способ назвать каталог для /api/git:
+// клиент присылает ключ комнаты, который офис и так показывает на двери.
+const cwdOfProject = (project) => {
+  const a = (last.agents || []).find((x) => x.project === project && x.cwd);
+  return a ? a.cwd : null;
+};
 const clients = new Set();
 // Notes the player left, plus whatever was actually sent into a live chat.
 const outbox = [];
@@ -233,6 +241,7 @@ async function tick() {
   try {
     last = await snapshot();
     last.version = VERSION;
+    last.release = await releaseNudge(ROOT);
     for (const a of last.agents) a.outbox = outbox.filter((t) => t.agentId === a.id).slice(-5);
     last.weather = await realWeather();
     last.settings = publicSettings(await getSettings());
@@ -579,6 +588,22 @@ const server = http.createServer(async (req, res) => {
     const file = path.join(dir, (url.searchParams.get('name') || 'latest').replace(/[^\w-]/g, '') + '.png');
     await fsp.writeFile(file, Buffer.from(b64, 'base64'));
     return send(res, 200, { ok: true, file });
+  }
+
+  // Дерево гита комнаты. Каталог берётся по ключу комнаты из живого снимка, а
+  // не из запроса: путь параметром означал бы чтение любого каталога машины
+  // чужими руками — тот же довод, по которому /api/file пускает только файлы,
+  // встреченные в транскрипте.
+  if (url.pathname === '/api/git') {
+    const dir = cwdOfProject(url.searchParams.get('project') || '');
+    if (!dir) return send(res, 404, { ok: false, code: null, message: 'нет такой комнаты' });
+    return send(res, 200, await gitLog(dir, { force: url.searchParams.get('force') === '1' }));
+  }
+
+  if (url.pathname === '/api/git/commit') {
+    const dir = cwdOfProject(url.searchParams.get('project') || '');
+    if (!dir) return send(res, 404, { ok: false, code: null, message: 'нет такой комнаты' });
+    return send(res, 200, await gitCommit(dir, url.searchParams.get('hash') || ''));
   }
 
   // Serve an artifact, but only files that actually appeared in a transcript.

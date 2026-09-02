@@ -77,10 +77,10 @@ const service = { key: '__security', title: 'SECURITY', service: true, agents: [
 const floor = (rs) => ({ rooms: [...rs, service], projectRooms: rs });
 const state = { agents, layout: floor(rooms), me: {} };
 
-const calls = { enter: [], dress: 0, sky: 0, lang: 0 };
+const calls = { enter: [], bag: 0, sky: 0, lang: 0 };
 initTitle(state, {
   enter: (room) => calls.enter.push(room),
-  dress: () => { calls.dress += 1; },
+  bag: () => { calls.bag += 1; },
   sky: () => { calls.sky += 1; },
   lang: () => { calls.lang += 1; },
 });
@@ -157,7 +157,7 @@ ok('ESC вернул в меню, а не закрыл экран', titleOpen() 
 // --------------------------------------------------------- прочие клавиши
 calls.enter.length = 0;
 titleKey('c');
-ok('C зовёт «переодеться»', calls.dress === 1, calls.dress);
+ok('C зовёт инвентарь', calls.bag === 1, calls.bag);
 titleKey('з');
 ok('русская «з» — это P, окно в мир', calls.sky === 1, calls.sky);
 titleKey('p');

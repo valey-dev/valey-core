@@ -1,8 +1,9 @@
-import { lookOf, drawPerson, drawCat, normalizeLook } from './sprites.js';
+import { lookOf, drawPerson, drawCat, normalizeLook, dressOf, dressMe } from './sprites.js';
+import { potState, water as waterPot, tally, CAN_FULL } from './garden.js';
 import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, WALL } from './layout.js';
 import { loadModules, collect, first } from './modules.js';
 import { initStand } from './stand.js';
-import { drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawLift, drawReception, pxText, kickerBusy } from './office.js';
+import { drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, pxText, kickerBusy } from './office.js';
 import { drawCamera, buildCameras } from './cctv.js';
 import { syncActors, tickActors } from './actors.js';
 import * as UI from './ui.js';
@@ -147,12 +148,18 @@ async function saveSettings(patch) {
 
 UI.initUI(state, {
   close: closeAll,
-  saveMe: () => localStorage.setItem('valey-me', JSON.stringify(state.me)),
+  saveMe: () => {
+    localStorage.setItem('valey-me', JSON.stringify(state.me));
+    myWorn = dressMe(state.me, dressCode());
+  },
   sendTask: (agentId, text, deliver = false, mode = null, resend = null) => fetch('/api/task', {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({ agentId, text, deliver, mode, resend }),
   }).then((r) => r.json()).catch((e) => ({ error: e.message })),
   guideTo: (id) => { state.waypoint = id; UI.toast(tr('toast.guide')); },
+  // Инвентарь не повторяет панели языка, цвета и звука — он до них доводит.
+  lang: () => switchLang(),
+  sound: () => { state.soundOn = sound.toggle(); UI.renderHud(); return state.soundOn; },
   geocode: (q) => fetch('/api/geocode?q=' + encodeURIComponent(q)).then((r) => r.json()).catch((e) => ({ error: e.message })),
   saveSettings,
   invites: () => fetch('/api/invites', { headers: owned() })
@@ -214,6 +221,98 @@ fetch('/api/settings').then((r) => r.json()).then((r) => {
   UI.renderHud();
 }).catch(() => {});
 
+// Оранжерея. Сад общий и живёт в настройках офиса; в руках лейка — своя, и
+// только твоя: это не состояние офиса, а то, что ты сейчас держишь. Из-за
+// этого в общем офисе двое увидят лейку на крючке одновременно — цена, которую
+// платим за то, что носить её не нужно объяснять серверу.
+const garden = () => (state.settings && state.settings.garden) || { pots: {}, can: { left: CAN_FULL } };
+const canLeft = () => {
+  const c = garden().can;
+  return c && Number.isFinite(c.left) ? c.left : CAN_FULL;
+};
+// То, что показывает drawGreenhouse: состояние каждого горшка на сейчас.
+function gardenView(room) {
+  const g = garden(), now = Date.now(), st = {};
+  for (const p of room.pots) st[p.i] = potState(g.pots && g.pots[p.i], now);
+  const n = tally(g, room.pots, now);
+  return {
+    state: st, canTaken: !!state.carry, canLeft: canLeft(),
+    sign: tr('sign.watered', { n: n.wet, total: n.total }),
+  };
+}
+// Пишем и на сервер, и к себе сразу: полив должен быть виден в тот же кадр, а
+// не через такт потока. Если сервер откажет — гость, чужой офис — возвращаем
+// как было и говорим вслух.
+async function saveGarden(next, wasCarry) {
+  const before = garden();
+  state.settings = { ...state.settings, garden: next };
+  const r = await saveSettings({ garden: next });
+  if (r && r.error) {
+    state.settings = { ...state.settings, garden: before };
+    if (wasCarry !== undefined) state.carry = wasCarry;
+    UI.toast(tr('toast.gardenNotYours'), 'wait');
+    return false;
+  }
+  return true;
+}
+
+function takeCan() {
+  if (state.carry) {
+    state.carry = false;
+    UI.toast(tr('toast.canBack'));
+    return;
+  }
+  state.carry = true;
+  UI.toast(tr(canLeft() > 0 ? 'toast.canTaken' : 'toast.canTakenDry', { n: canLeft() }));
+}
+
+function fillCan() {
+  if (!state.carry) { UI.toast(tr('toast.canFirst'), 'wait'); return; }
+  if (canLeft() >= CAN_FULL) { UI.toast(tr('toast.canFull'), 'wait'); return; }
+  const g = garden();
+  saveGarden({ ...g, can: { left: CAN_FULL } });
+  sound.pour(1);
+  UI.toast(tr('toast.canFilled', { n: CAN_FULL }));
+}
+
+function pourOn(room, pot) {
+  if (!state.carry) { UI.toast(tr('toast.canFirst'), 'wait'); return; }
+  if (canLeft() <= 0) { UI.toast(tr('toast.canEmpty'), 'wait'); return; }
+  const g = garden(), now = Date.now();
+  const before = potState(g.pots && g.pots[pot.i], now);
+  const next = {
+    ...g,
+    pots: { ...(g.pots || {}), [pot.i]: waterPot(g.pots && g.pots[pot.i], now) },
+    can: { left: canLeft() - 1 },
+  };
+  saveGarden(next);
+  sound.pour(0.7);
+  const after = potState(next.pots[pot.i], now);
+  // Сказать стоит только то, что человек и так не увидит: зацвёл — увидит,
+  // а вот «это был последний полив в лейке» на экране ничем не написано.
+  if (after === 'bloom' && before !== 'bloom') UI.toast(tr('toast.bloomed'));
+  else if (next.can.left === 0) UI.toast(tr('toast.canRanOut'), 'wait');
+}
+
+// Дресс-код — настройка офиса, а не браузера: он приезжает в settings и
+// разлетается по всем открытым вкладкам. Одетый вид считается один раз на смену
+// кода, а не в каждом кадре: людей на этаже три десятка, и новый объект на
+// каждого шестьдесят раз в секунду — мусор ради ничего.
+const dressCode = () => (state.settings && state.settings.dress && state.settings.dress.code) || 'casual';
+let wornCode = null;
+let myWorn = null;
+const dressed = (a) => dressOf(lookOf(a.id), a.id, a.gender, dressCode());
+const myLook = () => {
+  const look = myWorn || state.me;
+  return state.carry ? { ...look, hands: 'can' } : look;
+};
+function dressAll() {
+  wornCode = dressCode();
+  state.looks.clear();
+  for (const a of state.agents) state.looks.set(a.id, dressed(a));
+  myWorn = dressMe(state.me, wornCode);
+}
+
 // The sky is either what open-meteo says, or what the browser makes up.
 function applyWeather(w) {
   state.realWeather = w && w.enabled ? w : null;
@@ -229,6 +328,38 @@ function applyWeather(w) {
   }
 }
 
+// ------------------------------------------------------------- дерево гита
+// История комнаты и диф одного коммита. Каталог сервер выбирает сам по ключу
+// комнаты — страница пути не знает и знать не должна.
+const GIT_TTL = 20_000;
+state.git = new Map();          // проект -> { at, board }
+const gitDiffs = new Map();     // проект + хеш -> диф, коммит неизменен навсегда
+
+async function gitOf(project, { force = false } = {}) {
+  const hit = state.git.get(project);
+  if (hit && !force && Date.now() - hit.at < GIT_TTL) return hit.board;
+  try {
+    const r = await fetch('/api/git?project=' + encodeURIComponent(project) + (force ? '&force=1' : ''));
+    const board = await r.json();
+    state.git.set(project, { at: Date.now(), board });
+    return board;
+  } catch (err) {
+    return { ok: false, code: null, message: String(err.message || err) };
+  }
+}
+
+async function gitCommitOf(project, hash) {
+  const key = project + '\0' + hash;
+  if (gitDiffs.has(key)) return gitDiffs.get(key);
+  try {
+    const r = await fetch('/api/git/commit?project=' + encodeURIComponent(project) + '&hash=' + encodeURIComponent(hash));
+    const data = await r.json();
+    if (data && data.ok) gitDiffs.set(key, data);
+    return data;
+  } catch (err) {
+    return { ok: false, code: null, message: String(err.message || err) };
+  }
+}
 // ---------------------------------------------------------------- присутствие
 // Кто ты для остальных: id, имя и внешность. id живёт в localStorage, а не в
 // sessionStorage — две вкладки одного браузера это один человек, а не двое.
@@ -254,7 +385,7 @@ function tellWhereIAm(now) {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      id: MY_ID, name: state.me.name || tr('label.me'), look: state.me,
+      id: MY_ID, name: state.me.name || tr('label.me'), look: myLook(),
       x: p.x, y: p.y, dir: p.dir || 1, moving: !!p.moving,
       room: room ? room.key : null,
     }),
@@ -328,7 +459,9 @@ const onSnapshot = (e) => {
   // надо переносить руками — иначе титульный экран показывает прочерк вместо
   // версии, и это видно только на кадре.
   state.version = data.version || state.version;
-  for (const a of state.agents) if (!state.looks.has(a.id)) state.looks.set(a.id, lookOf(a.id));
+  state.release = data.release || null;
+  if (wornCode !== dressCode()) dressAll();
+  else for (const a of state.agents) if (!state.looks.has(a.id)) state.looks.set(a.id, dressed(a));
 
   // Модуль может влиять на состав плана — мольберт стоит не во всякой комнате,
   // а только там, где в настройках назван файл. Подпись обязана это учитывать,
@@ -378,6 +511,9 @@ const onSnapshot = (e) => {
   if (data.settings) {
     const changed = JSON.stringify(data.settings) !== JSON.stringify(state.settings);
     state.settings = data.settings;
+    // дресс-код мог переключить кто-то в соседней вкладке — переодеваемся на
+    // месте, без перезагрузки: офис на то и офис
+    if (wornCode !== dressCode()) dressAll();
     // язык мог переключить кто-то в соседней вкладке — догоняем
     setLang(data.settings.lang);
     if (changed && !document.getElementById('sky').hidden) UI.renderSky();
@@ -419,7 +555,7 @@ addEventListener('keydown', (e) => {
   if (UI.rosterKey(e.key)) { e.preventDefault(); return; }
   if (first('key', e.key, e.shiftKey)) { e.preventDefault(); return; }
   if (UI.notesKey(e.key)) { e.preventDefault(); return; }
-  if (UI.dressKey(e.key)) { e.preventDefault(); return; }
+  if (UI.bagKey(e.key)) { e.preventDefault(); return; }
   if (UI.skyKey(e.key)) { e.preventDefault(); return; }
   if (UI.skinKey(e.key)) { e.preventDefault(); return; }
   if (['tab', ' ', 'e', 'escape'].includes(k)) e.preventDefault();
@@ -437,6 +573,7 @@ addEventListener('keydown', (e) => {
 
   // the character sheet is keyboard-driven too: arrows walk its bottom row
   if (state.dialogOpen) {
+    if (UI.dialogNumber(e.key)) return;
     if (k === 'arrowleft') return UI.moveDialogFocus(-1);
     if (k === 'arrowright') return UI.moveDialogFocus(1);
     if (k === 'arrowup') return UI.dialogUp();
@@ -464,7 +601,10 @@ addEventListener('keydown', (e) => {
   if (k === 'tab') return toggle('roster', UI.renderRoster, UI.closeRoster);
   // N снаружи показывает все заметки; внутри разговора та же клавиша их пишет
   if (k === 'n' || k === 'т') return toggle('notes', UI.renderNotes, UI.closeNotes);
-  if (k === 'c' || k === 'с') return toggle('dress', UI.renderDress, UI.closeDress);
+  // C открывает инвентарь на «на себе» — там, где эта клавиша была всегда;
+  // I открывает его же на той вкладке, где ты был в прошлый раз.
+  if (k === 'c' || k === 'с') return toggle('bag', () => UI.renderBag('self'), UI.closeBag);
+  if (k === 'i' || k === 'ш') return toggle('bag', UI.renderBag, UI.closeBag);
   if (k === 'p' || k === 'з') return toggle('sky', UI.renderSky, UI.closeSky);
   if (k === 'u' || k === 'г') return toggle('skin', UI.renderSkin, UI.closeSkin);
   // I — пригласить. Кадры клавишу не задают, это выбор здесь: G занята
@@ -488,7 +628,7 @@ addEventListener('keydown', (e) => {
 // Экран входа открыт и поверх него ничего нет — значит и клавиши, и ходьба
 // по коридору принадлежат ему.
 const titleFree = () => titleOpen()
-  && ['dress', 'sky', 'viewer', 'roster'].every((id) => document.getElementById(id).hidden);
+  && ['bag', 'sky', 'viewer', 'roster'].every((id) => document.getElementById(id).hidden);
 const NO_KEYS = new Set();
 
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
@@ -583,6 +723,24 @@ function nearest() {
     if (d < bestD) { bestD = d; best = { kind: 'water', prop }; }
   }
 
+  const gh = state.layout.greenhouse;
+  if (gh) {
+    for (const pot of gh.pots) {
+      const d = Math.hypot(pot.spot.x - p.x, pot.spot.y - p.y);
+      if (d < bestD) { bestD = d; best = { kind: 'pot', room: gh, pot }; }
+    }
+    const dt = Math.hypot(gh.tap.spot.x - p.x, gh.tap.spot.y - p.y);
+    if (dt < bestD) { bestD = dt; best = { kind: 'tap', room: gh }; }
+    const dh = Math.hypot(gh.hook.spot.x - p.x, gh.hook.spot.y - p.y);
+    if (dh < bestD) { bestD = dh; best = { kind: 'hook', room: gh }; }
+  }
+
+  const cur0 = state.currentRoom;
+  if (cur0 && cur0.micro) {
+    const d = Math.hypot(cur0.micro.x - p.x, cur0.micro.y + 8 - p.y);
+    if (d < bestD) { bestD = d; best = { kind: 'micro', room: cur0 }; }
+  }
+
   const cur = state.currentRoom;
   if (cur && cur.coffee) {
     const d = Math.hypot(cur.coffee.x - p.x - 18, cur.coffee.y - 10 - p.y);
@@ -626,6 +784,13 @@ function nearest() {
     const b = room.board;
     const d = Math.hypot(b.x + b.w / 2 - p.x, b.y + b.h + 16 - p.y);
     if (d < bestD) { bestD = d; best = { kind: 'board', room }; }
+  }
+  // Фикус: к дереву подходят снизу, как к остальному в комнате. Стоит он там,
+  // где есть репозиторий, — layout.js:144.
+  if (room && room.ficus) {
+    const f = room.ficus;
+    const d = Math.hypot(f.x - p.x, f.y - 6 - p.y);
+    if (d < bestD) { bestD = d; best = { kind: 'ficus', room }; }
   }
   // Модули добавляют свои цели тем же способом: кандидат с расстоянием,
   // ближайший побеждает. Ядро не знает, что это за предмет.
@@ -712,6 +877,39 @@ function tickPlay(now) {
   UI.toast(tr(key, { a: g.mine, b: g.his }));
 }
 
+// Рыба в микроволновке. Шесть секунд она греется, потом звонок — и ещё
+// четырнадцать секунд по этажу идёт запах. Ничего, кроме запаха, не
+// происходит: в этом и шутка.
+const MICRO_RUN = 6000, MICRO_SMELL = 14000;
+
+function startMicro(room) {
+  if (state.micro) {
+    // Уже греется — второй рыбе места нет. Молчать тут нельзя: человек жмёт
+    // ПРОБЕЛ и не понимает, почему ничего не случилось.
+    UI.toast(tr(state.micro.phase === 'run' ? 'toast.microBusy' : 'toast.microSmell'), 'wait');
+    return;
+  }
+  state.micro = { key: room.key, at: state.t, phase: 'run' };
+  state.player.moving = false;
+  UI.toast(tr('toast.microOn'));
+  sound.pour(0.5);
+}
+
+function tickMicro(now) {
+  const m = state.micro;
+  if (!m) return;
+  const passed = now - m.at;
+  if (m.phase === 'run' && passed > MICRO_RUN) {
+    m.phase = 'smell';
+    sound.chime();
+    UI.toast(tr('toast.microDing'), 'wait');
+    // Агенты узнают о рыбе так же, как обо всём остальном в офисе, — новостью
+    const who = state.agents[Math.floor(Math.random() * state.agents.length)];
+    if (who) UI.toast(tr('news.micro', { name: who.name }), 'news');
+  }
+  if (m.phase === 'smell' && passed > MICRO_RUN + MICRO_SMELL) state.micro = null;
+}
+
 function tickDrink(now) {
   const d = state.drink;
   if (!d) return;
@@ -766,6 +964,14 @@ function interact() {
     UI.toast(`«${tr('poster.name')}» · ${tr('poster.medium')}`);
   } else if (n.kind === 'water' || n.kind === 'coffee') {
     startDrink(n);
+  } else if (n.kind === 'hook') {
+    takeCan();
+  } else if (n.kind === 'tap') {
+    fillCan();
+  } else if (n.kind === 'pot') {
+    pourOn(n.room, n.pot);
+  } else if (n.kind === 'micro') {
+    startMicro(n.room);
   } else if (n.kind === 'kicker') {
     startPlay();
   } else if (n.kind === 'lang') {
@@ -776,7 +982,9 @@ function interact() {
     UI.openReception(n.desk, (id) => { state.waypoint = id; UI.toast(tr('toast.guideHim')); });
   } else if (n.kind === 'lift') {
     callLift(n.floor);
-    } else {
+  } else if (n.kind === 'ficus') {
+    UI.openGit(n.room.key, (project, opts) => gitOf(project, opts), (project, hash) => gitCommitOf(project, hash));
+  } else {
     UI.openGallery(boardItems(n.room), tr('board.title', { room: n.room.title }));
   }
 }
@@ -890,7 +1098,7 @@ function closeAll() {
   if (state.cctv.on) return closeCams();
   if (!document.getElementById('viewer').hidden) return UI.closeViewer();
   if (!document.getElementById('roster').hidden) return UI.closeRoster();
-  if (!document.getElementById('dress').hidden) return UI.closeDress();
+  if (!document.getElementById('bag').hidden) return UI.closeBag();
   if (!document.getElementById('sky').hidden) return UI.closeSky();
   if (!document.getElementById('skin').hidden) return UI.closeSkin();
   if (!document.getElementById('notes').hidden) return UI.closeNotes();
@@ -912,7 +1120,9 @@ function surfaceUnder(L, x, y) {
 function panelsOpen() {
   // едущая кабина тоже держит человека на месте: створки закрыты, выходить некуда
   return titleOpen() || state.dialogOpen || state.cctv.on || UI.inviteOpen() || state.lift.phase !== 'idle'
-    || ['viewer', 'roster', 'dress', 'sky', 'lift', 'invite'].some((id) => !document.getElementById(id).hidden);
+    // Панель модуля тоже держит экран: своих id ядро не знает и знать не должно.
+    || collect('busy').some(Boolean)
+    || ['viewer', 'roster', 'bag', 'sky', 'lift', 'invite'].some((id) => !document.getElementById(id).hidden);
 }
 
 function update(dt, now) {
@@ -925,6 +1135,7 @@ function update(dt, now) {
   const p = state.player;
 
   tickDrink(now);
+  tickMicro(now);
   tickPlay(now);
   tickLift(now);
   tellWhereIAm(now);
@@ -1112,7 +1323,7 @@ function draw(t) {
     drawCamera(ctx, VW, VH, cams[state.cctv.idx], {
       agents: state.agents, actors: state.actors, looks: state.looks, boardItems,
       layout: L, night: nightAmount(), weather: state.weather, cat: state.cat,
-      player: state.player, me: state.me, unlocked: state.cctv.unlocked,
+      player: state.player, me: myLook(), unlocked: state.cctv.unlocked,
       index: state.cctv.idx, total: cams.length,
       auto: state.cctv.auto, dwell: CAM_DWELL, since: state.cctv.since,
       online: t - state.cctv.since > 260,   // короткая рябь при переключении
@@ -1142,7 +1353,12 @@ function draw(t) {
       continue;
     }
     if (r.draw === 'meeting') { drawMeeting(ctx, r, t); continue; }
+    if (r.draw === 'greenhouse') {
+      drawGreenhouse(ctx, r, t, { night: nightAmount(), weather: state.weather, garden: gardenView(r) });
+      continue;
+    }
     drawRoom(ctx, r, t); drawRoomProps(ctx, r, t);
+    if (r.micro) drawMicro(ctx, r.micro, t, state.micro && state.micro.key === r.key ? state.micro : null);
   }
   drawLift(ctx, L, t, state.lift);
   drawReception(ctx, L, t);
@@ -1234,7 +1450,7 @@ function draw(t) {
     const dr = state.drink;
     // доска под ногами — до человека, он на ней стоит
     if (p.skate) drawSkateboard(ctx, p.x, p.y, p.dir, p.moving, t);
-    drawPerson(ctx, p.x, p.y, state.me, {
+    drawPerson(ctx, p.x, p.y, myLook(), {
       // на скейте ноги стоят на деке, а не переступают
       pose: p.skate ? 'stand' : (p.moving ? 'walk' : 'stand'),
       frame: Math.floor(t / (p.running ? 80 : 130)), dir: p.dir,
@@ -1295,6 +1511,20 @@ function draw(t) {
     const w = near.prop;
     draws.push({ y: 1e9, fn: () => label(w.x, w.y + 16, tr('hint.water'), '#9fd4e8') });
   }
+  if (near && (near.kind === 'pot' || near.kind === 'tap' || near.kind === 'hook')) {
+    const left = canLeft();
+    const spot = near.kind === 'pot' ? near.pot.spot : near.kind === 'tap' ? near.room.tap.spot : near.room.hook.spot;
+    const key = near.kind === 'hook' ? (state.carry ? 'hint.canBack' : 'hint.can')
+      : near.kind === 'tap' ? 'hint.tap'
+      : !state.carry ? 'hint.potNoCan' : left > 0 ? 'hint.pot' : 'hint.potEmpty';
+    draws.push({ y: 1e9, fn: () => label(spot.x, spot.y + 12, tr(key, { n: left }), state.carry ? '#9fd4e8' : '#9fe0a8') });
+  }
+  if (near && near.kind === 'micro') {
+    const m = near.room.micro;
+    const mine = state.micro && state.micro.key === near.room.key ? state.micro : null;
+    const key = mine ? (mine.phase === 'run' ? 'hint.microOn' : 'hint.microSmell') : 'hint.micro';
+    draws.push({ y: 1e9, fn: () => label(m.x, m.y + 16, tr(key), mine ? '#ffd166' : '#9fe0a8') });
+  }
   if (near && near.kind === 'coffee' && !state.drink) {
     const c = near.room.coffee;
     draws.push({ y: 1e9, fn: () => label(c.x - 12, c.y + 14, tr('hint.coffee'), '#ffd166') });
@@ -1317,6 +1547,10 @@ function draw(t) {
     draws.push({ y: 1e9, fn: () => label(b.x + b.w / 2, b.y + b.h + 14, tr('hint.board'), '#9fe0a8') });
   }
 
+  if (near && near.kind === 'ficus') {
+    const f = near.room.ficus;
+    draws.push({ y: 1e9, fn: () => label(f.x, f.y - 70, tr('hint.git'), '#9fe0a8') });
+  }
   draws.sort((a, b) => a.y - b.y).forEach((d) => d.fn());
 
   drawLight(ctx, L, t, night);
@@ -1496,7 +1730,7 @@ initTitle(state, {
     sound.init();
     sound.door(0.8);
   },
-  dress: () => UI.renderDress(),
+  bag: () => UI.renderBag('self'),
   sky: () => UI.renderSky(),
   lang: () => switchLang(),
 });

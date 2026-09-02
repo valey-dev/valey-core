@@ -9,7 +9,7 @@
 //   first   — отдаём событие первому, кто взялся (клавиша, ПРОБЕЛ, ESC).
 import { addDict } from './i18n.js';
 
-const HOOKS = ['sig', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'esc', 'tick', 'hud', 'lang', 'help'];
+const HOOKS = ['sig', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'esc', 'tick', 'hud', 'lang', 'help', 'busy'];
 const hooks = Object.fromEntries(HOOKS.map(h => [h, []]));
 const dicts = [];
 let ids = [];

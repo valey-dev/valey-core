@@ -10,7 +10,7 @@
 // смысл: каждому выдуманному агенту достался стол, и точка, куда ставится
 // игрок, проходима. Второе — прямой наследник того самого бага: посадить
 // человека в стену значит встретить посетителя словами «я застрял».
-import { AGENTS } from '../web/landing.js';
+import { AGENTS, BOARD } from '../web/landing.js';
 import { buildLayout, blocked, WALL } from '../web/layout.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -114,6 +114,25 @@ ok('ровно один в лимите', AGENTS.filter((a) => a.limited).length
 ok('заголовок «зачем» согласован с этажом',
   html.includes('Eight sessions. Three are waiting') && AGENTS.length === 8 && count('awaiting') === 3,
   { всего: AGENTS.length, ждут: count('awaiting') });
+
+// Доска: страница обещает «готовое висит на стене, клик — просмотр». Пока
+// карточки рисовались, а открыть было нечего, это обещание было обмануто.
+// Здесь держим данные в форме, которую просмотр умеет показать.
+const files = Object.values(BOARD).flat();
+ok('на доске есть работы', files.length >= 5, files.length);
+ok('у каждой работы есть автор', files.every((f) => f.who), files.filter((f) => !f.who).map((f) => f.path));
+ok('у каждого текстового файла есть содержимое',
+  files.filter((f) => !f.image).every((f) => f.body && f.body.length > 40),
+  files.filter((f) => !f.image && !(f.body && f.body.length > 40)).map((f) => f.path));
+ok('доска есть у каждой комнаты проекта',
+  projectRooms.every((r) => (BOARD[r.key] || []).length > 0),
+  projectRooms.filter((r) => !(BOARD[r.key] || []).length).map((r) => r.key));
+
+// Слово «демо» до 31 августа 2026 жило только в aria-label: его слышали
+// скринридеры и не видел никто. Теперь оно на экране, и на обоих языках.
+ok('подпись «демо» есть в разметке', /data-t="demoNote"/.test(html));
+ok('подпись «демо» переведена на оба языка',
+  /demoNote: 'A demo floor/.test(html) && /demoNote: 'Демо-этаж/.test(html));
 
 console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
 process.exit(bad ? 1 : 0);

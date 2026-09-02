@@ -564,6 +564,7 @@ export async function snapshot() {
       cwd: s.cwd,
       version: repo.version || '',
       stack: repo.stack || '',
+      repo: !!repo.git,
       branch: t.branch,
       model: t.model,
       title: t.title || t.aiTitle || '',

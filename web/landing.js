@@ -71,11 +71,23 @@ export const AGENTS = [
           say: 'Разложила лендинг на семь блоков. Подтверди порядок — и я отдам его в вёрстку.' } },
 ];
 
-// Пара файлов на доску: доска рисует карточки, ей важно только image/path.
-const BOARD = {
-  valey:      [{ path: 'hero.png', image: true }, { path: 'notes.md' }],
-  storefront: [{ path: 'sdk.md' }],
-  'docs-site': [{ path: 'plan.md' }, { path: 'blocks.png', image: true }],
+// Файлы на доске. Выдуманные, как и агенты, и панель говорит об этом вслух:
+// показываем механику — «готовое висит на стене» — а не чью-то работу.
+// path и image нужны отрисовке доски, остальное — просмотру.
+export const BOARD = {
+  valey: [
+    { path: 'paintings.md', who: 'Ася', body: '# Развеска картин\n\nСобрала два варианта для коридора: плотный по простенкам и разреженный.\n\n## Плотный\n\n- картина каждые 40 пикселей мира\n- в узких простенках рама налезает на окно\n- зато коридор не выглядит пустым\n\n## Разреженный\n\n- одна картина на простенок, остальное стена\n- пустее, но рамы нигде не спорят с окнами\n\nЖду решения, чтобы не вешать дважды.' },
+    { path: 'limit-notice.md', who: 'Пётр', body: '# Лимит подписки\n\nЭто говорит подписка, а не агент. В офисе такое должно выглядеть объявлением на двери, а не его репликой.\n\n```\nYou have hit your session limit \u00b7 resets 12:10am\n```\n\nСервер ловит такие строки отдельно и отдаёт полем `limited`, вместе со временем возврата.' },
+  ],
+  storefront: [
+    { path: 'sdk-notes.md', who: 'Марк', body: '# Spotify Web Playback SDK\n\nИщу, почему SDK отвечает `account_error` без Premium. Пока похоже, что это единственная причина, но проверил не всё.\n\n## Что проверено\n\n- токен живой, `/me` отвечает 200\n- `device_id` приходит, плеер регистрируется\n- на Premium-аккаунте тот же код играет\n\n```\nplayer.addListener(\'account_error\', e => {\n  console.log(e.message);   // Premium required\n});\n```\n\nВывод: без Premium играть нельзя вообще, превью на 30 секунд SDK не отдаёт.' },
+    { path: 'pricing.md', who: 'Марта', body: '# Что входит в бесплатный тариф\n\nСейчас две страницы отвечают на это по-разному, и это надо свести.\n\n- на лендинге сказано «всё локально, зависимостей нет»\n- в справке упомянут лимит на число комнат, которого в коде нет\n\nПишу один список и убираю второй.' },
+    { path: 'checkout.png', who: 'Марк', image: true },
+  ],
+  'docs-site': [
+    { path: 'blocks.md', who: 'Лиза', body: '# Лендинг: семь блоков\n\n1. Заголовок и демо-этаж\n2. Зачем — три столба\n3. Приватность\n4. Что дальше\n5. Замер спроса\n6. Скачать\n7. Подвал\n\nПодтверди порядок — и я отдам в вёрстку.' },
+    { path: 'release.md', who: 'Савва', body: '# 0.1.1\n\nТег и табличка в офисе показывают одну версию — ролик не соврёт.\n\n```\nnpm version patch\n```' },
+  ],
 };
 
 export function createFloor(canvas, opts = {}) {
@@ -110,6 +122,19 @@ export function createFloor(canvas, opts = {}) {
     return null;
   };
   const seats = new Map(AGENTS.map((a) => [a.id, seatOf(a)]).filter(([, s]) => s));
+
+  // Доска висит на верхней стене комнаты. Подходить к ней надо изнутри, поэтому
+  // меряем до её нижнего края, а не до середины.
+  const nearestBoard = () => {
+    let best = null, bd = 44;
+    for (const r of L.rooms) {
+      if (r.service || !r.board) continue;
+      const bx = r.board.x + r.board.w / 2, by = r.board.y + r.board.h;
+      const d = Math.hypot(bx - me.x, by - me.y);
+      if (d < bd) { bd = d; best = r; }
+    }
+    return best;
+  };
 
   const nearest = () => {
     let best = null, bd = 46;
@@ -172,10 +197,16 @@ export function createFloor(canvas, opts = {}) {
     draws.sort((a, b) => a.y - b.y).forEach((d) => d.fn());
 
     if (!talking) {
+      const hint = opts.talkHint ? opts.talkHint() : 'SPACE';
       const a = nearest();
       if (a) {
         const s = seats.get(a.id);
-        pxText(ctx, opts.talkHint ? opts.talkHint() : 'SPACE', s.d.x - 12, s.d.y - 22, '#ffd166');
+        pxText(ctx, hint, s.d.x - 12, s.d.y - 22, '#ffd166');
+      } else {
+        // у доски подсказка тоже нужна: без неё карточки выглядят нажимаемыми
+        // и молчат — ровно то, что чинится этой правкой
+        const r = nearestBoard();
+        if (r) pxText(ctx, hint, r.board.x + r.board.w / 2 - 12, r.board.y + r.board.h + 12, '#ffd166');
       }
     }
     ctx.restore();
@@ -223,9 +254,12 @@ export function createFloor(canvas, opts = {}) {
     key(k, down) { const s = k.toLowerCase(); if (down) keys.add(s); else keys.delete(s); },
     act() {
       if (talking) { talking = null; return null; }
+      // агент вперёд доски: у стола стоишь ближе, и разговор ожидаемее
       const a = nearest();
-      talking = a || null;
-      return a;
+      if (a) { talking = a; return { kind: 'agent', agent: a }; }
+      const r = nearestBoard();
+      if (r) return { kind: 'board', room: r, files: BOARD[r.key] || [] };
+      return null;
     },
     close() { talking = null; },
     talking: () => talking,

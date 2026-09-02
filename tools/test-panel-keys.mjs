@@ -29,9 +29,8 @@ function node(cls = '', props = {}) {
 
 const stub = node();
 let roster = null;
-let radioBox = null;
 let notes = null;
-let dress = null;
+let bag = null;
 let sky = null;
 let skin = null;
 
@@ -45,25 +44,6 @@ function makeRoster(n) {
 }
 
 // Порядок такой же, как в разметке панели: ручки, волны, громкость, своя волна.
-function makeRadio(waves = 2) {
-  const ctl = [
-    node('', { id: 'radioprev' }), node('big', { id: 'radiotoggle' }), node('', { id: 'radionext' }),
-  ];
-  for (let i = 0; i < waves; i++) { ctl.push(node('rst')); ctl.push(node('rdel')); }
-  ctl.push(node('', { id: 'radiovol', tagName: 'INPUT', type: 'range', value: '50' }));
-  ctl.push(node('', { id: 'radiouri', tagName: 'INPUT', type: 'text' }));
-  const classes = new Set(['open']);
-  return {
-    ctl, innerHTML: '',
-    classList: {
-      add: (c) => classes.add(c), remove: (c) => classes.delete(c),
-      contains: (c) => classes.has(c),
-      toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)),
-    },
-    querySelector: () => null,
-    querySelectorAll: () => ctl,
-  };
-}
 
 // портрет в «переодеться» рисуется на канвасе — стенду хватит заглушки
 const fakeCtx = {
@@ -74,7 +54,7 @@ const fakeCtx = {
 
 // Слот одежды — строка с ◀ и ▶ внутри, а не кнопка. Стрелки в стороны должны
 // жать эти кнопки, а не перескакивать на соседний слот.
-function makeDress(slots) {
+function makeBagSelf(slots) {
   const rows = [];
   const name = node('namerow');
   const input = node('', { tagName: 'INPUT' });
@@ -92,6 +72,33 @@ function makeDress(slots) {
     hidden: false, innerHTML: '', rows,
     querySelector: () => null,
     querySelectorAll: (sel) => (sel === '.namerow, .drow' ? rows : []),
+  };
+}
+
+// Вкладка «вещи» — сетка: ряд на слот, в ряду клетки. Стрелки тут значат не то
+// же самое, что на «на себе», поэтому у неё свой стенд.
+function makeBagThings(rows) {
+  const cats = rows.map((n) => {
+    const cells = Array.from({ length: n }, () => node('bcell'));
+    const cat = node('bcat');
+    cat.querySelectorAll = (sel) => (sel === '.bcell' ? cells : []);
+    cat.cells = cells;
+    return cat;
+  });
+  return {
+    hidden: false, innerHTML: '', cats, cells: cats.map((c) => c.cells),
+    querySelector: () => null,
+    querySelectorAll: (sel) => (sel === '.bcat' ? cats : []),
+  };
+}
+
+// Вкладка «офис» — просто ряд кнопок, кольцо фокуса как у окна в мир.
+function makeBagOffice(n) {
+  const btns = Array.from({ length: n }, () => node('obtn'));
+  return {
+    hidden: false, innerHTML: '', btns,
+    querySelector: () => null,
+    querySelectorAll: (sel) => (sel === '.obtn' ? btns : []),
   };
 }
 
@@ -120,6 +127,9 @@ function makeNotes(n) {
 }
 
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+// Адрес страницы нужен подсказке про Redirect URI в радио — второй кусок,
+// который отложенный ответ probeDrm достаёт из панели уже после её отрисовки.
+globalThis.location = { origin: 'http://localhost:5177', hash: '', search: '' };
 const withStyle = (n) => Object.assign(n, { style: { setProperty: () => {}, removeProperty: () => {} } });
 // initUI запоминает узлы один раз, поэтому за ним стоит постоянная обёртка, а
 // свежий подставной DOM подсовывается уже за ней
@@ -140,7 +150,8 @@ const proxy = (get) => ({
   querySelector: (s2) => get().querySelector(s2),
   querySelectorAll: (s2) => get().querySelectorAll(s2),
 });
-const dressProxy = proxy(() => dress);
+const bagProxy = proxy(() => bag);
+let viewer = null;
 const skyProxy = proxy(() => sky);
 const skinProxy = proxy(() => skin);
 
@@ -153,10 +164,21 @@ const rosterProxy = {
   querySelectorAll: (s2) => roster.querySelectorAll(s2),
 };
 
+const viewerProxy = proxy(() => viewer);
+
+// Правая панель дерева гита: её листают PgUp/PgDn, поэтому у неё должна быть
+// высота и прокрутка, а не общая заглушка с нулями.
+const pane = () => node('', { clientHeight: 400, scrollHeight: 4000 });
+const gcard = pane();
+const gcode = pane();
+
 globalThis.document = {
   querySelector: (sel) => (sel === '#roster' ? rosterProxy
+    : sel === '#gcard' ? gcard
+    : sel === '#gcode' ? gcode
+    : sel === '#viewer' ? viewerProxy
     : sel === '#notes' ? notesProxy
-    : sel === '#dress' ? dressProxy
+    : sel === '#bag' ? bagProxy
     : sel === '#sky' ? skyProxy
     : sel === '#skin' ? skinProxy
     : stub),
@@ -176,13 +198,16 @@ const agents = (n) => Array.from({ length: n }, (_, i) => ({
   id: 'a' + i, name: 'Агент ' + i, project: 'AI valey', status: 'awaiting',
   title: 'задача', lastSaid: 'ждёт', idleFor: 60, roleKey: 'code',
 }));
-const state = { agents: [], looks: new Map(), settings: {}, delivery: {}, visited: new Set() };
+// me нужен: инвентарь рисует человечка и подписи слотов из него
+const state = { agents: [], looks: new Map(), settings: {}, delivery: {}, visited: new Set(),
+  me: { skin: '#e8ad7e', hair: '#3a2a20', shirt: '#c25a4b', pants: '#3f4a63', boots: '#2a2118',
+        style: 0, tall: 0, face: 'none', head: 'none', glasses: false, hands: 'none', name: 'ТЫ' } };
 roster = makeRoster(0);
 notes = makeNotes(0);
-dress = makeDress(0);
+bag = makeBagSelf(0);
 sky = makeRing([]);
 skin = makeRing([]);
-UI.initUI(state, { guideTo: () => {} });
+UI.initUI(state, { guideTo: () => {}, saveMe: () => {} });
 
 let failed = 0;
 const check = (name, ok, got) => {
@@ -241,28 +266,72 @@ notes = makeNotes(0);
 UI.renderNotes();
 check('пустые заметки стрелки не едят', UI.notesKey('ArrowDown') === false, 'съели');
 
-// ------------------------------------------------------------- переодеться
-dress = makeDress(3);            // строка имени плюс три слота
-const rows = dress.rows;
+// --------------------------------------------------------------- инвентарь
+// Вкладка «на себе» — бывшая панель C, слово в слово: стрелки вверх-вниз по
+// слотам, в стороны крутят значение того, на котором стоишь.
+bag = makeBagSelf(3);            // строка имени плюс три слота
+const rows = bag.rows;
 const focusRow = () => rows.findIndex((r) => r.has('focus'));
-UI.dressKey('ArrowDown');
-check('переодеться: фокус пошёл со строки имени на первый слот', focusRow() === 1, focusRow());
+UI.bagKey('ArrowDown');
+check('на себе: фокус пошёл со строки имени на первый слот', focusRow() === 1, focusRow());
 check('и подсвечена ровно одна строка', rows.filter((r) => r.has('focus')).length === 1, rows.filter((r) => r.has('focus')).length);
-UI.dressKey('ArrowRight');
+UI.bagKey('ArrowRight');
 check('вправо жмёт ▶ этого слота, а не уводит', rows[1].next.clicked === 1 && rows[1].has('focus'), `${rows[1].next.clicked}`);
-UI.dressKey('ArrowLeft');
+UI.bagKey('ArrowLeft');
 check('влево жмёт ◀ того же слота', rows[1].prev.clicked === 1, rows[1].prev.clicked);
 check('соседний слот не тронут', rows[2].next.clicked === 0 && rows[2].prev.clicked === 0, 'тронут');
-UI.dressKey('Enter');
+UI.bagKey('Enter');
 check('Enter на слоте делает то же, что ▶', rows[1].next.clicked === 2, rows[1].next.clicked);
 
 // имя — поле ввода: Enter должен отдать ему фокус, иначе с клавиатуры не набрать
-UI.dressKey('ArrowUp');
-UI.dressKey('Enter');
+UI.bagKey('ArrowUp');
+UI.bagKey('Enter');
 check('Enter на имени отдаёт полю фокус', rows[0].input.focused === 1, rows[0].input.focused);
 
-UI.closeDress();
-check('закрытое переодевание стрелки не ест', UI.dressKey('ArrowDown') === false, 'съело');
+// Вкладки: цифра переключает, и стрелки после этого значат другое.
+bag = makeBagThings([3, 2]);
+check('цифра 2 обработана панелью', UI.bagKey('2') === true, 'не обработана');
+const cells = bag.cells;
+const focusCell = () => {
+  for (let r = 0; r < cells.length; r++) {
+    const i = cells[r].findIndex((c) => c.has('focus'));
+    if (i >= 0) return `${r}:${i}`;
+  }
+  return 'нигде';
+};
+check('вещи: фокус встал на первую клетку', focusCell() === '0:0', focusCell());
+UI.bagKey('ArrowRight'); UI.bagKey('ArrowRight');
+check('вправо ходит по клеткам ряда', focusCell() === '0:2', focusCell());
+UI.bagKey('ArrowDown');
+check('вниз меняет ряд и поджимает клетку под его длину', focusCell() === '1:1', focusCell());
+UI.bagKey('Enter');
+check('Enter надевает выбранное', cells[1][1].clicked === 1, cells[1][1].clicked);
+check('подсвечена ровно одна клетка', cells.flat().filter((c) => c.has('focus')).length === 1,
+  cells.flat().filter((c) => c.has('focus')).length);
+check('вправо по кругу возвращает в начало ряда', (UI.bagKey('ArrowRight'), focusCell()) === '1:0', focusCell());
+
+// назад на «на себе»: фокус там начинается заново, а не помнит клетку сетки
+bag = makeBagSelf(3);
+UI.bagKey('1');
+check('цифра 1 вернула на «на себе»', focusRow() === 0, focusRow());
+check('несуществующая вкладка не ловится', UI.bagKey('9') === false, 'поймана');
+
+// Вкладка «офис»: ряд кнопок, и стрелка вниз должна по ним ходить. До
+// 31 августа 2026 она не делала ничего — обработчик знал только две вкладки из
+// трёх, и клавиша уезжала в офис из-под открытой панели.
+bag = makeBagOffice(5);
+check('офис: цифра 3 открыла вкладку', UI.bagKey('3') === true, 'не обработана');
+check('вниз обработана', UI.bagKey('ArrowDown') === true, 'не обработана');
+check('и переводит на вторую кнопку', bag.btns[1].has('focus'), 'фокус не там');
+check('подсвечена ровно одна', bag.btns.filter((b) => b.has('focus')).length === 1,
+  bag.btns.filter((b) => b.has('focus')).length);
+UI.bagKey('Enter');
+check('Enter нажимает то, на чём стоишь', bag.btns[1].clicked === 1, bag.btns[1].clicked);
+UI.bagKey('ArrowUp');
+check('вверх возвращает на первую', bag.btns[0].has('focus'), 'не вернулась');
+
+UI.closeBag();
+check('закрытый инвентарь стрелки не ест', UI.bagKey('ArrowDown') === false, 'съело');
 
 // ------------------------------------------- окно в мир и цвет офиса (кольцо)
 sky = makeRing([{ id: 'skytoggle' }, { id: 'skyq', tagName: 'INPUT' }, { id: 'skygeo' }]);
@@ -288,6 +357,96 @@ check('вправо крутит ползунок, а не уводит', skin.b
 check('и дёргает его обработчик', hueSet === 1, hueSet);
 UI.skinKey('ArrowDown');
 check('вниз с ползунка всё-таки уводит', !skin.btns[1].has('focus'), 'застряли');
+
+// ------------------------------------------------------------- дерево гита
+// Панель рисуется в общий оверлей, поэтому подставной DOM тут один узел, а
+// проверяется по разметке: какая строка выбрана и какая ступень открыта.
+viewer = {
+  hidden: true, innerHTML: '',
+  querySelector: () => null,
+  querySelectorAll: () => [],
+};
+const commits = [
+  { hash: 'a'.repeat(40), short: 'aaaaaaa', parents: ['b'.repeat(40)], author: 'xoyk', ts: Date.now(),
+    refs: ['HEAD -> main'], subject: 'верхний коммит', body: '', unpushed: true },
+  { hash: 'b'.repeat(40), short: 'bbbbbbb', parents: ['c'.repeat(40)], author: 'xoyk', ts: Date.now() - 6e5,
+    refs: ['origin/main'], subject: 'средний коммит', body: '', unpushed: false },
+  { hash: 'c'.repeat(40), short: 'ccccccc', parents: [], author: 'xoyk', ts: Date.now() - 12e5,
+    refs: [], subject: 'нижний коммит', body: '', unpushed: false },
+];
+const board = { ok: true, branch: 'main', total: 3, dirty: 2, remotes: true, unpushed: 1, commits };
+const diff = {
+  ok: true, merge: false, truncated: false,
+  commit: { ...commits[0], add: 1, del: 0 },
+  files: [
+    { path: 'web/main.js', add: 1, del: 0, binary: false, lines: [{ kind: 'add', new: 1, text: 'const a = 1;' }] },
+    { path: 'web/ui.js', add: 0, del: 0, binary: false, lines: [] },
+  ],
+};
+await UI.openGit('AI valey', async () => board, async () => diff);
+const sel = () => {
+  const m = viewer.innerHTML.match(/class="grow sel" data-i="(\d+)"/);
+  return m ? Number(m[1]) : -1;
+};
+check('дерево: открылось на верхнем коммите', sel() === 0, sel());
+check('высота панели закреплена, пока есть что прокручивать',
+  viewer.innerHTML.includes('class="vwrap gitwrap tall"'), 'нет класса tall');
+check('рабочее дерево стоит отдельной строкой', viewer.innerHTML.includes('grow dirty'), 'нет строки');
+check('непушнутый коммит отмечен', viewer.innerHTML.includes('class="gup"'), 'нет отметки');
+gcard.scrollTop = 0;
+gcard.scrollTop = 0;
+check('PgDn на истории листает сообщение, а не список',
+  UI.gitKey('pagedown') === true && gcard.scrollTop > 0 && sel() === 0,
+  `scrollTop ${gcard.scrollTop}, строка ${sel()}`);
+check('PgUp крутит его обратно', UI.gitKey('pageup') === true && gcard.scrollTop === 0, gcard.scrollTop);
+check('стрелка вниз обработана деревом', UI.gitKey('arrowdown') === true, 'не обработана');
+check('и переводит на следующий коммит', sel() === 1, sel());
+UI.gitKey('arrowup');
+UI.gitKey('arrowup');
+check('вверх на первом коммите не уезжает за край', sel() === 0, sel());
+UI.gitKey('end');
+check('End уводит к последнему', sel() === 2, sel());
+UI.gitKey('home');
+check('Home возвращает к первому', sel() === 0, sel());
+await UI.gitKey('enter');
+await new Promise((r) => setTimeout(r, 0));
+check('Enter открывает диф', viewer.innerHTML.includes('class="gcode"'), 'дифа нет');
+check('в дифе выбран первый файл', viewer.innerHTML.includes('class="gfile sel" data-f="0"'), 'нет выбора');
+check('строка дифа пришла с подсветкой', viewer.innerHTML.includes('t-keyword'), 'без подсветки');
+check('префикс отдельной колонкой, а не в коде', !viewer.innerHTML.includes('>+const'), 'префикс в коде');
+UI.gitKey('arrowdown');
+check('вниз ведёт к следующему файлу', viewer.innerHTML.includes('class="gfile sel" data-f="1"'), 'не ведёт');
+UI.gitKey('arrowdown');
+check('на последнем файле вниз не уходит по кругу', viewer.innerHTML.includes('class="gfile sel" data-f="1"'), 'ушло по кругу');
+UI.gitKey('arrowup');
+check('вверх возвращает к предыдущему файлу', viewer.innerHTML.includes('class="gfile sel" data-f="0"'), 'не вернуло');
+UI.gitKey('arrowup');
+check('на первом файле вверх стоит на месте', viewer.innerHTML.includes('class="gfile sel" data-f="0"'), 'уехало');
+UI.gitKey('arrowright');
+check('вправо делает то же, что вниз', viewer.innerHTML.includes('class="gfile sel" data-f="1"'), 'не листает');
+gcode.scrollTop = 0;
+check('PgDn в дифе листает диф, а не файлы', UI.gitKey('pagedown') === true
+  && gcode.scrollTop > 0 && viewer.innerHTML.includes('class="gfile sel" data-f="1"'),
+  `scrollTop ${gcode.scrollTop}`);
+UI.gitKey('home');
+check('Home уводит к первому файлу', viewer.innerHTML.includes('class="gfile sel" data-f="0"'), 'не увело');
+UI.gitKey('end');
+check('End — к последнему', viewer.innerHTML.includes('class="gfile sel" data-f="1"'), 'не увело');
+UI.gitKey('escape');
+check('Esc из дифа возвращает в историю, а не в офис', UI.gitPanelOpen() && sel() === 0, 'закрылось совсем');
+UI.gitKey('escape');
+check('второй Esc закрывает дерево', !UI.gitPanelOpen(), 'осталось открытым');
+check('закрытое дерево клавиши не ест', UI.gitKey('arrowdown') === false, 'съело');
+
+// Отказные экраны меряются по содержимому: окно в пол-экрана ради двух строк
+// текста читается как поломка, а не как панель.
+await UI.openGit('пусто', async () => ({ ok: true, branch: 'main', total: 0, dirty: 0, remotes: false, unpushed: 0, commits: [] }), async () => ({}));
+check('«нет коммитов» не растягивается во весь экран',
+  !viewer.innerHTML.includes('gitwrap tall'), 'растянулось');
+await UI.openGit('отказ', async () => ({ ok: false, code: 128, message: 'not a git repository' }), async () => ({}));
+check('отказ git тоже по содержимому', !viewer.innerHTML.includes('gitwrap tall'), 'растянулось');
+check('и показывает код возврата', viewer.innerHTML.includes('128'), 'кода нет');
+UI.gitKey('escape');
 
 console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
 process.exit(failed ? 1 : 0);

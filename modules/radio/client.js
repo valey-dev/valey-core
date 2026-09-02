@@ -157,7 +157,9 @@ function openRadio() {
 // что в панели можно нажать, в порядке разметки — крестик не в счёт, его
 // заменяет Escape. Громкость внутри кольца крутится стрелками в стороны, как
 // ползунок и должен.
-const radioRing = focusRing(() => el.radio, '.radioknobs button, .rst, .rdel, #radiovol, #radiouri, .radioauth button');
+// numbers: '.rst' — цифра выбирает волну, а не ручку. Приехало из main
+// вместе с общей поддержкой цифр в кольце фокуса.
+const radioRing = focusRing(() => el.radio, '.radioknobs button, .rst, .rdel, #radiovol, #radiouri, .radioauth button', { numbers: '.rst' });
 function closeRadio() { if (el.radio) el.radio.classList.remove('open'); radioRing.reset(); }
 function radioKey(raw) { return radioRing.key(raw, radioOpen()); }
 
@@ -291,7 +293,7 @@ function paintRadio() {
   if (live) $('#radiovol').value = Math.round(player.volume * 100);
 
   $('#radiolist').innerHTML = radio.stations.map((s, i) => `<li class="${i === radio.current ? 'now' : ''}">
-    <button class="rst" data-i="${i}">${i === radio.current ? '●' : '○'} ${esc(stationName(s))}</button>
+    <button class="rst" data-i="${i}">${i === radio.current ? '●' : '○'} ${esc(stationName(s))}${i < 9 ? ` <kbd>${i + 1}</kbd>` : ''}</button>
     ${radio.stations.length > 1 ? `<button class="rdel" data-del="${i}" title="${tr('radio.remove')}">✕</button>` : ''}</li>`).join('');
   el.radio.querySelectorAll('.rst').forEach((b) => b.onclick = () => radio.tune(Number(b.dataset.i)));
   el.radio.querySelectorAll('.rdel').forEach((b) => b.onclick = () => radio.remove(Number(b.dataset.del)));
@@ -459,6 +461,10 @@ export function register(api) {
     return true;
   });
   api.on('esc', () => (radioOpen() ? (closeRadio(), true) : false));
+  // Открытая панель держит экран: пока она видна, офис не считается свободным.
+  // Раньше это знало ядро строкой UI.radioOpen() в busy() — своих id у модуля
+  // ядро не знает, поэтому спрашивает.
+  api.on('busy', () => radioOpen());
 
   api.on('tick', (state) => {
     S = state;

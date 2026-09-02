@@ -51,18 +51,23 @@ function makeRadio(waves = 2) {
     node('', { id: 'radioprev' }), node('big', { id: 'radiotoggle' }), node('', { id: 'radionext' }),
   ];
   for (let i = 0; i < waves; i++) { ctl.push(node('rst')); ctl.push(node('rdel')); }
+  const stations = ctl.filter((c) => c.has('rst'));
   ctl.push(node('', { id: 'radiovol', tagName: 'INPUT', type: 'range', value: '50' }));
   ctl.push(node('', { id: 'radiouri', tagName: 'INPUT', type: 'text' }));
   const classes = new Set(['open']);
+  // Стекло над пластинкой ищут по классу, и до дерева гита этот запрос никогда
+  // не доходил: probeDrm отвечает через промис, а ждать его в стенде было
+  // некому — падение ждало первого же await в файле.
+  const glass = node('radioglass');
   return {
-    ctl, innerHTML: '',
+    ctl, glass, stations, innerHTML: '',
     classList: {
       add: (c) => classes.add(c), remove: (c) => classes.delete(c),
       contains: (c) => classes.has(c),
       toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)),
     },
-    querySelector: () => null,
-    querySelectorAll: () => ctl,
+    querySelector: (sel) => (sel === '.radioglass' ? glass : null),
+    querySelectorAll: (sel) => (sel === '.rst' ? stations : ctl),
   };
 }
 
@@ -200,11 +205,15 @@ const at = (list) => list.findIndex((b) => b.has('focus'));
 
 // ------------------------------------------------------------------- радио
 // el.radio ставится внутри buildRadio, поэтому подсовываем его тем же путём,
-// каким его достаёт код панели
-document.querySelector = (sel) => (sel === '#radio' ? radioBox
-  : sel === '#roster' ? rosterProxy
-  : sel === '#notes' ? notesProxy
-  : stub);
+// каким его достаёт код панели.
+//
+// Добавляем к карте, а не затираем её. Затирающий вариант приехал сюда вместе с
+// переносом теста и в ядре успел стоить получаса: всё, что идёт ниже, получало
+// общую заглушку вместо своих узлов, и «PgUp/PgDn не крутят панель» означало,
+// что панелью оказалась заглушка нулевой высоты. Исправлено в main 2 сентября
+// 2026, перенесено сюда следом.
+const baseQuery = document.querySelector;
+document.querySelector = (sel) => (sel === '#radio' ? radioBox : baseQuery(sel));
 radioBox = makeRadio(2);
 // openRadio по пути трогает живой плеер и DRM браузера — на голом node это
 // падает. Но el.radio и класс open проставляются в самом начале, до этого

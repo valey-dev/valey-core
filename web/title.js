@@ -7,6 +7,7 @@
 import { pxText, drawSwitcher } from './office.js';
 import { t as tr, lang } from './i18n.js';
 import { drawPerson } from './sprites.js';
+import * as PF from './pixfont.js';
 
 const $ = (s) => document.querySelector(s);
 const px = (ctx, x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); };
@@ -95,6 +96,57 @@ function label(ctx, x, y, text, color = '#ffd166') {
   pxText(ctx, text, x - w / 2, y, color);
 }
 
+// ------------------------------------------------------------------ фонарь
+// Коридор освещён щелью под дверью и больше ничем, поэтому человечка у правой
+// стены не видно вовсе. Фонарь над ним — причина посмотреть направо, и он
+// нарочно плохой: ровный тёплый свет сделал бы из коридора холл гостиницы, а
+// нужна контора после закрытия.
+// Макет: https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=694-2
+//
+// Высота выбрана не на глаз и не по макету: сверху полосу держит карточка «за
+// дверью» (.tcard, right/top 4%), снизу — табличка переключателя на FLOOR-44.
+// Карточка живёт в DOM и с холстом НЕ масштабируется: на макете её низ лёг на
+// y 70, а на кадре при ×2 оказался на 75 — на 72 плита фонаря пряталась под
+// неё. Чем меньше зум, тем ниже карточка, поэтому 76 — не запас, а край.
+const LAMP_Y = 76;
+
+// Дрожь: 0.72 базовых, две синусоиды на мелкое дребезжание, раз в 2.6 секунды
+// просадка на 120 мс. Ниже 0.25 не опускается — погасший фонарь читается как
+// поломка сцены, а не как настроение.
+function lampGlow(t) {
+  const jitter = Math.sin(t / 190) * 0.5 + Math.sin(t / 77) * 0.25;
+  const dip = t % 2600 < 120 ? 0.3 : 1;
+  return Math.max(0.25, (0.72 + jitter * 0.12) * dip);
+}
+
+// Свет кладётся до человечка и до его таблички: он закрывает их собой, как
+// закрыл бы настоящий. Корпус не мигает никогда — мигающий силуэт читается
+// как дрожь всей сцены, а не как больная лампа.
+function drawLamp(ctx, t) {
+  const k = lampGlow(t);
+  const x = LANG_X;
+  const y = LAMP_Y + 19;                            // где кончается корпус
+  // Четыре ступени вместо трёх: на кадре три давали ровную полосу, похожую на
+  // столб, а не на свет. Прозрачности тоже подняты — макетные 0.16 на тёмной
+  // стене не читались вовсе.
+  ctx.globalAlpha = 0.22 * k; px(ctx, x - 5, y, 10, 12, '#d8be86');
+  ctx.globalAlpha = 0.14 * k; px(ctx, x - 9, y + 12, 18, 16, '#d8be86');
+  ctx.globalAlpha = 0.09 * k; px(ctx, x - 14, y + 28, 28, 16, '#d8be86');
+  ctx.globalAlpha = 0.05 * k; px(ctx, x - 19, y + 44, 38, FLOOR - y - 44, '#d8be86');
+  ctx.globalAlpha = 0.09 * k; px(ctx, x - 16, FLOOR, 32, 4, '#d8be86');
+  ctx.globalAlpha = 0.05 * k; px(ctx, x - 22, FLOOR + 4, 44, 5, '#d8be86');
+  ctx.globalAlpha = 1;
+  px(ctx, x - 4, LAMP_Y, 8, 3, '#4a423a');          // плита на стене
+  px(ctx, x - 1, LAMP_Y + 3, 2, 4, '#3a322c');      // штанга
+  px(ctx, x - 8, LAMP_Y + 7, 16, 3, '#5a4f45');     // верхний обод
+  px(ctx, x - 7, LAMP_Y + 10, 14, 7, '#6b5f4e');    // плафон
+  ctx.globalAlpha = 0.35 + 0.65 * k;                // светится только стекло
+  px(ctx, x - 5, LAMP_Y + 12, 10, 4, '#c9a95f');
+  px(ctx, x - 3, LAMP_Y + 13, 6, 2, '#e8cf8a');
+  ctx.globalAlpha = 1;
+  px(ctx, x - 7, LAMP_Y + 17, 14, 2, '#463d33');    // нижний обод
+}
+
 // ------------------------------------------------------------------- сцена
 export function drawTitle(ctx, VW, VH, t) {
   const lit = (S.agents || []).length > 0;
@@ -121,10 +173,20 @@ export function drawTitle(ctx, VW, VH, t) {
   px(ctx, PLAQUE.x + 2, PLAQUE.y + 2, PLAQUE.w - 4, PLAQUE.h - 4, '#6b472a');
   px(ctx, PLAQUE.x + 12, PLAQUE.y - 4, 3, 5, '#6d5040');
   px(ctx, PLAQUE.x + PLAQUE.w - 15, PLAQUE.y - 4, 3, 5, '#6d5040');
-  // Имя короче прежнего втрое, поэтому и кегль другой: на 11 табличка, рассчитанная
-  // на девять знаков, выглядела полупустой. Вариант выбран по кадру 30 августа 2026.
-  pxText(ctx, 'VALEY', PLAQUE.x + 31, PLAQUE.y + 14, '#ffd166', 14);
-  pxText(ctx, tr('title.sub'), PLAQUE.x + 30, PLAQUE.y + 20, '#c9b391', 5);
+  // Обе строки набираются пикселями, а не fillText. Пятый кегль на холсте
+  // 400×225 рисуется серыми полутонами, а офис раздувает каждый полутон в
+  // квадрат: на кадре из офиса «офис агентов» не читалось ни одной буквой.
+  //
+  // Лицо выбирается по самой строке, а не по языку. Русской нужна широкая
+  // гарнитура — кириллицы в 3×5 нет и не будет; английской хватает 3×5, где
+  // латиница полная. Если строку не берёт ни одно лицо, остаётся прежний
+  // fillText: мыльная подпись лучше пропавшей.
+  const mid = PLAQUE.x + PLAQUE.w / 2;
+  PF.drawText(ctx, 'VALEY', Math.round(mid - PF.textWidth('VALEY', PF.WIDE, 2) / 2), PLAQUE.y + 3, '#ffd166', PF.WIDE, 2);
+  const sub = tr('title.sub');
+  const face = PF.canDraw(sub, PF.WIDE) ? PF.WIDE : PF.canDraw(sub) ? PF.SMALL : null;
+  if (face) PF.drawText(ctx, sub, Math.round(mid - PF.textWidth(sub, face) / 2), PLAQUE.y + 15, '#c9b391', face);
+  else pxText(ctx, sub, PLAQUE.x + 30, PLAQUE.y + 20, '#c9b391', 5);
 
   // дверь
   px(ctx, DOOR.x - 4, DOOR.y - 4, DOOR.w + 8, DOOR.h + 4, '#1d1510');
@@ -147,6 +209,8 @@ export function drawTitle(ctx, VW, VH, t) {
   } else {
     ctx.globalAlpha = 0.06; px(ctx, DOOR.x, FLOOR - 2, DOOR.w, 2, '#ffd166'); ctx.globalAlpha = 1;
   }
+
+  drawLamp(ctx, t);
 
   // Человечек-переключатель у правой стены. Рисуется тем же кодом, что и в
   // коридоре офиса: вторая копия разошлась бы с ним молча при первой же правке
@@ -193,7 +257,7 @@ export function layoutTitle() {
 const MENU = [
   { k: 'title.enter', key: '⏎', act: () => api.enter(null) },
   { k: 'title.who', key: 'TAB', act: () => { T.page = 'rooms'; T.roomIdx = 0; renderTitle(); } },
-  { k: 'title.dress', key: 'C', act: () => api.dress() },
+  { k: 'title.dress', key: 'C', act: () => api.bag() },
   { k: 'title.sky', key: 'P', act: () => api.sky() },
 ];
 
@@ -290,12 +354,27 @@ function menuHtml(n) {
          <b>${tr('title.nobody')}</b>
          <span class="thint">${tr('title.emptyWhy')}</span>
        </div>`;
+  // Пинок про релизный ролик. Виден только владельцу и только когда есть за
+  // что пинать — состояние приходит с сервера уже решённым, здесь его не
+  // пересчитывают. Кадр: WIP — Пинок про релизный ролик, утверждён 1 сентября
+  // 2026.
+  const rel = S && S.release;
+  const relCard = !rel ? '' : `<div class="tcard release">
+         <span class="tlabel">${tr('title.releaseLabel')}</span>
+         <b>${tr('title.releaseNot', { tag: esc(rel.tag) })}</b>
+         <span class="twait">${rel.days === null ? ''
+           : rel.days === 0 ? tr('title.releaseToday')
+           : tr('title.releaseAge', { n: rel.days, word: word('title.day', rel.days) })}</span>
+         <span class="tidle">${rel.hasDraft
+           ? tr('title.releaseDraft', { file: esc(rel.draft) })
+           : tr('title.releaseNoDraft')}</span>
+       </div>`;
   const hint = n.total ? '' : `<div class="tnote">
       <b>${tr('title.roomsCome')}</b>
       <span>${tr('title.roomsHow')}</span>
     </div>`;
   return `${menuButtons()}
-    ${card}${hint}
+    ${card}${relCard}${hint}
     ${metaRow()}`;
 }
 
@@ -374,7 +453,7 @@ export function titleKey(raw) {
     return true;
   }
   if (k === 'tab') { T.page = 'rooms'; T.roomIdx = 0; renderTitle(); return true; }
-  if (k === 'c' || k === 'с') { api.dress(); return true; }
+  if (k === 'c' || k === 'с') { api.bag(); return true; }
   if (k === 'p' || k === 'з') { api.sky(); return true; }
   if (k === 'escape') return true;   // из офиса выйти некуда, ESC тут ничего не значит
   return ['arrowleft', 'arrowright', 'a', 'd', 'ф', 'в'].includes(k);

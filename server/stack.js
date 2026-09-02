@@ -9,6 +9,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
+import { hasRepo } from './git.js';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
@@ -159,6 +160,10 @@ export async function projectInfo(dir) {
 
   const picked = pickManifest(await readRoot(dir));
   const info = {};
+  // Репозиторий ли это — вопрос той же цены и того же кэша, что стек: один
+  // запрос на каталог раз в пять минут. От ответа зависит, вырастет ли в
+  // комнате дерево, а комната без гита остаётся с обычным цветком.
+  info.git = await hasRepo(dir);
   if (picked?.stack) info.stack = picked.stack;
   const version = picked?.version || await gitTag(dir);
   if (version) info.version = version;

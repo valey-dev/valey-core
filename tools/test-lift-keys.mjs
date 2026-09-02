@@ -22,7 +22,11 @@ function node(cls = '') {
 // В панели живут либо этажи, либо строки стойки — узел el.lift один и тот же.
 function makeLift(kind = 'floors', n = 3) {
   const cls = kind === 'floors' ? 'liftbtn' : 'recgo';
-  const btns = Array.from({ length: n }, () => node(cls));
+  const btns = Array.from({ length: n }, (_, i) => {
+    const b = node(cls);
+    b.dataset.n = String(i + 1);      // этажи пронумерованы, и цифра ищет по номеру
+    return b;
+  });
   return {
     hidden: false,
     innerHTML: '',
@@ -30,6 +34,7 @@ function makeLift(kind = 'floors', n = 3) {
     querySelector: () => null,
     querySelectorAll: (sel) => (
       sel === '.liftbtn, .recgo' ? btns
+      : sel === '.liftbtn' ? (kind === 'floors' ? btns : [])
       : sel === '[data-n]' && kind === 'floors' ? btns
       : sel === '[data-go]' && kind === 'rec' ? btns
       : []),
@@ -93,7 +98,17 @@ UI.liftKey('Enter');
 check('Enter нажимает этаж под фокусом', lift.btns[0].clicked === 1, lift.btns[0].clicked);
 check('и только его', lift.btns.filter((b) => b.clicked).length === 1, lift.btns.map((b) => b.clicked).join(','));
 
-// --- 5. закрытая панель клавиши не забирает ---
+// --- 5. цифра — прямой выбор этажа: «3» это третий этаж, а не третий пункт ---
+lift = makeLift('floors', 3);
+check('цифра обработана панелью', UI.liftKey('2') === true, 'не обработана');
+check('и нажала этаж с этим номером', lift.btns[1].clicked === 1, lift.btns[1].clicked);
+check('соседние этажи не тронуты', lift.btns[0].clicked === 0 && lift.btns[2].clicked === 0, 'тронуты');
+check('и фокус переехал туда же', lift.btns[1].has('focus'), 'не переехал');
+UI.liftKey('7');
+check('цифра мимо списка ничего не нажала', lift.btns.every((b) => b.clicked <= 1), 'нажала');
+check('но в офис не уехала', UI.liftKey('7') === true, 'уехала');
+
+// --- 6. закрытая панель клавиши не забирает ---
 // иначе стрелки перестанут ходить по офису после первой же поездки
 lift.hidden = true;
 check('закрытая панель не ест стрелки', UI.liftKey('ArrowUp') === false, 'съела');

@@ -4,7 +4,10 @@
   transform:translate(-50%,-50%) translateY(140vh); opacity:0; pointer-events:none;
   transition:transform .18s steps(4), opacity .18s}
 #radio.open{transform:translate(-50%,-50%); opacity:1; pointer-events:auto}
-.radiowrap{width:min(420px,92vw)}
+/* Ширина делится на --ui там, где задаётся: vw внутри zoom меряется от окна и
+   потом умножается на масштаб, и ограничитель перестаёт ограничивать. Правка
+   приехала из main 2 сентября 2026 вместе с общим правилом zoom. */
+.radiowrap{width:min(420px, calc(92vw / var(--ui, 1)))}
 .radiobody{padding:12px; display:flex; flex-direction:column; gap:10px}
 .radiocab{background:linear-gradient(var(--cab),var(--cab2)); border:3px solid var(--cab-edge);
   box-shadow:inset 0 0 0 2px var(--cab-in); padding:8px}

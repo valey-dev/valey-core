@@ -41,8 +41,8 @@ await fsp.writeFile(path.join(mods, 'пример', 'server.js'),
 
 // 3. Папка без манифеста и папка с чужим id — не модули.
 await fsp.mkdir(path.join(mods, 'мусор'), { recursive: true });
-await fsp.mkdir(path.join(mods, 'dossier'), { recursive: true });
-await fsp.writeFile(path.join(mods, 'dossier', 'module.json'), JSON.stringify({ id: 'НЕ-dossier', client: 'client.js' }));
+await fsp.mkdir(path.join(mods, 'чужой'), { recursive: true });
+await fsp.writeFile(path.join(mods, 'чужой', 'module.json'), JSON.stringify({ id: 'не-тот-id', client: 'client.js' }));
 
 const loaded = await loadModules(root);
 ok('загрузился ровно один модуль', loaded.length === 1, loaded.map(m => m.id));

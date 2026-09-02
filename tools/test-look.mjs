@@ -1,7 +1,8 @@
 // node tools/test-look.mjs — внешность агентов: офис не перетасовывается
 // новыми слотами. Стенд ходит по старой раздаче, переписанной здесь целиком:
 // если сдвиг в web/sprites.js поедет, тест увидит это, а не поверит на слово.
-import { lookOf, normalizeLook, drawPerson, cycle, hash, SKIN, HAIR, SHIRT, PANTS, BOOTS, HEADS, FACES, HANDS } from '../web/sprites.js';
+import { lookOf, normalizeLook, drawPerson, dressOf, dressMe, cycle, hash, SKIN, HAIR, SHIRT, PANTS, BOOTS, HEADS, FACES, HANDS,
+  SHIRT_WORK, BLOUSE, JACKET, TIE, WORK_BOOTS } from '../web/sprites.js';
 
 const pick = (arr, n) => arr[Math.abs(n >>> 0) % arr.length];
 
@@ -122,6 +123,81 @@ for (const pose of ['stand', 'walk', 'sit']) {
       if (!has('#cfe8ff')) bad(`${pose}: очки не нарисовались вместе с «${head}»`);
     }
   }
+}
+
+// ---- дресс-код: офисная одежда считается отдельно и свободный вид не трогает
+for (const id of ids) {
+  const free = lookOf(id);
+  const same = dressOf(free, id, 'm', 'casual');
+  if (same !== free) bad(`${id}: свободный дресс-код вернул не тот же самый look`);
+  const work = dressOf(free, id, 'm', 'office');
+  // главное: одевание НЕ мутирует исходный вид
+  for (const k of ['skin', 'hair', 'shirt', 'pants', 'style', 'tall', 'boots', 'head', 'face', 'hands', 'glasses']) {
+    if (JSON.stringify(free[k]) !== JSON.stringify(lookOf(id)[k])) bad(`${id}: dressOf испортил свободный ${k}`);
+  }
+  // и не трогает то, чем человек узнаётся
+  for (const k of ['skin', 'hair', 'style', 'tall', 'head', 'face', 'hands', 'glasses', 'pants']) {
+    if (JSON.stringify(work[k]) !== JSON.stringify(free[k])) bad(`${id}: офис поменял ${k}, а не должен`);
+  }
+  if (!work.office) bad(`${id}: офисный вид не помечен office`);
+  if (work.boots !== WORK_BOOTS) bad(`${id}: обувь в офисе осталась ${work.boots}`);
+  if (!SHIRT_WORK.includes(work.shirt)) bad(`${id}: мужская рубашка вне палитры: ${work.shirt}`);
+  if (work.jacket && !JACKET.includes(work.jacket)) bad(`${id}: пиджак вне палитры: ${work.jacket}`);
+  if (work.tie && !TIE.includes(work.tie.color)) bad(`${id}: галстук вне палитры: ${work.tie.color}`);
+  if (work.bottom !== 'pants') bad(`${id}: мужчина в юбке`);
+}
+
+// раздача не выродилась: нужны и пиджаки, и все три мужских кроя, и юбки
+const seenWork = { cuts: new Set(), jackets: 0, skirts: 0, trousers: 0, blouses: new Set(), bows: 0, women: 0 };
+for (const id of ids) {
+  const m = dressOf(lookOf(id), id, 'm', 'office');
+  if (m.tie) seenWork.cuts.add(m.tie.cut);
+  if (m.jacket) seenWork.jackets++;
+  const w = dressOf(lookOf(id), id, 'f', 'office');
+  seenWork.women++;
+  seenWork.blouses.add(w.shirt);
+  if (w.bottom === 'skirt') seenWork.skirts++; else seenWork.trousers++;
+  if (w.tie) { seenWork.bows++; if (w.tie.cut !== 'bow') bad(`${id}: женщине достался галстук кроя ${w.tie.cut}`); }
+}
+if (seenWork.cuts.size < 3) bad(`кроёв галстука встретилось ${seenWork.cuts.size} из трёх`);
+if (!seenWork.jackets) bad('пиджаков не досталось никому');
+if (seenWork.jackets === ids.length) bad('пиджак достался вообще всем');
+if (!seenWork.skirts || !seenWork.trousers) bad(`юбки: ${seenWork.skirts}, брюки: ${seenWork.trousers}`);
+if (seenWork.blouses.size < 3) bad(`блузок встретилось ${seenWork.blouses.size}`);
+if (!seenWork.bows) bad('бабочка не досталась ни одной');
+if (seenWork.bows > seenWork.women / 2) bad(`бабочек ${seenWork.bows} на ${seenWork.women} женщин — это не «иногда»`);
+
+// свой персонаж одевается руками, и свободный верх при этом не теряется
+const me = normalizeLook({ ...base, name: 'ТЫ' });
+const meFree = dressMe(me, 'casual');
+if (meFree !== me) bad('свой персонаж в свободном режиме подменился копией');
+const meWork = dressMe({ ...me, shirtWork: BLOUSE[1], tie: { cut: 'plain', color: TIE[0] }, bottom: 'skirt' }, 'office');
+if (meWork.shirt !== BLOUSE[1]) bad('офисный верх своего персонажа не взялся из shirtWork');
+if (meWork.bottom !== 'skirt') bad('крой низа своего персонажа потерялся');
+if (me.shirt !== base.shirt) bad('свободный верх своего персонажа затёрся офисным');
+if (dressMe(me, 'office').shirt !== SHIRT_WORK[0]) bad('без выбранного верха офис не подставил первый');
+
+// ---- юбка и галстук действительно рисуются, а не теряются в ветке
+for (const pose of ['stand', 'walk', 'sit']) {
+  for (let frame = 0; frame < 4; frame++) {
+    const look = { ...base, office: true, shirt: SHIRT_WORK[0], boots: WORK_BOOTS,
+      bottom: 'skirt', jacket: JACKET[0], tie: { cut: 'plain', color: TIE[0] } };
+    const ctx = stub();
+    drawPerson(ctx, 20, 40, look, { pose, frame });
+    const has = (c) => ctx.rects.some((r) => r.c === c);
+    if (!has(JACKET[0])) bad(`${pose}/${frame}: пиджак не нарисовался`);
+    if (pose !== 'sit' && !has(TIE[0])) bad(`${pose}/${frame}: галстук не нарисовался`);
+    if (pose !== 'sit') {
+      // под юбкой видно кожу ног — именно этим она отличается от штанов
+      const legs = ctx.rects.filter((r) => r.c === base.skin && r.y > 40 - 7 && r.w === 2);
+      if (!legs.length) bad(`${pose}/${frame}: под юбкой не видно ног`);
+    }
+  }
+}
+for (const cut of ['plain', 'slim', 'stripe', 'bow']) {
+  const ctx = stub();
+  drawPerson(ctx, 20, 40, { ...base, office: true, shirt: SHIRT_WORK[0], tie: { cut, color: TIE[4] } }, { pose: 'stand' });
+  if (!ctx.rects.some((r) => r.c === TIE[4])) bad(`крой ${cut} не нарисовался`);
 }
 
 // ---- старый look рисуется и после переноса: очки не пропали вместе с acc

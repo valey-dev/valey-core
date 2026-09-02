@@ -56,8 +56,13 @@ ok('первый этаж — сервисный ярус',
 ok('нижний ряд проектов — этаж 2',
   L.lift.floors.some((f) => f.n === 2 && f.rooms.includes('p0')),
   L.lift.floors.map((f) => [f.n, f.rooms]));
-ok('верхний коридор — самый большой номер',
-  Math.max(...L.lift.floors.map((f) => f.n)) === 5, L.lift.floors.map((f) => f.n));
+// Крыша с оранжереей — верхний этаж, и она же самый большой номер. Раньше здесь
+// стояла пятёрка числом: с появлением яруса крыши этажей стало на один больше,
+// и жёсткая цифра проверяла старый мир, а не правило.
+ok('самый верхний этаж — крыша с оранжереей',
+  L.lift.floors[0].n === Math.max(...L.lift.floors.map((f) => f.n))
+  && L.lift.floors[0].rooms.includes('ОРАНЖЕРЕЯ'),
+  L.lift.floors.map((f) => [f.n, f.rooms]));
 ok('подвала больше нет', !L.lift.floors.some((f) => f.basement), null);
 ok('номера идут подряд без дыр',
   L.lift.floors.map((f) => f.n).sort((a, b) => a - b).every((n, i) => n === i + 1),

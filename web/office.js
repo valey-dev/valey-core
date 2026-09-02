@@ -176,14 +176,23 @@ const plural = (n, one, few, many) => {
 // Кто стоит у входа, зависит от языка: при английском интерфейсе — мужик в
 // кожанке и джинсах, при русском — приезжий в бейсболке. На табличке над
 // головой написан язык, на который он переключит, а не тот, что включён.
+// Ключ здесь — включённый язык, а не национальность человечка: под `en` стоит
+// русский. Путается при каждом чтении, поэтому сказано прямо.
+//
+// У каждого по предмету, и это одна пара, а не два независимых человека:
+// сигарета против стакана кофе. Неподвижный человечек в коридоре получает
+// занятие, а незнакомец — два разных силуэта вместо двух мужиков.
+// Рубашка американца светло-голубая, а не белая, по одной причине: рукав
+// рисуется цветом рубашки, стакан стоит к нему вплотную, и на белом он пропал
+// целиком — нашлось на кадре из макета до того, как это попало в код.
 const SWITCHER = {
-  ru: { skin: '#e8ad7e', hair: '#a8542a', shirt: '#c25a4b', pants: '#5a6b8a', boots: '#6b4a2a', style: 2, head: 'ball', glasses: false, face: 'none', tall: 1, hands: 'none' },
-  en: { skin: '#f4c9a0', hair: '#3a2a20', shirt: '#38302a', pants: '#3f4a63', boots: '#2a2118', style: 0, head: 'none', glasses: false, face: 'beard', tall: 0, hands: 'none' },
+  ru: { skin: '#e8ad7e', hair: '#a8542a', shirt: '#aebccb', pants: '#5a6b8a', boots: '#6b4a2a', style: 2, head: 'ball', glasses: false, face: 'none', tall: 1, hands: 'cup' },
+  en: { skin: '#f4c9a0', hair: '#3a2a20', shirt: '#38302a', pants: '#3f4a63', boots: '#2a2118', style: 0, head: 'none', glasses: false, face: 'beard', tall: 0, hands: 'none', cig: true },
 };
 
 export function drawSwitcher(ctx, p, t, facing = 0) {
   const look = SWITCHER[lang()] || SWITCHER.ru;
-  drawPerson(ctx, p.x, p.y, look, { pose: 'stand', frame: (t / 260) | 0, dir: facing });
+  drawPerson(ctx, p.x, p.y, look, { pose: 'stand', frame: (t / 260) | 0, dir: facing, ms: t });
   // табличка висит выше обычного пузыря: на прежней высоте её закрывала строка
   // подсказки — ровно в тот момент, когда человек подошёл нажать
   const top = p.y - 22 - look.tall - 20;
@@ -453,6 +462,49 @@ export function drawDesk(ctx, d, agent, t) {
   if ((h >>> 3) % 2) px(ctx, x - 22, y - 1, 7, 4, '#efe6d2');
 }
 
+// Микроволновка в кухонном углу. Всё интересное в ней — за стеклом: пока
+// греет, окно светится и рыба едет по кругу вместе с тарелкой; после звонка
+// из щелей идёт запах, и это единственное, что видно из другого конца этажа.
+export function drawMicro(ctx, m, t, run) {
+  const x = m.x, y = m.y;
+  const on = !!run && run.phase === 'run';
+  px(ctx, x - 15, y, 30, 3, '#7a5f45');
+  px(ctx, x - 15, y + 3, 30, 1, '#5a4636');
+  px(ctx, x - 13, y - 18, 26, 18, '#3a3a42');
+  px(ctx, x - 13, y - 18, 26, 2, '#4e4e58');
+  px(ctx, x - 13, y - 2, 26, 2, '#2a2a30');
+  px(ctx, x - 11, y - 16, 17, 13, '#2a2a30');
+  px(ctx, x - 10, y - 15, 15, 11, on ? '#6b4a1e' : '#1b1b22');
+  // панель: лампочка горит, пока идёт нагрев
+  px(ctx, x + 7, y - 16, 5, 13, '#2f2f38');
+  px(ctx, x + 8, y - 15, 3, 3, on ? '#ffd166' : '#5a5a66');
+  for (let i = 0; i < 3; i++) px(ctx, x + 8, y - 10 + i * 3, 3, 1, '#5a5a66');
+  if (run) {
+    const sw = Math.sin(t / 260) * 3;
+    px(ctx, x - 9, y - 6, 12, 1, '#6a6a76');
+    px(ctx, x - 5 + sw, y - 10, 7, 4, on ? '#d9a06a' : '#b8865a');
+    px(ctx, x - 7 + sw, y - 10, 2, 4, on ? '#c08a52' : '#a07348');
+    px(ctx, x + 2 + sw, y - 9, 1, 1, '#2b2118');
+    if (on) {
+      ctx.globalAlpha = 0.22 + 0.22 * Math.sin(t / 90);
+      px(ctx, x - 10, y - 15, 15, 11, '#ffc46a');
+      ctx.globalAlpha = 1;
+    }
+  }
+  // Запах — это вся шутка, поэтому он заметный: семь струек, широкие и почти
+  // непрозрачные у самой дверцы. На первом кадре они были в шестнадцать
+  // процентов и терялись в тёплом свете комнаты.
+  if (run && run.phase === 'smell') {
+    for (let i = 0; i < 7; i++) {
+      const s = Math.sin(t / 380 + i * 1.1);
+      const up = (t / 34 + i * 13) % 30;
+      ctx.globalAlpha = Math.max(0, (0.5 - up / 70) * (0.7 + 0.3 * s));
+      px(ctx, x - 11 + i * 4 + s * 2, y - 20 - up, 3, 6, '#9fd46a');
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
 export function drawRoomProps(ctx, r, t) {
   // coffee corner
   const c = r.coffee;
@@ -655,6 +707,222 @@ function drawConsole(ctx, s, t, on) {
 // Рисуется по утверждённому плану 400:2 (он нарисован ×3). Дерево и сукно
 // вместо кафеля: это не пультовая, сюда приходят разговаривать. Считывателя у
 // двери нет намеренно — его отсутствие и есть половина смысла комнаты.
+// --------------------------------------------------------------- оранжерея
+// Комната на крыше. Всё в ней подчинено одному: за стеклом настоящее небо —
+// тот же drawSky, что в окнах коридора, с погодой и временем суток. Кадры,
+// с которых снята геометрия: 734:2 (день) и 734:1654 (ночь в дождь).
+//
+// Растение живёт тремя состояниями: сухое, политое, цветёт. Разницу на
+// двадцати пикселях делает цвет, а не поза — наклон листа на пиксель там не
+// читается, проверено на кадре 1:1. Поэтому мокрая земля в горшке — ДВЕ
+// строки пикселей: это и есть ответ на «я полил», и одной строки для него мало.
+const GLASS_FRAME = '#4a3628';
+
+export function drawPot(ctx, x, y, kind, state) {
+  const dry = state === 'dry', bloom = state === 'bloom';
+  const leaf = dry ? '#7a7a44' : '#3f6633';
+  const leaf2 = dry ? '#8f8f52' : '#4d7a3e';
+  const soil = dry ? '#7a5a40' : '#2f2118';
+  const d = dry ? 1 : 0;
+  px(ctx, x - 5, y - 8, 10, 8, '#8a4a34');
+  px(ctx, x - 5, y - 8, 10, 2, '#a85c40');
+  px(ctx, x - 5, y - 2, 10, 2, '#6e3a28');
+  px(ctx, x - 4, y - 7, 8, 2, soil);
+  if (kind === 'flower') {
+    px(ctx, x - 1, y - 15, 2, 8, leaf);
+    px(ctx, x - 5, y - 13 + d, 4, 2, leaf2); px(ctx, x + 1, y - 13 + d, 4, 2, leaf2);
+    px(ctx, x - 4, y - 16 + d, 3, 2, leaf); px(ctx, x + 1, y - 16 + d, 3, 2, leaf);
+    if (bloom) {
+      px(ctx, x - 3, y - 19, 2, 2, '#d4707f');
+      px(ctx, x + 1, y - 20, 2, 2, '#e08a96');
+      px(ctx, x - 1, y - 22, 2, 2, '#d4707f');
+    }
+  }
+  if (kind === 'ficus') {
+    px(ctx, x - 1, y - 18, 2, 11, '#6b4a32');
+    px(ctx, x - 6, y - 22 + d, 5, 3, leaf); px(ctx, x + 1, y - 22 + d, 5, 3, leaf);
+    px(ctx, x - 4, y - 25 + d, 8, 3, leaf2); px(ctx, x - 2, y - 28 + d, 4, 3, leaf);
+    if (bloom) { px(ctx, x - 5, y - 26, 2, 2, '#e8d38a'); px(ctx, x + 3, y - 23, 2, 2, '#e8d38a'); }
+  }
+  if (kind === 'cactus') {
+    const skin = dry ? '#6b7a4a' : '#4a7a52';
+    px(ctx, x - 2, y - 21, 4, 14, skin);
+    px(ctx, x - 5, y - 17, 3, 6, skin); px(ctx, x + 2, y - 15, 3, 6, skin);
+    px(ctx, x - 1, y - 18, 1, 1, '#d9d3c8'); px(ctx, x, y - 13, 1, 1, '#d9d3c8');
+    if (bloom) { px(ctx, x - 2, y - 24, 4, 3, '#e08a96'); px(ctx, x - 1, y - 25, 2, 1, '#f0a8b2'); }
+  }
+  if (kind === 'palm') {
+    px(ctx, x - 1, y - 17, 2, 10, '#7a5a3a');
+    px(ctx, x - 9, y - 19 + d, 7, 2, leaf); px(ctx, x + 2, y - 19 + d, 7, 2, leaf);
+    px(ctx, x - 7, y - 22 + d, 5, 2, leaf2); px(ctx, x + 2, y - 22 + d, 5, 2, leaf2);
+    px(ctx, x - 1, y - 24, 2, 3, leaf2);
+    if (bloom) { px(ctx, x - 4, y - 17, 2, 2, '#e8d38a'); px(ctx, x + 2, y - 17, 2, 2, '#e8d38a'); }
+  }
+  if (kind === 'ivy') {
+    px(ctx, x - 5, y - 13, 10, 5, leaf2); px(ctx, x - 4, y - 16, 7, 3, leaf);
+    px(ctx, x - 7, y - 8 + d, 2, 6, leaf); px(ctx, x + 5, y - 8 + d, 2, 5, leaf2);
+    px(ctx, x - 8, y - 4 + d, 2, 3, leaf2); px(ctx, x + 6, y - 5 + d, 2, 3, leaf);
+    if (bloom) { px(ctx, x - 7, y - 1, 2, 2, '#cfd8f0'); px(ctx, x + 6, y - 2, 2, 2, '#cfd8f0'); }
+  }
+}
+
+// Лейка: тело 7×5, вода — полоса на дне. Уровень тут не прочитать, и он и не
+// должен читаться: сколько поливов осталось, говорит строка подсказки.
+export function drawCan(ctx, x, y, left = 0) {
+  px(ctx, x, y, 7, 5, '#7f9aa8');
+  px(ctx, x, y, 7, 1, '#9ab4c2');
+  px(ctx, x + 7, y + 1, 4, 1, '#7f9aa8');
+  px(ctx, x + 10, y + 2, 1, 2, '#6b8592');
+  px(ctx, x - 1, y - 2, 2, 3, '#7f9aa8');
+  const lvl = Math.max(0, Math.min(3, left));
+  if (lvl > 0) px(ctx, x + 1, y + 5 - lvl, 5, lvl, '#3f6b8a');
+}
+
+export function drawGreenhouse(ctx, r, t, opts = {}) {
+  // Погода обязана быть объектом: drawSky читает weather.kind без проверки, и
+  // на первых кадрах — пока /api/settings не ответил — её ещё нет. Комната со
+  // стеклянной стеной падала бы на каждом таком кадре.
+  const { night = 0, garden = null } = opts;
+  const weather = opts.weather || { kind: 'clear' };
+  const x0 = r.x, y0 = r.y, W = r.w, H = r.h;
+
+  // --- стеклянная стена: небо, переплёт, блики, конденсат
+  drawSky(ctx, x0 + 2, y0 + 2, W - 4, 22, t, night, weather);
+  for (let x = 0; x < W; x += 30) px(ctx, x0 + x, y0, 2, WALL, GLASS_FRAME);
+  px(ctx, x0, y0 + 12, W, 1, GLASS_FRAME);
+  px(ctx, x0, y0, W, 2, '#6b4d33');
+  px(ctx, x0, y0 + WALL - 2, W, 2, '#5a4f45');
+  ctx.globalAlpha = 0.16;
+  for (let x = 8; x < W; x += 30) px(ctx, x0 + x, y0 + 2, 1, 22, '#e8f2f8');
+  ctx.globalAlpha = 1;
+  // Конденсат — по стеклу поверх переплёта, а дождь идёт ЗА ним: это и есть
+  // разница между «капли снаружи» и «запотело изнутри».
+  const wet = weather && (weather.kind === 'rain' || weather.kind === 'storm');
+  ctx.globalAlpha = wet ? 0.55 : 0.3;
+  for (let i = 0; i < 14; i++) {
+    const h = hash('cond' + i);
+    px(ctx, x0 + 8 + (h % (W - 16)), y0 + 4 + ((h >>> 5) % 16), 1, 2, '#e8f2f8');
+  }
+  ctx.globalAlpha = 1;
+
+  // --- пол: кирпич со сдвигом рядов. Квадратная плитка вместе со светом из-под
+  // переплёта читалась досками, и на двух кадрах подряд правилось не то.
+  for (let y = y0 + WALL; y < y0 + H; y += 8) {
+    const off = (((y - y0 - WALL) / 8) % 2) ? 8 : 0;
+    for (let x = -8; x < W; x += 16) {
+      const h = hash(`gh${x + off},${y}`);
+      px(ctx, x0 + x + off, y, 15, 7, ['#6b4a3a', '#654436', '#71503e'][h % 3]);
+      px(ctx, x0 + x + off, y + 7, 16, 1, '#513628');
+      px(ctx, x0 + x + off + 15, y, 1, 8, '#513628');
+    }
+  }
+  px(ctx, x0, y0 + H - 10, W, 10, '#4a3b31');
+  px(ctx, x0, y0 + H - 10, W, 2, '#8a6247');
+  px(ctx, x0, y0, 8, H, '#4a3b31');
+  px(ctx, x0 + W - 8, y0, 8, H, '#4a3b31');
+
+  // --- луч из-под переплёта. Наклонный и гаснущий: вертикальная полоса во всю
+  // глубину — это доска пола, а не свет. Ночью лучей два и они лунные.
+  const beams = night > 0.5 ? [140, 320] : [30, 90, 150, 210, 270, 330, 390];
+  for (const bx of beams) {
+    for (let i = 0; i < 16; i++) {
+      const y = y0 + WALL + i * 8;
+      if (y > y0 + H - 10) break;
+      ctx.globalAlpha = (night > 0.5 ? 0.09 : 0.15) * (1 - i / 18) * (1 - night * 0.5);
+      px(ctx, x0 + bx + i * 2, y, 7, 8, night > 0.5 ? '#7aa0d8' : '#ffe9a8');
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // --- дверь
+  px(ctx, r.door.x - 2, y0 + 2, r.door.w + 4, WALL - 2, '#241e1a');
+  px(ctx, r.door.x, y0 + 4, r.door.w, WALL - 6, night > 0.5 ? '#2b3138' : '#5b7f92');
+  px(ctx, r.door.x, y0 + 4, r.door.w, 2, '#55626e');
+  px(ctx, r.door.x + r.door.w / 2 - 1, y0 + 4, 2, WALL - 6, '#241e1a');
+  px(ctx, r.door.x + r.door.w / 2 - 5, y0 + 13, 3, 1, '#c9a06a');
+  px(ctx, r.door.x + r.door.w / 2 + 2, y0 + 13, 3, 1, '#c9a06a');
+
+  // --- стеллаж, подвесные кашпо, пересадочный столик
+  px(ctx, x0 + 28, y0 + 60, 172, 4, '#8a6247');
+  px(ctx, x0 + 28, y0 + 64, 172, 2, '#6b4a32');
+  px(ctx, x0 + 32, y0 + 66, 3, 16, '#6b4a32');
+  px(ctx, x0 + 193, y0 + 66, 3, 16, '#6b4a32');
+  for (const hx of [252, 300, 348]) {
+    const sway = Math.sin(t / 1400 + hx) * 0.6;
+    px(ctx, x0 + hx, y0 + WALL, 1, 12, '#8a6247');
+    px(ctx, x0 + hx - 5 + sway, y0 + 38, 11, 6, '#8a4a34');
+    px(ctx, x0 + hx - 5 + sway, y0 + 38, 11, 2, '#a85c40');
+    px(ctx, x0 + hx - 7 + sway, y0 + 44, 3, 5, '#3f6633');
+    px(ctx, x0 + hx + 4 + sway, y0 + 44, 3, 4, '#4d7a3e');
+    px(ctx, x0 + hx - 3 + sway, y0 + 35, 7, 3, '#4d7a3e');
+  }
+  px(ctx, x0 + 36, y0 + 104, 62, 4, '#8a6247');
+  px(ctx, x0 + 36, y0 + 108, 62, 2, '#6b4a32');
+  px(ctx, x0 + 40, y0 + 110, 3, 12, '#6b4a32');
+  px(ctx, x0 + 91, y0 + 110, 3, 12, '#6b4a32');
+  px(ctx, x0 + 44, y0 + 99, 12, 5, '#8a4a34');
+  px(ctx, x0 + 44, y0 + 99, 12, 2, '#a85c40');
+  px(ctx, x0 + 60, y0 + 101, 9, 3, '#3a2a1e');
+  px(ctx, x0 + 72, y0 + 100, 14, 4, '#7a6a4a');
+
+  // --- кран, раковина, ведро, лужа, шланг
+  px(ctx, x0 + 348, y0 + 66, 58, 4, '#8a6247');
+  px(ctx, x0 + 354, y0 + 70, 46, 13, '#aab8bc');
+  px(ctx, x0 + 357, y0 + 72, 40, 9, '#7f8c90');
+  px(ctx, x0 + 376, y0 + 50, 3, 16, '#8f9a9e');
+  px(ctx, x0 + 376, y0 + 50, 13, 3, '#8f9a9e');
+  px(ctx, x0 + 386, y0 + 53, 2, 5, '#8f9a9e');
+  px(ctx, x0 + 360, y0 + 86, 13, 11, '#7f8c90');
+  px(ctx, x0 + 360, y0 + 86, 13, 2, '#9aa8ac');
+  ctx.globalAlpha = 0.55; px(ctx, x0 + 352, y0 + 100, 22, 3, '#4a3b32'); ctx.globalAlpha = 1;
+  px(ctx, x0 + 392, y0 + 92, 14, 2, '#3f5a44');
+  px(ctx, x0 + 390, y0 + 94, 18, 2, '#4a6b50');
+  px(ctx, x0 + 392, y0 + 96, 14, 2, '#3f5a44');
+  // мешок земли и стопка пустых горшков
+  px(ctx, x0 + 298, y0 + 96, 17, 15, '#7a6a4a');
+  px(ctx, x0 + 298, y0 + 96, 17, 3, '#8f7f5a');
+  px(ctx, x0 + 302, y0 + 93, 9, 4, '#3a2a1e');
+  px(ctx, x0 + 322, y0 + 102, 11, 9, '#8a4a34');
+  px(ctx, x0 + 322, y0 + 102, 11, 2, '#a85c40');
+  px(ctx, x0 + 324, y0 + 96, 11, 8, '#8a4a34');
+  px(ctx, x0 + 324, y0 + 96, 11, 2, '#a85c40');
+
+  // --- крючок с лейкой: пустой, если лейку унесли
+  px(ctx, x0 + 336, y0 + 52, 2, 4, '#6b4a32');
+  if (!garden || !garden.canTaken) drawCan(ctx, x0 + 328, y0 + 56, garden ? garden.canLeft : 4);
+
+  // --- скамейка
+  px(ctx, x0 + 268, y0 + 124, 46, 4, '#8a6247');
+  px(ctx, x0 + 268, y0 + 128, 46, 2, '#6b4a32');
+  px(ctx, x0 + 270, y0 + 130, 3, 8, '#6b4a32');
+  px(ctx, x0 + 309, y0 + 130, 3, 8, '#6b4a32');
+  px(ctx, x0 + 268, y0 + 110, 46, 3, '#8a6247');
+  px(ctx, x0 + 270, y0 + 113, 3, 11, '#6b4a32');
+  px(ctx, x0 + 309, y0 + 113, 3, 11, '#6b4a32');
+
+  // --- сами растения
+  for (const p of r.pots) drawPot(ctx, p.x, p.y, p.kind, (garden && garden.state && garden.state[p.i]) || 'wet');
+
+  // --- табличка над дверью. Та же, что у комнат проектов, и вторая строка у неё
+  // ровно так же собирается из того, что в комнате происходит: «полито 5 из 7».
+  drawNameplate(ctx, { ...r, sub: (garden && garden.sign) || '' }, r.door);
+
+  // --- лампа над стеллажом: ночью это единственное тёплое пятно в комнате
+  if (night > 0.35) {
+    px(ctx, x0 + 112, y0 + WALL, 1, 6, '#6b4a32');
+    px(ctx, x0 + 107, y0 + 32, 11, 4, '#3a2a1e');
+    px(ctx, x0 + 108, y0 + 36, 9, 1, '#ffe9a8');
+    for (let i = 0; i < 13; i++) {
+      const y = y0 + 38 + i * 9;
+      if (y > y0 + H - 10) break;
+      const half = 7 + i * 2.6;
+      ctx.globalAlpha = 0.17 * (1 - i / 14) * night;
+      px(ctx, x0 + 112 - half, y, half * 2, 9, '#ffd9a0');
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
 export function drawMeeting(ctx, m, t) {
   const x0 = m.x, y0 = m.y, W = m.w, H = m.h;
 

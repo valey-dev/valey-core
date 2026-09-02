@@ -69,7 +69,11 @@ export function buildLayout(agents) {
   }
 
   const rooms = [], bands = [];
-  let gridRow = [], rowY = MARGIN + CORRIDOR, rowH = 0;
+  // Ряды проектов начинаются НИЖЕ на высоту оранжереи и её площадки: крыша —
+  // это верхний ярус, зеркальный служебному снизу. Мир от этого вырос вверх
+  // на GREEN_H + CORRIDOR, и это единственное, чем оранжерея платит за небо.
+  let gridRow = [], rowY = MARGIN + CORRIDOR + GREEN_H + CORRIDOR, rowH = 0;
+  const roofY = MARGIN + CORRIDOR;
 
   const flushRow = (row) => {
     for (const r of gridRow) { r.y = rowY; r.bandY = rowY - CORRIDOR / 2; }
@@ -103,9 +107,12 @@ export function buildLayout(agents) {
     // однострочной, как была.
     const info = list.find((a) => a.version || a.stack) || {};
     const sub = [info.version, info.stack].filter(Boolean).join(' · ');
+    // Репозиторий — свойство проекта, а не сессии: хватает одного агента,
+    // который про него знает.
+    const repo = list.some((a) => a.repo);
 
     const room = {
-      key: project, title: project, sub, x, y: 0, w, h, tone, deskRows,
+      key: project, title: project, sub, repo, x, y: 0, w, h, tone, deskRows,
       door: { x: x + 34, w: 36 },
       back: null,   // second way in, filled once the room knows its final y
       board: { x: x + w - 122, y: 12, w: 100, h: 42 },
@@ -125,6 +132,11 @@ export function buildLayout(agents) {
     r.back = backDoor(r);
     r.board.y += r.y;
     r.coffee.y = r.y + r.h - 44;
+    // Микроволновка — слева от кофемашины, в том же кухонном углу. Стоит у
+    // всех: греть рыбу можно в любой комнате, и в этом вся суть.
+    // На полке, а не на полу: человек ростом 24 закрывает собой всё, что
+    // стоит на его уровне, — а смотреть тут надо именно в окошко.
+    r.micro = { x: r.coffee.x - 44, y: r.coffee.y - 18 };
     for (let i = 0; i < r.agents.length; i++) {
       const cx = i % COLS_IN_ROOM, cy = Math.floor(i / COLS_IN_ROOM);
       r.desks.push({
@@ -137,9 +149,11 @@ export function buildLayout(agents) {
     r.aisleY = r.y + r.h - FOOT + 6;
     r.doorPoint = { x: r.door.x + r.door.w / 2, y: r.y + WALL + 16 };
     r.art = hangPictures(r);
-    // Фикус — только у себя. Стоит в левом углу под окном: там нет ни столов,
-    // ни кофемашины, и мимо него никто не ходит к своему месту.
-    if (r.key === 'AI valey') r.ficus = { x: r.x + 26, y: r.y + r.h - 16 };
+    // Фикус растёт там, где есть репозиторий: подойти к нему — посмотреть
+    // историю проекта, и предмет отвечает на вопрос ещё до нажатия. Комната без
+    // гита остаётся с обычным цветком. Стоит в левом углу под окном: там нет ни
+    // столов, ни кофемашины, и мимо него никто не ходит к своему месту.
+    if (r.repo) r.ficus = { x: r.x + 26, y: r.y + r.h - 16 };
     // Мольберт — у верхней стены правее двери: между стеной и первым рядом
     // столов 52 пикселя пустого пола, и это единственная полоса в комнате, где
     // он никому не перекрывает дорогу к своему месту. Кофемашина справа,
@@ -150,6 +164,7 @@ export function buildLayout(agents) {
   // отдельная комната внизу, вне сетки проектов: пультовая с камерами
   const security = buildSecurity(w, rowY);
   const meeting = buildMeeting(w, rowY);
+  const greenhouse = buildGreenhouse(w, roofY);
   const h = security.y + security.h + MARGIN;
   // Вертикальные проходы между колоннами комнат и вдоль внешних стен. Комнаты во
   // всех рядах стоят по одной сетке, поэтому такой проход свободен сверху донизу —
@@ -217,7 +232,16 @@ export function buildLayout(agents) {
   props.push({ kind: 'ashtray', x: lounge.x + 36, y: lounge.y + 6 });
   props.push({ kind: 'kicker', x: kicker.x, y: kicker.y });
 
-  const lift = buildLift(w, bands, rooms, security, meeting);
+  // Площадка перед оранжереей — обычный коридор, только верхний, и класть его
+  // приходится руками: flushRow кладёт полосу над своим рядом, а над крышей
+  // ряда нет. После props — чтобы кулер, скамейка и фикус коридора сюда не
+  // приехали: на площадке из мебели только двери лифта.
+  // unshift, а не push: полоса кладётся ПЕРВОЙ, потому что этажи в лифте
+  // считаются по порядку полос, и крыша обязана оказаться сверху списка. При
+  // push она вставала предпоследней, между вторым этажом и первым.
+  const topRow = bands.reduce((m, b) => Math.max(m, b.row), 0) + 1;
+  bands.unshift({ y: MARGIN, h: CORRIDOR, row: topRow, roof: true });
+  const lift = buildLift(w, bands, [...rooms, greenhouse], security, meeting);
   // rooms лежат в порядке отрисовки — сверху вниз, как их клали. Наружу проектные
   // комнаты отдаются в порядке слотов: первый слот — это левая комната нижнего
   // ряда, то есть первое, что видит вошедший. На ней же стоит спавн по умолчанию,
@@ -229,7 +253,7 @@ export function buildLayout(agents) {
     // отрисовки, а нижний ярус лежит ниже всех рядов и перекрывать его нечем.
     // projectRooms — для всего, что считает проекты: таблички этажей, титульный
     // экран, спавн, камеры. Отличать «комнату» от «проекта» приходится ровно там.
-    rooms: [...rooms, security, meeting], projectRooms: bySlot, security, meeting,
+    rooms: [...rooms, security, meeting, greenhouse], projectRooms: bySlot, security, meeting, greenhouse,
     byAgent, bands, props, lanes, lounge, kicker, lift,
     wallArt: hangCorridorPictures(worldW),
     w: worldW, h: Math.max(h, 480),
@@ -380,6 +404,64 @@ function buildSecurity(floorW, y) {
   return sec;
 }
 
+
+// ---------------------------------------------------------------- оранжерея
+// Третья комната без проекта — и единственная, которая стоит НАВЕРХУ. Причина
+// одна и она же весь смысл: у оранжереи стеклянная стена, а за стеклом то же
+// настоящее небо, что в окнах коридора, — drawSky с погодой и временем суток.
+// Снизу это не работает: там над комнатой ещё три этажа. Служебный ярус к тому
+// же занят целиком — курилка, пультовая и переговорка стоят вплотную.
+//
+// Числа сняты с утверждённого кадра 734:2 (нарисован ×3): комната 420×150,
+// стена 26 = WALL, дверь по центру шириной 44, стеллаж на y+60, кран справа,
+// скамейка и кадки на полу. Мебель у нижней стены поднята: последние 10 px
+// комнаты — стена, и кадка там оказалась бы внутри неё.
+const GREEN_W = 420, GREEN_H = 150;
+
+function buildGreenhouse(floorW, y) {
+  const x = Math.round(floorW / 2 - GREEN_W / 2);
+  const door = { x: x + 188, w: 44 };
+  const room = {
+    key: '__greenhouse', title: 'ОРАНЖЕРЕЯ', greenhouse: true,
+    service: true, draw: 'greenhouse', lit: false,
+    x, y, w: GREEN_W, h: GREEN_H, door,
+    agents: [], desks: [], art: [], back: null, coffee: null,
+  };
+  // Семь горшков: четыре на стеллаже, три кадками на полу. Номер закреплён за
+  // местом, потому что он же ключ в настройках: пересчитай порядок — и политым
+  // окажется не тот, кого полили.
+  room.pots = [
+    { i: 0, kind: 'flower', x: x + 46, y: y + 60, shelf: true },
+    { i: 1, kind: 'cactus', x: x + 78, y: y + 60, shelf: true },
+    { i: 2, kind: 'flower', x: x + 110, y: y + 60, shelf: true },
+    { i: 3, kind: 'ivy', x: x + 142, y: y + 60, shelf: true },
+    { i: 4, kind: 'palm', x: x + 128, y: y + 124 },
+    { i: 5, kind: 'ficus', x: x + 172, y: y + 136 },
+    { i: 6, kind: 'ficus', x: x + 236, y: y + 112 },
+  ];
+  // Подходят к горшку снизу — и к тому, что на стеллаже, тоже: поливают сверху
+  // вниз, стоя перед ним, а не сбоку.
+  for (const p of room.pots) p.spot = { x: p.x, y: p.y + (p.shelf ? 30 : 16) };
+  room.tap = { x: x + 376, y: y + 50, spot: { x: x + 372, y: y + 104 } };
+  room.hook = { x: x + 332, y: y + 56, spot: { x: x + 332, y: y + 100 } };
+  room.bench = {
+    x: x + 268, y: y + 124, w: 46,
+    seats: [{ x: x + 280, y: y + 128 }, { x: x + 302, y: y + 128 }],
+  };
+  // Мебель занимает пол ровно там, где нарисована. Кадки — тоже мебель: сквозь
+  // фикус в комнате проекта уже не ходят, и здесь та же логика.
+  room.blocks = [
+    { x: x + 28, y: y + 56, w: 172, h: 26 },
+    { x: x + 36, y: y + 100, w: 62, h: 24 },
+    { x: x + 348, y: y + 62, w: 58, h: 36 },
+    { x: x + 268, y: y + 110, w: 46, h: 26 },
+    { x: x + 123, y: y + 116, w: 10, h: 10 },
+    { x: x + 167, y: y + 128, w: 10, h: 10 },
+    { x: x + 231, y: y + 104, w: 10, h: 10 },
+  ];
+  room.doorPoint = { x: door.x + door.w / 2, y: y + WALL + 16 };
+  return room;
+}
 
 // One picture per room — this is an office, not a gallery. It hangs in the middle
 // of the widest stretch of wall the door and the board leave free.
@@ -542,6 +624,7 @@ export function blocked(L, x, y) {
     // кадка занимает пол, крона висит выше головы и не мешает
     if (r.ficus && x > r.ficus.x - 12 && x < r.ficus.x + 12 && y > r.ficus.y - 14 && y < r.ficus.y + 4) return true;
     if (r.coffee && x > r.coffee.x - 16 && x < r.coffee.x + 14 && y > r.coffee.y - 34 && y < r.coffee.y + 4) return true;
+    if (r.micro && x > r.micro.x - 17 && x < r.micro.x + 17 && y > r.micro.y - 22 && y < r.micro.y + 4) return true;
     for (const b of r.blocks || []) {
       if (x > b.x - 4 && x < b.x + b.w + 4 && y > b.y && y < b.y + b.h) return true;
     }

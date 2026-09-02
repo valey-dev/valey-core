@@ -1,20 +1,22 @@
 // Every panel that is HTML rather than pixels: dialog, board viewer,
 // morning round, your own look, toasts.
-import { drawPerson, cycle, hash, SKIN, HAIR, SHIRT, PANTS, BOOTS, HEADS, FACES, HANDS } from './sprites.js';
+import { drawPerson, drawItem, dressMe, cycle, hash, SKIN, HAIR, SHIRT, PANTS, BOOTS, HEADS, FACES, HANDS,
+  SHIRT_WORK, BLOUSE, JACKET, TIE, CUTS, BOTTOMS } from './sprites.js';
 import { renderMarkdown } from './markdown.js';
 import { highlight, langOf } from './highlight.js';
 import { collect } from './modules.js';
+import { layoutGraph, railBits, RAIL } from './gitgraph.js';
 import { theme, applyTheme, resetTheme, PRESETS, ui, UI_STEPS, applyUiScale } from './theme.js';
 import { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } from './notes.js';
 
 const $ = (s) => document.querySelector(s);
-const el = { hud: null, dialog: null, viewer: null, roster: null, dress: null, toasts: null };
+const el = { hud: null, dialog: null, viewer: null, roster: null, bag: null, toasts: null };
 let S = null, api = null;
 
 export function initUI(state, callbacks) {
   S = state; api = callbacks;
   el.hud = $('#hud'); el.dialog = $('#dialog'); el.viewer = $('#viewer');
-  el.roster = $('#roster'); el.dress = $('#dress'); el.toasts = $('#toasts');
+  el.roster = $('#roster'); el.bag = $('#bag'); el.toasts = $('#toasts');
   el.sky = $('#sky');
   el.skin = $('#skin');
   el.lift = $('#lift');
@@ -286,9 +288,9 @@ function buildDialog(a) {
       <div class="act">${actLine(a)}</div>
       <div class="body">${body}</div>
       <div class="acts">
-        <button data-p="talk" class="${S.page === 'talk' ? 'on' : ''}">${tr('tab.talk')}</button>
-        <button data-p="work" class="${S.page === 'work' ? 'on' : ''}">${tr('tab.work')}</button>
-        <button data-p="task" class="${S.page === 'task' ? 'on' : ''}">${tr('tab.task')}</button>
+        <button data-p="talk" class="${S.page === 'talk' ? 'on' : ''}">${tr('tab.talk')} <kbd>1</kbd></button>
+        <button data-p="work" class="${S.page === 'work' ? 'on' : ''}">${tr('tab.work')} <kbd>2</kbd></button>
+        <button data-p="task" class="${S.page === 'task' ? 'on' : ''}">${tr('tab.task')} <kbd>3</kbd></button>
         <button data-p="close">${tr('tab.close')} <kbd>Esc</kbd></button>
       </div>
     </div>`;
@@ -438,6 +440,19 @@ export function closeDialog() {
 
 // ---- arrows walk along the bottom row, Enter presses ----
 const actButtons = () => [...el.dialog.querySelectorAll('.acts button')];
+
+// Цифра переключает вкладку карточки: 1 — чем занят, 2 — показать работу,
+// 3 — дать задание. «Закрыть» номера не получает, у неё есть Esc. Пока
+// печатаешь записку, сюда вообще не доходит: main.js отдаёт клавиши полю.
+export function dialogNumber(raw) {
+  if (!S || !S.dialogOpen) return false;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 3) return false;
+  const b = actButtons()[n - 1];
+  if (!b || b.disabled) return false;
+  b.click();
+  return true;
+}
 const readLink = () => el.dialog.querySelector('#readAll');
 // Строки файлов на вкладке «Показать работу» и кнопки на записках во вкладке
 // «Дать задание» — это одно и то же место в карточке: список под текстом, в
@@ -697,6 +712,7 @@ function columns() {
 
 export function closeViewer() {
   el.viewer.hidden = true;
+  gitView = null;
   chatView = null;
   mdSource = null;
   docKind = null;
@@ -723,6 +739,7 @@ function paintHeadFocus() {
 export function viewerKey(raw, big = false) {
   if (el.viewer.hidden) return false;
   const key = raw.toLowerCase();
+  if (gitKey(key)) return true;
   if (transcriptKey(key, big)) return true;
   const n = gallery.items.length;
 
@@ -847,116 +864,297 @@ const rosterRing = focusRing(() => el.roster, '.go');
 export function closeRoster() { el.roster.hidden = true; rosterSig = ''; rosterRing.reset(); }
 export function rosterKey(raw) { return rosterRing.key(raw, el.roster && !el.roster.hidden); }
 
-// ------------------------------------------------------------ your own look
-// Одиннадцать слотов в один столбец уезжают за нижний край ноутбука, поэтому
-// панель разложена на две колонки: слева цвета, справа надетое. Цвет в строке
-// показан пятном, а не словом — «кожа 3» не значит ничего.
+// -------------------------------------------------------------------- инвентарь
+// Панель «Как ты выглядишь» переехала сюда целиком и стала вкладкой «на себе»:
+// слева цвета, справа тело. Съёмное ушло на «вещи» и показывается сеткой, а не
+// строками с ◀▶ — галстуков в дресс-коде будет восемнадцать, и перебирать их
+// стрелкой это не выбор, а перелистывание.
+//
+// Вкладки лежат списком, а не тремя ветками if: «ключи» и «офис» из того же
+// макета приезжают следующими коммитами и добавляются сюда одной строкой.
+// Макет: Figma, секция «🔵 WIP — Дресс-код и инвентарь · Ready for Dev»,
+// кадры 556:56 (на себе) и 556:508 (вещи).
 const COLORS = [
   { key: 'skin', list: SKIN },
   { key: 'hair', list: HAIR },
-  { key: 'shirt', list: SHIRT },
+  { key: 'shirt', list: SHIRT },   // подменяется офисной рубашкой, см. colorFields()
   { key: 'pants', list: PANTS },
   { key: 'boots', list: BOOTS },
 ];
-const WORN = [
+const colorFields = () => COLORS.map((f) => (f.key === 'shirt' ? { ...topField(), label: 'shirt' } : f));
+const BODY = [
   { key: 'tall', list: [0, 1] },
   { key: 'style', list: [0, 1, 2, 3, 4] },
   { key: 'face', list: FACES },
+];
+// Слот сетки умеет читать и писать не только S.me[key]: галстук лежит парой
+// «цвет + крой», и разложить его на две строки честнее, чем городить
+// восемнадцать клеток в одну.
+const THINGS = [
   { key: 'head', list: HEADS },
   { key: 'glasses', list: [false, true] },
   { key: 'hands', list: HANDS },
+  { key: 'tie', office: true, list: [null, ...TIE],
+    get: () => (S.me.tie ? S.me.tie.color : null),
+    set: (v) => { S.me.tie = v ? { cut: (S.me.tie && S.me.tie.cut) || 'plain', color: v } : null; } },
+  { key: 'cut', office: true, list: CUTS,
+    get: () => (S.me.tie ? S.me.tie.cut : null),
+    set: (v) => { S.me.tie = { cut: v, color: (S.me.tie && S.me.tie.color) || TIE[0] }; } },
+  { key: 'jacket', office: true, list: [null, ...JACKET] },
 ];
-const FIELDS = [...COLORS, ...WORN];
+const readSlot = (f) => (f.get ? f.get() : S.me[f.key]);
+// Подпись клетки. У галстука и пиджака значение — цвет, и ключа в словаре под
+// него не бывает: показываем сам цвет, а «нет» переводим.
+const cellTitle = (f, v) => (f.key === 'tie' || f.key === 'jacket'
+  ? (v ? String(v) : tr('val.none'))
+  : tr(`val.${f.key}.${v}`));
+const writeSlot = (f, v) => { if (f.set) f.set(v); else S.me[f.key] = v; };
+
+const FIELDS = [...COLORS, ...BODY];
+const TABS = ['self', 'things', 'office'];
+let bagTab = 'self';
+
+// Дресс-код читается отсюда же, из настроек офиса: он общий, а не браузерный.
+const dressCode = () => (S.settings && S.settings.dress && S.settings.dress.code) || 'casual';
+const officeOn = () => dressCode() === 'office';
+// В офисном режиме «верх» правит офисную рубашку, а не свободную кофту: иначе
+// переключение туда-обратно съедало бы выбранный цвет.
+const topField = () => (officeOn()
+  ? { key: 'shirtWork', list: [...SHIRT_WORK, ...BLOUSE.filter((c) => !SHIRT_WORK.includes(c))] }
+  : { key: 'shirt', list: SHIRT });
+const bottomCut = { key: 'bottom', list: BOTTOMS };
 
 const colorRow = (f) => `<div class="drow"><button data-f="${f.key}" data-d="-1">◀</button>
-  <span class="dname">${tr('dress.' + f.key)}</span>
+  <span class="dname">${tr('dress.' + (f.label || f.key))}</span>
   <span class="sw" data-k="${f.key}" style="background:${S.me[f.key]}"></span>
   <button data-f="${f.key}" data-d="1">▶</button></div>`;
 
-const wornRow = (f) => `<div class="drow"><button data-f="${f.key}" data-d="-1">◀</button>
+const bodyRow = (f) => `<div class="drow"><button data-f="${f.key}" data-d="-1">◀</button>
   <span class="dname">${tr('dress.' + f.key)}</span>
   <span class="dval" data-k="${f.key}">${tr(`val.${f.key}.${S.me[f.key]}`)}</span>
   <button data-f="${f.key}" data-d="1">▶</button></div>`;
 
-export function renderDress() {
-  el.dress.hidden = false;
-  el.dress.innerHTML = `<div class="rwrap dresswrap">
-    <div class="vhead">${tr('dress.title')}<button id="dx">✕</button></div>
-    <div class="dbody">
+const selfHtml = () => `<div class="dbody">
       <canvas id="me" width="72" height="86"></canvas>
       <div class="rows">
         <label class="namerow">${tr('dress.name')} <input id="myname" maxlength="14" value="${S.me.name || tr('label.me')}"></label>
         <p class="tally">${tr('dress.tally', { water: S.me.drinks || 0, coffee: S.me.coffees || 0 })}</p>
         <p class="dcap">${tr('dress.colors')}</p>
-        ${COLORS.map(colorRow).join('')}
+        ${colorFields().map(colorRow).join('')}
       </div>
       <div class="rows">
-        <p class="dcap">${tr('dress.worn')}</p>
-        ${WORN.map(wornRow).join('')}
+        <p class="dcap">${tr('bag.body')}</p>
+        ${BODY.map(bodyRow).join('')}
+        ${officeOn() ? `<p class="dcap">${tr('bag.cut')}</p>${bodyRow(bottomCut)}` : ''}
       </div>
-    </div></div>`;
+    </div>`;
+
+const thingsHtml = () => `<div class="bbody">
+      ${THINGS.map((f) => `<div class="bcat" data-slot="${f.key}">
+        <p class="dcap">${tr('dress.' + f.key)}${f.office && !officeOn() ? ` <span class="dim">${tr('bag.onlyOffice')}</span>` : ''}</p>
+        <div class="brow">${f.list.map((v, i) => `<button class="bcell${readSlot(f) === v ? ' on' : ''}"
+          data-slot="${f.key}" data-i="${i}" title="${cellTitle(f, v)}"><canvas width="48" height="48"></canvas></button>`).join('')}</div>
+      </div>`).join('')}
+      <p class="hint">${tr('bag.thingsNote')}</p>
+    </div>`;
+
+// Вкладка «офис». Дресс-код живёт здесь, потому что у него нет предмета в
+// офисе: погоду настраивают у окна, язык — у таблички, а «всем надеть
+// галстуки» не висит нигде.
+const officeHtml = () => {
+  const on = officeOn();
+  return `<div class="bbody">
+      <p class="dcap">${tr('bag.dressCode')}</p>
+      <div class="oseg">
+        <button class="obtn${on ? '' : ' on'}" data-code="casual">${tr('bag.casual')}</button>
+        <button class="obtn${on ? ' on' : ''}" data-code="office">${tr('bag.office')}</button>
+        <span class="bhint">${tr('bag.dressWho', { n: S.agents.length })}</span>
+      </div>
+      <p class="hint">${tr('bag.dressNote')}</p>
+      <p class="dcap">${tr('bag.rest')}</p>
+      <div class="orow"><b>${tr('bag.langRow')}</b><span>${tr('bag.langSub')}</span>
+        <i>${lang().toUpperCase()}</i><button class="obtn" data-act="lang">${tr('bag.switch')}</button></div>
+      <div class="orow"><b>${tr('bag.skinRow')}</b><span>${tr('bag.skinSub')}</span>
+        <i>U</i><button class="obtn" data-act="skin">${tr('bag.open')}</button></div>
+      <div class="orow"><b>${tr('bag.soundRow')}</b><span>${tr('bag.soundSub')}</span>
+        <i>M</i><button class="obtn" data-act="sound">${S.soundOn ? tr('bag.off') : tr('bag.on')}</button></div>
+    </div>`;
+};
+
+export function renderBag(tab) {
+  if (tab && TABS.includes(tab)) bagTab = tab;
+  el.bag.hidden = false;
+  el.bag.innerHTML = `<div class="rwrap bagwrap">
+    <div class="vhead">${tr('bag.title')} · ${tr('bag.tab.' + bagTab)}<button id="bx">✕</button></div>
+    <div class="btabs">
+      ${TABS.map((t, i) => `<button class="btab${t === bagTab ? ' on' : ''}" data-tab="${t}">${tr('bag.tab.' + t)}<kbd>${i + 1}</kbd></button>`).join('')}
+      <span class="bhint">${tr('bag.tabHint')}</span>
+    </div>
+    ${bagTab === 'self' ? selfHtml() : bagTab === 'things' ? thingsHtml() : officeHtml()}
+  </div>`;
+
+  $('#bx').onclick = closeBag;
+  el.bag.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => openTab(b.dataset.tab));
+  if (bagTab === 'self') bindSelf();
+  else if (bagTab === 'things') bindThings();
+  else bindOffice();
+}
+
+function bindOffice() {
+  el.bag.querySelectorAll('[data-code]').forEach((b) => b.onclick = async () => {
+    const code = b.dataset.code;
+    if (code === dressCode()) return;
+    const r = await api.saveSettings({ dress: { code } });
+    if (r && r.error) return toast(tr('bag.notYours'), 'wait');
+    renderBag();
+    toast(code === 'office' ? tr('bag.nowOffice') : tr('bag.nowCasual'));
+  });
+  el.bag.querySelectorAll('[data-act]').forEach((b) => b.onclick = () => {
+    const act = b.dataset.act;
+    if (act === 'lang') return api.lang();
+    if (act === 'skin') { closeBag(); return renderSkin(); }
+    if (act === 'sound') { api.sound(); renderBag(); }
+  });
+  paintBagFocus();
+}
+
+function bindSelf() {
   const c = $('#me').getContext('2d');
   const paint = () => {
     c.imageSmoothingEnabled = false;
     c.fillStyle = '#2a1f19'; c.fillRect(0, 0, 72, 86);
-    c.save(); c.scale(2.4, 2.4); drawPerson(c, 15, 33, S.me, { pose: 'stand', frame: 0 }); c.restore();
+    c.save(); c.scale(2.4, 2.4);
+    // человечек показан одетым по коду офиса: панель обещает то же, что видно
+    // на этаже, а не то, что лежит в сохранении
+    drawPerson(c, 15, 33, dressMe(S.me, dressCode()), { pose: 'stand', frame: 0 });
+    c.restore();
   };
   // строка показывает своё значение, поэтому обновляется вместе с человечком.
   // Перерисовать всю панель было бы короче, но тогда стрелка забирает фокус у
   // поля с именем — прямо посреди того, как его печатают.
   const refresh = () => {
-    for (const f of COLORS) {
-      const s = el.dress.querySelector(`.sw[data-k="${f.key}"]`);
+    for (const f of colorFields()) {
+      const s = el.bag.querySelector(`.sw[data-k="${f.key}"]`);
       if (s) s.style.background = S.me[f.key];
     }
-    for (const f of WORN) {
-      const v = el.dress.querySelector(`.dval[data-k="${f.key}"]`);
+    for (const f of [...BODY, bottomCut]) {
+      const v = el.bag.querySelector(`.dval[data-k="${f.key}"]`);
       if (v) v.textContent = tr(`val.${f.key}.${S.me[f.key]}`);
     }
     paint();
   };
   paint();
-  $('#dx').onclick = () => { el.dress.hidden = true; };
   $('#myname').oninput = (e) => { S.me.name = e.target.value.toUpperCase().slice(0, 14) || tr('label.me'); api.saveMe(); };
-  paintDressFocus();
-  el.dress.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => {
+  paintBagFocus();
+  const rowFields = () => [...colorFields(), ...BODY, bottomCut];
+  el.bag.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => {
     const key = b.dataset.f, dir = Number(b.dataset.d);
-    S.me[key] = cycle(FIELDS.find((x) => x.key === key).list, S.me[key], dir);
+    const f = rowFields().find((x) => x.key === key);
+    if (!f) return;
+    S.me[key] = cycle(f.list, S.me[key], dir);
     api.saveMe(); refresh();
   });
 }
-export function closeDress() { el.dress.hidden = true; dressIdx = 0; }
 
-// «Переодеться» — не ряд кнопок, а список слотов, у каждого ◀ и ▶. Поэтому
+function bindThings() {
+  for (const f of THINGS) {
+    el.bag.querySelectorAll(`.bcell[data-slot="${f.key}"]`).forEach((b) => {
+      const cv = b.querySelector('canvas');
+      if (cv && cv.getContext) {
+        const c = cv.getContext('2d');
+        c.imageSmoothingEnabled = false;
+        c.clearRect(0, 0, 48, 48);
+        c.save(); c.scale(4, 4); drawItem(c, f.key, f.list[Number(b.dataset.i)], S.me); c.restore();
+      }
+      b.onclick = () => {
+        writeSlot(f, f.list[Number(b.dataset.i)]);
+        api.saveMe();
+        el.bag.querySelectorAll(`.bcell[data-slot="${f.key}"]`).forEach((o) => o.classList.toggle('on', o === b));
+        // крой рисуется цветом выбранного галстука, и наоборот — поэтому
+        // соседняя строка перерисовывается вместе с этой
+        if (f.key === 'tie' || f.key === 'cut') renderBag();
+      };
+    });
+  }
+  paintBagFocus();
+}
+
+// Вкладка «офис» — ряд кнопок, а не список слотов и не сетка: у неё третье
+// поведение клавиш, и держать его руками рядом с двумя другими незачем.
+const officeRing = focusRing(() => el.bag, '.obtn');
+
+function openTab(tab) {
+  if (!TABS.includes(tab) || tab === bagTab) return;
+  bagTab = tab; bagIdx = 0; cellIdx = 0;
+  officeRing.reset();
+  renderBag();
+}
+
+export function closeBag() { el.bag.hidden = true; bagIdx = 0; cellIdx = 0; officeRing.reset(); }
+
+// «На себе» — не ряд кнопок, а список слотов, у каждого ◀ и ▶. Поэтому
 // вверх-вниз ходят по слотам, а в стороны крутят значение того, на котором
-// стоишь: так этот список и читается глазами. Раньше он был мышиным целиком,
-// все одиннадцать слотов.
-let dressIdx = 0;
-const dressRows = () => [...el.dress.querySelectorAll('.namerow, .drow')];
+// стоишь: так этот список и читается глазами.
+//
+// «Вещи» — сетка, и там те же четыре стрелки значат другое: вверх-вниз меняют
+// ряд, в стороны ходят по клеткам, ⏎ надевает. Один индекс на оба случая не
+// годится, поэтому их два.
+let bagIdx = 0;
+let cellIdx = 0;
+const bagRows = () => [...el.bag.querySelectorAll('.namerow, .drow')];
+const bagCats = () => [...el.bag.querySelectorAll('.bcat')];
+const catCells = (cat) => (cat ? [...cat.querySelectorAll('.bcell')] : []);
 
-function paintDressFocus() {
-  const list = dressRows();
+function paintBagFocus() {
+  if (bagTab === 'office') { officeRing.paint(); return; }
+  if (bagTab === 'things') {
+    const cats = bagCats();
+    if (!cats.length) return;
+    bagIdx = Math.max(0, Math.min(cats.length - 1, bagIdx));
+    const cells = catCells(cats[bagIdx]);
+    cellIdx = Math.max(0, Math.min(cells.length - 1, cellIdx));
+    for (const cat of cats) for (const b of catCells(cat)) b.classList.remove('focus');
+    if (cells[cellIdx]) {
+      cells[cellIdx].classList.add('focus');
+      cells[cellIdx].scrollIntoView({ block: 'nearest' });
+    }
+    return;
+  }
+  const list = bagRows();
   if (!list.length) return;
-  dressIdx = Math.max(0, Math.min(list.length - 1, dressIdx));
-  list.forEach((r, i) => r.classList.toggle('focus', i === dressIdx));
-  list[dressIdx].scrollIntoView({ block: 'nearest' });
+  bagIdx = Math.max(0, Math.min(list.length - 1, bagIdx));
+  list.forEach((r, i) => r.classList.toggle('focus', i === bagIdx));
+  list[bagIdx].scrollIntoView({ block: 'nearest' });
 }
 
 // Escape не трогаем: его ловит closeAll() в main.js.
-export function dressKey(raw) {
-  if (el.dress.hidden) return false;
+export function bagKey(raw) {
+  if (el.bag.hidden) return false;
   const key = raw.toLowerCase();
-  const list = dressRows();
+
+  // Цифра — вкладка. Клавиши 1..9 в офисе больше ничем не заняты: масштаб
+  // сидит на +, − и 0.
+  const n = Number(key);
+  if (Number.isInteger(n) && n >= 1 && n <= TABS.length) {
+    openTab(TABS[n - 1]);
+    return true;
+  }
+  if (bagTab === 'office') return officeRing.key(key, true);
+  return bagTab === 'things' ? thingsKey(key) : selfKey(key);
+}
+
+function selfKey(key) {
+  const list = bagRows();
   if (!list.length) return false;
 
   const step = { arrowup: -1, arrowdown: 1 }[key];
   if (step !== undefined) {
-    dressIdx = (dressIdx + step + list.length) % list.length;
-    paintDressFocus();
+    bagIdx = (bagIdx + step + list.length) % list.length;
+    paintBagFocus();
     return true;
   }
 
-  const row = list[dressIdx];
+  const row = list[bagIdx];
   const turn = { arrowleft: '-1', arrowright: '1' }[key];
   if (turn !== undefined) {
     const b = row && row.querySelector(`[data-d="${turn}"]`);
@@ -976,6 +1174,30 @@ export function dressKey(raw) {
   return false;
 }
 
+function thingsKey(key) {
+  const cats = bagCats();
+  if (!cats.length) return false;
+
+  const down = { arrowup: -1, arrowdown: 1 }[key];
+  if (down !== undefined) {
+    bagIdx = (bagIdx + down + cats.length) % cats.length;
+    paintBagFocus();
+    return true;
+  }
+  const side = { arrowleft: -1, arrowright: 1 }[key];
+  if (side !== undefined) {
+    const cells = catCells(cats[bagIdx]);
+    if (cells.length) cellIdx = (cellIdx + side + cells.length) % cells.length;
+    paintBagFocus();
+    return true;
+  }
+  if (key === 'enter' || key === ' ') {
+    const cells = catCells(cats[bagIdx]);
+    if (cells[cellIdx]) cells[cellIdx].click();
+    return true;
+  }
+  return false;
+}
 
 // --------------------------------------------------------- window on the world
 let geoTimer = 0;
@@ -1081,7 +1303,15 @@ function bindResults() {
 // Экспортируется: панель модуля водит фокус теми же стрелками, что и панели
 // ядра, и заводить второй способ ходить по кнопкам значило бы завести второй
 // офис.
-export function focusRing(nodeOf, selector) {
+// opts.numbers — цифра 1..9 выбирает пункт списка и нажимает его. Идея приехала
+// из инвентаря, где так переключаются вкладки, и оказалась общей: список на
+// экране почти всегда короткий и пронумерован глазами и без нас.
+//   numbers: true          — по всем пунктам кольца
+//   numbers: '.rst'        — только по этим (в радио цифра — волна, а не ручка)
+//   byData: 'n'            — цифра ищет пункт с data-n="цифра", а не N-й по счёту:
+//                            в лифте «3» это третий этаж, даже если он второй в
+//                            списке.
+export function focusRing(nodeOf, selector, opts = {}) {
   let idx = 0;
   const list = () => (nodeOf() ? [...nodeOf().querySelectorAll(selector)] : []);
   const paint = () => {
@@ -1110,6 +1340,21 @@ export function focusRing(nodeOf, selector) {
         cur.value = String(Math.max(min, Math.min(max, Number(cur.value || 0) + (key === 'arrowleft' ? -by : by))));
         if (cur.oninput) cur.oninput({ target: cur });
         return true;
+      }
+
+      if (opts.numbers) {
+        const n = Number(key);
+        if (Number.isInteger(n) && n >= 1 && n <= 9) {
+          const pool = opts.numbers === true ? l : [...nodeOf().querySelectorAll(opts.numbers)];
+          const hit = opts.byData ? pool.find((b) => Number(b.dataset[opts.byData]) === n) : pool[n - 1];
+          // Цифра мимо списка не уезжает в офис: панель открыта, и шаг игрока
+          // из-под неё читается как «клавиатура живёт своей жизнью».
+          if (!hit) return true;
+          const at = l.indexOf(hit);
+          if (at >= 0) { idx = at; paint(); }
+          if (!hit.disabled) hit.click();
+          return true;
+        }
       }
 
       const step = { arrowup: -1, arrowdown: 1, arrowleft: -1, arrowright: 1 }[key];
@@ -1277,7 +1522,7 @@ export function openLift(lift, floorNow, pick) {
 // офиса были недостижимы вовсе, а не просто неудобны.
 //
 // Escape тут не перехватываем: его ловит closeAll() в main.js.
-const liftRing = focusRing(() => el.lift, '.liftbtn, .recgo');
+const liftRing = focusRing(() => el.lift, '.liftbtn, .recgo', { numbers: '.liftbtn', byData: 'n' });
 export function closeLift() { el.lift.hidden = true; liftRing.reset(); }
 export function liftKey(raw) { return liftRing.key(raw, el.lift && !el.lift.hidden); }
 
@@ -1715,6 +1960,7 @@ export function closeNotes() { el.notes.hidden = true; notesRing.reset(); }
 export function notesKey(raw) { return notesRing.key(raw, el.notes && !el.notes.hidden); }
 export function notesOpen() { return !el.notes.hidden; }
 
+
 export function relabel() {
   renderHud();
   // Диалог и обход перерисовываются только когда меняется их ключ — иначе
@@ -1727,7 +1973,277 @@ export function relabel() {
   collect('lang');
   if (S && S.dialogOpen) renderDialog();
   if (el.roster && !el.roster.hidden) renderRoster();
-  if (el.dress && !el.dress.hidden) renderDress();
+  if (el.bag && !el.bag.hidden) renderBag();
   if (el.sky && !el.sky.hidden) renderSky();
   if (el.skin && !el.skin.hidden) renderSkin();
+}
+
+// ------------------------------------------------------------- дерево гита
+// Панель живёт в том же оверлее, что мольберт и доска: пока она открыта,
+// viewerKey отдаёт ей клавиши первой. Две ступени — история и диф, — и Esc из
+// дифа возвращает в историю, а не в офис: иначе путь приходится повторять.
+let gitView = null;      // { project, board, sel, mode, commit, file }
+let gitLoad = null, gitCommitLoad = null;
+let gitCardToken = 0;    // карточку коммита грузим лениво, стрелки её обгоняют
+
+export function gitPanelOpen() { return !!gitView; }
+
+const gitWhen = (ts) => ago(ts ? Math.round((Date.now() - ts) / 1000) : null);
+const gitDate = (ts) => new Date(ts).toLocaleString(lang() === 'ru' ? 'ru-RU' : 'en-GB',
+  { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+
+// Коммит, у которого в сообщении расписался агент. Не украшение: офис про то и
+// есть — кто из сотрудников это сделал.
+const byAgent = (c) => /Co-Authored-By:\s*Claude/i.test(c.body || '');
+const isHead = (c) => (c.refs || []).some((r) => r.startsWith('HEAD'));
+
+export async function openGit(project, load, loadCommit) {
+  gitLoad = load; gitCommitLoad = loadCommit;
+  gitView = { project, board: null, sel: 0, mode: 'log', commit: null, file: 0 };
+  el.viewer.hidden = false;
+  renderGit();
+  const board = await load(project);
+  if (!gitView || gitView.project !== project) return;
+  gitView.board = board;
+  renderGit();
+  if (board && board.ok && board.commits.length) loadGitCard();
+}
+
+export function closeGit() { gitView = null; closeViewer(); }
+
+// Карточка справа: сообщение и файлы. Файлы знает только запрос по коммиту,
+// поэтому он идёт отдельно и своим темпом — на зажатой стрелке доезжает
+// последний, а не каждый.
+async function loadGitCard() {
+  const v = gitView;
+  if (!v || !v.board || !v.board.ok) return;
+  const c = v.board.commits[v.sel];
+  if (!c) return;
+  const mine = ++gitCardToken;
+  const data = await gitCommitLoad(v.project, c.hash);
+  if (mine !== gitCardToken || !gitView || gitView.mode !== 'log') return;
+  gitView.commit = data;
+  renderGit();
+}
+
+function gitBar(b) {
+  if (!b || !b.ok) return '';
+  const bits = [tr('git.commits', { n: b.total })];
+  if (b.unpushed) bits.push(tr('git.notPushedN', { n: b.unpushed }));
+  return `<div class="gitbar">
+    <span class="gbranch">${esc(b.branch || tr('git.detached'))}</span>
+    <span class="gmeta">${esc(bits.join(' · '))}</span></div>`;
+}
+
+function gitTrouble(b) {
+  return `<div class="gitempty">
+    <p class="gbig">${tr('git.down')}</p>
+    <p class="gsaid">git${b.code != null ? ' — ' + tr('git.codeIs', { n: b.code }) : ''}: ${esc(b.message)}</p>
+    <p class="gwhy">${tr('git.downWhy')}</p></div>`;
+}
+
+function gitRail(row) {
+  const { bits, dot } = railBits(row);
+  const rails = bits.map((r) => `<i style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;background:${r.color}"></i>`).join('');
+  return rails + `<b class="gdot${dot.merge ? ' merge' : ''}" style="left:${dot.x}px;top:${dot.y}px;width:${dot.size}px;height:${dot.size}px;background:${dot.color}"></b>`;
+}
+
+function gitRefs(c) {
+  return (c.refs || []).slice(0, 2)
+    .map((r) => `<span class="gref${r.startsWith('HEAD') ? ' head' : ''}${r.startsWith('tag:') ? ' tag' : ''}">${esc(r.replace('tag: ', ''))}</span>`)
+    .join('');
+}
+
+function gitList(b) {
+  const g = layoutGraph(b.commits);
+  const railW = RAIL.x0 + (g.width - 1) * RAIL.laneW + RAIL.dot + 6;
+  // Рабочее дерево стоит над HEAD и в историю не входит: без него панель врёт,
+  // показывая последнюю запись часовой давности, когда файлы на диске другие.
+  const dirty = b.dirty
+    ? `<div class="grow dirty"><span class="grail" style="width:${railW}px">
+        <b class="gdot hollow" style="left:${RAIL.x0 - RAIL.dot / 2}px;top:${RAIL.rowH / 2 - RAIL.dot / 2}px;width:${RAIL.dot}px;height:${RAIL.dot}px"></b></span>
+      <span class="gsubj">${tr('git.dirty')}</span>
+      <span class="gwhen">${tr('git.dirtyN', { n: b.dirty })}</span></div>`
+    : '';
+  const rows = b.commits.map((c, i) => `<div class="grow${i === gitView.sel ? ' sel' : ''}" data-i="${i}">
+      <span class="grail" style="width:${railW}px">${gitRail(g.rows[i])}</span>
+      <span class="ghash">${esc(c.short)}</span>
+      ${c.unpushed ? `<span class="gup" title="${tr('git.notPushed')}">↑</span>` : ''}
+      ${gitRefs(c)}
+      <span class="gsubj">${esc(c.subject)}</span>
+      <span class="gwhen">${gitWhen(c.ts)}</span></div>`).join('');
+  const rest = b.total - b.commits.length;
+  const more = rest > 0 ? `<p class="gmore">${tr('git.more', { n: rest })}</p>` : '';
+  return `<div class="glist" id="glist">${dirty}${rows}${more}</div>${gitCard(b)}`;
+}
+
+function gitCard(b) {
+  const c = b.commits[gitView.sel];
+  if (!c) return '<div class="gcard" id="gcard"></div>';
+  const d = gitView.commit;
+  const fresh = d && d.ok && d.commit && d.commit.hash === c.hash;
+  const files = fresh
+    ? `<p class="gclabel">${tr('git.files', { n: d.files.length })}</p>`
+      + (d.files.length
+        ? `<ul class="gcfiles">${d.files.map((f) => `<li><span>${esc(f.path)}</span>
+            <b class="add">+${f.add}</b><b class="del">−${f.del}</b></li>`).join('')}</ul>`
+        : `<p class="gwhy">${tr('git.noDiff')}</p>`)
+    : '';
+  return `<div class="gcard" id="gcard">
+    <p class="gchash">${esc(c.short)}${c.unpushed ? `<span class="gup">↑ ${tr('git.notPushed')}</span>` : ''}</p>
+    <p class="gcsubj">${esc(c.subject)}</p>
+    ${c.body ? `<p class="gcbody">${esc(c.body).slice(0, 900)}</p>` : ''}
+    <p class="gcwho">${esc(c.author)} · ${esc(gitDate(c.ts))}</p>
+    ${byAgent(c) ? `<p class="gagent">${tr('git.byAgent')}</p>` : ''}
+    ${files}
+    <p class="ghint">${tr('git.openDiff')}</p></div>`;
+}
+
+function renderGit() {
+  const v = gitView;
+  if (!v) return;
+  if (v.mode === 'diff') return renderGitDiff();
+  const b = v.board;
+  const body = !b ? `<p class="empty">${tr('git.loading')}</p>`
+    : !b.ok ? gitTrouble(b)
+    : !b.commits.length ? `<div class="gitempty"><p class="gbig">${tr('git.empty')}</p>
+        <p class="gwhy">${tr('git.emptyWhy')}</p></div>`
+    : gitList(b);
+  const tall = !!(b && b.ok && b.commits.length);
+  el.viewer.innerHTML = `<div class="vwrap gitwrap${tall ? ' tall' : ''}">
+    <div class="vhead">${esc(tr('git.title', { project: v.project }))}
+      <span class="zhint">${tr('git.keys')}</span>
+      <button id="vx">✕</button></div>
+    ${gitBar(b)}
+    <div class="gitbody">${body}</div></div>`;
+  $('#vx').onclick = closeGit;
+  el.viewer.querySelectorAll('.grow[data-i]').forEach((row) => {
+    row.onclick = () => {
+      const i = Number(row.dataset.i);
+      if (gitView.sel === i) return openGitDiff();
+      gitView.sel = i; gitView.commit = null;
+      renderGit(); loadGitCard();
+    };
+  });
+  scrollGitRow();
+}
+
+function scrollGitRow() {
+  const row = el.viewer.querySelector('.grow.sel');
+  if (row && row.scrollIntoView) row.scrollIntoView({ block: 'nearest' });
+}
+
+async function openGitDiff() {
+  const v = gitView;
+  const c = v.board && v.board.ok && v.board.commits[v.sel];
+  if (!c) return;
+  v.mode = 'diff'; v.file = 0;
+  const fresh = v.commit && v.commit.ok && v.commit.commit && v.commit.commit.hash === c.hash;
+  if (!fresh) { v.commit = null; renderGitDiff(); v.commit = await gitCommitLoad(v.project, c.hash); }
+  if (!gitView || gitView.mode !== 'diff') return;
+  renderGitDiff();
+}
+
+function diffBody(f) {
+  if (!f) return `<p class="empty">${tr('git.noDiff')}</p>`;
+  if (f.binary) return `<p class="empty">${tr('git.binary')}</p>`;
+  const code = langOf(f.path);
+  return f.lines.map((l) => {
+    if (l.kind === 'hunk') return `<div class="dl hunk"><code>${esc(l.text)}</code></div>`;
+    const sign = l.kind === 'add' ? '+' : l.kind === 'del' ? '−' : ' ';
+    // Префикс отрезан сервером, поэтому подсветке достаётся ровно код — тот же
+    // разборщик, что и на доске, без второй правды о том, что такое строка.
+    const src = code ? highlight(l.text, code) : esc(l.text);
+    return `<div class="dl ${l.kind}"><i class="dn">${l.old || ''}</i><i class="dn">${l.new || ''}</i>`
+      + `<i class="dp">${sign}</i><code>${src}</code></div>`;
+  }).join('');
+}
+
+function renderGitDiff() {
+  const v = gitView;
+  const c = v.board.commits[v.sel];
+  const d = v.commit;
+  const ready = d && d.ok;
+  const f = ready ? d.files[v.file] : null;
+  const head = `${esc(c.short)} · ${esc(c.subject)}`;
+  const bar = ready ? `<div class="gitbar">
+      <span class="gmeta">${tr('git.files', { n: d.files.length })} · <b class="add">+${d.commit.add}</b>
+        <b class="del">−${d.commit.del}</b> · ${esc(c.author)}, ${esc(gitWhen(c.ts))}</span>
+      ${d.merge ? `<span class="gnote">${tr('git.merge')}</span>` : ''}
+      ${d.truncated ? `<span class="gnote warn">${tr('git.truncated')}</span>` : ''}</div>` : '';
+  const body = !d ? `<p class="empty">${tr('git.loading')}</p>`
+    : !d.ok ? gitTrouble(d)
+    : `<div class="gfiles">${d.files.map((x, i) => `<div class="gfile${i === v.file ? ' sel' : ''}" data-f="${i}">
+          <span>${esc(x.path)}</span><b class="add">+${x.add}</b><b class="del">−${x.del}</b></div>`).join('')
+        || `<p class="empty">${tr('git.noDiff')}</p>`}</div>
+      <div class="gcode" id="gcode">${diffBody(f)}</div>`;
+  el.viewer.innerHTML = `<div class="vwrap gitwrap tall">
+    <div class="vhead">${head}
+      <span class="zhint">${tr('git.diffKeys')}</span>
+      <button id="vx">✕</button></div>
+    ${bar}
+    <div class="gitbody diff">${body}</div></div>`;
+  $('#vx').onclick = closeGit;
+  el.viewer.querySelectorAll('.gfile[data-f]').forEach((node) => {
+    node.onclick = () => { gitView.file = Number(node.dataset.f); renderGitDiff(); };
+  });
+  const picked = el.viewer.querySelector('.gfile.sel');
+  if (picked && picked.scrollIntoView) picked.scrollIntoView({ block: 'nearest' });
+}
+
+// Стрелки водят по списку файлов и на краю останавливаются — как ↑↓ по
+// коммитам ступенью выше. По кругу тут не годится: список файлов коммита
+// читают сверху вниз, и прыжок с последнего на первый читается как сбой.
+function leafGitFile(step) {
+  const d = gitView.commit;
+  if (!d || !d.ok || !d.files.length) return;
+  const next = Math.max(0, Math.min(d.files.length - 1, gitView.file + step));
+  if (next === gitView.file) return;
+  gitView.file = next;
+  renderGitDiff();
+}
+
+function moveGitSel(step) {
+  const b = gitView.board;
+  if (!b || !b.ok || !b.commits.length) return;
+  const next = Math.max(0, Math.min(b.commits.length - 1, gitView.sel + step));
+  if (next === gitView.sel) return;
+  gitView.sel = next; gitView.commit = null;
+  renderGit();
+  loadGitCard();
+}
+
+// true — клавишу забрало дерево. Из дифа Esc возвращает в историю: то же
+// правило, что у мольберта, и та же причина.
+export function gitKey(key) {
+  if (!gitView) return false;
+  const v = gitView;
+  if (key === 'escape') {
+    if (v.mode === 'diff') { v.mode = 'log'; renderGit(); return true; }
+    closeGit(); return true;
+  }
+  // Правило на обе ступени одно, и в этом весь смысл: стрелки и Home/End водят
+  // по левому списку, PgUp/PgDn листают правую панель — на истории это
+  // сообщение коммита, в дифе сам диф. Раньше PgUp/PgDn на истории прыгали на
+  // десять коммитов, и длинное сообщение нельзя было дочитать с клавиатуры
+  // вовсе, хотя ступенью ниже те же клавиши уже листали правую панель.
+  const pane = $(v.mode === 'diff' ? '#gcode' : '#gcard');
+  if (pane && (key === 'pageup' || key === 'pagedown')) {
+    pane.scrollTop += (key === 'pagedown' ? 1 : -1) * pane.clientHeight * 0.9;
+    return true;
+  }
+  if (v.mode === 'diff') {
+    if (key === 'arrowup' || key === 'arrowleft') { leafGitFile(-1); return true; }
+    if (key === 'arrowdown' || key === 'arrowright') { leafGitFile(1); return true; }
+    if (key === 'home') { leafGitFile(-1e6); return true; }
+    if (key === 'end') { leafGitFile(1e6); return true; }
+    if (key === ' ' || key === 'enter') return true;
+    return false;
+  }
+  if (key === 'arrowup') { moveGitSel(-1); return true; }
+  if (key === 'arrowdown') { moveGitSel(1); return true; }
+  if (key === 'home') { moveGitSel(-1e6); return true; }
+  if (key === 'end') { moveGitSel(1e6); return true; }
+  if (key === 'enter' || key === ' ') { openGitDiff(); return true; }
+  return false;
 }

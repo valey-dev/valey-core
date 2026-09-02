@@ -104,3 +104,18 @@ git('commit', '-m', `chore(release): ${tag}`);
 git('tag', '-a', tag, '-m', tag);
 console.log(`\nготово: ${tag} на ${git('rev-parse', '--short', 'HEAD')}`);
 console.log(`пуш — отдельно и по твоему решению:\n  git push origin main ${tag}`);
+
+// Минор без ролика — сломанное правило, а не мелочь: так вышел v0.2.0. Поэтому
+// черновик сценария появляется сам, вместе с тегом. Пустой лист — главная
+// причина, по которой выпуск откладывается, и убрать его дешевле, чем потом
+// уговаривать себя сесть.
+if (next.endsWith('.0')) {
+  try {
+    const out = execFileSync(process.execPath, [new URL('script.mjs', import.meta.url).pathname, tag],
+      { encoding: 'utf8' });
+    console.log('\n' + out.trim());
+    console.log(`\nМинорный релиз — значит ролик. Черновик уже лежит, править его\nлегче, чем начинать с нуля. Проход снимается одной командой.`);
+  } catch (err) {
+    console.log('\nчерновик сценария не собрался: ' + (err.stderr || err.message).toString().trim());
+  }
+}

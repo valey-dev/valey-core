@@ -79,6 +79,7 @@ for (const r of L.rooms) {
   const who = r.title;
   if (r.draw === 'security') { survives(`пультовая: ${who}`, () => office.drawSecurity(ctx, r, t, {})); continue; }
   if (r.draw === 'meeting') { survives(`переговорка: ${who}`, () => office.drawMeeting(ctx, r, t)); continue; }
+  if (r.draw === 'greenhouse') { survives(`оранжерея: ${who}`, () => office.drawGreenhouse(ctx, r, t, {})); continue; }
   survives(`комната: ${who}`, () => { office.drawRoom(ctx, r, t); office.drawRoomProps(ctx, r, t); });
   survives(`доска: ${who}`, () => office.drawBoard(ctx, r, [], t, false));
   for (const d of r.desks) survives(`стол ${who}#${d.i}`, () => office.drawDesk(ctx, d, null, t));
