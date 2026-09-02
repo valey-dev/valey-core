@@ -13,5 +13,12 @@
     "start": "node server/index.js",
     "dev": "node server/index.js",
     "test": "for t in tools/test-*.mjs modules/*/test-*.mjs; do node \"$t\" || exit 1; done"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xoyk/valey-core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xoyk/valey-core/issues"
   }
 }

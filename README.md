@@ -63,6 +63,8 @@ The office is a core plus a `modules/` folder. A module is a directory with a `m
 
 Writing your own is [documented here](docs/modules.md).
 
+The repository is called `valey-core` because that is what it is. The office is open core: this core and the cosmetic modules are here under the AGPL, and some modules — the ones that are sold, and the ones that need servers we run — are not. You are not missing a folder; they were never in this repository, and nothing here checks for them or degrades without them.
+
 ## Keys
 
 `WASD` walk · `SHIFT` run · `SPACE` talk, and drink at the cooler · `TAB` the round · `N` notes · `C` change your look · `P` window on the world · `U` office colour · `M` sound · `R` radio · `+` `0` scale · `ESC` back. The security room is below the floor and has the cameras.
