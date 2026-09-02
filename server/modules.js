@@ -40,8 +40,16 @@ export async function loadModules(root) {
     return loaded;                       // модулей нет — это нормальный режим, а не сбой
   }
   for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-    if (!e.isDirectory()) continue;
     const base = path.join(dir, e.name);
+    // stat, а не e.isDirectory(): у символической ссылки на каталог dirent
+    // говорит «не каталог», и приватные модули, привязанные ссылками из
+    // соседнего репозитория, просто не находились бы. Ссылка — штатный способ
+    // положить сюда чужой модуль, см. README репозитория модулей.
+    try {
+      if (!(await fsp.stat(base)).isDirectory()) continue;
+    } catch {
+      continue;                          // битая ссылка — не модуль, а мусор
+    }
     let manifest;
     try {
       manifest = JSON.parse(await fsp.readFile(path.join(base, 'module.json'), 'utf8'));
