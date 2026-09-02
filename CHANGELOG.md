@@ -1,15 +1,8 @@
 # Changelog
 
-What changed from release to release, newest first. The sections are assembled
-from conventional commit prefixes — `node tools/release.mjs minor`.
+What changed from release to release, newest first. The sections are assembled from conventional commit prefixes — `node tools/release.mjs minor`.
 
-Three things, so the file does not mislead. **The hashes lead into the
-project's own history, not this repository**: it starts at a single commit, and
-nothing here can be found by them. **Some entries describe modules that are not
-here** — the office is a core plus a `modules/` folder, and not every module
-sits next to the core. And **entries about internal documents were cut**: they
-pointed at files this repository does not contain, and said nothing to a reader
-of it.
+Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
 ## v0.2.0 — 30 August 2026
 
@@ -55,13 +48,6 @@ of it.
 
 ## v0.1.0 — 30 August 2026
 
-The first pinned release: 79 commits since 25 August, everything above this
-line. The pixel office, live Claude Code agents, notes on the desk and a task
-sent into a chat, paintings and the easel, the title screen, the lift, weather
-in the window.
+The first pinned release: 79 commits since 25 August, everything above this line. The pixel office, live Claude Code agents, notes on the desk and a task sent into a chat, paintings and the easel, the title screen, the lift, weather in the window.
 
-This section was written by hand rather than by the generator, and it is the
-only one. Conventional prefixes arrived on 29 August; of those 79 commits only
-a handful carry one, and the generator would have produced seventy lines of
-"Other" instead of a description. From the next release the history is tagged
-throughout and assembles itself.
+This section was written by hand rather than by the generator, and it is the only one. Conventional prefixes arrived on 29 August; of those 79 commits only a handful carry one, and the generator would have produced seventy lines of "Other" instead of a description. From the next release the history is tagged throughout and assembles itself.
