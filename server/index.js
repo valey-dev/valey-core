@@ -12,6 +12,7 @@ import { gitLog, gitCommit } from './git.js';
 import { deliver, deliveryStatus, isBusy, MODES } from './deliver.js';
 import { releaseNudge } from './release.js';
 import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleAll, setModuleOff } from './modules.js';
+import { check as checkNetwork, newToken } from './network.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const WEB = path.join(ROOT, 'web');
@@ -278,6 +279,29 @@ const OPEN = new Set(['/api/enter', '/api/whoami', '/api/stand']);
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+
+  // Первый вопрос — не «кто вы», а «откуда». Гейт ниже решает, пускать ли
+  // человека; этот решает, отвечать ли адресу вообще. Он стоит выше статики,
+  // потому что дыра была именно в ней: без него офис отдавал страницу, поток
+  // и /api/file всей сети Wi-Fi.
+  const net = checkNetwork(req, url, (await getSettings()).network);
+  if (!net.ok) {
+    // Закрытый офис отвечает 404, а не 403: сканеру незачем знать, что по
+    // этому адресу что-то живёт и просто не пускает.
+    return send(res, net.reason === 'closed' ? 404 : 401, net.reason === 'closed'
+      ? { error: 'not found', errorKey: 'err.notFound' }
+      : { error: 'нужен токен', errorKey: 'err.needToken' });
+  }
+  // Токен приехал строкой в адресе — запоминаем кукой и уводим из URL, чтобы
+  // секрет не остался в истории браузера и в заголовке Referer.
+  if (net.setCookie) {
+    res.setHeader('set-cookie', net.setCookie);
+    if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
+      url.searchParams.delete('token');
+      res.writeHead(302, { location: url.pathname + (url.search || '') });
+      return res.end();
+    }
+  }
 
   // Гейт стоит до всех обработчиков, а не в каждом: так новый эндпоинт
   // закрыт по умолчанию, а не забыт. Статика не гейтится — страницу надо
@@ -686,11 +710,28 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, async () => {
+// Куда слушать. По умолчанию петля: до 30 августа 2026 хост не указывался
+// вообще, а это `0.0.0.0` — офис отвечал всей сети Wi-Fi без единой проверки.
+// Открыть наружу можно, но только вместе с токеном: одно без другого и есть
+// та самая дыра.
+let boot = await getSettings();
+const EXTERNAL = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
+if (EXTERNAL && !(boot.network || {}).token) {
+  boot = await patchSettings({ network: { external: true, token: newToken() } });
+  console.log('Сетевой токен создан и записан в настройки офиса');
+}
+const HOST = process.env.HOST || (EXTERNAL ? '0.0.0.0' : '127.0.0.1');
+
+server.listen(PORT, HOST, async () => {
   const mods = await loadModules(ROOT);
   const token = await ownerToken();
   const s = await getSettings();
   console.log(`Valey office at http://localhost:${PORT}`);
+  if (EXTERNAL) {
+    const t = (boot.network || {}).token || '';
+    console.log(`  открыт наружу (${HOST}) — с другого устройства один раз с токеном:`);
+    console.log(`  http://<адрес-этой-машины>:${PORT}/?token=${t || '<см. настройки>'}`);
+  }
   if (mods.length) console.log(`  модули: ${mods.map(m => m.id).join(', ')}`);
   // Модуль, который не завёлся, обязан сказать это здесь: иначе пропавшая
   // фича расследуется глазами вместо одной строки в логе.

@@ -14,6 +14,35 @@ npm start
 
 Then open <http://localhost:5177>.
 
+The server binds `127.0.0.1`, so the office answers this machine and nothing
+else. That is worth saying out loud because it was not true until 30 August
+2026: `server.listen(PORT)` with no host is `0.0.0.0`, and with no checks of
+any kind anyone on the same Wi-Fi who knew the port read every session
+transcript through `/api/chat` and opened files through `/api/file`.
+
+### Reaching it from another device
+
+Off by default, and it turns on together with a token — an open port without
+one is exactly the hole described above, so the two cannot be set apart.
+
+```bash
+VALEY_EXTERNAL=1 npm start
+#   открыт наружу (0.0.0.0) — с другого устройства один раз с токеном:
+#   http://<адрес-этой-машины>:5177/?token=…
+```
+
+* **Loopback is always its own.** The browser on this machine knows nothing
+  about tokens, or `npm start` would stop being enough.
+* **The token in the address lives one request.** It arrives as `?token=`,
+  moves into an `HttpOnly; SameSite=Lax` cookie and is dropped from the URL by
+  a redirect: a secret in the address bar stays in browser history, in logs and
+  in the `Referer` header. No `Secure` flag on purpose — over http (a tunnel, a
+  LAN) the cookie would not be stored and the phone would quietly stop working.
+* **Closed answers 404, not 403.** A scanner learns nothing about what is here.
+* The token is never sent to the page — settings ride the SSE stream into a
+  browser that also runs a radio iframe and a sandbox for foreign HTML. Only
+  `hasToken` goes out.
+
 **There is no install step.** Not a missing instruction — the project has no dependencies, so there is no `npm install` to run and no `node_modules` to appear. The only foreign thing the office itself carries is the JetBrains Mono font in `web/fonts/`, shipped as files under the OFL, because the office works without internet.
 
 One file in here is not the office: `web/landing.html` is the project's public page, and it does reach out — Google Fonts for its typefaces, and a form. The office does not, and that difference is the point of the section below.
