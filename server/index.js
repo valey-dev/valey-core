@@ -11,7 +11,7 @@ import { getSettings, patchSettings, publicSettings, ownerToken } from './settin
 import { gitLog, gitCommit } from './git.js';
 import { deliver, deliveryStatus, isBusy, MODES } from './deliver.js';
 import { releaseNudge } from './release.js';
-import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleAll, setModuleOff } from './modules.js';
+import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff } from './modules.js';
 import { check as checkNetwork, newToken } from './network.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -240,6 +240,9 @@ function peopleTick() {
 
 async function tick() {
   try {
+    // Предыдущий снимок нужен наблюдателям: событие — это разница, а не
+    // состояние. Ядро само её не считает, оно только отдаёт обе стороны.
+    const prev = last;
     last = await snapshot();
     last.version = VERSION;
     last.release = await releaseNudge(ROOT);
@@ -249,6 +252,9 @@ async function tick() {
     last.delivery = await deliveryStatus();
     last.people = livePeople();
     last.access = accessForOwner();
+    // Наблюдатели — до рассылки: модуль может дописать своё в снимок, и
+    // клиент должен получить его в том же такте, а не через 2.5 секунды.
+    await moduleObserve(last, prev);
     const full = `data: ${JSON.stringify(last)}\n\n`;
     // Гостям — по своей проекции: у каждого свой набор открытого.
     for (const res of clients) {
