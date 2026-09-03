@@ -110,6 +110,29 @@ cd ../ai-valey-<topic>
   into the office you are working in is not isolation, it is a shared mutable
   file with extra steps.
 
+  **Стенд поднимается с табличкой.** Офис на 5177 и офис на 5188 выглядят
+  одинаково, и это уже стоило времени дважды: кадр из чужой ветки прочитался
+  как «фича не работает», а пустой этаж в режиме shared — как поломка сборки.
+  Переменная `VALEY_STAND` вешает в углу жёлтую табличку: что проверяем, какая
+  ветка, какой порт, какие модули поднялись и какие не встали.
+
+  ```bash
+  VALEY_SETTINGS=/tmp/valey-<topic>.json PORT=5188 \
+    VALEY_STAND="что проверяем" npm start
+  ```
+
+  На табличке же — переключатели модулей: клик гасит модуль и перезагружает
+  страницу, второй клик возвращает. Это **имитация, а не бесплатная сборка**:
+  файлы остаются на диске, отключается лишь то, что офис о них знает.
+  Настоящая проверка — та, где папки `modules/` нет; переключатель отвечает на
+  вопрос «как офис выглядит без него», а не «собирается ли он без него».
+  Состояние живёт в памяти сервера и умирает с ним: забытая галочка не должна
+  пережить перезапуск.
+
+  В обычном офисе таблички нет вовсе — снимать её перед показом не нужно.
+  `shot.mjs --url` принимает адрес целиком, а `#room=<ключ>` заводит сразу в
+  комнату, включая служебные: пешком до пультовой не дойти, в списке TAB её нет.
+
 <!-- rule:worktree-limits -->
 ### What worktrees do not fix
 
@@ -271,6 +294,24 @@ the rule may be bypassed for this piece of work.
 промоушен на `Prod`, архив, версии, раскладка и токены — лежит в приватной
 половине рулбука, `modules/AGENTS.md`. Здесь остаётся само правило: без
 утверждённого кадра код не начинается.
+
+<!-- local:hand-edited-markdown -->
+### Wrapping: 79 columns here, one line per paragraph out there
+
+The working files — this one, and `BACKLOG.md` and `MODULES.md` in the private
+half — wrap at 79 columns, and should keep doing so: they are read in a
+terminal and diffed line by line.
+
+**Anything written for a public repository does not.** One line per paragraph,
+however long. Markdown joins wrapped lines when it renders, so the wrapping is
+invisible where it is read and expensive where it is edited: fixing one word
+means re-flowing the paragraph by hand.
+
+On 2 September 2026 the public README went out wrapped at 79 out of habit. The
+first hand-edit of it joined a paragraph into the bullet above with a comma
+where a blank line had been, and the install note swallowed the sentence about
+npm. The wrapping did not cause the typo; it caused the re-flowing that
+produced it.
 
 <!-- rule:extending -->
 ## How to extend this file
