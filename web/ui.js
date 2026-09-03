@@ -543,6 +543,11 @@ export function dialogUp() {
   }
   if (!linkFocused && readLink() && (!body || body.scrollTop <= 2)) {
     linkFocused = true;
+    // Встал на блок транскрипта — значит читать будешь там, и машинка тут
+    // больше не нужна: она дописывает текст сама и тянет внимание обратно.
+    // То же правило ядро уже применяло к новой реплике, пришедшей при
+    // выбранной ссылке, — здесь оно просто срабатывает и на само нажатие.
+    finishTypewriter();
     paintDialogFocus();
     const link = readLink();
     if (link) link.scrollIntoView({ block: 'nearest' });

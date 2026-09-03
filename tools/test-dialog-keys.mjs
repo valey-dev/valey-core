@@ -289,10 +289,14 @@ state.page = 'talk';
 state.sayText = 'длинная реплика агента';
 state.typed = 4;
 UI.dialogUp();
+check('вверх на блок транскрипта дописывает реплику разом',
+  state.typed === state.sayText.length, `${state.typed} из ${state.sayText.length}`);
+check('и фокус остаётся на блоке, а не уходит обратно к кнопкам',
+  current.link.has('focus') && current.buttons.every((b) => !b.has('focus')),
+  `ссылка: ${current.link.has('focus')}`);
 UI.pressDialogFocus();
 check('Enter на ссылке транскрипта открывает её с первого раза',
   current.link.clicked === 1, `нажатий: ${current.link.clicked}`);
-check('и машинка при этом не тронута', state.typed === 4, `${state.typed} из ${state.sayText.length}`);
 
 console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
 process.exit(failed ? 1 : 0);
