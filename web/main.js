@@ -753,13 +753,6 @@ function nearest() {
     const d = Math.hypot(b.x + b.w / 2 - p.x, b.y + b.h + 16 - p.y);
     if (d < bestD) { bestD = d; best = { kind: 'board', room }; }
   }
-  // Фикус: к дереву подходят снизу, как к остальному в комнате. Стоит он там,
-  // где есть репозиторий, — layout.js:144.
-  if (room && room.ficus) {
-    const f = room.ficus;
-    const d = Math.hypot(f.x - p.x, f.y - 6 - p.y);
-    if (d < bestD) { bestD = d; best = { kind: 'ficus', room }; }
-  }
   // Модули добавляют свои цели тем же способом: кандидат с расстоянием,
   // ближайший побеждает. Ядро не знает, что это за предмет.
   for (const c of collect('near', p, state.layout, room)) {
