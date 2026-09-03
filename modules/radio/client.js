@@ -8,6 +8,7 @@
 // `help` (своя клавиша в строке подсказки внизу). Первые две были объявлены в
 // загрузчике и ни разу не вызывались — то есть модуль, вставший в них, молча
 // ничего бы не делал.
+import { pxText } from '../../web/office.js';
 import { t as tr } from '../../web/i18n.js';
 import { toast, renderHud, focusRing } from '../../web/ui.js';
 import { sound } from '../../web/sound.js';
@@ -494,6 +495,11 @@ export function register(api) {
 }
 
 function relabelRadio() {
+      // Панели может не быть вовсе: ядро зовёт `lang` у всех модулей при смене
+      // языка, а приёмник до первого открытия своего элемента не заводит.
+      // Без этой строки точка падала на каждой смене языка — загрузчик ловил и
+      // писал в лог, то есть ломалось молча и только в консоли.
+      if (!el.radio) return;
       const lead = (sel, text) => {
         const n = el.radio.querySelector(sel);
         if (n && n.firstChild && n.firstChild.nodeType === 3) n.firstChild.nodeValue = text;
