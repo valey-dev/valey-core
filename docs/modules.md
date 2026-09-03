@@ -87,6 +87,7 @@ export const defaults = () => ({ mything: { key: '' } });
 export const merge = (prev, patch) => ({ mything: { ...prev.mything, ...(patch.mything || {}) } });
 export const publicView = (s) => ({ mything: { ...s.mything, key: undefined, hasKey: !!s.mything.key } });
 export const onPatch = (patch) => { if (patch.mything) forgetCache(); };
+export const observe = async (now, prev) => { journal.record(now, prev); };
 
 export async function route(url, req, res, send) {
   if (url.pathname !== '/api/mything') return false;
@@ -96,6 +97,14 @@ export async function route(url, req, res, send) {
 ```
 
 Settings live in the office's one file, in your own section — a module does not get a settings file of its own, or there would be as many as there are modules. `merge` is how a value survives a save the page never saw; `publicView` is how a secret stays on the server. The module cuts its own secret out, because it is the only one that knows where it is.
+
+`observe` is called once per office tick with the snapshot the core has just
+built and the one before it, on the **server**. Use it when your module keeps
+history or counts something: the client point `tick` is a browser frame, and the
+browser is often closed while the office keeps running. Observers are awaited,
+so a journal can rely on order; one that throws is logged and does not stop the
+tick or the other observers. An event is a difference, so both snapshots are
+handed over — the core does not compute the diff for you.
 
 `route` **must return `true`** when it answers. Returning the result of `send` returns `undefined`, the core reads that as "not mine", and then tries to answer a second time into headers that are already gone.
 

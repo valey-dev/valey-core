@@ -12,7 +12,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { loadModules, moduleList, moduleDefaults, moduleErrors, moduleRoute } from '../server/modules.js';
+import { loadModules, moduleList, moduleDefaults, moduleErrors, moduleRoute, moduleObserve } from '../server/modules.js';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -36,8 +36,12 @@ await fsp.writeFile(path.join(mods, 'пример', 'module.json'), JSON.stringi
   client: 'client.js', style: 'style.css', server: 'server.js'
 }));
 await fsp.writeFile(path.join(mods, 'пример', 'server.js'),
+  'import fsp from "node:fs/promises";\n' +
   'export const defaults = () => ({ пример: { ключ: "" } });\n' +
-  'export const route = (url, req, res, send) => url.pathname === "/api/wip" ? (send(res, 200, { ok: true }), true) : false;\n');
+  'export const route = (url, req, res, send) => url.pathname === "/api/wip" ? (send(res, 200, { ok: true }), true) : false;\n' +
+  // Наблюдатель пишет на диск, а не в память: проверять через повторный
+  // import нельзя — модуль уже загружен, и второй import отдаст кэш.
+  `export async function observe(now, prev) { await fsp.writeFile(${JSON.stringify(path.join(root, 'seen.json'))}, JSON.stringify([now?.n, prev?.n])); }\n`);
 
 // 3. Папка без манифеста и папка с чужим id — не модули.
 await fsp.mkdir(path.join(mods, 'мусор'), { recursive: true });
@@ -65,6 +69,28 @@ await loadModules(root);
 ok('сломанный модуль не уронил загрузку', moduleList().some(m => m.id === 'пример'));
 ok('сломанный модуль не попал в список для клиента', !moduleList().some(m => m.id === 'broken'));
 ok('и о нём сказано вслух', moduleErrors().some(e => e.id === 'broken'), moduleErrors());
+
+// 5. Наблюдение за снимком офиса. Точка серверная, и она нужна тем, кто ведёт
+// журнал: клиентский `tick` — про кадр в браузере, а браузер бывает закрыт,
+// пока офис работает.
+await moduleObserve({ n: 2 }, { n: 1 });
+ok('наблюдателю достались снимок и предыдущий',
+  await fsp.readFile(path.join(root, 'seen.json'), 'utf8') === '[2,1]',
+  await fsp.readFile(path.join(root, 'seen.json'), 'utf8').catch(() => null));
+
+// Упавший наблюдатель не роняет такт и не глотает соседей: это зовётся раз в
+// 2.5 секунды и обязано пережить любой чужой код.
+await fsp.mkdir(path.join(mods, 'падучий'), { recursive: true });
+await fsp.writeFile(path.join(mods, 'падучий', 'module.json'), JSON.stringify({ id: 'падучий', server: 'server.js' }));
+await fsp.writeFile(path.join(mods, 'падучий', 'server.js'),
+  'export const observe = async () => { throw new Error("наблюдатель упал"); };\n');
+await loadModules(root);
+let survived = true;
+try { await moduleObserve({ n: 3 }, { n: 2 }); } catch { survived = false; }
+ok('упавший наблюдатель не уронил такт', survived);
+ok('и не помешал соседу отработать',
+  await fsp.readFile(path.join(root, 'seen.json'), 'utf8') === '[3,2]',
+  await fsp.readFile(path.join(root, 'seen.json'), 'utf8').catch(() => null));
 
 await fsp.rm(root, { recursive: true, force: true });
 console.log(bad ? `\n${bad} упало` : '\nвсё прошло');

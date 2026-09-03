@@ -133,6 +133,23 @@ export async function moduleRoute(url, req, res, send) {
   return false;
 }
 
+// Наблюдение за снимком офиса. Ядро строит его раз в POLL_MS и раздаёт
+// клиентам; модулю, который ведёт журнал или считает метрики, нужен тот же
+// снимок на сервере. Клиентская точка `tick` для этого не годится: она про
+// кадр в браузере, а браузер может быть закрыт — офис при этом работает.
+//
+// Ждём модули, а не бросаем и забываем: журналу нужен порядок, а такт и так
+// стоит на await'ах снимка, погоды и настроек. Упавший наблюдатель не роняет
+// такт и не молчит — как и везде в загрузчике.
+export async function moduleObserve(now, prev) {
+  const seen = live().filter((m) => typeof m.server?.observe === 'function');
+  if (!seen.length) return;
+  const done = await Promise.allSettled(seen.map((m) => m.server.observe(now, prev)));
+  done.forEach((r, i) => {
+    if (r.status === 'rejected') console.log(`модуль ${seen[i].id} споткнулся на снимке: ${r.reason}`);
+  });
+}
+
 // Модуль, который не завёлся, не должен молчать: иначе «фича пропала» будет
 // расследоваться глазами вместо одной строки в логе.
 export function moduleErrors() {
