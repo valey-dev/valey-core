@@ -1361,6 +1361,10 @@ function draw(t) {
       drawGreenhouse(ctx, r, t, { night: nightAmount(), weather: state.weather, garden: gardenView(r) });
       continue;
     }
+    // Комната модуля: своя кисть у неё своя, и красит её модуль в точке draw.
+    // Ядру тут делать нечего — drawRoom нарисовал бы поверх читальни обычный
+    // кабинет с тоном и столами, которых у неё нет.
+    if (r.draw) continue;
     drawRoom(ctx, r, t); drawRoomProps(ctx, r, t);
     if (r.micro) drawMicro(ctx, r.micro, t, state.micro && state.micro.key === r.key ? state.micro : null);
   }

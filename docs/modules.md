@@ -107,6 +107,8 @@ so a journal can rely on order; one that throws is logged and does not stop the
 tick or the other observers. An event is a difference, so both snapshots are
 handed over — the core does not compute the diff for you.
 
+A room you hand over is yours to paint. The core paints only the rooms it knows — a room with a `draw` kind of its own is skipped in the room pass, and you draw it from the `draw` point. Give it a very small `y` so it lands under the boards, desks and people that sort into the same list.
+
 `room` and `layout` are two different moments, and the difference matters. `room` is asked **while the plan is being built**, before the world's height is known and before the lift is assembled, and it is the only way to add a room: one handed over later would sit outside the floor and have no lift stop. `layout` is called on the finished plan and is for attaching things to it — a prop, a target, a rectangle nobody walks through. The core cannot compute your room's geometry for you, so `room` hands you an anchor — the service tier's bottom room and the floor width — and takes a finished room back.
 
 `route` **must return `true`** when it answers. Returning the result of `send` returns `undefined`, the core reads that as "not mine", and then tries to answer a second time into headers that are already gone.
