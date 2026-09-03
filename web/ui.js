@@ -502,7 +502,12 @@ const stillTyping = () => S.page === 'talk' && !!$('#say') && !!S.sayText
   && S.typed < S.sayText.length;
 
 export function pressDialogFocus() {
-  if (stillTyping()) { finishTypewriter(); return; }
+  // Дописывает машинку только тот Enter, который иначе нажал бы кнопку под
+  // фокусом. Ушёл стрелкой вверх — на ссылку транскрипта или на файл — значит
+  // уже выбрал, что делать, и перехватывать у него клавишу нельзя. 3 сентября
+  // 2026 перехватывала: чтобы открыть транскрипт во весь экран, приходилось
+  // жать Enter дважды, и первое нажатие выглядело как «не сработало».
+  if (stillTyping() && !linkFocused && fileIdx < 0) { finishTypewriter(); return; }
   if (linkFocused) {
     const link = readLink();
     if (link) link.click();

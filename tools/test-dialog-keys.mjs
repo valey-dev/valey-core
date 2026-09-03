@@ -278,5 +278,21 @@ check('и не нажимает кнопку под фокусом', current.but
 UI.pressDialogFocus();
 check('следующий Enter уже нажимает кнопку', current.buttons.some((b) => b.clicked === 1), current.buttons.map((b) => b.clicked).join(','));
 
+// --- 18. машинка не отбирает Enter у того, кто ушёл вверх ---
+// Путь, который сломался 3 сентября 2026: открыл диалог, стрелкой вверх встал
+// на ссылку транскрипта, нажал Enter — и вместо транскрипта дописывалась
+// реплика. Читать агентов в полноэкранном транскрипте стоило двух нажатий,
+// причём первое выглядело как «не сработало».
+current = makeDialog({ withLink: true });
+UI.closeDialog();
+state.page = 'talk';
+state.sayText = 'длинная реплика агента';
+state.typed = 4;
+UI.dialogUp();
+UI.pressDialogFocus();
+check('Enter на ссылке транскрипта открывает её с первого раза',
+  current.link.clicked === 1, `нажатий: ${current.link.clicked}`);
+check('и машинка при этом не тронута', state.typed === 4, `${state.typed} из ${state.sayText.length}`);
+
 console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
 process.exit(failed ? 1 : 0);
