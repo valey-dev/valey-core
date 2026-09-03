@@ -98,6 +98,8 @@ The repository is called `valey-core` because that is what it is. The office is 
 
 `WASD` walk · `SHIFT` run · `SPACE` talk, and drink at the cooler · `TAB` the round · `N` notes · `C` change your look · `P` window on the world · `U` office colour · `M` sound · `R` radio · `+` `0` scale · `ESC` back. The security room is below the floor and has the cameras.
 
+A gamepad works too, and the keyboard stays free for typing: the left stick or d-pad walks (the stick is analogue — a light tilt is a slow walk), `A` talks, `B` goes back, `X` takes the skateboard, `Y` opens the round, the triggers run and the bumpers scale. Any controller the browser sees as a standard one will do — an Xbox pad paired over Bluetooth on macOS, say. The browser only notices it after the first button press, and Chrome only offers it on `localhost` or over https.
+
 ## Tests
 
 ```bash

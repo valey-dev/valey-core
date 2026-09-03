@@ -12,6 +12,7 @@ import { sound, tickSound } from './sound.js';
 import { titleOf } from './paintings.js';
 import { drawBubble } from './badges.js';
 import { skateStep, rolling, drawSkateboard, ollieStep, canOllie, OLLIE_POP } from './skate.js';
+import { readPad, edges as padEdges } from './pad.js';
 // t переименован в tr: в main.js `t` — это время кадра у draw(t), и импорт
 // молча перекрывался числом внутри каждого колбэка отрисовки
 import { t as tr, lang, setLang, onLang } from './i18n.js';
@@ -512,7 +513,9 @@ for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
   addEventListener(ev, (e) => e.preventDefault());
 }
 
-addEventListener('keydown', (e) => {
+// Один обработчик на клавиатуру и геймпад: кнопки геймпада приходят сюда
+// именами клавиш, и панели отвечают им, не зная, откуда нажатие.
+function onKey(e) {
   const k = e.key.toLowerCase();
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
   // the open board eats the arrows before the office sees them
@@ -597,7 +600,8 @@ addEventListener('keydown', (e) => {
     if (canOllie(state.player) && !nearest()) state.player.vz = OLLIE_POP;
     else interact();
   }
-});
+}
+addEventListener('keydown', onKey);
 // Экран входа открыт и поверх него ничего нет — значит и клавиши, и ходьба
 // по коридору принадлежат ему.
 const titleFree = () => titleOpen()
@@ -606,6 +610,33 @@ const NO_KEYS = new Set();
 
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 addEventListener('blur', () => keys.clear());
+
+// Геймпад опрашивается раз в кадр: у Gamepad API нет событий на кнопки, только
+// снимок. Кнопки уходят в onKey как клавиши, отпускания — в keys, как keyup.
+// Оси остаются здесь, аналогом: update() берёт их вместо клавиш, когда стик
+// наклонён.
+const pad = { x: 0, y: 0, down: new Set(), seen: false };
+const typing = () => {
+  const el = document.activeElement;
+  return !!el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT');
+};
+function tickPad() {
+  const list = (typeof navigator !== 'undefined' && navigator.getGamepads) ? navigator.getGamepads() : [];
+  let gp = null;
+  for (const g of list) if (g) { gp = g; break; }
+  if (gp && !pad.seen) { pad.seen = true; UI.toast(tr('toast.pad')); }
+  const next = readPad(gp);
+  const { pressed, released } = padEdges(pad, next);
+  for (const key of pressed) {
+    sound.init();
+    // Пока печатают, стрелки со стика остаются при тексте: стик под большим
+    // пальцем дрожит, а фокус в карточке от этого уезжать не должен.
+    if (typing() && key.startsWith('Arrow')) continue;
+    onKey({ key, shiftKey: next.down.has('Shift'), target: { tagName: 'GAMEPAD' }, preventDefault() {} });
+  }
+  for (const key of released) keys.delete(key.toLowerCase());
+  pad.x = next.x; pad.y = next.y; pad.down = next.down;
+}
 
 function toggle(id, open, close) {
   const node = document.getElementById(id);
@@ -1120,9 +1151,11 @@ function update(dt, now) {
 
   if (!panelsOpen() && !state.drink && !state.play) {
     const running = keys.has('shift');
-    const ix = (keys.has('arrowright') || keys.has('d') || keys.has('в') ? 1 : 0)
+    // Стик берёт верх над клавишами: он же и кладёт стрелки в keys, когда
+    // наклонён за порог, и складывать их с аналогом значило бы терять аналог.
+    const ix = pad.x || (keys.has('arrowright') || keys.has('d') || keys.has('в') ? 1 : 0)
       - (keys.has('arrowleft') || keys.has('a') || keys.has('ф') ? 1 : 0);
-    const iy = (keys.has('arrowdown') || keys.has('s') || keys.has('ы') ? 1 : 0)
+    const iy = pad.y || (keys.has('arrowdown') || keys.has('s') || keys.has('ы') ? 1 : 0)
       - (keys.has('arrowup') || keys.has('w') || keys.has('ц') ? 1 : 0);
     let dx = 0, dy = 0;
     if (p.skate) {
@@ -1567,6 +1600,7 @@ let rafId = 0;
 function loop(now) {
   const dt = Math.min(3, (now - lastT) / 16.67); lastT = now;
   state.t = now;
+  tickPad();
   update(dt, now); draw(now);
   if (!document.hidden) { cancelAnimationFrame(rafId); rafId = requestAnimationFrame(loop); }
 }
