@@ -404,6 +404,16 @@ npm start   # затем пройтись по офису на localhost:5177</c
   var q=document.querySelector('.search'),secs=[].slice.call(document.querySelectorAll('section.sec')),
       links={},gts=[].slice.call(document.querySelectorAll('h2.gt'));
   [].slice.call(document.querySelectorAll('nav .t')).forEach(function(a){links[a.getAttribute('data-id')]=a;});
+  // Fragment navigation is refused where this page is most often opened — a
+  // data: URL, a srcdoc iframe, a viewer's side panel — so a click on a #link
+  // scrolls by hand. The href stays, so a real browser still gets a real anchor.
+  document.addEventListener('click',function(e){
+    var a=e.target.closest&&e.target.closest('a[href^="#"]');if(!a)return;
+    var el=document.getElementById(a.getAttribute('href').slice(1));if(!el)return;
+    e.preventDefault();el.scrollIntoView({behavior:'smooth',block:'start'});
+    try{history.replaceState(null,'',a.getAttribute('href'));}catch(_){}
+  });
+  if(location.hash){var h=document.getElementById(location.hash.slice(1));if(h)h.scrollIntoView();}
   q.addEventListener('input',function(){
     var v=q.value.trim().toLowerCase();
     secs.forEach(function(s){
