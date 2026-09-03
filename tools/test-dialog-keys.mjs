@@ -32,6 +32,7 @@ const fakeCtx = {
 
 function makeDialog({ withLink = true, files = 0 } = {}) {
   const state = {
+    say: node('say', 'say'),
     body: node('', 'body'),
     link: withLink ? node('readAll', 'linky more') : null,
     files: Array.from({ length: files }, () => node('', 'file')),
@@ -47,6 +48,7 @@ function makeDialog({ withLink = true, files = 0 } = {}) {
     innerHTML: '',
     firstChild: {},
     querySelector: (sel) => (sel === '.body' ? state.body
+      : sel === '#say' ? state.say
       : sel === '#readAll' ? state.link
       : sel === '#pf' ? pf
       : null),
@@ -259,6 +261,22 @@ check('«закрыть» цифрой не нажимается', UI.dialogNumb
 check('и кнопка закрытия цела', current.buttons[3].clicked === 0, current.buttons[3].clicked);
 state.dialogOpen = false;
 check('при закрытой карточке цифра уходит в офис', UI.dialogNumber('1') === false, 'осталась');
+
+// --- 16. пока реплика печатается, Enter дописывает её, а не жмёт кнопку ---
+// мышью это был клик по самому тексту; клавиши не было, и машинку приходилось
+// пережидать молча
+current = makeDialog({ withLink: false });
+UI.closeDialog();
+state.page = 'talk';
+state.sayText = 'длинная реплика агента';
+state.typed = 4;
+UI.pressDialogFocus();
+check('Enter на печатающейся реплике дописывает её', state.typed === state.sayText.length, `${state.typed} из ${state.sayText.length}`);
+check('и не нажимает кнопку под фокусом', current.buttons.every((b) => b.clicked === 0), current.buttons.map((b) => b.clicked).join(','));
+
+// --- 17. дописанная реплика больше клавишу не перехватывает ---
+UI.pressDialogFocus();
+check('следующий Enter уже нажимает кнопку', current.buttons.some((b) => b.clicked === 1), current.buttons.map((b) => b.clicked).join(','));
 
 console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
 process.exit(failed ? 1 : 0);

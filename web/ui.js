@@ -495,7 +495,14 @@ export function moveDialogFocus(step) {
   paintDialogFocus();
 }
 
+// Пока реплика печатается, первый Enter или ПРОБЕЛ дописывает её целиком, а не
+// нажимает то, на чём стоит фокус. Мышью это делалось кликом по самому тексту —
+// клавиши не было вообще, и ждать машинку приходилось молча.
+const stillTyping = () => S.page === 'talk' && !!$('#say') && !!S.sayText
+  && S.typed < S.sayText.length;
+
 export function pressDialogFocus() {
+  if (stillTyping()) { finishTypewriter(); return; }
   if (linkFocused) {
     const link = readLink();
     if (link) link.click();
