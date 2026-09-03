@@ -447,7 +447,9 @@ const onSnapshot = (e) => {
     // обратно туда же.
     const wasP = anchorOf(state.layout, state.player);
     const wasC = anchorOf(state.layout, state.cat);
-    state.layout = buildLayout(state.agents);
+    // Комнаты модулей спрашиваются внутри сборки: планировке нужно знать про
+    // них до того, как посчитается высота мира и соберётся лифт.
+    state.layout = buildLayout(state.agents, { rooms: (anchor) => collect('room', anchor, state) });
     // Модули довешивают своё на готовую планировку: предмет, точку подхода
     // и прямоугольник, через который не ходят.
     collect('layout', state.layout, state);

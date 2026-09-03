@@ -60,6 +60,7 @@ Two calling conventions, and confusing them is expensive:
 | Point | Kind | Called with | You return |
 | --- | --- | --- | --- |
 | `sig` | collect | `state` | a string folded into the floor-plan signature; the plan rebuilds when it changes |
+| `room` | collect | `{ w, security, meeting, rowY, below }` | a room object, or nothing if your module is not a room |
 | `layout` | collect | `L, state` | nothing; attach your things to the layout |
 | `near` | collect | `p, L, room` | `{ kind, d, … }` — the nearest candidate wins |
 | `draw` | collect | `L, t, near` | `{ y, fn(ctx) }`, or an array of them; sorted by `y` with everything else |
@@ -105,6 +106,8 @@ browser is often closed while the office keeps running. Observers are awaited,
 so a journal can rely on order; one that throws is logged and does not stop the
 tick or the other observers. An event is a difference, so both snapshots are
 handed over — the core does not compute the diff for you.
+
+`room` and `layout` are two different moments, and the difference matters. `room` is asked **while the plan is being built**, before the world's height is known and before the lift is assembled, and it is the only way to add a room: one handed over later would sit outside the floor and have no lift stop. `layout` is called on the finished plan and is for attaching things to it — a prop, a target, a rectangle nobody walks through. The core cannot compute your room's geometry for you, so `room` hands you an anchor — the service tier's bottom room and the floor width — and takes a finished room back.
 
 `route` **must return `true`** when it answers. Returning the result of `send` returns `undefined`, the core reads that as "not mine", and then tries to answer a second time into headers that are already gone.
 
