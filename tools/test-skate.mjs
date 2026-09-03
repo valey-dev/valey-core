@@ -4,7 +4,8 @@
 // по коридору с отпущенными клавишами), либо разгоняется без предела, либо по
 // диагонали едет в полтора раза быстрее, чем прямо. Всё это видно только на
 // длинной серии кадров, поэтому проверяется здесь, а не глазами.
-import { skateStep, rolling, CRUISE, CRUISE_PUSH, STOP } from '../web/skate.js';
+import { skateStep, rolling, CRUISE, CRUISE_PUSH, STOP,
+  ollieStep, canOllie, OLLIE_POP } from '../web/skate.js';
 
 let bad = 0;
 const ok = (what, cond, got) => {
@@ -76,6 +77,28 @@ ok('на длинных кадрах не перескакивает потол�
 ok('разворот гасит старую скорость', run(run(still, { x: 1 }, 60), { x: -1 }, 30).vx < 0);
 ok('порог остановки не нулевой', STOP > 0);
 ok('вызов без аргументов не падает', speed(skateStep()) === 0);
+
+
+// --- олли ---
+ok('с земли на доске оттолкнуться можно', canOllie({ skate: true, z: 0 }) === true);
+ok('пешком — нельзя', canOllie({ skate: false, z: 0 }) === false);
+ok('в воздухе второй раз — нельзя', canOllie({ skate: true, z: 5 }) === false);
+
+let air = { z: 0, vz: OLLIE_POP }, top = 0, aloft = 0, landed = false;
+while (aloft < 600) {
+  air = ollieStep(air, 1);
+  top = Math.max(top, air.z);
+  aloft++;
+  if (air.landed) { landed = true; break; }
+}
+ok('приземляется сам, а не висит', landed);
+ok('высшая точка около 14 пикселей', top > 12 && top < 20, top);
+ok('в воздухе меньше секунды', aloft < 60, aloft);
+ok('после приземления высота и скорость обнулены', air.z === 0 && air.vz === 0, air);
+ok('на земле без толчка ничего не происходит', ollieStep({ z: 0, vz: 0 }).z === 0);
+// длинный кадр — вкладка была в фоне: игрок должен приземлиться, а не уйти под пол
+ok('длинный кадр приземляет, а не роняет ниже пола', ollieStep({ z: 1, vz: -5 }, 4).landed === true);
+ok('вызов без аргументов не падает', ollieStep().z === 0);
 
 console.log(bad ? `\nпровалено: ${bad}` : '\nвсё хорошо');
 process.exit(bad ? 1 : 0);

@@ -11,7 +11,7 @@ import { proceduralWeather, fromWeatherCode, flash } from './weather.js';
 import { sound, tickSound } from './sound.js';
 import { titleOf } from './paintings.js';
 import { drawBubble } from './badges.js';
-import { skateStep, rolling, drawSkateboard } from './skate.js';
+import { skateStep, rolling, drawSkateboard, ollieStep, canOllie, OLLIE_POP } from './skate.js';
 // t переименован в tr: в main.js `t` — это время кадра у draw(t), и импорт
 // молча перекрывался числом внутри каждого колбэка отрисовки
 import { t as tr, lang, setLang, onLang } from './i18n.js';
@@ -31,7 +31,7 @@ const DEFAULT_ME = {
 const state = {
   agents: [], layout: null, sig: '', actors: new Map(), looks: new Map(),
   // vx/vy — накат скейта: скорость живёт между кадрами, у пешей ходьбы её нет
-  player: { x: 120, y: 60, dir: 0, moving: false, skate: false, vx: 0, vy: 0 }, spawned: false,
+  player: { x: 120, y: 60, dir: 0, moving: false, skate: false, vx: 0, vy: 0, z: 0, vz: 0 }, spawned: false,
   cat: { x: 200, y: 60, tx: 200, ty: 60 },
   me: normalizeLook({ ...DEFAULT_ME, ...JSON.parse(localStorage.getItem('valey-me') || '{}') }),
   visited: new Set(), waypoint: null, currentRoom: null,
@@ -591,7 +591,12 @@ addEventListener('keydown', (e) => {
     UI.toast(state.soundOn ? tr('toast.soundOn') : tr('toast.soundOff'));
     return;
   }
-  if ((k === ' ' || k === 'e' || k === 'у') && !state.dialogOpen) interact();
+  if ((k === ' ' || k === 'e' || k === 'у') && !state.dialogOpen) {
+    // На доске ПРОБЕЛ прыгает — но только там, где ему раньше нечего было
+    // делать. Иначе с агентом стало бы не поговорить, не слезая с доски.
+    if (canOllie(state.player) && !nearest()) state.player.vz = OLLIE_POP;
+    else interact();
+  }
 });
 // Экран входа открыт и поверх него ничего нет — значит и клавиши, и ходьба
 // по коридору принадлежат ему.
@@ -612,7 +617,7 @@ function toggle(id, open, close) {
 function toggleSkate() {
   const p = state.player;
   p.skate = !p.skate;
-  if (!p.skate) { p.vx = 0; p.vy = 0; }
+  if (!p.skate) { p.vx = 0; p.vy = 0; p.z = 0; p.vz = 0; }
   UI.toast(tr(p.skate ? 'toast.skateOn' : 'toast.skateOff'));
 }
 
@@ -1128,6 +1133,11 @@ function update(dt, now) {
       dx = p.vx * dt; dy = p.vy * dt;
       p.moving = rolling(p);
       p.running = false;
+      // Полёт считается отдельно от качения: по земле едет доска, вверх летит
+      // всё вместе. landed поднимается один кадр — под звук приземления.
+      const air = ollieStep(p, dt);
+      p.z = air.z; p.vz = air.vz;
+      if (air.landed) sound.step(0.8, surfaceUnder(L, p.x, p.y));
     } else {
       const sp = (running ? 2.6 : 1.35) * dt;
       dx = ix * sp; dy = iy * sp;
@@ -1408,8 +1418,10 @@ function draw(t) {
     }
     const dr = state.drink;
     // доска под ногами — до человека, он на ней стоит
-    if (p.skate) drawSkateboard(ctx, p.x, p.y, p.dir, p.moving, t);
-    drawPerson(ctx, p.x, p.y, myLook(), {
+    if (p.skate) drawSkateboard(ctx, p.x, p.y, p.dir, p.moving, t, p.z);
+    // Человек летит вместе с доской, тень остаётся на полу — её рисует сама
+    // доска и сжимает по высоте.
+    drawPerson(ctx, p.x, p.y - p.z, myLook(), {
       // на скейте ноги стоят на деке, а не переступают
       pose: p.skate ? 'stand' : (p.moving ? 'walk' : 'stand'),
       frame: Math.floor(t / (p.running ? 80 : 130)), dir: p.dir,

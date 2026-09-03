@@ -45,16 +45,40 @@ export function skateStep({ vx = 0, vy = 0 } = {}, { x = 0, y = 0, push = false 
 
 export const rolling = ({ vx = 0, vy = 0 }) => Math.hypot(vx, vy) > STOP;
 
+// ------------------------------------------------------------------- олли
+// Прыжок с доски. Те же единицы, что и у горизонтальной скорости: пиксели за
+// кадр при 60 к/с, чтобы высоту можно было сравнить с длиной шага глазами.
+export const OLLIE_POP = 2.4;   // ~14 пикселей в высшей точке
+export const GRAVITY = 0.17;    // ~0.5 с в воздухе: дольше читается как полёт
+
+// Чистая функция, как и skateStep: высота, вертикальная скорость и длина кадра
+// на входе — новые на выходе. landed поднимается ровно в тот кадр, когда
+// коснулись земли, чтобы звук и пыль сыграли один раз, а не каждый кадр.
+export function ollieStep({ z = 0, vz = 0 } = {}, dt = 1) {
+  if (z <= 0 && vz <= 0) return { z: 0, vz: 0, landed: false };
+  const nz = z + vz * dt;
+  if (nz <= 0) return { z: 0, vz: 0, landed: true };
+  return { z: nz, vz: vz - GRAVITY * dt, landed: false };
+}
+
+// Оттолкнуться можно только с земли и только стоя на доске: иначе олли в
+// воздухе превращается в бесконечный подъём.
+export const canOllie = ({ skate = false, z = 0 } = {}) => !!skate && z <= 0;
+
 // Доска под ногами. Рисуется до человека, потому что он на ней стоит; нос
 // загнут по направлению взгляда, чтобы разворот читался без анимации.
-export function drawSkateboard(ctx, x, y, dir = 1, moving = false, t = 0) {
+export function drawSkateboard(ctx, x, y, dir = 1, moving = false, t = 0, lift = 0) {
   const p = (px, py, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(Math.round(px), Math.round(py), w, h); };
   const d = dir || 1;
   // колёса чуть подпрыгивают на ходу — один пиксель, но без него доска мертвая
   const jig = moving && Math.floor(t / 90) % 2 ? 1 : 0;
 
-  ctx.fillStyle = 'rgba(0,0,0,0.22)';
-  ctx.beginPath(); ctx.ellipse(x, y + 4, 9, 2, 0, 0, Math.PI * 2); ctx.fill();
+  // Тень остаётся на полу и сжимается с высотой — без этого прыжок читается
+  // как «доску нарисовали выше», а не как отрыв.
+  const k = Math.max(0.35, 1 - lift / 26);
+  ctx.fillStyle = `rgba(0,0,0,${0.22 * k})`;
+  ctx.beginPath(); ctx.ellipse(x, y + 4, 9 * k, 2 * k, 0, 0, Math.PI * 2); ctx.fill();
+  y -= lift;
 
   p(x - 6, y + 2 + jig, 2, 2, '#e2cfa8');            // колёса
   p(x + 4, y + 2 + jig, 2, 2, '#e2cfa8');
