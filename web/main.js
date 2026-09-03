@@ -333,42 +333,6 @@ function applyWeather(w) {
 // комнаты — страница пути не знает и знать не должна.
 const GIT_TTL = 20_000;
 state.git = new Map();          // проект -> { at, board }
-const gitDiffs = new Map();     // проект + хеш -> диф, коммит неизменен навсегда
-
-async function gitOf(project, { force = false } = {}) {
-  const hit = state.git.get(project);
-  if (hit && !force && Date.now() - hit.at < GIT_TTL) return hit.board;
-  try {
-    const r = await fetch('/api/git?project=' + encodeURIComponent(project) + (force ? '&force=1' : ''));
-    const board = await r.json();
-    state.git.set(project, { at: Date.now(), board });
-    return board;
-  } catch (err) {
-    return { ok: false, code: null, message: String(err.message || err) };
-  }
-}
-
-async function gitCommitOf(project, hash) {
-  const key = project + '\0' + hash;
-  if (gitDiffs.has(key)) return gitDiffs.get(key);
-  try {
-    const r = await fetch('/api/git/commit?project=' + encodeURIComponent(project) + '&hash=' + encodeURIComponent(hash));
-    const data = await r.json();
-    if (data && data.ok) gitDiffs.set(key, data);
-    return data;
-  } catch (err) {
-    return { ok: false, code: null, message: String(err.message || err) };
-  }
-}
-// ---------------------------------------------------------------- присутствие
-// Кто ты для остальных: id, имя и внешность. id живёт в localStorage, а не в
-// sessionStorage — две вкладки одного браузера это один человек, а не двое.
-const MY_ID = (() => {
-  let v = localStorage.getItem('valey-id');
-  if (!v) { v = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()); localStorage.setItem('valey-id', v); }
-  return v;
-})();
-
 // Пока идёшь — часто, пока стоишь — редко. Порог по расстоянию, а не по
 // «нажата ли клавиша»: лифт возит человека сам, и молчать в это время нельзя.
 const HERE_MOVING_MS = 140, HERE_IDLE_MS = 1500;
@@ -982,8 +946,6 @@ function interact() {
     UI.openReception(n.desk, (id) => { state.waypoint = id; UI.toast(tr('toast.guideHim')); });
   } else if (n.kind === 'lift') {
     callLift(n.floor);
-  } else if (n.kind === 'ficus') {
-    UI.openGit(n.room.key, (project, opts) => gitOf(project, opts), (project, hash) => gitCommitOf(project, hash));
   } else {
     UI.openGallery(boardItems(n.room), tr('board.title', { room: n.room.title }));
   }
@@ -1547,10 +1509,6 @@ function draw(t) {
     draws.push({ y: 1e9, fn: () => label(b.x + b.w / 2, b.y + b.h + 14, tr('hint.board'), '#9fe0a8') });
   }
 
-  if (near && near.kind === 'ficus') {
-    const f = near.room.ficus;
-    draws.push({ y: 1e9, fn: () => label(f.x, f.y - 70, tr('hint.git'), '#9fe0a8') });
-  }
   draws.sort((a, b) => a.y - b.y).forEach((d) => d.fn());
 
   drawLight(ctx, L, t, night);

@@ -8,7 +8,6 @@ import { fileURLToPath } from 'node:url';
 import { snapshot, fileAllowed, conversation } from './agents.js';
 import { realWeather, forgetWeather, geocode } from './weather.js';
 import { getSettings, patchSettings, publicSettings, ownerToken } from './settings.js';
-import { gitLog, gitCommit } from './git.js';
 import { deliver, deliveryStatus, isBusy, MODES } from './deliver.js';
 import { releaseNudge } from './release.js';
 import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff } from './modules.js';
@@ -618,22 +617,6 @@ const server = http.createServer(async (req, res) => {
     const file = path.join(dir, (url.searchParams.get('name') || 'latest').replace(/[^\w-]/g, '') + '.png');
     await fsp.writeFile(file, Buffer.from(b64, 'base64'));
     return send(res, 200, { ok: true, file });
-  }
-
-  // Дерево гита комнаты. Каталог берётся по ключу комнаты из живого снимка, а
-  // не из запроса: путь параметром означал бы чтение любого каталога машины
-  // чужими руками — тот же довод, по которому /api/file пускает только файлы,
-  // встреченные в транскрипте.
-  if (url.pathname === '/api/git') {
-    const dir = cwdOfProject(url.searchParams.get('project') || '');
-    if (!dir) return send(res, 404, { ok: false, code: null, message: 'нет такой комнаты' });
-    return send(res, 200, await gitLog(dir, { force: url.searchParams.get('force') === '1' }));
-  }
-
-  if (url.pathname === '/api/git/commit') {
-    const dir = cwdOfProject(url.searchParams.get('project') || '');
-    if (!dir) return send(res, 404, { ok: false, code: null, message: 'нет такой комнаты' });
-    return send(res, 200, await gitCommit(dir, url.searchParams.get('hash') || ''));
   }
 
   // Serve an artifact, but only files that actually appeared in a transcript.

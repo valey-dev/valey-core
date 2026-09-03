@@ -9,8 +9,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { layoutGraph, railBits, laneColor, RAIL } from '../web/gitgraph.js';
-import { parseDiff, gitLog } from '../server/git.js';
+import { layoutGraph, railBits, laneColor, RAIL } from './gitgraph.js';
+import { parseDiff, gitLog } from './server.js';
 
 let failed = 0;
 const ok = (cond, name, said = '') => {
