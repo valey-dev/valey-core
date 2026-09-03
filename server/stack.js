@@ -14,6 +14,46 @@ import { promisify } from 'node:util';
 
 const run = promisify(execFile);
 
+const roots = new Map();          // каталог сессии -> { at, root }
+const ROOT_TTL = 60_000;
+
+// Имя комнаты из ответа git. `--git-common-dir` показывает на служебный каталог
+// репозитория — и на «/путь/проект/.git», и на голый «/путь/проект.git»;
+// комната называется по тому, что лежит вокруг него.
+export function rootFromCommonDir(commonDir, dir) {
+  if (!commonDir) return dir;
+  const g = commonDir.replace(/\/+$/, '');
+  return path.basename(g) === '.git' ? path.dirname(g) : g.replace(/\.git$/, '');
+}
+
+// Корень репозитория для рабочего каталога сессии. Комната в офисе — это
+// проект, а не рабочая копия: агент, ушедший в git worktree, сидит в каталоге
+// со своим именем (.claude/worktrees/<тема>), и по basename ему доставалась
+// отдельная комната. 30 августа 2026 на этаже стояло девять комнат на четыре
+// проекта, и два агента одного репозитория оказывались в разных его концах.
+// `--git-common-dir` отвечает одинаково из основного чекаута и из любого
+// worktree, в том числе созданного вне репозитория, — он и есть признак «тот
+// же проект». Не репозиторий — остаётся сам каталог, как было.
+export async function repoRoot(dir) {
+  if (!dir) return dir;
+  const hit = roots.get(dir);
+  if (hit && Date.now() - hit.at < ROOT_TTL) return hit.root;
+  let root = dir;
+  try {
+    const { stdout } = await run('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+      { cwd: dir, timeout: 2000 });
+    root = rootFromCommonDir(stdout.trim(), dir);
+  } catch { /* не репозиторий — комната по каталогу */ }
+  roots.set(dir, { at: Date.now(), root });
+  return root;
+}
+
+// Синхронное чтение того же кэша. Нужно затем, что имя комнаты спрашивают из
+// синхронного кода в трёх местах, а git — вызов асинхронный: кэш греется один
+// раз за снимок, читается мгновенно, и до первого прогрева комната зовётся по
+// каталогу — как до этой правки.
+export const repoRootCached = (dir) => (roots.get(dir) || {}).root || dir;
+
 // Порядок здесь — это и есть приоритет: первый манифест, который смог назвать
 // стек, отвечает и за версию. Файл, лежащий выше в списке, выигрывает у всех,
 // что ниже, — иначе монорепа с package.json и pyproject.toml отвечает по

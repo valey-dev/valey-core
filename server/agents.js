@@ -5,7 +5,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { getSettings, patchSettings } from './settings.js';
-import { projectInfo } from './stack.js';
+import { projectInfo, repoRoot, repoRootCached } from './stack.js';
 
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const SESSIONS_DIR = path.join(CLAUDE_DIR, 'sessions');
@@ -486,7 +486,9 @@ async function nameRegistry(sessions) {
 // отсортирован по времени старта — новая сессия вставала в начало и сдвигала
 // всю комнату на один стол, так что при каждом старте и завершении соседи
 // вставали и шли пересаживаться.
-const projectOf = (s) => path.basename(s.cwd || '') || 'nowhere';
+// Комната — по репозиторию, а не по каталогу сессии: иначе каждое рабочее
+// дерево одного проекта уезжает в собственную комнату на другом конце этажа.
+const projectOf = (s) => path.basename(repoRootCached(s.cwd) || s.cwd || '') || 'nowhere';
 
 function sameSeats(a, b) {
   const ka = Object.keys(a), kb = Object.keys(b);
@@ -532,6 +534,9 @@ const IDLE_MS = 90_000;
 
 export async function snapshot() {
   const sessions = await liveSessions();
+  // Греем кэш корней до того, как считаются места: projectOf синхронная, а git
+  // асинхронный, и без прогрева первый снимок рассадил бы всех по каталогам.
+  await Promise.all(sessions.map((s) => repoRoot(s.cwd)));
   await indexTranscripts();
   const names = await nameRegistry(sessions);
   const seats = await seatRegistry(sessions);
