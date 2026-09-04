@@ -1,16 +1,12 @@
 // node tools/test-presence.mjs — присутствие людей в офисе.
 //
-// Поднимает настоящий сервер на своём порту и разговаривает с ним по HTTP:
-// проверять тут нечего в чистых функциях, вся логика — в реестре и в том, что
-// он отдаёт наружу. Порт свой и высокий, гасится по PID своего процесса —
-// чужие офисы на 5177 и соседних не трогаются.
-import { spawn } from 'node:child_process';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const PORT = Number(process.env.PRESENCE_PORT || 5391);
-const base = `http://127.0.0.1:${PORT}`;
+// Поднимает настоящий сервер и разговаривает с ним по HTTP: проверять тут
+// нечего в чистых функциях, вся логика — в реестре и в том, что он отдаёт
+// наружу. Порт спрашивается у системы, настройки свои, каталог сессий пустой:
+// до 4 сентября 2026 стенд стартовал на НАСТОЯЩИХ настройках пользователя —
+// в режиме shared получал каскад 403, а с включённой погодой ходил в
+// open-meteo. Гасится свой потомок, чужие офисы не трогаются.
+import { startOffice } from './lib/office.mjs';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -19,11 +15,11 @@ const ok = (name, cond, got) => {
 };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const srv = spawn(process.execPath, ['server/index.js'], {
-  cwd: ROOT, env: { ...process.env, PORT: String(PORT) }, stdio: 'ignore',
+// Каталог сессий свой и пустой: этому стенду агенты не нужны вовсе, он про людей.
+const { base, stop } = await startOffice({
+  settings: { access: { mode: 'private', token: 'presence-owner-0001', invites: [] } },
+  claudeDir: '/nonexistent-claude-dir',
 });
-const stop = () => { try { srv.kill(); } catch { /* уже мёртв */ } };
-process.on('exit', stop);
 process.on('SIGINT', () => { stop(); process.exit(130); });
 
 const post = (p, body) => fetch(base + p, {
@@ -32,13 +28,6 @@ const post = (p, body) => fetch(base + p, {
 const state = () => fetch(base + '/api/state').then((r) => r.json());
 
 try {
-  // ждём, пока поднимется
-  let up = false;
-  for (let i = 0; i < 60 && !up; i++) {
-    try { await fetch(base + '/api/state'); up = true; } catch { await wait(150); }
-  }
-  if (!up) throw new Error(`сервер не поднялся на ${PORT} — занят?`);
-
   // ------------------------------------------------------------- пришли
   await post('/api/here', { id: 'aaa', name: 'Сергей', look: { shirt: '#4fa89a' }, x: 100.6, y: 200.4, dir: -1, moving: true, room: 'ai-valey' });
   await post('/api/here', { id: 'bbb', name: 'Костя', look: {}, x: 300, y: 400, dir: 1, moving: false, room: null });
