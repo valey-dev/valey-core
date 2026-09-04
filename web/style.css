@@ -74,7 +74,7 @@ canvas{image-rendering:pixelated; display:block; border:3px solid var(--frame);
   box-shadow:0 0 0 3px var(--bg), 0 14px 40px rgba(0,0,0,.7);}
 #dialog[hidden]{display:none}
 .portrait canvas{width:72px; height:72px; image-rendering:pixelated; border:2px solid var(--frame)}
-.content{flex:1; min-width:0}
+.content{flex:1; min-width:0; container-type:inline-size}
 .who b{color:var(--warn); font-size:15px; letter-spacing:.05em}
 .role{font-size:10px; padding:1px 6px; border:1px solid var(--frame-dim); margin-left:6px; color:var(--ink-dim)}
 .role.r-design{color:#c39bff;border-color:#5a4478} .role.r-research{color:#8fc8ff;border-color:#3f5c78}
@@ -99,12 +99,29 @@ textarea{width:100%; background:var(--field); color:var(--ink); border:2px solid
 textarea:focus{outline:none; border-color:var(--warn)}
 .acts{display:flex; gap:6px; margin-top:10px; flex-wrap:wrap}
 .acts button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
-  font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 10px; cursor:pointer}
+  font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 10px; cursor:pointer;
+  white-space:nowrap}
 .acts button:hover:not(:disabled){background:var(--wood-lit); color:#fff}
-/* Погашенная вкладка обязана выглядеть погашенной: «Дать задание» темнеет,
+/* Погашенная вкладка обязана выглядеть погашенной: «Задание» темнеет,
    пока агент ждёт разрешения, — доставлять ему в этот момент нечего, и кнопка,
    которая выглядит живой и не нажимается, читается как поломка. */
 .acts button:disabled{opacity:.45; cursor:not-allowed}
+/* Четыре кнопки — один ряд, и место под них кончается не от размера окна, а от
+   масштаба офиса: ширина карточки поделена на --ui (см. ниже, там же история),
+   поэтому на 175% внутри остаётся тем меньше, чем уже окно. Замерено 4 сентября
+   2026 при 175%: внутри карточки 606 при окне 1400, 517 при 1200, 465 при 1100,
+   412 при 1000, 386 при 950. Ряду тогда нужно было 479 по-русски и 550 по-
+   английски — с окна 1150 и ниже «Отойти» уезжал на вторую строку.
+   Первым делом подписи стали короче («Показать работу» → «Работа», «What it is
+   up to» → «Doing now»): 380 и 444. Подсказки клавиш при этом остаются всегда —
+   цифры на кнопках держат половину обаяния этой карточки, и прятать их, чтобы
+   выиграть шесть пикселей, значит чинить не то.
+   Что ряд отдаёт, когда всё равно тесно: сначала поля и зазор (−32), потом
+   размер шрифта (−31). Обе ступени включаются только там, где иначе была бы
+   вторая строка. Мерит контейнер, а не окно: vw внутри zoom врёт, и именно на
+   этом уже спотыкались две панели. */
+@container (max-width: 470px){ .acts{gap:4px} .acts button{padding:4px 6px} }
+@container (max-width: 420px){ .acts button{font-size:11px} }
 .acts button.on{background:var(--wood-lit); color:var(--warn); border-color:var(--warn)}
 kbd{color:var(--muted); font-size:10px}
 
