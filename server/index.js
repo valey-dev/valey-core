@@ -10,6 +10,7 @@ import { snapshot, fileOwners, conversation } from './agents.js';
 import { realWeather, forgetWeather, geocode } from './weather.js';
 import { getSettings, patchSettings, publicSettings, ownerToken } from './settings.js';
 import { deliver, deliveryStatus, isBusy, MODES } from './deliver.js';
+import { ask as askPermit, answer as answerPermit, permits, forgetGone } from './permit.js';
 import { releaseNudge } from './release.js';
 import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff } from './modules.js';
 import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
@@ -103,6 +104,10 @@ function project(snapshot, guestId) {
   return {
     ...snapshot,
     access: accessForGuest(guestId),
+    // Запрос разрешения — это команда с машины хозяина: пути, ветки, ключи в
+    // аргументах. Гостю не показываем ни пейджера, ни счётчика: нечего решать
+    // и не по чему судить.
+    permits: [],
     agents: (snapshot.agents || []).map((a) => {
       if (granted(guestId, a.id)) return a;
       const out = {};
@@ -235,6 +240,20 @@ function peopleTick() {
   setTimeout(peopleTick, PEOPLE_MS);
 }
 
+// Кому вообще есть смысл задавать вопрос. Гость не считается: пейджер до него
+// не доходит, и держать ради него вопрос значит держать его ни для кого.
+const audience = () => [...clients].some((res) => !res.valeyGuest);
+
+// Пейджер должен пищать сразу, а не в такте снимка: 2.5 секунды — это разница
+// между «мне звонят» и «мне звонили». Событие идёт только хозяевам, потому что
+// в проекции гостя запросов нет вовсе.
+function broadcastPermits() {
+  if (!last) return;
+  last.permits = permits();
+  const payload = `event: permits\ndata: ${JSON.stringify(last.permits)}\n\n`;
+  for (const res of clients) if (!res.valeyGuest) res.write(payload);
+}
+
 async function tick() {
   try {
     // Предыдущий снимок нужен наблюдателям: событие — это разница, а не
@@ -249,6 +268,10 @@ async function tick() {
     last.delivery = await deliveryStatus();
     last.people = livePeople();
     last.access = accessForOwner();
+    // Вопрос, заданный сессией, которой в офисе больше нет, отпускаем: отвечать
+    // на него некому, а ждать его девять минут — держать чужой терминал.
+    forgetGone(last.agents.map((a) => a.id));
+    last.permits = permits();
     // Наблюдатели — до рассылки: модуль может дописать своё в снимок, и
     // клиент должен получить его в том же такте, а не через 2.5 секунды.
     await moduleObserve(last, prev);
@@ -666,6 +689,43 @@ async function handle(req, res) {
       if (e instanceof BodyError) throw e;
       return send(res, 400, { error: e.message });
     }
+  }
+
+  // Запрос разрешения из Claude Code. Приходит от хука на этой же машине и
+  // ВИСИТ здесь, пока хозяин не ответит: пока висит — в терминале диалога нет.
+  // Отвечать может только хозяин, поэтому и спрашивать пускаем только его:
+  // чужой запрос сюда — это способ нарисовать в офисе поддельную команду и
+  // получить на неё настоящее «разрешить».
+  if (url.pathname === '/api/permit' && req.method === 'POST') {
+    if (!(await isOwner(req))) return forbidden(res);
+    // tool_input у Write — это целый файл, и 64 КБ ему мало. Предел всё равно
+    // нужен: тело читается в память, а запросов может быть много.
+    const body = await readJson(req, SHOT_MAX);
+    const { held, verdict, entry } = askPermit(body, { audience: audience() });
+    // Никого нет — офис отходит в сторону немедленно. Пустой ответ возвращает
+    // хуку штатный путь, и человек видит родной диалог, не подождав ни секунды.
+    if (!held) return send(res, 200, {});
+    // Девять минут — это дольше любого таймаута по умолчанию, который мог бы
+    // закрыть сокет за нас.
+    res.setTimeout(0);
+    if (req.socket) req.socket.setTimeout(0);
+    // Хук убили или терминал закрыли — вопроса больше нет. Без этого карточка
+    // висела бы в офисе до таймера, и хозяин отвечал бы в пустоту.
+    req.on('close', () => { if (!res.writableEnded) answerPermit(entry.id, { decision: 'terminal' }); broadcastPermits(); });
+    broadcastPermits();
+    const v = await verdict;
+    broadcastPermits();
+    return send(res, 200, v || {});
+  }
+
+  // Ответ хозяина. Гостю сюда нельзя даже посмотреть: запросов он не видит.
+  if (url.pathname === '/api/permit/answer' && req.method === 'POST') {
+    if (!(await isOwner(req))) return forbidden(res);
+    const b = await readJson(req);
+    const done = answerPermit(String(b.id || ''), { decision: String(b.decision || ''), message: b.message });
+    if (!done) return send(res, 404, { error: 'этого запроса уже нет', errorKey: 'err.permitGone' });
+    broadcastPermits();
+    return send(res, 200, { ok: true, ...done, permits: permits() });
   }
 
   if (url.pathname === '/api/delivery') return send(res, 200, await deliveryStatus());
