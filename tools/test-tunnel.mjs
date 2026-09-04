@@ -11,15 +11,8 @@
 // токена. Поэтому посредник теперь — снаружи: закрытому офису он получает 404,
 // открытому — 401, пока не предъявит сетевой токен; хозяином его делает только
 // токен хозяина, как и раньше.
-import { spawn } from 'node:child_process';
-import fsp from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { startOffice } from './lib/office.mjs';
 
-const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const PORT = Number(process.env.TUNNEL_PORT || 5394);
-const base = `http://127.0.0.1:${PORT}`;
 const OWNER = 'tunnel-owner-0001';
 const NET = 'tunnel-net-token-0001';
 
@@ -28,26 +21,17 @@ const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
   else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
 };
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-tunnel-'));
-const settingsFile = path.join(dir, 'settings.json');
-await fsp.writeFile(settingsFile, JSON.stringify({
-  // именно private: это тот режим, в котором ловушка и живёт
-  access: { mode: 'private', token: OWNER, invites: [] },
-  // открыт наружу и с токеном — как README и велит; слушает при этом всё
-  // равно петлю (HOST ниже), стенду незачем светить порт в Wi-Fi
-  network: { external: true, token: NET },
-  weather: { enabled: false },
-}, null, 2));
-
-const srv = spawn(process.execPath, ['server/index.js'], {
-  cwd: ROOT,
-  env: { ...process.env, PORT: String(PORT), VALEY_SETTINGS: settingsFile, HOST: '127.0.0.1' },
-  stdio: 'ignore',
+const { base, stop } = await startOffice({
+  settings: {
+    // именно private: это тот режим, в котором ловушка и живёт
+    access: { mode: 'private', token: OWNER, invites: [] },
+    // открыт наружу и с токеном — как README и велит; слушает при этом всё
+    // равно петлю, стенду незачем светить порт в Wi-Fi
+    network: { external: true, token: NET },
+  },
+  claudeDir: '/nonexistent-claude-dir',
 });
-const stop = () => { try { srv.kill(); } catch { /* уже мёртв */ } };
-process.on('exit', stop);
 
 const get = (p, headers = {}) => fetch(base + p, { headers })
   .then(async (r) => ({ status: r.status, j: await r.json().catch(() => null), cookie: r.headers.get('set-cookie') }));
@@ -55,12 +39,6 @@ const VIA = { 'x-forwarded-for': '203.0.113.7' };
 const BEARER = { ...VIA, authorization: 'Bearer ' + NET };
 
 try {
-  let up = false;
-  for (let i = 0; i < 60 && !up; i++) {
-    try { await fetch(base + '/api/whoami'); up = true; } catch { await wait(150); }
-  }
-  if (!up) throw new Error(`сервер не поднялся на ${PORT} — занят?`);
-
   const direct = await get('/api/whoami');
   ok('своя машина — хозяин, как и была', direct.j && direct.j.owner === true, direct);
 
@@ -103,8 +81,7 @@ try {
   bad += 1;
   console.log('УПАЛ  | стенд не доехал →', e.message);
 } finally {
-  stop();
-  await fsp.rm(dir, { recursive: true, force: true });
+  await stop();
 }
 
 console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');

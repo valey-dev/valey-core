@@ -4,7 +4,8 @@ import { drawPerson, drawItem, dressMe, cycle, hash, SKIN, HAIR, SHIRT, PANTS, B
   SHIRT_WORK, BLOUSE, JACKET, TIE, CUTS, BOTTOMS } from './sprites.js';
 import { renderMarkdown } from './markdown.js';
 import { highlight, langOf } from './highlight.js';
-import { collect } from './modules.js';
+import { collect, moduleIds } from './modules.js';
+import { LIBRARY, TIERS, byId, children, colOf } from './library.js';
 import { theme, applyTheme, resetTheme, PRESETS, ui, UI_STEPS, applyUiScale } from './theme.js';
 import { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } from './notes.js';
 import { esc } from './esc.js';
@@ -22,6 +23,29 @@ export function initUI(state, callbacks) {
   el.lift = $('#lift');
   el.invite = $('#invite');
   el.notes = $('#notes');
+  // Один обработчик на всю панель просмотра, поставленный на входе: разметка
+  // внутри неё перерисовывается постоянно, а он это переживает.
+  bindCopyButtons();
+  // Панели с полем ввода закрывают себя сами. onKey в main.js возвращается на
+  // любом INPUT — так недописанное задание переживает случайный Escape, — и до
+  // closeAll() нажатие не доходит: пока фокус в поле, панель заперта. У обхода
+  // и лифта полей нет, им хватает closeAll(); карточка агента не в списке
+  // намеренно, там поле задания и Escape ему не хозяин.
+  selfClosing(el.sky, closeSky);
+  selfClosing(el.notes, closeNotes);
+  selfClosing(el.invite, closeInvite);
+  selfClosing(el.bag, closeBag);
+  selfClosing(el.skin, closeSkin);
+}
+
+// Обработчик вешается на саму панель, а не на поле: нутро панели переписывается
+// на каждый рендер, а она сама остаётся.
+function selfClosing(box, close) {
+  if (!box) return;
+  box.onkeydown = (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault(); e.stopPropagation(); close();
+  };
 }
 
 export const clean = (s) => (s || '').replace(/```[\s\S]*?```/g, tr('clean.code')).replace(/[*#`]/g, '').replace(/\n{3,}/g, '\n\n').trim();
@@ -530,6 +554,7 @@ function typewriter() {
 
 export function closeDialog() {
   el.dialog.hidden = true; dialogKey = ''; armedNote = 0; btnIndex = 0; linkFocused = false; fileIdx = -1;
+  clearInterval(S.tw);   // машинка дописывала бы реплику в закрытую карточку
   denying = false;
   // Карточка закрылась — пейджер должен узнать: вопрос, отданный ей, иначе
   // пропадает с экрана совсем.
@@ -732,6 +757,104 @@ function renderGallery() {
   if (picked) picked.scrollIntoView({ block: 'nearest' });
 }
 
+// ------------------------------------------------ копирование блоков кода
+// Кнопку рисует markdown.js, нажатие ловится здесь и одной делегацией на
+// панель: блоков в транскрипте бывают сотни, и вешать обработчик на каждый —
+// это сотни обработчиков, переживающих перерисовку.
+//
+// Буфер обмена в браузере доступен только на localhost или по https. Офис
+// открывают и по туннелю, и по адресу в сети — там `navigator.clipboard` либо
+// отсутствует, либо отказывает, поэтому за ним стоит старый `execCommand`, а
+// если и он не сработал, кнопка говорит «не вышло» вместо того, чтобы соврать
+// зелёным.
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* туннель или http — падаем на запасной путь */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+// Состояние живёт на самой кнопке полторы секунды и возвращается в покой.
+// Отдельной строки статуса нет нарочно: кнопка и есть ответ.
+async function copyBlock(btn) {
+  const block = btn.closest('.mdblock');
+  const code = block && block.querySelector('pre.mdcode code');
+  if (!code) return false;
+  const ok = await copyText(code.textContent);
+  btn.classList.remove('done', 'fail');
+  btn.classList.add(ok ? 'done' : 'fail');
+  btn.textContent = tr(ok ? 'md.copied' : 'md.copyFail');
+  clearTimeout(btn._back);
+  btn._back = setTimeout(() => {
+    btn.classList.remove('done', 'fail');
+    btn.textContent = tr('md.copy');
+  }, ok ? 1500 : 4000);
+  return ok;
+}
+
+// Клавиша копирует верхний блок, попавший в экран, — тот, который читают.
+// Ниже экрана блоки есть почти всегда, и копировать первый в документе значило
+// бы копировать не то, что видно.
+function copyTopBlock() {
+  const box = el.viewer.querySelector('#chatlog') || el.viewer.querySelector('.vbody') || el.viewer;
+  const top = box.getBoundingClientRect ? box.getBoundingClientRect().top : 0;
+  const blocks = [...el.viewer.querySelectorAll('.mdblock')];
+  if (!blocks.length) return false;
+  const seen = blocks.find((b) => b.getBoundingClientRect().bottom > top + 4) || blocks[0];
+  const btn = seen.querySelector('.mdcopy');
+  if (!btn) return false;
+  btn.scrollIntoView({ block: 'nearest' });
+  copyBlock(btn);
+  return true;
+}
+
+// Строка клавиш внизу перечисляет то, что работает, — и обещание должно быть
+// правдой: C копирует, только когда в панели есть блок кода, поэтому и в
+// подсказке она появляется только тогда. Пустое обещание клавиши офис уже
+// проходил на радио, когда «R — радио» стояло в строке бесплатной сборки.
+export function paintCopyHint() {
+  if (!el.viewer || el.viewer.hidden) return;
+  const line = el.viewer.querySelector('.vpath');
+  if (!line || line.dataset.copyHint) return;
+  if (!el.viewer.querySelector('.mdblock')) return;
+  line.dataset.copyHint = '1';
+  const piece = document.createElement('span');
+  piece.textContent = ` · C — ${tr('md.copy')}`;
+  line.appendChild(piece);
+}
+
+// Делегация ставится один раз на панель просмотра: разметка внутри неё
+// перерисовывается постоянно, а обработчик переживает это, потому что висит
+// выше.
+export function bindCopyButtons() {
+  // Подставной DOM клавиатурных стендов слушателей не умеет, и это не повод
+  // им падать: они проверяют состояние, а не подписку.
+  if (!el.viewer || !el.viewer.addEventListener || el.viewer._copyBound) return;
+  el.viewer._copyBound = true;
+  el.viewer.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest && e.target.closest('.mdcopy');
+    if (!btn) return;
+    e.preventDefault();
+    copyBlock(btn);
+  });
+}
+
 // `title` is what Esc goes back to: a board has one, an agent's file list does not
 let viewToken = 0;
 
@@ -827,6 +950,7 @@ export async function openFile(p, items = null, index = -1, title = '') {
     <div class="single">${inner}</div><div class="vpath">${esc(p)}</div></div>`;
   $('#vx').onclick = closeViewer;
   bindDocControls();
+  paintCopyHint();
   const img = $('#zimg');
   if (img) {
     img.onclick = () => { img.classList.toggle('pixel'); };
@@ -876,6 +1000,12 @@ function paintHeadFocus() {
 export function viewerKey(raw, big = false) {
   if (el.viewer.hidden) return false;
   const key = raw.toLowerCase();
+  // C копирует верхний блок кода — и в транскрипте, и в файле. Снаружи эта
+  // буква открывает инвентарь на «на себе», и до 4 сентября 2026 она делала
+  // это прямо поверх открытого просмотра: буквы проваливались сюда сквозь
+  // панель. Внутри просмотра переодеваться незачем, а копировать — постоянно;
+  // инвентарь остаётся на I, одним нажатием.
+  if ((key === 'c' || key === 'с') && el.viewer.querySelector('.mdblock')) return copyTopBlock();
   if (transcriptKey(key, big)) return true;
   const n = gallery.items.length;
 
@@ -1047,7 +1177,10 @@ const cellTitle = (f, v) => (f.key === 'tie' || f.key === 'jacket'
 const writeSlot = (f, v) => { if (f.set) f.set(v); else S.me[f.key] = v; };
 
 const FIELDS = [...COLORS, ...BODY];
-const TABS = ['self', 'things', 'office'];
+const TABS = ['self', 'things', 'office', 'tree'];
+// Гость вкладку «дерево» не видит: у него чужой этаж, и из чего он собран —
+// не его вопрос.
+const tabs = () => (isGuest() ? TABS.filter((t) => t !== 'tree') : TABS);
 let bagTab = 'self';
 
 // Дресс-код читается отсюда же, из настроек офиса: он общий, а не браузерный.
@@ -1117,22 +1250,148 @@ const officeHtml = () => {
     </div>`;
 };
 
+// ------------------------------------------------------------ дерево модулей
+// Вкладка «дерево»: вся сборка офиса как дерево навыков, три колонки по
+// ярусам. Состав — web/library.js; горит то, что ядро (бесплатные ветки) и что
+// вернул /api/modules (модули). Ни цен, ни «купить»: касса живёт на valey.dev,
+// а здесь видно, из чего офис собран и что из чего растёт.
+//
+// Выбранный узел и есть фокус: стрелки ходят по дереву — ↑↓ по колонке, ←→ по
+// ребру (к родителю и к первому потомку), и карточка под деревом меняется
+// сразу, без Enter. Отдельного кольца фокуса нет: подсвечивать одно, а
+// показывать другое — это два курсора на одной панели.
+// Макет: Figma, Prod, секция «18 · Дерево модулей в инвентаре», кадры 932:2
+// (бесплатная сборка) и 934:2 (сборка «Офис»). Принято 4 сентября 2026.
+let treeSel = null;
+// Цвета иконок — заглушки из четырёх пикселей, как на макете; свои иконки —
+// отдельная работа. Ветка и её продолжение красятся одним тоном — кроме
+// мольберта: он вырос из доски работ вместе с деревом гита, а два одинаково
+// зелёных узла рядом читались бы как один предмет.
+const TONE = { floor1: '#c9a06a', bible: '#c9a06a', art: '#d97b6c', easel: '#d97b6c',
+  board: '#9fe0a8', gittree: '#9fe0a8', task: '#ffd166', feed: '#ffd166', cctv: '#8fbcff', dossier: '#8fbcff',
+  radio: '#c39bff', dress: '#f6e3c0', agents: '#e0a06a', floor: '#e0a06a', talk: '#9fe0a8', meet: '#9fe0a8',
+  door: '#8c7660', guest: '#8c7660' };
+const L = (v) => (v ? (v[lang()] || v.ru) : '');
+// own — горит; office/floor — тусклый с именем тарифа; room — бесплатная
+// ветка, у которой не лежит папка (радио без modules/); ghost — «за год».
+const treeState = (n) => (n.tier === 'more' ? 'ghost'
+  : n.module ? (moduleIds().includes(n.module) ? 'own' : n.tier)
+  : n.tier === 'room' ? 'own' : n.tier);
+const treeOwn = (n) => treeState(n) === 'own';
+const treeCount = (tier) => {
+  const all = LIBRARY.filter((n) => n.tier === tier);
+  return { t: tier, n: all.filter(treeOwn).length, m: all.length };
+};
+const treeSub = (c) => (c.t === 'room' ? tr(c.n === c.m ? 'tree.sub.room' : 'tree.sub.roomSome')
+  : c.t === 'office' ? tr(c.n === c.m ? 'tree.sub.officeAll' : c.n ? 'tree.sub.officeSome' : 'tree.sub.office')
+  : tr('tree.sub.floor'));
+// По умолчанию выбран первый модуль «Офиса», которого нет: это и есть ответ на
+// «что в следующем тире». Когда есть всё — призрачный узел про год.
+const treeDefault = () => LIBRARY.find((n) => n.tier === 'office' && !treeOwn(n)) || byId('more');
+const treeCur = () => byId(treeSel) || (treeSel = treeDefault().id, byId(treeSel));
+export const treeSelected = () => treeCur().id;
+
+const treeCard = (n) => {
+  const st = treeState(n), from = n.parent ? L(byId(n.parent).name) : '';
+  const meta = st === 'own' ? tr(n.tier === 'room' ? 'tree.meta.room' : 'tree.meta.owned', { from })
+    : st === 'ghost' ? tr('tree.meta.more')
+    : tr('tree.meta.' + n.tier, { from });
+  return `<div class="lcard">
+      <div class="lhead"><b>${esc(L(n.name))}</b><span>${meta}</span></div>
+      <p>${tr('tree.gives')} ${esc(L(n.gives))}</p>
+      ${n.where ? `<p>${tr('tree.where')} ${esc(L(n.where))}</p>` : ''}
+      ${n.without && st !== 'own' ? `<p>${tr('tree.without')} ${esc(L(n.without))}</p>` : ''}
+      ${st === 'ghost' ? '' : `<p>${tr('tree.arrives')} ${tr('tree.arrive.' + n.tier)}</p>`}
+    </div>`;
+};
+
+const treeHtml = () => {
+  const sel = treeCur();
+  const cols = TIERS.map(treeCount);
+  return `<div class="bbody tbody">
+      <div class="tcols">${cols.map((c) => `<div class="tcol${c.n === c.m ? ' own' : ''}">
+        <b>${tr('tree.col.' + c.t, { n: c.n, m: c.m })}</b><span>${treeSub(c)}</span></div>`).join('')}</div>
+      <div class="tree" id="tree"><svg class="tedges"></svg>
+        ${LIBRARY.map((n) => { const st = treeState(n); return `<button class="tnode ${st}${n.id === sel.id ? ' on' : ''}"
+          data-id="${n.id}" data-col="${colOf(n)}" data-row="${n.row}" style="grid-column:${colOf(n) * 2 + 1}; grid-row:${n.row + 1}">
+          ${st === 'ghost' ? '' : `<i class="tico" style="--c:${TONE[n.id] || '#8c7660'}"></i>`}<span>${esc(L(n.name))}</span>
+          ${st === 'own' || st === 'ghost' ? '' : `<em>${tr('tree.tag.' + n.tier)}</em>`}</button>`; }).join('')}
+      </div>
+      ${treeCard(sel)}
+      <p class="hint dim">${tr('tree.note')} ${tr('tree.keys')}</p>
+    </div>`;
+};
+
+// Рёбра — по настоящей геометрии кнопок, а не по номерам строк: ширина панели
+// на узком экране плывёт, а сетка — нет. Ребро идёт от правого края родителя
+// к левому краю потомка через середину жёлоба; строка в строку — прямой.
+function treeEdges() {
+  const box = el.bag.querySelector('#tree'), svg = box && box.querySelector('.tedges');
+  if (!svg || !box.getBoundingClientRect) return;          // подставной DOM стенда
+  const o = box.getBoundingClientRect();
+  const at = (b) => { const r = b.getBoundingClientRect(); return { l: r.left - o.left, r: r.right - o.left, y: r.top - o.top + r.height / 2 }; };
+  const nodes = new Map([...box.querySelectorAll('.tnode')].map((b) => [b.dataset.id, b]));
+  let out = '';
+  for (const n of LIBRARY) {
+    const p = n.parent && nodes.get(n.parent), c = nodes.get(n.id);
+    if (!p || !c) continue;
+    const a = at(p), z = at(c), xm = z.l - 18;
+    const d = a.y === z.y ? `M${a.r},${a.y} H${z.l}` : `M${a.r},${a.y} H${xm} V${z.y} H${z.l}`;
+    out += `<path d="${d}"${c.classList.contains('own') ? ' class="lit"' : ''}/>`;
+  }
+  svg.setAttribute('viewBox', `0 0 ${o.width} ${o.height}`);
+  svg.innerHTML = out;
+}
+
+function bindTree() {
+  el.bag.querySelectorAll('.tnode').forEach((b) => b.onclick = () => { treeSel = b.dataset.id; renderBag(); });
+  treeEdges();
+  const on = el.bag.querySelector('.tnode.on');
+  if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+}
+
+// Ближайший по строке узел соседней колонки — когда ребра нет: «за год» не
+// растёт ни из чего, а у радио нет продолжения.
+const treeNear = (col, row) => LIBRARY.filter((n) => colOf(n) === col)
+  .sort((a, b) => Math.abs(a.row - row) - Math.abs(b.row - row))[0] || null;
+
+function treeKey(key) {
+  const cur = treeCur();
+  let next = null;
+  if (key === 'arrowup' || key === 'arrowdown') {
+    const col = LIBRARY.filter((n) => colOf(n) === colOf(cur)).sort((a, b) => a.row - b.row);
+    const d = key === 'arrowup' ? -1 : 1;
+    next = col[(col.indexOf(cur) + d + col.length) % col.length];
+  } else if (key === 'arrowleft') {
+    next = cur.parent ? byId(cur.parent) : treeNear(colOf(cur) - 1, cur.row);
+  } else if (key === 'arrowright') {
+    next = children(cur.id)[0] || treeNear(colOf(cur) + 1, cur.row);
+  } else if (key === 'enter' || key === ' ') {
+    return true;                       // выбранное уже раскрыто карточкой
+  } else return false;
+  // Край дерева — не повод отдать стрелку офису: панель открыта.
+  if (next && next.id !== cur.id) { treeSel = next.id; renderBag(); }
+  return true;
+}
+
 export function renderBag(tab) {
-  if (tab && TABS.includes(tab)) bagTab = tab;
+  if (tab && tabs().includes(tab)) bagTab = tab;
+  if (!tabs().includes(bagTab)) bagTab = 'self';
   el.bag.hidden = false;
   el.bag.innerHTML = `<div class="rwrap bagwrap">
     <div class="vhead">${tr('bag.title')} · ${tr('bag.tab.' + bagTab)}<button id="bx">✕</button></div>
     <div class="btabs">
-      ${TABS.map((t, i) => `<button class="btab${t === bagTab ? ' on' : ''}" data-tab="${t}">${tr('bag.tab.' + t)}<kbd>${i + 1}</kbd></button>`).join('')}
+      ${tabs().map((t, i) => `<button class="btab${t === bagTab ? ' on' : ''}" data-tab="${t}">${tr('bag.tab.' + t)}<kbd>${i + 1}</kbd></button>`).join('')}
       <span class="bhint">${tr('bag.tabHint')}</span>
     </div>
-    ${bagTab === 'self' ? selfHtml() : bagTab === 'things' ? thingsHtml() : officeHtml()}
+    ${bagTab === 'self' ? selfHtml() : bagTab === 'things' ? thingsHtml() : bagTab === 'tree' ? treeHtml() : officeHtml()}
   </div>`;
 
   $('#bx').onclick = closeBag;
   el.bag.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => openTab(b.dataset.tab));
   if (bagTab === 'self') bindSelf();
   else if (bagTab === 'things') bindThings();
+  else if (bagTab === 'tree') bindTree();
   else bindOffice();
 }
 
@@ -1220,7 +1479,7 @@ function bindThings() {
 const officeRing = focusRing(() => el.bag, '.obtn');
 
 function openTab(tab) {
-  if (!TABS.includes(tab) || tab === bagTab) return;
+  if (!tabs().includes(tab) || tab === bagTab) return;
   bagTab = tab; bagIdx = 0; cellIdx = 0;
   officeRing.reset();
   renderBag();
@@ -1243,6 +1502,7 @@ const catCells = (cat) => (cat ? [...cat.querySelectorAll('.bcell')] : []);
 
 function paintBagFocus() {
   if (bagTab === 'office') { officeRing.paint(); return; }
+  if (bagTab === 'tree') return;      // выбранный узел и есть фокус, см. treeHtml()
   if (bagTab === 'things') {
     const cats = bagCats();
     if (!cats.length) return;
@@ -1271,11 +1531,12 @@ export function bagKey(raw) {
   // Цифра — вкладка. Клавиши 1..9 в офисе больше ничем не заняты: масштаб
   // сидит на +, − и 0.
   const n = Number(key);
-  if (Number.isInteger(n) && n >= 1 && n <= TABS.length) {
-    openTab(TABS[n - 1]);
+  if (Number.isInteger(n) && n >= 1 && n <= tabs().length) {
+    openTab(tabs()[n - 1]);
     return true;
   }
   if (bagTab === 'office') return officeRing.key(key, true);
+  if (bagTab === 'tree') return treeKey(key);
   return bagTab === 'things' ? thingsKey(key) : selfKey(key);
 }
 
@@ -1509,7 +1770,7 @@ export function focusRing(nodeOf, selector, opts = {}) {
 }
 
 const skyRing = focusRing(() => el.sky, '#skytoggle, #skyq, .skyhit, #skygeo');
-export function closeSky() { el.sky.hidden = true; skyRing.reset(); }
+export function closeSky() { el.sky.hidden = true; skyRing.reset(); clearTimeout(geoTimer); }
 export function skyKey(raw) { return skyRing.key(raw, el.sky && !el.sky.hidden); }
 
 // ------------------------------------------------------------- цвет офиса
@@ -1866,6 +2127,7 @@ function paintChat(msgs, fresh = 0, force = false) {
   if (first) box.scrollTop = Math.max(0, first.offsetTop - box.offsetTop - 12);
   else if (atBottom || !keep) box.scrollTop = box.scrollHeight;
   else box.scrollTop = keep;
+  paintCopyHint();
 }
 
 function paintNoteCount() {

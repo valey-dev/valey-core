@@ -64,7 +64,8 @@ const DICT = {
     'hint.liftCall': '[ ПРОБЕЛ ] вызвать лифт',
     'hint.board': '[ ПРОБЕЛ ] посмотреть доску',
     // у человечка-переключателя подписано, куда он переключит, а не что он такое
-    'hint.lang': '[ ПРОБЕЛ ] in English',
+    // Подпись целиком на языке, куда зовёт: американец не говорит «ПРОБЕЛ»
+    'hint.lang': '[ SPACE ] in English',
     'hint.kicker': '[ ПРОБЕЛ ] сыграть',
     'label.me': 'ТЫ',
     'label.gulp': 'буль',
@@ -404,7 +405,7 @@ const DICT = {
     'round.nobody': 'Никто не ждёт. Редкий день.',
     'bag.title': 'Инвентарь',
     'bag.tab.self': 'на себе', 'bag.tab.things': 'вещи',
-    'bag.tabHint': '1 2 3 — вкладки · C и I — открыть',
+    'bag.tabHint': '1 2 3 4 — вкладки · C и I — открыть',
     'bag.body': 'тело',
     'bag.thingsNote': 'Всё съёмное лежит здесь. Ничего не выпадает и не покупается — доступно всё и всегда: это витрина, а не рюкзак.',
     'bag.tab.office': 'офис',
@@ -422,6 +423,26 @@ const DICT = {
     'bag.notYours': 'Дресс-код меняет хозяин офиса',
     'bag.nowOffice': 'Офис переоделся: рубашки, галстуки, пиджаки',
     'bag.nowCasual': 'Офис вернулся к свободной одежде',
+    'bag.tab.tree': 'дерево',
+    'tree.col.room': 'КОМНАТА · {n} из {m}', 'tree.col.office': 'ОФИС · {n} из {m}', 'tree.col.floor': 'ЭТАЖ · {n} из {m}',
+    'tree.sub.room': 'бесплатно, у тебя целиком',
+    'tree.sub.roomSome': 'бесплатно · папки модуля нет рядом с офисом',
+    'tree.sub.office': 'тариф «Офис» · год обновлений',
+    'tree.sub.officeSome': 'тариф «Офис» · часть модулей ещё не приехала',
+    'tree.sub.officeAll': 'куплен · остальное приедет с обновлениями',
+    'tree.sub.floor': 'включает «Офис» каждому · ещё не построено',
+    'tree.tag.office': 'Офис', 'tree.tag.floor': 'Этаж', 'tree.tag.room': 'бесплатно',
+    'tree.meta.room': 'бесплатно · в ядре',
+    'tree.meta.owned': 'установлен · растёт из «{from}»',
+    'tree.meta.office': 'тариф «Офис» · растёт из «{from}»',
+    'tree.meta.floor': 'тариф «Этаж» · растёт из «{from}» · ещё не построено',
+    'tree.meta.more': 'тариф «Офис» · год обновлений',
+    'tree.gives': 'Что даёт:', 'tree.where': 'Где:', 'tree.without': 'Чего нет без него:', 'tree.arrives': 'Как приезжает:',
+    'tree.arrive.room': 'в ядре, бесплатно и навсегда: исходники открыты, с машины ничего не уходит.',
+    'tree.arrive.office': 'с тарифом «Офис» папка модуля кладётся в modules/ рядом с офисом, и он подхватывает её на следующем запуске. Ключ ничего не отпирает — он нужен, чтобы доходили обновления.',
+    'tree.arrive.floor': 'подпиской, потому что это наши серверы — рандеву и ретранслятор, расход ежемесячный. «Этаж» включает «Офис» каждому участнику. Пока не построено: колонка стоит, чтобы было видно, куда растёт дерево.',
+    'tree.note': 'Дерево — карта, а не касса: цены и покупка живут на valey.dev. Здесь видно, из чего офис собран и что из чего растёт.',
+    'tree.keys': 'Стрелки — по дереву: ↑↓ по колонке, ←→ по ветке.',
     'dress.tie': 'галстук', 'dress.cut': 'крой галстука', 'dress.jacket': 'пиджак', 'dress.bottom': 'низ',
     'val.none': 'нет',
     'val.bottom.pants': 'брюки', 'val.bottom.skirt': 'юбка',
@@ -484,6 +505,8 @@ const DICT = {
     'doc.scriptsOff': 'выключены',
     'doc.stopScripts': 'выключить',
     'doc.runScripts': 'выполнить скрипты',
+    'md.copy': 'копировать', 'md.copied': 'скопировано',
+    'md.copyFail': 'не вышло — выдели и скопируй',
     'doc.markdown': 'разметка',
     'doc.source': 'исходник',
     'doc.page': 'страница',
@@ -547,7 +570,7 @@ const DICT = {
     'task.resent': '✈ Отправил заново, с полным доступом.',
     'task.noteSent': '✈ Записка ушла в чат {name}. Ответ придёт сюда же.',
 
-    'help': 'WASD — ходить · SHIFT — бежать · B — скейт · ПРОБЕЛ — заговорить и попить · TAB — обход · N — заметки · C — переодеться · P — окно в мир · U — цвет офиса · M — звук · + 0 — масштаб (×6…×8) · SECURITY внизу — камеры по этажу (T — автообход) · ESC — назад',
+    'help': 'WASD — ходить · SHIFT — бежать · B — скейт · ПРОБЕЛ — заговорить и попить · TAB — обход · N — заметки · C — переодеться · P — окно в мир · U — цвет офиса · M — звук · + 0 — масштаб (×6…×8) · SECURITY внизу — камеры по этажу (T — автообход) · I — пригласить · ESC — назад',
     'doc.title': 'Valey — офис',
   },
 
@@ -929,7 +952,7 @@ const DICT = {
     'round.nobody': 'Nobody is waiting. A rare day.',
     'bag.title': 'Inventory',
     'bag.tab.self': 'on you', 'bag.tab.things': 'things',
-    'bag.tabHint': '1 2 3 — tabs · C and I — open',
+    'bag.tabHint': '1 2 3 4 — tabs · C and I — open',
     'bag.body': 'body',
     'bag.thingsNote': 'Everything you can take off lives here. Nothing drops and nothing is bought — it is all available, always: a display case, not a backpack.',
     'bag.tab.office': 'office',
@@ -947,6 +970,26 @@ const DICT = {
     'bag.notYours': 'Only the office owner changes the dress code',
     'bag.nowOffice': 'The office changed: shirts, ties, jackets',
     'bag.nowCasual': 'The office is back in casual clothes',
+    'bag.tab.tree': 'tree',
+    'tree.col.room': 'ROOM · {n} of {m}', 'tree.col.office': 'OFFICE · {n} of {m}', 'tree.col.floor': 'FLOOR · {n} of {m}',
+    'tree.sub.room': 'free, all of it yours',
+    'tree.sub.roomSome': 'free · the module folder is not next to the office',
+    'tree.sub.office': 'the Office tier · a year of updates',
+    'tree.sub.officeSome': 'the Office tier · some modules have not arrived yet',
+    'tree.sub.officeAll': 'bought · the rest arrives with updates',
+    'tree.sub.floor': 'includes Office for everyone · not built yet',
+    'tree.tag.office': 'Office', 'tree.tag.floor': 'Floor', 'tree.tag.room': 'free',
+    'tree.meta.room': 'free · in the core',
+    'tree.meta.owned': 'installed · grows out of “{from}”',
+    'tree.meta.office': 'the Office tier · grows out of “{from}”',
+    'tree.meta.floor': 'the Floor tier · grows out of “{from}” · not built yet',
+    'tree.meta.more': 'the Office tier · a year of updates',
+    'tree.gives': 'What it gives:', 'tree.where': 'Where:', 'tree.without': 'What is missing without it:', 'tree.arrives': 'How it arrives:',
+    'tree.arrive.room': 'in the core, free and for good: the sources are open, nothing leaves the machine.',
+    'tree.arrive.office': 'with the Office tier the module folder goes into modules/ next to the office, and the office picks it up on the next start. The key unlocks nothing — it is there so updates reach you.',
+    'tree.arrive.floor': 'by subscription, because these are our servers — the rendezvous and the relay, a monthly cost. Floor includes Office for every member. Not built yet: the column stands so you can see where the tree grows.',
+    'tree.note': 'The tree is a map, not a checkout: prices and buying live on valey.dev. Here you see what the office is made of and what grows out of what.',
+    'tree.keys': 'Arrows walk the tree: ↑↓ along a column, ←→ along a branch.',
     'dress.tie': 'tie', 'dress.cut': 'tie cut', 'dress.jacket': 'jacket', 'dress.bottom': 'bottom',
     'val.none': 'none',
     'val.bottom.pants': 'trousers', 'val.bottom.skirt': 'skirt',
@@ -1007,6 +1050,8 @@ const DICT = {
     'doc.scriptsOff': 'off',
     'doc.stopScripts': 'switch off',
     'doc.runScripts': 'run the scripts',
+    'md.copy': 'copy', 'md.copied': 'copied',
+    'md.copyFail': 'no luck — select it and copy',
     'doc.markdown': 'rendered',
     'doc.source': 'source',
     'doc.page': 'page',
@@ -1070,7 +1115,7 @@ const DICT = {
     'task.resent': '✈ Sent again, with full access.',
     'task.noteSent': '✈ The note went to {name}’s chat. The answer lands right here.',
 
-    'help': 'WASD to walk · SHIFT to run · B skateboard · SPACE to talk and to drink · TAB the round · N notes · C to change · P window on the world · U office colour · M sound · + 0 scale (×6…×8) · SECURITY below — floor cameras (T to cycle) · ESC back',
+    'help': 'WASD to walk · SHIFT to run · B skateboard · SPACE to talk and to drink · TAB the round · N notes · C to change · P window on the world · U office colour · M sound · + 0 scale (×6…×8) · SECURITY below — floor cameras (T to cycle) · I invite · ESC back',
     'doc.title': 'Valey — the office',
   },
 };
@@ -1123,7 +1168,17 @@ export function onLang(fn) { listeners.add(fn); return () => listeners.delete(fn
 // Полнота словаря проверяется здесь же, а не тестом: расхождение ключей между
 // языками — это дыра, которую в игре видно только на том экране, куда редко
 // заходят. В консоли она видна на первой же загрузке.
-const missing = LANGS.flatMap((l) => Object.keys(DICT.ru).filter((k) => DICT[l][k] == null).map((k) => `${l}:${k}`));
+// Спрашиваются только те формы числа, которые язык объявляет: у английского
+// нет «few», и `title.day.few` в его словаре не пропуск, а грамматика.
+// Предупреждение об этом печаталось при каждой загрузке и приучало не читать
+// строку, которая ловит настоящие дыры. «many» просят у всех: это запасная
+// форма резолвера, и в английском она стоит вместо «other».
+const FORMS = ['one', 'few', 'many', 'other'];
+const wanted = (l, k) => {
+  const f = FORMS.find((s) => k.endsWith('.' + s));
+  return !f || f === 'many' || new Intl.PluralRules(l).resolvedOptions().pluralCategories.includes(f);
+};
+const missing = LANGS.flatMap((l) => Object.keys(DICT.ru).filter((k) => DICT[l][k] == null && wanted(l, k)).map((k) => `${l}:${k}`));
 if (missing.length) console.warn('i18n: нет перевода —', missing.join(', '));
 
 // Словарь модуля вливается в общий: искать его будет тот же tr, поэтому модуль

@@ -2,56 +2,36 @@
 // DOM подставной: проверяется не вёрстка, а что делает нажатие — куда уезжает
 // прокрутка и что приносит R, когда реплик прибавилось и когда нет.
 
-function node(id = '') {
-  const classes = new Set();
-  return {
-    id, innerHTML: '', textContent: '', scrollTop: 0, hidden: false,
-    scrollHeight: 2000, clientHeight: 300, offsetTop: 0,
-    classList: {
-      add: (c) => classes.add(c), remove: (c) => classes.delete(c),
-      contains: (c) => classes.has(c),
-      toggle: (c, on) => (on === undefined ? (classes.has(c) ? classes.delete(c) : classes.add(c)) : (on ? classes.add(c) : classes.delete(c))),
-    },
-    querySelector(sel) {
-      // новая реплика ищется в логе — она есть ровно тогда, когда её нарисовали
-      if (sel === '.msg.fresh' && this.innerHTML.includes('fresh')) return Object.assign(node(), { offsetTop: 1500 });
-      return null;
-    },
-    querySelectorAll: () => [],
-    click() {},
-  };
-}
+import { node, installDom } from './lib/dom.mjs';
 
-const viewer = node('viewer');
-const chatlog = node('chatlog');
-const chatst = node('chatst');
-const vx = node('vx');
-const toasts = Object.assign(node('toasts'), {
+// У лога своя высота и свой поиск: новая реплика есть ровно тогда, когда её
+// нарисовали. Остальное — общая машинка.
+const withLog = (id) => node('', {
+  id, scrollHeight: 2000, clientHeight: 300,
+  querySelector(sel) {
+    if (sel === '.msg.fresh' && this.innerHTML.includes('fresh')) return node('', { offsetTop: 1500 });
+    return null;
+  },
+});
+
+const viewer = node('', { id: 'viewer' });
+const chatlog = withLog('chatlog');
+const chatst = node('', { id: 'chatst' });
+const vx = node('', { id: 'vx' });
+const toasts = Object.assign(node('', { id: 'toasts' }), {
   children: [], appendChild(n) { this.children.push(n); }, get firstChild() { return this.children[0]; },
   removeChild(n) { this.children = this.children.filter((x) => x !== n); },
 });
-const stub = { querySelector: () => null, querySelectorAll: () => [], classList: node().classList };
 // пока разговор «закрыт», лога в документе нет — как после closeViewer
 let logPresent = true;
 
-const byId = (sel) => ({
-  '#toasts': toasts, '#viewer': viewer, '#chatlog': logPresent ? chatlog : null, '#chatst': logPresent ? chatst : null, '#vx': vx,
-}[sel]);
-
-globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
-const withStyle = (n) => Object.assign(n, { style: { setProperty: () => {}, removeProperty: () => {} } });
-globalThis.document = {
-  querySelector: (sel) => byId(sel) || stub,
-  querySelectorAll: () => [],
-  addEventListener: () => {},
-  documentElement: withStyle(node()),
-  body: withStyle(node()),
-  createElement: () => withStyle(node()),
-};
-globalThis.window = globalThis;
-globalThis.addEventListener = () => {};
+installDom({
+  find: (sel) => ({
+    '#toasts': toasts, '#viewer': viewer, '#chatlog': logPresent ? chatlog : null,
+    '#chatst': logPresent ? chatst : null, '#vx': vx,
+  }[sel] || null),
+});
 globalThis.setTimeout = setTimeout;
-globalThis.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
 let served = { messages: [] };
 let calls = 0;
@@ -129,6 +109,48 @@ check('Esc закрыл разговор', viewer.hidden === true, viewer.hidden
 logPresent = false;                  // лога в документе больше нет
 check('на закрытом экране стрелки офису возвращаются', UI.viewerKey('ArrowUp', false) === false, 'перехвачены');
 check('и R тоже', UI.viewerKey('r', false) === false, 'перехвачен');
+
+// --- копирование блока кода клавишей C ---
+// Граница тут важнее самого копирования: пока в просмотре есть блок кода, C
+// принадлежит ему; когда блоков нет — проваливается в офис и открывает
+// инвентарь, как было всегда.
+// Экран к этому месту закрыт предыдущей проверкой — открываем обратно, иначе
+// viewerKey вернёт false просто потому, что смотреть нечего, и проверка про
+// клавишу окажется проверкой ни про что.
+viewer.hidden = false;
+logPresent = true;
+check('без блоков кода C не забирается просмотром', UI.viewerKey('c') === false, 'забрала');
+
+let copied = null;
+// В node у globalThis.navigator есть только getter, поэтому подменяем через
+// defineProperty, а не присваиванием.
+const setClipboard = (writeText) => Object.defineProperty(globalThis, 'navigator', {
+  value: { clipboard: { writeText } }, configurable: true, writable: true });
+setClipboard(async (t) => { copied = t; });
+const codeNode = Object.assign(node(), { textContent: 'git push origin main' });
+const cbtn = Object.assign(node(), { textContent: 'копировать', scrollIntoView() {} });
+const cblock = Object.assign(node(), {
+  getBoundingClientRect: () => ({ top: 10, bottom: 60 }),
+  querySelector: (sel) => (sel === 'pre.mdcode code' ? codeNode : sel === '.mdcopy' ? cbtn : null),
+});
+cbtn.closest = (sel) => (sel === '.mdblock' ? cblock : null);
+viewer.querySelector = (sel) => (sel === '.mdblock' ? cblock : sel === '#chatlog' ? chatlog : null);
+viewer.querySelectorAll = (sel) => (sel === '.mdblock' ? [cblock] : []);
+chatlog.getBoundingClientRect = () => ({ top: 0, bottom: 400 });
+
+check('с блоком кода C забирает просмотр', UI.viewerKey('c') === true, 'не забрала');
+await new Promise((r) => setTimeout(r, 0));
+check('в буфер ушёл текст кода, а не подсветка', copied === 'git push origin main', copied);
+check('кнопка сказала «скопировано»', cbtn.textContent === 'скопировано', cbtn.textContent);
+check('и подсветилась', cbtn.classList.contains('done'), 'нет класса');
+
+// Отказ буфера — то, что увидит всякий, кто открыл офис по туннелю.
+copied = null;
+setClipboard(async () => { throw new Error('нет доступа'); });
+globalThis.document.execCommand = () => false;
+UI.viewerKey('с');                        // и по-русски тоже
+await new Promise((r) => setTimeout(r, 0));
+check('отказ виден на кнопке', cbtn.classList.contains('fail') && /не вышло/.test(cbtn.textContent), cbtn.textContent);
 
 console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
 process.exit(failed ? 1 : 0);

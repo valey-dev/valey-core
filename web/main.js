@@ -30,12 +30,19 @@ const DEFAULT_ME = {
   style: 0, head: 'none', glasses: false, face: 'none', tall: 1, hands: 'none', name: tr('label.me'),
 };
 
+// Что лежит в localStorage, писали мы же — но не обязательно этой версией и
+// не обязательно целиком: одно битое значение на верхнем уровне модуля
+// роняло весь офис до первого кадра, без единой строки в консоли.
+const stored = (key, fallback) => {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+};
+
 const state = {
   agents: [], layout: null, sig: '', actors: new Map(), looks: new Map(),
   // vx/vy — накат скейта: скорость живёт между кадрами, у пешей ходьбы её нет
   player: { x: 120, y: 60, dir: 0, moving: false, skate: false, vx: 0, vy: 0, z: 0, vz: 0 }, spawned: false,
   cat: { x: 200, y: 60, tx: 200, ty: 60 },
-  me: normalizeLook({ ...DEFAULT_ME, ...JSON.parse(localStorage.getItem('valey-me') || '{}') }),
+  me: normalizeLook({ ...DEFAULT_ME, ...stored('valey-me', {}) }),
   visited: new Set(), waypoint: null, currentRoom: null,
   focus: null, dialogOpen: false, page: 'talk', typed: 0, notice: '', t: 0,
   prevStatus: new Map(),
@@ -191,7 +198,13 @@ UI.initUI(state, {
   }).then((r) => r.json()).then((r) => {
     // Забираем токен: офис только что стал общим, и без него эта же страница
     // на следующем запросе окажется гостем в собственном офисе.
-    if (r && r.owner) { OWNER = r.owner; localStorage.setItem('valey-owner', OWNER); }
+    if (r && r.owner) {
+      OWNER = r.owner; localStorage.setItem('valey-owner', OWNER);
+      // Поток помнит, кем открыт: сервер решает это один раз при подключении.
+      // Без переоткрытия старый поток после перехода в shared шёл гостевой
+      // проекцией — хозяин видел свой офис без реплик и файлов.
+      openStream();
+    }
     return r;
   }).catch((e) => ({ error: e.message })),
   answerPermit: (id, decision, message) => fetch('/api/permit/answer', {
@@ -237,6 +250,9 @@ knock().then((entered) => {
   UI.renderHud();
 }).catch(() => { /* не ответил — считаем гостем: молча дать больше прав хуже */
   state.owner = false;
+  // Поток открывается и здесь: до 4 сентября 2026 упавший whoami оставлял
+  // офис пустым навсегда, без объяснения, — снимки просто не приходили.
+  if (!es) openStream();
 });
 
 fetch('/api/settings').then((r) => r.json()).then((r) => {
@@ -427,6 +443,11 @@ function seePeople(list) {
 // Открытый раньше поток получал 403, и человек видел пустой офис до первой
 // перезагрузки. Найдено 30 августа 2026 первым же настоящим входом по ссылке.
 let es = null;
+// EventSource сам переподключается только после обрыва сети. Ответ 4xx/5xx —
+// офис перезапустился в другом режиме, пропуск отозван, сервер упал на
+// секунду — закрывает его насовсем, и страница молча замирает на последнем
+// снимке. Поэтому закрытый поток открывается заново, с растущей паузой.
+let streamRetry = 2000;
 function openStream() {
   if (es) es.close();
   const pass = OWNER ? 'owner=' + encodeURIComponent(OWNER)
@@ -439,7 +460,13 @@ function openStream() {
   es.addEventListener('people', (e) => {
     try { seePeople(JSON.parse(e.data)); } catch { /* мусор в кадре — пропускаем */ }
   });
-  es.onmessage = onSnapshot;
+  es.onmessage = (e) => { streamRetry = 2000; onSnapshot(e); };
+  es.onerror = () => {
+    if (es.readyState !== EventSource.CLOSED) return;   // сеть моргнула — браузер сам вернётся
+    const wait = streamRetry;
+    streamRetry = Math.min(streamRetry * 2, 30000);
+    setTimeout(() => { if (es.readyState === EventSource.CLOSED) openStream(); }, wait);
+  };
 }
 
 const onSnapshot = (e) => {
@@ -616,18 +643,20 @@ function onKey(e) {
   if (k === 'tab') return toggle('roster', UI.renderRoster, UI.closeRoster);
   // N снаружи показывает все заметки; внутри разговора та же клавиша их пишет
   if (k === 'n' || k === 'т') return toggle('notes', UI.renderNotes, UI.closeNotes);
-  // C открывает инвентарь на «на себе» — там, где эта клавиша была всегда;
-  // I открывает его же на той вкладке, где ты был в прошлый раз.
+  // C открывает инвентарь на «на себе» — там, где эта клавиша была всегда.
   if (k === 'c' || k === 'с') return toggle('bag', () => UI.renderBag('self'), UI.closeBag);
-  if (k === 'i' || k === 'ш') return toggle('bag', UI.renderBag, UI.closeBag);
   if (k === 'p' || k === 'з') return toggle('sky', UI.renderSky, UI.closeSky);
   if (k === 'u' || k === 'г') return toggle('skin', UI.renderSkin, UI.closeSkin);
   // I — пригласить. Кадры клавишу не задают, это выбор здесь: G занята
   // нарисованным «этажом команды», а из свободных букв I — единственная,
   // которая читается и по-русски (ш) как та же кнопка. Панель только у
-  // хозяина: гостю звать некого, офис не его.
-  if ((k === 'i' || k === 'ш') && state.owner !== false) {
-    return UI.inviteOpen() ? UI.closeInvite() : UI.openInvite();
+  // хозяина; гостю звать некого, и у него I открывает инвентарь на той
+  // вкладке, где он был. Две ветки претендовали на букву с 2 сентября 2026,
+  // инвентарь стоял выше и приглашение не открывалось ни у кого — а другого
+  // входа у панели нет.
+  if (k === 'i' || k === 'ш') {
+    if (state.owner !== false) return UI.inviteOpen() ? UI.closeInvite() : UI.openInvite();
+    return toggle('bag', UI.renderBag, UI.closeBag);
   }
   // H — вернуть отложенный пейджер. Не E: она в офисе равна ПРОБЕЛу, и
   // «перезвоню» с возвратом на одну клавишу были бы разговором с агентом.
@@ -1144,6 +1173,10 @@ function closeAll() {
   if (!document.getElementById('sky').hidden) return UI.closeSky();
   if (!document.getElementById('skin').hidden) return UI.closeSkin();
   if (!document.getElementById('notes').hidden) return UI.closeNotes();
+  // Приглашение стояло в panelsOpen() и не стояло здесь: панель держала офис,
+  // а Escape проваливался мимо неё в закрытие диалога и выглядел сломанным.
+  // Закрыть её можно было только крестиком — у него свой обработчик.
+  if (UI.inviteOpen()) return UI.closeInvite();
   if (first('esc')) return;
   state.dialogOpen = false; state.focus = null; state.notice = ''; UI.closeDialog();
 }

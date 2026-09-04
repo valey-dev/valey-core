@@ -264,6 +264,39 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .orow b{font-weight:normal; color:var(--ink)}
 .orow span{flex:1; font-size:11px; color:var(--muted)}
 .orow i{font-style:normal; font-size:11px; color:var(--ink-dim)}
+
+/* Вкладка «дерево»: три колонки по ярусам на одной сетке, рёбра — SVG поверх
+   неё по настоящей геометрии кнопок. Тусклый узел — не «купите», а имя тарифа. */
+.tbody{gap:10px}
+.tcols,.tree{display:grid; grid-template-columns:1fr 36px 1fr 36px 1fr}
+.tcol:nth-child(2){grid-column:3} .tcol:nth-child(3){grid-column:5}
+.tcol b{display:block; font:bold 10px "JetBrains Mono", "Courier New",monospace; letter-spacing:.08em; color:var(--muted)}
+.tcol.own b{color:var(--accent)}
+.tcol span{font-size:9px; color:var(--muted-dim)}
+.tree{position:relative; grid-auto-rows:28px; row-gap:6px}
+.tedges{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
+.tedges path{fill:none; stroke:var(--frame-dim); stroke-width:2}
+.tedges path.lit{stroke:var(--accent)}
+.tnode{position:relative; display:flex; align-items:center; gap:6px; padding:0 6px; height:28px; min-width:0;
+  background:var(--bg-deep); border:1px solid var(--frame); color:var(--ink); cursor:pointer; text-align:left;
+  font:11px "JetBrains Mono", "Courier New",monospace}
+.tnode span{flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis}
+.tnode em{font-style:normal; font-size:9px; color:var(--warn)}
+.tnode.floor em, .tnode.room em{color:var(--muted)}
+.tnode.office, .tnode.floor, .tnode.room{border-color:var(--frame-dim); color:var(--muted)}
+.tnode.office .tico, .tnode.floor .tico, .tnode.room .tico{opacity:.4}
+.tnode.ghost{background:none; border:1px dashed var(--frame-dim); color:var(--muted)}
+.tnode:hover{background:var(--wood)}
+.tnode.on{background:var(--wood); border:2px solid var(--accent); padding:0 5px; color:var(--ink); font-weight:bold}
+.tico{width:16px; height:16px; flex:none;
+  background:conic-gradient(var(--c) 0 25%, color-mix(in srgb, var(--c) 55%, black) 25% 50%,
+    var(--c) 50% 75%, color-mix(in srgb, var(--c) 55%, black) 75%)}
+.lcard{background:var(--bg-deep); border:1px solid var(--frame-dim); padding:10px 12px;
+  display:flex; flex-direction:column; gap:8px; font-size:11px; color:var(--ink)}
+.lcard p{margin:0; line-height:1.4}
+.lhead{display:flex; justify-content:space-between; align-items:baseline; gap:8px}
+.lhead b{color:var(--warn); font-size:13px}
+.lhead span{color:var(--muted); font-size:11px; text-align:right}
 .dbody{display:flex; gap:18px; padding:14px; flex-wrap:wrap}
 #me{image-rendering:pixelated; border:2px solid var(--frame); width:108px; height:129px}
 .rows{flex:1; min-width:240px}
