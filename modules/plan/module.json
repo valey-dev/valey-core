@@ -1,0 +1,7 @@
+{
+  "id": "plan",
+  "name": { "ru": "План офиса", "en": "Office plan" },
+  "tier": "core",
+  "client": "client.js",
+  "style": "style.css"
+}
