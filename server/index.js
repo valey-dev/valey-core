@@ -1,17 +1,19 @@
 // Tiny zero-dependency bridge: static files + SSE stream of the office state.
 import http from 'node:http';
+import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { snapshot, fileAllowed, conversation } from './agents.js';
+import { snapshot, fileOwners, conversation } from './agents.js';
 import { realWeather, forgetWeather, geocode } from './weather.js';
 import { getSettings, patchSettings, publicSettings, ownerToken } from './settings.js';
 import { deliver, deliveryStatus, isBusy, MODES } from './deliver.js';
 import { releaseNudge } from './release.js';
 import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff } from './modules.js';
-import { check as checkNetwork, newToken } from './network.js';
+import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
+import { MIME, fileType, fileHeaders } from './files.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const WEB = path.join(ROOT, 'web');
@@ -19,20 +21,19 @@ const MODS = path.join(ROOT, 'modules');
 const PORT = Number(process.env.PORT || 5177);
 const POLL_MS = 2500;
 
-const MIME = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif', '.svg': 'image/svg+xml', '.webp': 'image/webp',
-  '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8',
-};
-
 // Версия офиса — из своего package.json, а не строкой в интерфейсе: её
 // показывает табличка на титульном экране, и в релизном ролике она должна
 // совпадать с тегом.
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 
 let last = { now: 0, agents: [], version: VERSION };
+
+// Страховка от одной пропущенной ошибки. Обработчик ниже завёрнут в try, но
+// промис, брошенный без await, туда не попадает — а без этой строки Node
+// гасит процесс, и офис, к которому подключены вкладки, просто исчезает.
+process.on('unhandledRejection', (err) => {
+  console.error('[unhandled]', (err && err.stack) || err);
+});
 // Комната -> каталог на диске. Единственный способ назвать каталог для /api/git:
 // клиент присылает ключ комнаты, который офис и так показывает на двери.
 const cwdOfProject = (project) => {
@@ -132,9 +133,6 @@ const safeInvite = (i) => ({
   id: i.id, name: i.name, from: i.from, at: i.at, usedAt: i.usedAt, used: !!i.usedAt,
 });
 
-const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
-const PROXIED = ['x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'forwarded'];
-
 async function isOwner(req) {
   const s = await getSettings();
   // Заголовок для обычных запросов, параметр — для потока. EventSource
@@ -157,8 +155,8 @@ async function isOwner(req) {
   //
   // Это не замена переключателю в shared, а страховка от того, что о нём
   // забудут: правильный порядок — сначала shared, потом туннель.
-  if (PROXIED.some((h) => req.headers[h])) return false;
-  return LOOPBACK.has(req.socket.remoteAddress);
+  if (proxied(req)) return false;
+  return isLocal(req);
 }
 
 // Гость — тот, кто вошёл по приглашению и держит выданный ему токен. От
@@ -265,15 +263,82 @@ async function tick() {
   setTimeout(tick, POLL_MS);
 }
 
-function send(res, code, body, type = 'application/json; charset=utf-8') {
-  res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' });
+function send(res, code, body, type = 'application/json; charset=utf-8', extra = {}) {
+  res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store', ...extra });
   res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
 }
 
-async function readBody(req) {
+// Ошибка тела — это ответ, а не падение: код и ключ уходят клиенту из
+// обёртки обработчика, и она же закрывает соединение, чтобы недочитанное тело
+// не висело в сокете.
+class BodyError extends Error {
+  constructor(code, key, message) { super(message); this.code = code; this.key = key; }
+}
+
+// Потолок на тело. До 3 сентября 2026 его не было ни у одной ручки, включая
+// открытые до входа: гигабайт в /api/enter копился в памяти до конца.
+// Кадру со стенда нужно больше — он один и его шлёт только хозяин.
+const BODY_MAX = 64 * 1024;
+const SHOT_MAX = 16 * 1024 * 1024;
+
+async function readBody(req, max = BODY_MAX) {
   const chunks = [];
-  for await (const c of req) chunks.push(c);
+  let size = 0;
+  for await (const c of req) {
+    size += c.length;
+    if (size > max) throw new BodyError(413, 'err.tooBig', 'слишком длинно');
+    chunks.push(c);
+  }
   return Buffer.concat(chunks).toString('utf8');
+}
+
+// JSON-тело — только с заголовком application/json. Это не педантизм: запрос
+// с таким заголовком браузер не пошлёт с чужого сайта без preflight, а на
+// preflight офис не отвечает. Пустое тело — пустой объект, как и было.
+async function readJson(req, max = BODY_MAX) {
+  const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  if (type !== 'application/json') throw new BodyError(415, 'err.notJson', 'нужен application/json');
+  const raw = await readBody(req, max);
+  if (!raw.trim()) return {};
+  let b;
+  try { b = JSON.parse(raw); } catch { throw new BodyError(400, 'err.badJson', 'не разобрать'); }
+  if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BodyError(400, 'err.badJson', 'ожидался объект');
+  return b;
+}
+
+// ------------------------------------------------------------ чужая вкладка
+// Всё с петли считается хозяйским (см. isOwner), и это доверие достаётся любой
+// вкладке в том же браузере: страница чужого сайта шлёт POST на 127.0.0.1:5177,
+// и сокет — петля. До 3 сентября 2026 такой POST в /api/settings менял токен
+// хозяина и режим доставки, а /api/task с deliver запускал claude --resume
+// с bypassPermissions. Два признака, оба ставит браузер и ни один нельзя
+// подделать из скрипта:
+//  - Origin и Sec-Fetch-Site: откуда пришёл запрос. Своя страница — тот же хост.
+//  - Host: к кому обращались. DNS rebinding резолвит чужое имя в 127.0.0.1, и
+//    тогда Origin совпадает с Host, зато Host — не наш.
+// Без Origin и без Sec-Fetch-Site приходят curl, тесты и EventSource: это не
+// браузерная вкладка, и здесь им верят.
+const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?$/i;
+
+function hostOk(req) {
+  // Через посредника имя хоста чужое по определению — туннель приходит со
+  // своим публичным именем, и его запросы уже спросил о токене сетевой гейт.
+  // Снаружи хост — адрес этой машины в чьей-то сети, его не перечислить.
+  if (!isLocal(req)) return true;
+  return LOCAL_HOST.test(req.headers.host || '');
+}
+
+function crossSite(req) {
+  if (String(req.headers['sec-fetch-site'] || '').toLowerCase() === 'cross-site') return true;
+  const origin = req.headers.origin;
+  if (!origin) return false;
+  if (origin === 'null') return true;
+  let from;
+  try { from = new URL(origin).host; } catch { return true; }
+  // Посредник, переписывающий Host, обязан оставить настоящий в
+  // X-Forwarded-Host — иначе своя же страница из туннеля окажется чужой.
+  const host = req.headers['x-forwarded-host'] || req.headers.host || '';
+  return from.toLowerCase() !== String(host).split(',')[0].trim().toLowerCase();
 }
 
 // Через эти две двери входят, поэтому они открыты всегда: иначе гость не
@@ -282,7 +347,29 @@ async function readBody(req) {
 // иначе на пустом экране непонятно, чей это офис и что на нём проверяют.
 const OPEN = new Set(['/api/enter', '/api/whoami', '/api/stand']);
 
+// Одна ошибка — один ответ 500, а не мёртвый офис. До 3 сентября 2026 битый
+// JSON в /api/enter — ручке, открытой до входа, — ронял процесс вместе со
+// всеми вкладками, которые его слушали.
 const server = http.createServer(async (req, res) => {
+  try {
+    await handle(req, res);
+  } catch (e) {
+    if (e instanceof BodyError) {
+      if (!res.headersSent) {
+        res.setHeader('connection', 'close');
+        send(res, e.code, { error: e.message, errorKey: e.key });
+      }
+      return;
+    }
+    console.error('[http]', req.method, req.url, (e && e.stack) || e);
+    try {
+      if (!res.headersSent) send(res, 500, { error: 'внутренняя ошибка', errorKey: 'err.internal' });
+      else res.end();
+    } catch { /* сокет уже закрыт */ }
+  }
+});
+
+async function handle(req, res) {
   const url = new URL(req.url, 'http://localhost');
 
   // Первый вопрос — не «кто вы», а «откуда». Гейт ниже решает, пускать ли
@@ -306,6 +393,15 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(302, { location: url.pathname + (url.search || '') });
       return res.end();
     }
+  }
+
+  // Чужое имя хоста на петле — rebinding. Отвечаем как закрытый офис: 404,
+  // сканеру незачем знать, что тут кто-то живёт.
+  if (!hostOk(req)) return send(res, 404, { error: 'not found', errorKey: 'err.notFound' });
+  // Чужая вкладка меняет состояние только через не-GET: GET она и так не
+  // прочитает, тот же origin ей не отдаст ответ.
+  if (req.method !== 'GET' && req.method !== 'HEAD' && crossSite(req)) {
+    return send(res, 403, { error: 'запрос с чужой страницы', errorKey: 'err.crossSite' });
   }
 
   // Гейт стоит до всех обработчиков, а не в каждом: так новый эндпоинт
@@ -352,7 +448,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/access' && req.method === 'POST') {
     const guest = await guestOf(req);
     if (!guest) return send(res, 403, { error: 'просить может гость', errorKey: 'err.guestOnly' });
-    const b = JSON.parse((await readBody(req)) || '{}');
+    const b = await readJson(req);
     const agentId = String(b.agentId || '');
     if (!agentId) return send(res, 400, { error: 'нужен agentId' });
     asks.set(askKey(guest.guest, agentId), {
@@ -368,7 +464,7 @@ const server = http.createServer(async (req, res) => {
   // тишину, — иначе он будет думать, что не дошло.
   if (url.pathname === '/api/access/answer' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
-    const b = JSON.parse((await readBody(req)) || '{}');
+    const b = await readJson(req);
     const ask = [...asks.values()].find((a) => a.id === b.id);
     if (!ask) return send(res, 404, { error: 'этого запроса уже нет' });
     if (b.yes) {
@@ -385,7 +481,7 @@ const server = http.createServer(async (req, res) => {
   // длиннее выдачи, иначе им не пользуются.
   if (url.pathname === '/api/access/revoke' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
-    const b = JSON.parse((await readBody(req)) || '{}');
+    const b = await readJson(req);
     grants.get(String(b.guestId || ''))?.delete(String(b.agentId || ''));
     return send(res, 200, { ok: true, access: accessForOwner() });
   }
@@ -396,7 +492,7 @@ const server = http.createServer(async (req, res) => {
   // ссылке и 48 бит, по которым перебором не ходят.
   if (url.pathname === '/api/invite' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
-    const b = JSON.parse((await readBody(req)) || '{}');
+    const b = await readJson(req);
     const s = await getSettings();
     const code = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
     const invite = {
@@ -432,7 +528,7 @@ const server = http.createServer(async (req, res) => {
   // в действии нет — исчезает приглашение, а с ним и выданный по нему токен.
   if (url.pathname === '/api/invite/revoke' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
-    const b = JSON.parse((await readBody(req)) || '{}');
+    const b = await readJson(req);
     const s = await getSettings();
     const left = (s.access.invites || []).filter((i) => i.id !== b.id);
     await patchSettings({ access: { ...s.access, invites: left } });
@@ -451,7 +547,7 @@ const server = http.createServer(async (req, res) => {
   // не войти. Взамен выдаётся токен гостя, чтобы перезагрузка страницы не
   // выставляла человека за дверь.
   if (url.pathname === '/api/enter' && req.method === 'POST') {
-    const b = JSON.parse((await readBody(req)) || '{}');
+    const b = await readJson(req);
     const s = await getSettings();
     const invites = s.access.invites || [];
     const invite = invites.find((i) => i.code === String(b.code || ''));
@@ -528,7 +624,7 @@ const server = http.createServer(async (req, res) => {
   // Leave a note on the desk, or actually send it into the agent's chat.
   if (url.pathname === '/api/task' && req.method === 'POST') {
     try {
-      const { agentId, text, deliver: wantsDelivery, mode: wantedMode, resend } = JSON.parse(await readBody(req));
+      const { agentId, text, deliver: wantsDelivery, mode: wantedMode, resend } = await readJson(req);
       // Записку на стол может оставить кто угодно: её увидит хозяин, когда
       // вернётся, и сам решит. Отправка в чат — другое: она запускает
       // claude --resume в живой сессии, а с bypassPermissions это терминал.
@@ -567,6 +663,7 @@ const server = http.createServer(async (req, res) => {
       deliver(task, agent, mode).catch((e) => { task.state = 'failed'; task.error = e.message; });
       return send(res, 200, { ok: true, task, delivery: status });
     } catch (e) {
+      if (e instanceof BodyError) throw e;
       return send(res, 400, { error: e.message });
     }
   }
@@ -580,13 +677,14 @@ const server = http.createServer(async (req, res) => {
       // на весь офис, и менять их гостю нечего.
       if (!(await isOwner(req))) return forbidden(res);
       try {
-        const patch = JSON.parse(await readBody(req));
+        const patch = await readJson(req);
         const saved = await patchSettings(patch);
         forgetWeather();
         moduleOnPatch(patch);
         last.weather = await realWeather({ force: true });
         return send(res, 200, { ok: true, settings: publicSettings(saved), weather: last.weather });
       } catch (e) {
+        if (e instanceof BodyError) throw e;
         return send(res, 400, { error: e.message });
       }
     }
@@ -610,7 +708,7 @@ const server = http.createServer(async (req, res) => {
     // Кадр пишется файлом на диск хозяина. Гость может снять экран своим
     // браузером — но не класть картинки в чужую папку.
     if (!(await isOwner(req))) return forbidden(res);
-    const body = await readBody(req);
+    const body = await readBody(req, SHOT_MAX);
     const b64 = body.replace(/^data:image\/png;base64,/, '');
     const dir = path.join(ROOT, '.shots');
     await fsp.mkdir(dir, { recursive: true });
@@ -622,13 +720,21 @@ const server = http.createServer(async (req, res) => {
   // Serve an artifact, but only files that actually appeared in a transcript.
   if (url.pathname === '/api/file') {
     const p = url.searchParams.get('path') || '';
-    if (!fileAllowed(p, last)) return send(res, 403, { error: 'not an agent artifact' });
+    const owners = fileOwners(p, last);
+    if (!owners.length) return send(res, 403, { error: 'not an agent artifact' });
+    // Файл принадлежит разговору: гостю он открыт ровно тогда, когда открыт
+    // разговор, — тем же согласием, что и /api/chat. До 3 сентября 2026 тут
+    // проверялся только сам список, и гость с любым пропуском читал всё, что
+    // агент когда-либо открывал — включая Read по .env, если угадать путь.
+    const guest = await guestOf(req);
+    if (guest && !owners.some((id) => granted(guest.guest, id))) {
+      return send(res, 403, { error: 'этот разговор не открыт', errorKey: 'err.notGranted' });
+    }
     try {
       const st = await fsp.stat(p);
       if (st.size > 8 * 1024 * 1024) return send(res, 413, { error: 'too big' });
-      const ext = path.extname(p).toLowerCase();
-      const type = MIME[ext] || 'text/plain; charset=utf-8';
-      return send(res, 200, await fsp.readFile(p), type);
+      // Показать, но не исполнить: html и svg уходят вложением, см. files.js.
+      return send(res, 200, await fsp.readFile(p), fileType(p), fileHeaders(p));
     } catch {
       return send(res, 404, { error: 'gone' });
     }
@@ -661,7 +767,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/stand/toggle') {
     if (!process.env.VALEY_STAND) return send(res, 404, { error: 'стенда нет' });
     if (!(await isOwner(req))) return forbidden(res);
-    const body = JSON.parse((await readBody(req)) || '{}');
+    const body = await readJson(req);
     if (!setModuleOff(body.id, !!body.off)) return send(res, 404, { error: 'нет такого модуля' });
     return send(res, 200, { ok: true, all: moduleAll() });
   }
@@ -697,7 +803,7 @@ const server = http.createServer(async (req, res) => {
   } catch {
     return send(res, 404, 'not found', 'text/plain');
   }
-});
+}
 
 // Куда слушать. По умолчанию петля: до 30 августа 2026 хост не указывался
 // вообще, а это `0.0.0.0` — офис отвечал всей сети Wi-Fi без единой проверки.

@@ -604,8 +604,16 @@ export function conversation(sessionId) {
   return cache.get(sessionId)?.st?.recent || [];
 }
 
+// Чьи это файлы: id агентов, в чьём транскрипте путь появился. Файл принадлежит
+// разговору, и открывать его гостю можно ровно тогда, когда открыт разговор.
+export function fileOwners(p, snap) {
+  return (snap.agents || [])
+    .filter((a) => a.files.some((f) => f.path === p) || a.artifacts.some((f) => f.path === p))
+    .map((a) => a.id);
+}
+
 export function fileAllowed(p, snap) {
-  return snap.agents.some((a) => a.files.some((f) => f.path === p) || a.artifacts.some((f) => f.path === p));
+  return fileOwners(p, snap).length > 0;
 }
 
 export { fs, inferRole, describeTool, ROLES, ROLE_WINDOW_MS, ROLE_STALE_MS };
