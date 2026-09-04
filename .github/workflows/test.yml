@@ -40,6 +40,13 @@ jobs:
           done
       - name: tests
         run: npm test
+      # Node 20 и 22 сами узнают модуль по синтаксису, Node 18 — нет, и стенд
+      # загрузчика модулей падал только там. Флаг гасит это определение и на
+      # свежих версиях: подставной модуль без своего package.json ловится
+      # трижды, а не один раз в самой старой колонке.
+      - name: tests, without module detection
+        if: matrix.node != '18'
+        run: node --no-experimental-detect-module tools/run-tests.mjs
       # Сухой прогон выпуска: он читает историю и package.json, и ломается
       # молча — например, от версии, которую не разобрать. Дешевле проверить.
       - name: release dry run
