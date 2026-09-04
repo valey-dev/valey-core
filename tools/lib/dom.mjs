@@ -17,7 +17,7 @@
 export const noopCtx = () => ({
   imageSmoothingEnabled: false, fillStyle: '', font: '', textAlign: '', globalAlpha: 1,
   fillRect() {}, clearRect() {}, strokeRect() {},
-  save() {}, restore() {}, scale() {}, translate() {}, rotate() {},
+  save() {}, restore() {}, scale() {}, translate() {}, rotate() {}, setTransform() {},
   beginPath() {}, closePath() {}, moveTo() {}, lineTo() {}, arc() {}, ellipse() {},
   fill() {}, stroke() {}, fillText() {}, drawImage() {},
   measureText: () => ({ width: 0 }),

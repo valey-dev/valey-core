@@ -1,85 +1,50 @@
 // node modules/plan/test-keys.mjs — клавиши плана офиса.
 //
-// DOM подставной, как и в остальных клавиатурных стендах: проверяется не
-// вёрстка, а фокус — на какой комнате он встаёт при открытии, куда ходит
-// стрелками по сетке и кого подсвечивает Enter. Планировка настоящая, из
-// buildLayout: ходьба по плану — это ходьба по её геометрии, и подставная
+// Проверяется не вёрстка, а фокус: на какой комнате он встаёт при открытии,
+// куда ходит стрелками по сетке и кого выбирает Enter. Планировка настоящая,
+// из buildLayout: ходьба по плану — это ходьба по её геометрии, и подставная
 // сетка проверяла бы стенд, а не модуль.
+//
+// DOM общий, из tools/lib/dom.mjs. Своя машинка здесь была, и прожила ровно до
+// первого слияния с main: там шесть копий уже свели в одну, и седьмая, приехав
+// из ветки, вернула бы ту же беду — стенды расходятся не подписью узла, а тем,
+// что считают правдой. Местного тут осталось только то, чего общий шим не
+// знает и знать не должен: холст плана и полотно, на которое он кладёт кнопки
+// комнат.
+import { node, installDom } from '../../tools/lib/dom.mjs';
 
-function node(tag = 'DIV') {
-  const classes = new Set();
-  const kids = [];
-  const n = {
-    tagName: tag, hidden: false, textContent: '', title: '', width: 0, height: 0,
-    dataset: {}, style: {}, clicked: 0, children: kids,
-    classList: {
-      add: (c) => classes.add(c), remove: (c) => classes.delete(c),
-      contains: (c) => classes.has(c),
-      toggle: (c, on) => (on === undefined ? (classes.has(c) ? classes.delete(c) : classes.add(c)) : (on ? classes.add(c) : classes.delete(c))),
+// Полотно карты. Кнопки комнат живут поверх холста, и модуль их пересобирает
+// на каждую смену планировки — значит appendChild должен правда складывать, а
+// remove у сложенного правда убирать. Общий узел этого не умеет и не обязан:
+// это единственное место в офисе, где список детей имеет значение.
+function makeMap() {
+  const cells = [];
+  return node('planmap', {
+    id: 'planmap',
+    appendChild(b) {
+      b.remove = () => { const i = cells.indexOf(b); if (i >= 0) cells.splice(i, 1); };
+      cells.push(b);
+      return b;
     },
-    has: (c) => classes.has(c),
-    appendChild(k) { kids.push(k); k.parent = n; return k; },
-    remove() { if (n.parent) n.parent.children.splice(n.parent.children.indexOf(n), 1); },
-    click() { n.clicked += 1; if (n.onclick) n.onclick(); },
-    scrollIntoView() {},
-    getContext: () => ctx,
-    querySelector: (sel) => n.querySelectorAll(sel)[0] || null,
-    querySelectorAll: (sel) => {
-      const cls = sel.startsWith('.') ? sel.slice(1) : null;
-      const id = sel.startsWith('#') ? sel.slice(1) : null;
-      const out = [];
-      for (const k of kids) {
-        if ((cls && k.has(cls)) || (id && k.id === id)) out.push(k);
-        out.push(...k.querySelectorAll(sel));
-      }
-      return out;
-    },
-    set className(v) { classes.clear(); v.split(' ').filter(Boolean).forEach((c) => classes.add(c)); },
-    // Разметка панели приходит строкой; узлы с id и классом из неё заводятся
-    // плоским списком — модуль ищет их по id, а вложенность ему не важна.
-    get innerHTML() { return html; },
-    set innerHTML(v) {
-      html = v; kids.length = 0;
-      for (const m of v.matchAll(/<(\w+)([^>]*)>/g)) {
-        const id = (m[2].match(/\sid="([^"]+)"/) || [])[1];
-        const cls = (m[2].match(/\sclass="([^"]+)"/) || [])[1];
-        if (!id && !cls) continue;
-        const k = node(m[1].toUpperCase());
-        if (id) k.id = id;
-        if (cls) k.className = cls;
-        n.appendChild(k);
-      }
-    },
-  };
-  let html = '';
-  return n;
+    querySelectorAll: (sel) => (sel === '.plancell' ? cells.slice() : []),
+    cells,
+  });
 }
 
-// Холст рисуется по-настоящему, но смотреть на него здесь некому: контекст
-// принимает любой вызов и любое свойство.
-const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => (t[k] = v, true) });
+const map = makeMap();
+const canvas = node('', { id: 'plancanvas', tagName: 'CANVAS' });
+const detail = node('plandetail', { id: 'plandetail' });
+const count = node('', { id: 'plancount', tagName: 'I' });
+// Тосты ядра: toast() считает детей, поэтому список должен существовать.
+const toasts = node('', { id: 'toasts', children: [], appendChild() {} });
 
-const body = node('BODY');
-// Модуль ищет свои узлы через document.querySelector по id: панель висит на
-// body, значит искать надо по всему дереву от него.
-globalThis.document = {
-  body,
-  documentElement: node('HTML'),
-  createElement: (tag) => node(tag.toUpperCase()),
-  querySelector: (sel) => body.querySelector(sel),
-  querySelectorAll: (sel) => body.querySelectorAll(sel),
-  addEventListener: () => {},
-  getElementById: (id) => body.querySelector('#' + id),
-};
-Object.assign(document.documentElement, { style: { setProperty() {}, removeProperty() {} } });
-Object.assign(body, { style: { setProperty() {}, removeProperty() {} } });
-// тосты ядра живут в #toasts: «провожу» из плана падает без него
-body.appendChild(Object.assign(node('DIV'), { id: 'toasts' }));
-globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
-globalThis.window = globalThis;
-globalThis.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
-globalThis.addEventListener = () => {};
-globalThis.setTimeout = () => 0;
+installDom({
+  byId: {
+    planmap: map, plancanvas: canvas, plandetail: detail, plancount: count,
+    planx: node('', { id: 'planx' }), plango: node('plango', { id: 'plango' }),
+    toasts,
+  },
+});
 
 const { buildLayout } = await import('../../web/layout.js');
 const { addDict } = await import('../../web/i18n.js');
@@ -122,6 +87,7 @@ check('закрытый план стрелки не ест', P.planKey('ArrowDo
 check('K открывает план', hooks.key('k') === true && P.planOpen(), P.planOpen());
 check('и он держит экран', hooks.busy() === true, hooks.busy());
 check('фокус встаёт на ближайшую дверь — первую комнату', P.planFocus() === r0.key, P.planFocus());
+check('на каждую комнату положена своя кнопка', map.cells.length === L.rooms.length, `${map.cells.length} на ${L.rooms.length}`);
 
 // ------------------------------------------------------------------ сетка
 const row0 = L.projectRooms.filter((r) => r.y === r0.y).sort((a, b) => a.x - b.x);
@@ -162,9 +128,9 @@ check('в пустую комнату не ведёт', state.waypoint === null 
 hooks.esc();
 
 // Экран входа: под ним плана нет, там ещё нечему быть «здесь».
-body.classList.add('titling');
+document.body.classList.add('titling');
 check('на экране входа K не открывает план', hooks.key('k') === false && !P.planOpen(), P.planOpen());
-body.classList.remove('titling');
+document.body.classList.remove('titling');
 
 console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
 process.exit(failed ? 1 : 0);
