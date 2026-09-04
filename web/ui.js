@@ -26,6 +26,26 @@ export function initUI(state, callbacks) {
   // Один обработчик на всю панель просмотра, поставленный на входе: разметка
   // внутри неё перерисовывается постоянно, а он это переживает.
   bindCopyButtons();
+  // Панели с полем ввода закрывают себя сами. onKey в main.js возвращается на
+  // любом INPUT — так недописанное задание переживает случайный Escape, — и до
+  // closeAll() нажатие не доходит: пока фокус в поле, панель заперта. У обхода
+  // и лифта полей нет, им хватает closeAll(); карточка агента не в списке
+  // намеренно, там поле задания и Escape ему не хозяин.
+  selfClosing(el.sky, closeSky);
+  selfClosing(el.notes, closeNotes);
+  selfClosing(el.invite, closeInvite);
+  selfClosing(el.bag, closeBag);
+  selfClosing(el.skin, closeSkin);
+}
+
+// Обработчик вешается на саму панель, а не на поле: нутро панели переписывается
+// на каждый рендер, а она сама остаётся.
+function selfClosing(box, close) {
+  if (!box) return;
+  box.onkeydown = (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault(); e.stopPropagation(); close();
+  };
 }
 
 export const clean = (s) => (s || '').replace(/```[\s\S]*?```/g, tr('clean.code')).replace(/[*#`]/g, '').replace(/\n{3,}/g, '\n\n').trim();
@@ -1692,16 +1712,6 @@ export function closeInvite() { if (el.invite) el.invite.hidden = true; }
 
 export async function openInvite() {
   el.invite.hidden = false;
-  // Панель закрывает себя сама, как и редактор заметки. Поле «кого зовём»
-  // забирает клавиши себе: onKey в main.js возвращается на любом INPUT, и до
-  // closeAll Escape не доходит — а поле в этой панели первое, так что вся
-  // панель выглядела запертой. Обработчик висит на самой панели, а не на поле:
-  // renderInvite переписывает её нутро на каждый ответ сервера, а она сама
-  // остаётся.
-  el.invite.onkeydown = (e) => {
-    if (e.key !== 'Escape') return;
-    e.preventDefault(); e.stopPropagation(); closeInvite();
-  };
   await renderInvite();
 }
 
