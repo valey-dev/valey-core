@@ -5,30 +5,8 @@
 // DOM подставной, как и в остальных клавиатурных стендах: проверяется не
 // вёрстка, а состояние фокуса — куда он встаёт, как ходит и что нажимает.
 
-function node(cls = '', props = {}) {
-  const classes = new Set(cls.split(' ').filter(Boolean));
-  return {
-    disabled: false, textContent: '', innerHTML: '', scrollTop: 0,
-    clicked: 0, focused: 0, dataset: {}, tagName: 'BUTTON', title: '',
-    classList: {
-      add: (c) => classes.add(c),
-      remove: (c) => classes.delete(c),
-      contains: (c) => classes.has(c),
-      toggle: (c, on) => (on === undefined ? (classes.has(c) ? classes.delete(c) : classes.add(c)) : (on ? classes.add(c) : classes.delete(c))),
-    },
-    has: (c) => classes.has(c),
-    click() { this.clicked += 1; },
-    focus() { this.focused += 1; },
-    scrollIntoView() {},
-    querySelector: () => null,
-    querySelectorAll: () => [],
-    getContext: () => fakeCtx,
-    style: {},
-    ...props,
-  };
-}
+import { node, proxy, installDom } from '../../tools/lib/dom.mjs';
 
-const stub = node();
 let roster = null;
 let radioBox = null;
 let notes = null;
@@ -70,13 +48,6 @@ function makeRadio(waves = 2) {
     querySelectorAll: (sel) => (sel === '.rst' ? stations : ctl),
   };
 }
-
-// портрет в «переодеться» рисуется на канвасе — стенду хватит заглушки
-const fakeCtx = {
-  imageSmoothingEnabled: false, fillStyle: '',
-  fillRect() {}, save() {}, restore() {}, scale() {}, translate() {},
-  beginPath() {}, ellipse() {}, fill() {}, fillText() {},
-};
 
 // Слот одежды — строка с ◀ и ▶ внутри, а не кнопка. Стрелки в стороны должны
 // жать эти кнопки, а не перескакивать на соседний слот.
@@ -125,56 +96,19 @@ function makeNotes(n) {
   };
 }
 
-globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
-const withStyle = (n) => Object.assign(n, { style: { setProperty: () => {}, removeProperty: () => {} } });
 // initUI запоминает узлы один раз, поэтому за ним стоит постоянная обёртка, а
 // свежий подставной DOM подсовывается уже за ней
-const notesProxy = {
-  get hidden() { return notes.hidden; },
-  set hidden(v) { notes.hidden = v; },
-  set innerHTML(v) { notes.innerHTML = v; },
-  get innerHTML() { return notes.innerHTML; },
-  querySelector: (s2) => notes.querySelector(s2),
-  querySelectorAll: (s2) => notes.querySelectorAll(s2),
-};
-
-const proxy = (get) => ({
-  get hidden() { return get().hidden; },
-  set hidden(v) { get().hidden = v; },
-  set innerHTML(v) { get().innerHTML = v; },
-  get innerHTML() { return get().innerHTML; },
-  querySelector: (s2) => get().querySelector(s2),
-  querySelectorAll: (s2) => get().querySelectorAll(s2),
-});
+const notesProxy = proxy(() => notes);
 const dressProxy = proxy(() => dress);
 const skyProxy = proxy(() => sky);
 const skinProxy = proxy(() => skin);
 
-const rosterProxy = {
-  get hidden() { return roster.hidden; },
-  set hidden(v) { roster.hidden = v; },
-  set innerHTML(v) { roster.innerHTML = v; },
-  get innerHTML() { return roster.innerHTML; },
-  querySelector: (s2) => roster.querySelector(s2),
-  querySelectorAll: (s2) => roster.querySelectorAll(s2),
-};
+const rosterProxy = proxy(() => roster);
 
-globalThis.document = {
-  querySelector: (sel) => (sel === '#roster' ? rosterProxy
-    : sel === '#notes' ? notesProxy
-    : sel === '#dress' ? dressProxy
-    : sel === '#sky' ? skyProxy
-    : sel === '#skin' ? skinProxy
-    : stub),
-  querySelectorAll: () => [],
-  addEventListener: () => {},
-  documentElement: withStyle(node()),
-  body: withStyle(node()),
-  createElement: () => withStyle(node()),
-};
-globalThis.window = globalThis;
-globalThis.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
-globalThis.addEventListener = () => {};
+const { stub } = installDom({
+  byId: { roster: rosterProxy, notes: notesProxy, dress: dressProxy, sky: skyProxy, skin: skinProxy },
+  location: {},
+});
 
 const CORE = await import('../../web/ui.js');
 const UI = await import('./client.js');

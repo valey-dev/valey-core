@@ -4,30 +4,8 @@
 // DOM подставной, как и в остальных клавиатурных стендах: проверяется не
 // вёрстка, а состояние фокуса — куда он встаёт, как ходит и что нажимает.
 
-function node(cls = '', props = {}) {
-  const classes = new Set(cls.split(' ').filter(Boolean));
-  return {
-    disabled: false, textContent: '', innerHTML: '', scrollTop: 0,
-    clicked: 0, focused: 0, dataset: {}, tagName: 'BUTTON', title: '',
-    classList: {
-      add: (c) => classes.add(c),
-      remove: (c) => classes.delete(c),
-      contains: (c) => classes.has(c),
-      toggle: (c, on) => (on === undefined ? (classes.has(c) ? classes.delete(c) : classes.add(c)) : (on ? classes.add(c) : classes.delete(c))),
-    },
-    has: (c) => classes.has(c),
-    click() { this.clicked += 1; },
-    focus() { this.focused += 1; },
-    scrollIntoView() {},
-    querySelector: () => null,
-    querySelectorAll: () => [],
-    getContext: () => fakeCtx,
-    style: {},
-    ...props,
-  };
-}
+import { node, proxy, installDom } from './lib/dom.mjs';
 
-const stub = node();
 let roster = null;
 let notes = null;
 let bag = null;
@@ -42,15 +20,6 @@ function makeRoster(n) {
     querySelectorAll: (sel) => (sel === '.go' || sel === '[data-go]' ? gos : []),
   };
 }
-
-// Порядок такой же, как в разметке панели: ручки, волны, громкость, своя волна.
-
-// портрет в «переодеться» рисуется на канвасе — стенду хватит заглушки
-const fakeCtx = {
-  imageSmoothingEnabled: false, fillStyle: '',
-  fillRect() {}, save() {}, restore() {}, scale() {}, translate() {},
-  beginPath() {}, ellipse() {}, fill() {}, fillText() {},
-};
 
 // Слот одежды — строка с ◀ и ▶ внутри, а не кнопка. Стрелки в стороны должны
 // жать эти кнопки, а не перескакивать на соседний слот.
@@ -126,44 +95,12 @@ function makeNotes(n) {
   };
 }
 
-globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
-// Адрес страницы нужен подсказке про Redirect URI в радио — второй кусок,
-// который отложенный ответ probeDrm достаёт из панели уже после её отрисовки.
-globalThis.location = { origin: 'http://localhost:5177', hash: '', search: '' };
-const withStyle = (n) => Object.assign(n, { style: { setProperty: () => {}, removeProperty: () => {} } });
-// initUI запоминает узлы один раз, поэтому за ним стоит постоянная обёртка, а
-// свежий подставной DOM подсовывается уже за ней
-const notesProxy = {
-  get hidden() { return notes.hidden; },
-  set hidden(v) { notes.hidden = v; },
-  set innerHTML(v) { notes.innerHTML = v; },
-  get innerHTML() { return notes.innerHTML; },
-  querySelector: (s2) => notes.querySelector(s2),
-  querySelectorAll: (s2) => notes.querySelectorAll(s2),
-};
-
-const proxy = (get) => ({
-  get hidden() { return get().hidden; },
-  set hidden(v) { get().hidden = v; },
-  set innerHTML(v) { get().innerHTML = v; },
-  get innerHTML() { return get().innerHTML; },
-  querySelector: (s2) => get().querySelector(s2),
-  querySelectorAll: (s2) => get().querySelectorAll(s2),
-});
+const notesProxy = proxy(() => notes);
 const bagProxy = proxy(() => bag);
 let viewer = null;
 const skyProxy = proxy(() => sky);
 const skinProxy = proxy(() => skin);
-
-const rosterProxy = {
-  get hidden() { return roster.hidden; },
-  set hidden(v) { roster.hidden = v; },
-  set innerHTML(v) { roster.innerHTML = v; },
-  get innerHTML() { return roster.innerHTML; },
-  querySelector: (s2) => roster.querySelector(s2),
-  querySelectorAll: (s2) => roster.querySelectorAll(s2),
-};
-
+const rosterProxy = proxy(() => roster);
 const viewerProxy = proxy(() => viewer);
 
 // Правая панель дерева гита: её листают PgUp/PgDn, поэтому у неё должна быть
@@ -172,25 +109,15 @@ const pane = () => node('', { clientHeight: 400, scrollHeight: 4000 });
 const gcard = pane();
 const gcode = pane();
 
-globalThis.document = {
-  querySelector: (sel) => (sel === '#roster' ? rosterProxy
-    : sel === '#gcard' ? gcard
-    : sel === '#gcode' ? gcode
-    : sel === '#viewer' ? viewerProxy
-    : sel === '#notes' ? notesProxy
-    : sel === '#bag' ? bagProxy
-    : sel === '#sky' ? skyProxy
-    : sel === '#skin' ? skinProxy
-    : stub),
-  querySelectorAll: () => [],
-  addEventListener: () => {},
-  documentElement: withStyle(node()),
-  body: withStyle(node()),
-  createElement: () => withStyle(node()),
-};
-globalThis.window = globalThis;
-globalThis.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
-globalThis.addEventListener = () => {};
+// Адрес страницы нужен подсказке про Redirect URI в радио — второй кусок,
+// который отложенный ответ probeDrm достаёт из панели уже после её отрисовки.
+const { stub } = installDom({
+  byId: {
+    roster: rosterProxy, gcard, gcode, viewer: viewerProxy, notes: notesProxy,
+    bag: bagProxy, sky: skyProxy, skin: skinProxy,
+  },
+  location: {},
+});
 
 const UI = await import('../web/ui.js');
 

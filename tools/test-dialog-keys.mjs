@@ -2,47 +2,22 @@
 // DOM здесь подставной: проверяется не вёрстка, а состояние фокуса — куда
 // уходит стрелка вверх, что нажимает Enter и когда фокус со ссылки слетает.
 
-// --- минимальный DOM: ровно то, чего касается код карточки ---
-function node(id = '', cls = '') {
-  const classes = new Set(cls.split(' ').filter(Boolean));
-  return {
-    id,
-    disabled: false,
-    textContent: '',
-    scrollTop: 0,
-    clicked: 0,
-    classList: {
-      add: (c) => classes.add(c),
-      remove: (c) => classes.delete(c),
-      contains: (c) => classes.has(c),
-      toggle: (c, on) => (on === undefined ? (classes.has(c) ? classes.delete(c) : classes.add(c)) : (on ? classes.add(c) : classes.delete(c))),
-    },
-    has: (c) => classes.has(c),
-    click() { this.clicked += 1; },
-    scrollIntoView() {},
-  };
-}
-
-// портрет в карточке рисуется на канвасе — для стенда хватит заглушки
-const fakeCtx = {
-  imageSmoothingEnabled: false, fillStyle: '',
-  fillRect() {}, beginPath() {}, ellipse() {}, fill() {},
-  save() {}, translate() {}, scale() {}, restore() {},
-};
+// DOM подставной и общий с остальными стендами: tools/lib/dom.mjs.
+import { node, proxy, installDom } from './lib/dom.mjs';
 
 function makeDialog({ withLink = true, files = 0 } = {}) {
   const state = {
-    say: node('say', 'say'),
-    body: node('', 'body'),
-    link: withLink ? node('readAll', 'linky more') : null,
-    files: Array.from({ length: files }, () => node('', 'file')),
+    say: node('say', { id: 'say' }),
+    body: node('body'),
+    link: withLink ? node('linky more', { id: 'readAll' }) : null,
+    files: Array.from({ length: files }, () => node('file')),
   };
   state.buttons = ['talk', 'work', 'task', 'close'].map((p) => {
-    const b = node('', 'btn-' + p);
+    const b = node('btn-' + p);
     b.dataset = { p };
     return b;
   });
-  const pf = Object.assign(node('pf'), { getContext: () => fakeCtx });
+  const pf = node('', { id: 'pf' });
   state.dialog = {
     hidden: false,
     innerHTML: '',
@@ -62,35 +37,17 @@ function makeDialog({ withLink = true, files = 0 } = {}) {
 }
 
 let current = makeDialog();
-const stub = { querySelector: () => null, querySelectorAll: () => [] };
 
 // initUI запоминает узел карточки один раз, поэтому подсовываем ему постоянную
 // обёртку, а свежий DOM подставляем уже за ней
-const dialogProxy = {
-  hidden: false,
-  firstChild: {},
-  set innerHTML(v) { current.dialog.innerHTML = v; },
-  get innerHTML() { return current.dialog.innerHTML; },
-  querySelector: (sel) => current.dialog.querySelector(sel),
-  querySelectorAll: (sel) => current.dialog.querySelectorAll(sel),
-};
+const dialogProxy = Object.assign(proxy(() => current.dialog), { firstChild: {} });
 
-globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
-// theme.js на импорте красит :root, поэтому у корня должен быть свой style
-const withStyle = (n) => Object.assign(n, { style: { setProperty: () => {}, removeProperty: () => {} } });
-globalThis.document = {
-  // карточка ищет свои узлы и через document ($('#pf'), $('#readAll')), поэтому
-  // сначала заглядываем в неё, а уже потом отдаём пустышку
-  querySelector: (sel) => (sel === '#dialog' ? dialogProxy : (current.dialog.querySelector(sel) || stub)),
-  querySelectorAll: () => [],
-  addEventListener: () => {},
-  documentElement: withStyle(node()),
-  body: withStyle(node()),
-  createElement: () => withStyle(node()),
-};
-globalThis.window = globalThis;
-globalThis.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
-globalThis.addEventListener = () => {};
+// Карточка ищет свои узлы и через document ($('#pf'), $('#readAll')), поэтому
+// поиск сначала заглядывает в неё, а уже потом отдаёт пустышку.
+installDom({
+  byId: { dialog: dialogProxy },
+  find: (sel) => (sel === '#dialog' ? dialogProxy : current.dialog.querySelector(sel)),
+});
 
 const UI = await import('../web/ui.js');
 
@@ -138,8 +95,12 @@ check('домотал до верха — следующий вверх увод
 // --- 5. короткий ответ: ссылки нет, вверх просто мотает ---
 current = makeDialog({ withLink: false });
 UI.closeDialog();
+current.body.scrollTop = 200;
 UI.dialogUp();
-check('без ссылки вверх просто мотает', current.body.scrollTop < 0, current.body.scrollTop);
+// Раньше здесь стояло scrollTop < 0. В браузере прокрутка прижата к нулю, и
+// проверка проходила только потому, что подставной узел это позволял: она
+// закрепляла состояние, которого не бывает. Мотаем с промотанного места.
+check('без ссылки вверх просто мотает', current.body.scrollTop < 200, current.body.scrollTop);
 UI.pressDialogFocus();
 check('Enter без ссылки нажимает кнопку', current.buttons[0].clicked === 1, current.buttons.map((b) => b.clicked).join(','));
 
@@ -174,7 +135,7 @@ UI.renderDialog();                       // первая отрисовка ка
 UI.dialogUp();
 check('фокус встал на ссылку в настоящей карточке', current.link.has('focus'), 'focus нет');
 
-current.link = node('readAll', 'linky more');   // ответ дописали, узел переписан
+current.link = node('linky more', { id: 'readAll' });   // ответ дописали, узел переписан
 agent.lastSaid = 'начало ответа и продолжение';
 UI.renderDialog();
 check('после дописывания ответа подсветка на месте', current.link.has('focus'), 'focus слетел');
@@ -218,8 +179,10 @@ check('кнопки при этом не нажаты', current.buttons.every((b
 // --- 12. с верхней строки вверх мотает, а не выкидывает из списка ---
 UI.dialogUp();
 check('с первой строки фокус остаётся в списке', current.files[0].has('focus'), 'вылетел');
+current.body.scrollTop = 200;
 UI.dialogUp();
-check('выше первой строки — мотаем текст', current.files[0].has('focus') && current.body.scrollTop < 0, current.body.scrollTop);
+check('выше первой строки — мотаем текст, а фокус остаётся на строке',
+  current.files[0].has('focus') && current.body.scrollTop < 200, current.body.scrollTop);
 
 // --- 13. вниз с последней строки возвращает на кнопки ---
 current = makeDialog({ withLink: false, files: 2 });
