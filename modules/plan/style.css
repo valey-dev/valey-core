@@ -1,0 +1,43 @@
+/* План офиса — стили модуля. Каркас панели (.rwrap, .vhead) остаётся ядру:
+   рамка у панелей офиса одна на всех; здесь только то, что внутри. */
+#plan{position:fixed; inset:0; z-index:28; background:rgba(12,8,5,.8);
+  display:flex; align-items:center; justify-content:center}
+#plan[hidden]{display:none}
+/* Ширина делится на --ui там, где задаётся: vw внутри zoom меряется от окна и
+   потом умножается на масштаб, и ограничитель перестаёт ограничивать. */
+.planwrap{width:min(680px, calc(92vw / var(--ui, 1)))}
+.vhead #plancount{font-style:normal; font-weight:normal; color:var(--muted); margin-left:10px}
+.planbody{display:flex; min-height:0}
+.planmap{position:relative; flex:0 0 auto; padding:10px 0 8px 10px}
+.planmap canvas{image-rendering:pixelated; display:block; border:2px solid var(--frame-dim); background:#f1e2bc}
+/* Клетка комнаты — кнопка для мыши поверх холста. Сама она невидима: рамку
+   фокуса рисует холст, там же, где стены и люди, иначе они разъезжаются на
+   полпикселя при дробном масштабе. */
+.plancell{position:absolute; background:none; border:0; padding:0; margin:0; cursor:pointer; opacity:0}
+.plandetail{flex:1 1 auto; min-width:0; padding:12px 12px 8px; display:flex; flex-direction:column; gap:6px;
+  border-left:2px solid var(--wood-hi); overflow-y:auto}
+.plandetail h4{margin:0; font-size:13px; color:var(--accent)}
+.plandetail h4 small{display:block; color:var(--muted); font-weight:normal; font-size:11px; margin-top:2px}
+.plandetail .hint{margin:0; color:var(--muted); font-size:11px}
+.planrow{display:flex; gap:8px; align-items:flex-start; padding:5px 6px; border:1px solid transparent}
+.planrow.wait{border-color:var(--warn)}
+.plandot{flex:none; display:inline-block; width:10px; height:10px; margin-top:5px; border:1px solid #000; vertical-align:-1px}
+.planextra .plandot{width:8px; height:8px; margin:0 4px 0 0}
+.planextra{margin:0; font-size:11px; color:var(--muted)}
+.planrow .who{flex:1; min-width:0; font-size:11px; line-height:1.35}
+.planrow .who b{display:block; color:var(--ink); font-weight:700}
+.planrow .who i{font-style:normal; color:var(--muted)}
+.planrow.wait .who i{color:var(--ink-dim)}
+.plandetail .spacer{flex:1}
+/* Кнопка одна, и Enter нажимает её без фокуса — рамка на ней стоит всегда,
+   чтобы было видно, что Enter здесь есть чему нажать. */
+.plango{align-self:flex-start; background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:12px "JetBrains Mono", "Courier New", monospace; padding:5px 12px; cursor:pointer;
+  outline:2px solid var(--warn); outline-offset:-2px}
+.plango:hover{background:var(--wood-lit); color:var(--warn)}
+.planlegend{display:flex; gap:14px; flex-wrap:wrap; padding:6px 12px 8px; font-size:10.5px; color:var(--muted);
+  border-top:2px solid var(--wood-hi)}
+.planlegend s{text-decoration:none; display:inline-block; width:8px; height:8px; border:1px solid #000;
+  vertical-align:-1px; margin-right:5px}
+.planlegend s.free{background:#f1e2bc; border-style:dashed}
+.planlegend .k{margin-left:auto; color:var(--ink-dim)}
