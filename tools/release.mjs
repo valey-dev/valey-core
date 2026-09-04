@@ -7,12 +7,20 @@
 //   node tools/release.mjs patch --dry
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
-const git = (...a) => execFileSync('git', a, { encoding: 'utf8' }).trim();
+// Корень — от этого файла, а не от cwd: git и файлы обязаны смотреть в один
+// репозиторий. До 4 сентября 2026 git ходил в cwd, а package.json и CHANGELOG
+// брались отсюда: запуск из подкаталога переписывал файлы, а `git add` падал
+// на pathspec — версия поднята, раздел вписан, коммита нет, отката тоже.
+const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+
+const git = (...a) => execFileSync('git', ['-C', ROOT, ...a], { encoding: 'utf8' }).trim();
 // То же, но молча: до первого тега `git describe` кричит в stderr, и этот крик
 // не про ошибку, а про «тегов ещё нет».
 const gitQuiet = (...a) =>
-  execFileSync('git', a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  execFileSync('git', ['-C', ROOT, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
 const die = (m) => { console.error('release: ' + m); process.exit(1); };
 
 const kind = process.argv[2];
@@ -111,7 +119,7 @@ console.log(`пуш — отдельно и по твоему решению:\n 
 // уговаривать себя сесть.
 if (next.endsWith('.0')) {
   try {
-    const out = execFileSync(process.execPath, [new URL('script.mjs', import.meta.url).pathname, tag],
+    const out = execFileSync(process.execPath, [fileURLToPath(new URL('script.mjs', import.meta.url)), tag],
       { encoding: 'utf8' });
     console.log('\n' + out.trim());
     console.log(`\nМинорный релиз — значит ролик. Черновик уже лежит, править его\nлегче, чем начинать с нуля. Проход снимается одной командой.`);
