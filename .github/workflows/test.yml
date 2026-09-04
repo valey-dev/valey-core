@@ -29,8 +29,12 @@ jobs:
         node: ['18', '20', '22']
     name: node ${{ matrix.node }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # v5, а не v4: сами экшены крутятся на Node внутри раннера, и v4 сидят
+      # на Node 20, который GitHub гасит 23 сентября 2026. Три предупреждения
+      # в первом зелёном прогоне 4 сентября были ровно про это — не про наш
+      # код и не про матрицу ниже, она про то, на чём запускается офис.
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
       - name: syntax
