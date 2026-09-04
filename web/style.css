@@ -139,7 +139,21 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
   color:var(--ink); font:inherit; font-size:12px; line-height:18px;
   white-space:pre-wrap; word-break:break-all; max-height:200px; overflow:auto}
 .prow{display:flex; gap:8px; align-items:center; margin:8px 0 6px; flex-wrap:wrap}
+/* Одеваются здесь же, а не наследуют от `.acts`: кнопки ответа живут в теле
+   карточки, а тот селектор — про нижний ряд вкладок. Без своего правила
+   браузер рисует их системными, и карточка разъезжается с макетом на глазах. */
+.prow button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 10px; cursor:pointer;
+  display:inline-flex; align-items:center; gap:6px}
+.prow button:hover:not(:disabled){background:var(--wood-lit); color:#fff}
+.prow button:disabled{opacity:.45; cursor:not-allowed}
 .prow button.primary{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
+.prow button.primary:hover{color:var(--warn)}
+/* Фокус со стрелок — своей обводкой снаружи рамки, как в нижнем ряду: на
+   основной кнопке рамка уже жёлтая, и подсветить его цветом рамки нечем. */
+.prow button.focus{outline:2px solid var(--ink); outline-offset:2px; color:#fff}
+.prow button.focus.primary{outline-color:var(--warn); color:var(--warn)}
+.prow kbd{font:inherit; font-size:10px; color:var(--ink-dim); border:0; background:none; padding:0}
 /* «В терминале» — не отказ и не разрешение, а «спрошу не здесь»: отодвигается
    от тройки решений, чтобы не читаться четвёртым вариантом ответа. */
 .prow button[data-a="terminal"]{margin-left:auto}
