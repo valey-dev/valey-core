@@ -1,0 +1,57 @@
+# Что проверяет машина, пока правило «прогони перед пушем» проверяет человека.
+#
+# Матрица — не украшение: 3 сентября 2026 в ядро уехал `crypto.randomUUID()`
+# без импорта. Глобальный `crypto` появился в Node 19, а `engines` обещает 18 —
+# офис на нём не стартовал вовсе, и нашлось это ревью, а не прогоном. Здесь
+# такое падает до слияния.
+#
+# `npm test` — свой раннер, tools/run-tests.mjs: встроенный `node --test`
+# принимает каталоги на Node 20 и шаблоны на Node 22, и ни одного написания
+# нет на обеих. Проверено прогоном 4 сентября 2026, отсюда и свой обход.
+#
+# Ставить нечего: у проекта нет зависимостей, поэтому нет ни `npm ci`, ни кеша.
+# Модулей в этом чекауте только `radio` — то есть CI гоняет ровно бесплатную
+# сборку, ту, которую никто из нас на своей машине не запускает.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false        # 18 упал — 20 и 22 всё равно интересны
+      matrix:
+        node: ['18', '20', '22']
+    name: node ${{ matrix.node }}
+    steps:
+      # v5, а не v4: сами экшены крутятся на Node внутри раннера, и v4 сидят
+      # на Node 20, который GitHub гасит 23 сентября 2026. Три предупреждения
+      # в первом зелёном прогоне 4 сентября были ровно про это — не про наш
+      # код и не про матрицу ниже, она про то, на чём запускается офис.
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+      - name: syntax
+        run: |
+          for f in server/*.js web/*.js modules/*/*.js tools/*.mjs tools/lib/*.mjs; do
+            node --check "$f" || exit 1
+          done
+      - name: tests
+        run: npm test
+      # Node 20 и 22 сами узнают модуль по синтаксису, Node 18 — нет, и стенд
+      # загрузчика модулей падал только там. Флаг гасит это определение и на
+      # свежих версиях: подставной модуль без своего package.json ловится
+      # трижды, а не один раз в самой старой колонке.
+      - name: tests, without module detection
+        if: matrix.node != '18'
+        run: node --no-experimental-detect-module tools/run-tests.mjs
+      # Сухой прогон выпуска: он читает историю и package.json, и ломается
+      # молча — например, от версии, которую не разобрать. Дешевле проверить.
+      - name: release dry run
+        run: node tools/release.mjs patch --dry

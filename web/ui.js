@@ -440,6 +440,7 @@ function typewriter() {
 
 export function closeDialog() {
   el.dialog.hidden = true; dialogKey = ''; armedNote = 0; btnIndex = 0; linkFocused = false; fileIdx = -1;
+  clearInterval(S.tw);   // машинка дописывала бы реплику в закрытую карточку
 }
 
 // ---- arrows walk along the bottom row, Enter presses ----
@@ -1396,7 +1397,7 @@ export function focusRing(nodeOf, selector, opts = {}) {
 }
 
 const skyRing = focusRing(() => el.sky, '#skytoggle, #skyq, .skyhit, #skygeo');
-export function closeSky() { el.sky.hidden = true; skyRing.reset(); }
+export function closeSky() { el.sky.hidden = true; skyRing.reset(); clearTimeout(geoTimer); }
 export function skyKey(raw) { return skyRing.key(raw, el.sky && !el.sky.hidden); }
 
 // ------------------------------------------------------------- цвет офиса
@@ -1451,6 +1452,16 @@ export function closeInvite() { if (el.invite) el.invite.hidden = true; }
 
 export async function openInvite() {
   el.invite.hidden = false;
+  // Панель закрывает себя сама, как и редактор заметки. Поле «кого зовём»
+  // забирает клавиши себе: onKey в main.js возвращается на любом INPUT, и до
+  // closeAll Escape не доходит — а поле в этой панели первое, так что вся
+  // панель выглядела запертой. Обработчик висит на самой панели, а не на поле:
+  // renderInvite переписывает её нутро на каждый ответ сервера, а она сама
+  // остаётся.
+  el.invite.onkeydown = (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault(); e.stopPropagation(); closeInvite();
+  };
   await renderInvite();
 }
 

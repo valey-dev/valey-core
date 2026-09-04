@@ -9,6 +9,7 @@
 // стендах: проверяется строка, которую панель положила бы в документ.
 import { fileHeaders, fileType } from '../server/files.js';
 import { esc } from '../web/esc.js';
+import { node, installDom } from './lib/dom.mjs';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -44,39 +45,9 @@ const bare = (t) => t.replace(/"[^"]*"|'[^']*'/g, '""');
 const clean = (html) => !tags(html).some((t) => /^<script\b/i.test(t) || /\son\w+\s*=/i.test(bare(t)))
   && /&lt;script/.test(html);
 
-function node(props = {}) {
-  const classes = new Set();
-  return {
-    hidden: false, innerHTML: '', textContent: '', disabled: false, scrollTop: 0, dataset: {}, style: {},
-    classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c), contains: (c) => classes.has(c), toggle: () => {} },
-    click() {}, focus() {}, scrollIntoView() {},
-    querySelector: () => null, querySelectorAll: () => [],
-    getContext: () => fakeCtx,
-    ...props,
-  };
-}
-const fakeCtx = {
-  imageSmoothingEnabled: false, fillStyle: '',
-  fillRect() {}, save() {}, restore() {}, scale() {}, translate() {},
-  beginPath() {}, ellipse() {}, fill() {}, fillText() {}, clearRect() {},
-};
 const panels = {};
 for (const id of ['hud', 'dialog', 'viewer', 'roster', 'bag', 'toasts', 'sky', 'skin', 'lift', 'invite', 'notes']) panels[id] = node();
-const stub = node();
-const withStyle = (n) => Object.assign(n, { style: { setProperty: () => {}, removeProperty: () => {} } });
-globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
-globalThis.location = { origin: 'http://localhost:5177', hash: '', search: '' };
-globalThis.document = {
-  querySelector: (sel) => (sel.startsWith('#') && panels[sel.slice(1)]) || stub,
-  querySelectorAll: () => [],
-  addEventListener: () => {},
-  documentElement: withStyle(node()),
-  body: withStyle(node()),
-  createElement: () => withStyle(node()),
-};
-globalThis.window = globalThis;
-globalThis.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
-globalThis.addEventListener = () => {};
+installDom({ byId: panels, location: {} });
 
 const UI = await import('../web/ui.js');
 
