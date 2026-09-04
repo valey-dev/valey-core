@@ -357,7 +357,11 @@ function applyLine(st, line) {
 // Двуродные имена — Саша, Женя, Слава, Валя, Шура — закреплены за одним родом
 // решением, а не истиной: пол сессии знать неоткуда, и монетка, брошенная один
 // раз, лучше монетки, которую бросают в каждой фразе.
-const MALE = [
+//
+// Словарь с 4 сентября 2026 не один: паки выбираются в панели у человечка в
+// коридоре. Пак — это пара списков с родом, и всё остальное — раздача имён,
+// освобождение, номера на исчерпании — про пак не знает вовсе.
+const RU_MALE = [
   'Гоша', 'Тимка', 'Борис', 'Федя', 'Рома', 'Клим', 'Сеня', 'Гриша', 'Лёва', 'Пётр',
   'Юра', 'Стёпа', 'Кузя', 'Матвей', 'Игнат', 'Савва', 'Захар', 'Митя', 'Прохор', 'Ося',
   'Никита', 'Артём', 'Слава', 'Тихон', 'Costa', 'Ваня', 'Вова', 'Дима', 'Коля', 'Миша',
@@ -368,7 +372,7 @@ const MALE = [
   'Валера', 'Демид', 'Ерёма', 'Жора', 'Кеша', 'Лёня', 'Наум', 'Осип', 'Радик', 'Тёма',
   'Филя', 'Шурик', 'Ярик', 'Афоня', 'Ефрем', 'Трофим', 'Женя', 'Гаврик', 'Луша', 'Юзик',
 ];
-const FEMALE = [
+const RU_FEMALE = [
   'Марта', 'Люся', 'Ася', 'Нина', 'Дуся', 'Вера', 'Тоня', 'Зоя', 'Майя', 'Софа',
   'Рита', 'Ева', 'Лиза', 'Поля', 'Дина', 'Оля', 'Настя', 'Галя', 'Валя', 'Катя',
   'Юля', 'Инна', 'Мила', 'Аля', 'Аня', 'Даша', 'Маша', 'Наташа', 'Света', 'Таня',
@@ -379,22 +383,83 @@ const FEMALE = [
   'Феня', 'Циля', 'Клава', 'Броня', 'Веста', 'Дося', 'Ляля', 'Нюся', 'Рэя', 'Тина',
 ];
 
-// Словарь наружу — тесту, чтобы он проверял выданное, а не свою копию списка.
-export const NAME_POOL = [...MALE, ...FEMALE];
+// Английский пак. Регистр тот же, что у русского: не паспортные Robert и
+// Elizabeth, а то, как зовут за столом, — Bob и Betty. Иначе офис на двух
+// языках читается как два разных офиса.
+//
+// Двуродные — Sam, Alex, Charlie, Pat, Quinn — закреплены за мужским тем же
+// решением и по той же причине, что Женя и Слава в русском.
+const EN_MALE = [
+  'Pete', 'Gus', 'Sam', 'Max', 'Ed', 'Joe', 'Nick', 'Tom', 'Bill', 'Dave',
+  'Frank', 'Charlie', 'Andy', 'Bob', 'Mike', 'Steve', 'Jack', 'Harry', 'Alfie', 'Ollie',
+  'Archie', 'Freddie', 'Georgie', 'Bertie', 'Monty', 'Reggie', 'Stan', 'Wally', 'Rex', 'Hank',
+  'Chuck', 'Buddy', 'Duke', 'Earl', 'Jed', 'Cody', 'Wes', 'Chip', 'Skip', 'Buck',
+  'Dean', 'Kirk', 'Lance', 'Marty', 'Neil', 'Otis', 'Percy', 'Quinn', 'Rudy', 'Silas',
+  'Toby', 'Vince', 'Wade', 'Zeke', 'Abe', 'Barney', 'Cliff', 'Dexter', 'Elmer', 'Floyd',
+  'Gil', 'Hugo', 'Ike', 'Jasper', 'Karl', 'Leo', 'Milo', 'Ned', 'Oscar', 'Pat',
+  'Ralph', 'Roy', 'Seth', 'Theo', 'Vic', 'Walt', 'Ziggy', 'Angus', 'Boone', 'Caleb',
+  'Dale', 'Emmett', 'Finn', 'Grady', 'Homer', 'Ivan', 'Jonah', 'Lyle', 'Moe', 'Rusty',
+];
+const EN_FEMALE = [
+  'Sally', 'Ruby', 'Betty', 'Daisy', 'Ella', 'Flo', 'Gracie', 'Hattie', 'Ivy', 'June',
+  'Kitty', 'Lucy', 'Maggie', 'Nell', 'Opal', 'Pearl', 'Queenie', 'Rosie', 'Sadie', 'Tess',
+  'Una', 'Vera', 'Wanda', 'Winnie', 'Zelda', 'Abby', 'Bonnie', 'Cora', 'Dolly', 'Edie',
+  'Fern', 'Gwen', 'Hazel', 'Iris', 'Josie', 'Katie', 'Lottie', 'Mabel', 'Nora', 'Olive',
+  'Peggy', 'Polly', 'Rita', 'Susie', 'Trixie', 'Willa', 'Cleo', 'Dot', 'Elsie', 'Fay',
+  'Ginny', 'Hetty', 'Jenny', 'Lena', 'Milly', 'Ada', 'Birdie', 'Cissy', 'Della', 'Effie',
+  'Greta', 'Hilda', 'Isla', 'Janie', 'Lulu', 'Marge', 'Nan', 'Prue', 'Rhoda', 'Stella',
+  'Tilly', 'Wilma', 'Bess', 'Clara', 'Dixie', 'Etta', 'Nina', 'Vi', 'Fanny', 'Minnie',
+];
 
-const GENDER = new Map([...MALE.map((n) => [n, 'm']), ...FEMALE.map((n) => [n, 'f'])]);
 // Перемешаны, а не склеены подряд: иначе первые полсотни агентов на пустой
 // машине оказались бы сплошь мужчинами — имя выбирается от хеша, но соседи по
 // списку разбираются подряд, когда хеш попал в занятый кусок.
-const NAMES = MALE.flatMap((m, i) => (FEMALE[i] ? [m, FEMALE[i]] : [m]))
-  .concat(FEMALE.slice(MALE.length));
+const weave = (male, female) => male
+  .flatMap((m, i) => (female[i] ? [m, female[i]] : [m]))
+  .concat(female.slice(male.length));
+
+const pack = (male, female) => ({
+  pool: [...male, ...female],
+  names: weave(male, female),
+  gender: new Map([...male.map((n) => [n, 'm']), ...female.map((n) => [n, 'f'])]),
+});
+
+export const PACKS = {
+  ru: pack(RU_MALE, RU_FEMALE),
+  en: pack(EN_MALE, EN_FEMALE),
+};
+export const PACK_IDS = Object.keys(PACKS);
+const packOf = (id) => PACKS[id] || PACKS.ru;
+
+// Словарь наружу — тесту, чтобы он проверял выданное, а не свою копию списка.
+export const namePool = (id = 'ru') => packOf(id).pool.slice();
+// Образец для панели берётся из раздаточного порядка, а не из пула: пул
+// склеен мужскими и женскими подряд, и четыре первых имени в нём — четыре
+// мужика, что про словарь врёт.
+export const nameSample = (id = 'ru', n = 4) => packOf(id).names.slice(0, n);
+
+// Какой пак работает на самом деле. «auto» — идти за языком офиса: свежий офис
+// по-английски получает английские имена, и учить этому никого не надо.
+export const effectivePack = ({ namePack = 'auto', lang = 'ru' } = {}) =>
+  (PACKS[namePack] ? namePack : (PACKS[lang] ? lang : 'ru'));
 
 // «Ося 51» — то же имя, что «Ося»: номер приписан на исчерпании пула. Имена из
 // прежних версий словаря в карте не значатся, и для них остаётся старая догадка
 // по последней букве — врать она будет ровно там же, где врала всегда.
-export function genderOf(name = '') {
+//
+// Пак спрашивается первым, но не последним: на диске лежат имена, выданные
+// прежним паком, и «Пётр» обязан остаться мужчиной ровно до той секунды, пока
+// снимок не переименует офис. Иначе между сменой пака и следующим снимком
+// половина этажа меняет род.
+export function genderOf(name = '', id = 'ru') {
   const base = String(name).replace(/\s+\d+$/, '');
-  return GENDER.get(base) || (/[ая]$/.test(base) ? 'f' : 'm');
+  const here = packOf(id).gender.get(base);
+  if (here) return here;
+  for (const p of Object.values(PACKS)) {
+    const g = p.gender.get(base);
+    if (g) return g;
+  }
+  return /[ая]$/.test(base) ? 'f' : 'm';
 }
 
 export function hash(str) {
@@ -409,9 +474,10 @@ export function hash(str) {
 // Чистая часть распределителя: `saved` — что лежит на диске, `order` — сессии,
 // которым имя нужно, в порядке старта, `keep` — те, за кем имя остаётся. Всё
 // остальное живёт в nameRegistry, чтобы это можно было прогнать тестом.
-export function assignNames(saved, order, keep) {
+export function assignNames(saved, order, keep, packId = 'ru') {
+  const NAMES = packOf(packId).names;
   const names = {};
-  for (const [id, n] of Object.entries(saved)) if (keep.has(id)) names[id] = n;
+  for (const [sid, n] of Object.entries(saved)) if (keep.has(sid)) names[sid] = n;
   const taken = new Set(Object.values(names));
 
   // «Клим 97» — не имя, а след исчерпанного пула: так звали всех, кто пришёл
@@ -451,8 +517,29 @@ const sameNames = (a, b) => {
   return ka.length === kb.length && ka.every((k) => a[k] === b[k]);
 };
 
-async function nameRegistry(sessions) {
+// Порядок, в котором офис переименовывается целиком. Сначала все, у кого имя
+// уже есть, по возрастанию id, потом безымянные живые — и только так, потому
+// что этот же порядок берёт предпросмотр в панели. Разойдись они, и панель
+// обещала бы «Пётр станет Gus», а стал бы Pete: соврала бы ровно та строка,
+// ради которой её и показывают.
+const renameOrder = (names, order, keep) => [
+  ...Object.keys(names).filter((id) => keep.has(id)).sort(),
+  ...order.filter((id) => !names[id]),
+];
+
+// Как офис будет называться на этом паке. Считается по тому, что лежит на
+// диске, поэтому живые сессии без имени сюда не попадают — а спрашивают об
+// этой строке ровно про тех, кто уже стоит на этаже.
+export async function previewPack(packId) {
   const { names } = await getSettings();
+  const keep = new Set(Object.keys(names));
+  return assignNames({}, renameOrder(names, [], keep), keep, packId);
+}
+
+async function nameRegistry(sessions) {
+  const settings = await getSettings();
+  const { names } = settings;
+  const packId = effectivePack(settings);
 
   // Имя держится за сессией, пока на диске жив её транскрипт: `claude --resume`
   // возвращает тот же sessionId, и агент обязан вернуться собой, а не новым
@@ -475,9 +562,22 @@ async function nameRegistry(sessions) {
   const order = [...sessions]
     .sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0))
     .map((s) => s.sessionId);
-  const next = assignNames(names, order, keep);
 
-  if (!sameNames(next, names)) await patchSettings({ names: next });
+  // Пак сменили — офис переименовывается разом, с чистого листа: старые имена
+  // не переносятся, иначе половина этажа осталась бы в прежнем словаре, а это
+  // читается как поломка, а не как настройка. Обратно едет само — тот же
+  // sessionId по тому же паку даёт то же имя.
+  //
+  // Отметка namesPack на диске отвечает на вопрос «каким паком выданы имена,
+  // которые тут лежат». Без неё сервер не отличит «пак не трогали» от «пак
+  // сменили, пока офис не работал».
+  const renaming = settings.namesPack !== packId;
+  const next = renaming
+    ? assignNames({}, renameOrder(names, order, keep), keep, packId)
+    : assignNames(names, order, keep, packId);
+
+  if (renaming) await patchSettings({ names: next, namesPack: packId });
+  else if (!sameNames(next, names)) await patchSettings({ names: next });
   return next;
 }
 
@@ -539,6 +639,7 @@ export async function snapshot() {
   await Promise.all(sessions.map((s) => repoRoot(s.cwd)));
   await indexTranscripts();
   const names = await nameRegistry(sessions);
+  const namesPack = effectivePack(await getSettings());
   const seats = await seatRegistry(sessions);
   const agents = [];
 
@@ -563,7 +664,7 @@ export async function snapshot() {
       name: names[s.sessionId] || s.sessionId.slice(0, 6),
       // род едет со снимком: на странице от имени остаётся одна строка, а
       // «освободилась» и «повесила» ей нужны в двух местах
-      gender: genderOf(names[s.sessionId] || ''),
+      gender: genderOf(names[s.sessionId] || '', namesPack),
       project: projectOf(s),
       seat: seats[s.sessionId].i,
       cwd: s.cwd,

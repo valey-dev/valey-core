@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { snapshot, fileOwners, conversation } from './agents.js';
+import { snapshot, fileOwners, conversation, PACK_IDS, namePool, nameSample, effectivePack, previewPack } from './agents.js';
 import { realWeather, forgetWeather, geocode } from './weather.js';
 import { getSettings, patchSettings, publicSettings, ownerToken } from './settings.js';
 import { deliver, deliveryStatus, isBusy, MODES } from './deliver.js';
@@ -742,6 +742,20 @@ async function handle(req, res) {
 
   // Что из модулей доехало до этой сборки. Клиент по этому списку строит
   // импорты, поэтому список — единственное, что ядро о модулях знает.
+  // Паки имён — для панели у человечка в коридоре. Отдаётся не только список,
+  // но и то, как офис будет называться на каждом паке: панель обязана показать
+  // цену нажатия ДО нажатия, а посчитать её на странице нечем — словари живут
+  // здесь. Считается только когда панель открыли, а не потоком: на этаже это
+  // сотня строк, которые никому не нужны, пока никто не спросил.
+  if (url.pathname === '/api/names') {
+    const s = await getSettings();
+    const packs = [];
+    for (const id of PACK_IDS) {
+      packs.push({ id, size: namePool(id).length, sample: nameSample(id), names: await previewPack(id) });
+    }
+    return send(res, 200, { choice: s.namePack || 'auto', pack: effectivePack(s), packs });
+  }
+
   if (url.pathname === '/api/modules') return send(res, 200, moduleList());
 
   // Тестовый стенд. Пустой text значит «это обычный офис» — тогда клиент

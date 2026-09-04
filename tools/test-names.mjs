@@ -7,7 +7,11 @@
 // офис писал «Гоша освободилась» на четырнадцати именах из пятидесяти.
 //
 // Обе поломки тихие: имя с номером выглядит как имя, чужой род — как опечатка.
-import { assignNames, genderOf, NAME_POOL } from '../server/agents.js';
+// С 4 сентября 2026 словарь не один: проверка словаря идёт по каждому паку, а
+// не по одному «тому самому». Пак, у которого пул вдвое короче или в котором
+// половина имён без рода, — это не полпака, это офис, где каждый второй агент
+// зовётся с номером или «освободилась».
+import { assignNames, genderOf, namePool, PACK_IDS } from '../server/agents.js';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -18,11 +22,24 @@ const ok = (name, cond, got) => {
 const ids = (n, from = 0) => Array.from({ length: n }, (_, i) => `session-${from + i}`);
 const all = (arr) => new Set(arr);
 
-// ------------------------------------------------------------------ словарь
-const dup = NAME_POOL.filter((n, i) => NAME_POOL.indexOf(n) !== i);
-ok('в словаре нет повторов', dup.length === 0, dup);
-ok('у каждого имени есть род', NAME_POOL.every((n) => genderOf(n) === 'm' || genderOf(n) === 'f'));
-ok('словарь заметно больше прежних пятидесяти', NAME_POOL.length > 150, NAME_POOL.length);
+// Раздача проверяется на русском — на нём написаны все истории ниже.
+const NAME_POOL = namePool('ru');
+
+// ------------------------------------------------------------------ словари
+ok('паков больше одного', PACK_IDS.length > 1, PACK_IDS);
+for (const id of PACK_IDS) {
+  const pool = namePool(id);
+  const dup = pool.filter((n, i) => pool.indexOf(n) !== i);
+  ok(`${id}: в словаре нет повторов`, dup.length === 0, dup);
+  ok(`${id}: у каждого имени есть род`,
+    pool.every((n) => genderOf(n, id) === 'm' || genderOf(n, id) === 'f'));
+  ok(`${id}: словарь заметно больше прежних пятидесяти`, pool.length > 150, pool.length);
+}
+// Пул одного размера у всех паков — не придирка: имя выдаётся от хеша по
+// кругу, и офис, переехавший на короткий пак, упрётся в номера там, где на
+// длинном их не было.
+const sizes = PACK_IDS.map((id) => namePool(id).length);
+ok('паки сопоставимы по размеру', Math.max(...sizes) - Math.min(...sizes) < 30, sizes);
 
 // Ровно те имена, на которых врала догадка по последней букве.
 const wasWrong = ['Гоша', 'Тимка', 'Сеня', 'Гриша', 'Лёва', 'Стёпа', 'Кузя', 'Савва', 'Митя', 'Ося', 'Никита'];
@@ -90,6 +107,25 @@ NAME_POOL.forEach((n, i) => { packed['busy-' + i] = n; });
 packed['scarred'] = 'Клим 999';
 const noRoom = assignNames(packed, [], all(Object.keys(packed)));
 ok('на полном пуле номер остаётся на месте', noRoom['scarred'] === 'Клим 999', noRoom['scarred']);
+
+// ------------------------------------------------------- смена пака и обратно
+// На этом держится вся панель: строка в ней обещает, что вернёшь пак — вернутся
+// имена. Если бы не держалось, переключение было бы необратимым, и его просто
+// не нажали бы ни разу.
+const crowd = ids(12);
+const ru = assignNames({}, crowd, all(crowd), 'ru');
+const en = assignNames({}, crowd, all(crowd), 'en');
+ok('на другом паке офис зовётся иначе',
+  crowd.every((id) => ru[id] !== en[id]), { ru: ru[crowd[0]], en: en[crowd[0]] });
+ok('и именами этого пака',
+  Object.values(en).every((n) => namePool('en').includes(n)), Object.values(en).slice(0, 3));
+const back = assignNames({}, crowd, all(crowd), 'ru');
+ok('вернул пак — вернулись имена', JSON.stringify(back) === JSON.stringify(ru));
+ok('род едет вместе с паком',
+  genderOf(en[crowd[0]], 'en') === 'm' || genderOf(en[crowd[0]], 'en') === 'f');
+// Имена, выданные прежним паком, лежат на диске до следующего снимка, и род им
+// нужен ровно тот же: иначе между нажатием и снимком полэтажа меняет род.
+ok('чужому паку род прежнего имени всё равно известен', genderOf('Гоша', 'en') === 'm');
 
 console.log(bad ? `\nПЛОХО: ${bad}` : '\nвсё хорошо');
 process.exit(bad ? 1 : 0);
