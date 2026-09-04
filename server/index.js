@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { snapshot, fileOwners, conversation } from './agents.js';
 import { realWeather, forgetWeather, geocode } from './weather.js';
 import { getSettings, patchSettings, publicSettings, ownerToken } from './settings.js';
@@ -347,27 +347,48 @@ function crossSite(req) {
 // иначе на пустом экране непонятно, чей это офис и что на нём проверяют.
 const OPEN = new Set(['/api/enter', '/api/whoami', '/api/stand']);
 
-// Одна ошибка — один ответ 500, а не мёртвый офис. До 3 сентября 2026 битый
-// JSON в /api/enter — ручке, открытой до входа, — ронял процесс вместе со
-// всеми вкладками, которые его слушали.
-const server = http.createServer(async (req, res) => {
-  try {
-    await handle(req, res);
-  } catch (e) {
-    if (e instanceof BodyError) {
-      if (!res.headersSent) {
-        res.setHeader('connection', 'close');
-        send(res, e.code, { error: e.message, errorKey: e.key });
-      }
-      return;
-    }
-    console.error('[http]', req.method, req.url, (e && e.stack) || e);
+/**
+ * Обработчик запросов — отдельно от запуска.
+ *
+ * До 4 сентября 2026 файл слушал порт прямо на импорте, и стенду, чтобы
+ * спросить у маршрута один статус, приходилось поднимать процесс: спавн,
+ * ожидание порта, гашение. Пять таких стендов стоили полторы секунды прогона
+ * и умели проверять только то, что переживает HTTP. Теперь `npm start`
+ * зовёт start() внизу файла, а стенд берёт обработчик и вешает его на свой
+ * сервер в том же процессе.
+ *
+ * Одна ошибка — один ответ 500, а не мёртвый офис. До 3 сентября 2026 битый
+ * JSON в /api/enter — ручке, открытой до входа, — ронял процесс вместе со
+ * всеми вкладками, которые его слушали.
+ */
+export function createHandler() {
+  return async (req, res) => {
     try {
-      if (!res.headersSent) send(res, 500, { error: 'внутренняя ошибка', errorKey: 'err.internal' });
-      else res.end();
-    } catch { /* сокет уже закрыт */ }
-  }
-});
+      await handle(req, res);
+    } catch (e) {
+      if (e instanceof BodyError) {
+        if (!res.headersSent) {
+          res.setHeader('connection', 'close');
+          send(res, e.code, { error: e.message, errorKey: e.key });
+        }
+        return;
+      }
+      console.error('[http]', req.method, req.url, (e && e.stack) || e);
+      try {
+        if (!res.headersSent) send(res, 500, { error: 'внутренняя ошибка', errorKey: 'err.internal' });
+        else res.end();
+      } catch { /* сокет уже закрыт */ }
+    }
+  };
+}
+
+// Снимок офиса стенду взять неоткуда: он собирается из живых сессий этой
+// машины. Поэтому его можно положить руками — только для стендов, и только
+// пока такты не запущены.
+export function setSnapshot(s) {
+  last = { ...last, ...s };
+  return last;
+}
 
 async function handle(req, res) {
   const url = new URL(req.url, 'http://localhost');
@@ -805,31 +826,37 @@ async function handle(req, res) {
   }
 }
 
-// Куда слушать. По умолчанию петля: до 30 августа 2026 хост не указывался
-// вообще, а это `0.0.0.0` — офис отвечал всей сети Wi-Fi без единой проверки.
-// Открыть наружу можно, но только вместе с токеном: одно без другого и есть
-// та самая дыра.
-// Модули — раньше первого чтения настроек: их умолчания входят в кэш при
-// сборке, а кэш собирается один раз. До 4 сентября 2026 порядок был обратный,
-// и секция модуля появлялась в настройках только после первого сохранения —
-// клиент радио маскировал это через `|| {}`.
-const mods = await loadModules(ROOT);
-let boot = await getSettings();
-const EXTERNAL = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
-if (EXTERNAL && !(boot.network || {}).token) {
-  boot = await patchSettings({ network: { external: true, token: newToken() } });
-  console.log('Сетевой токен создан и записан в настройки офиса');
-}
-const HOST = process.env.HOST || (EXTERNAL ? '0.0.0.0' : '127.0.0.1');
+/**
+ * Поднять офис: модули, настройки, порт и такты.
+ *
+ * Куда слушать — по умолчанию петля: до 30 августа 2026 хост не указывался
+ * вообще, а это `0.0.0.0` — офис отвечал всей сети Wi-Fi без единой проверки.
+ * Открыть наружу можно, но только вместе с токеном: одно без другого и есть
+ * та самая дыра.
+ */
+export async function start({ port = PORT, host = process.env.HOST } = {}) {
+  // Модули — раньше первого чтения настроек: их умолчания входят в кэш при
+  // сборке, а кэш собирается один раз. До 4 сентября 2026 порядок был обратный,
+  // и секция модуля появлялась в настройках только после первого сохранения —
+  // клиент радио маскировал это через `|| {}`.
+  const mods = await loadModules(ROOT);
+  let boot = await getSettings();
+  const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
+  if (external && !(boot.network || {}).token) {
+    boot = await patchSettings({ network: { external: true, token: newToken() } });
+    console.log('Сетевой токен создан и записан в настройки офиса');
+  }
+  const HOST = host || (external ? '0.0.0.0' : '127.0.0.1');
+  const server = http.createServer(createHandler());
 
-server.listen(PORT, HOST, async () => {
+  await new Promise((resolve) => server.listen(port, HOST, resolve));
   const token = await ownerToken();
   const s = await getSettings();
-  console.log(`Valey office at http://localhost:${PORT}`);
-  if (EXTERNAL) {
+  console.log(`Valey office at http://localhost:${port}`);
+  if (external) {
     const t = (boot.network || {}).token || '';
     console.log(`  открыт наружу (${HOST}) — с другого устройства один раз с токеном:`);
-    console.log(`  http://<адрес-этой-машины>:${PORT}/?token=${t || '<см. настройки>'}`);
+    console.log(`  http://<адрес-этой-машины>:${port}/?token=${t || '<см. настройки>'}`);
   }
   if (mods.length) console.log(`  модули: ${mods.map(m => m.id).join(', ')}`);
   // Модуль, который не завёлся, обязан сказать это здесь: иначе пропавшая
@@ -839,7 +866,7 @@ server.listen(PORT, HOST, async () => {
   // один раз, вы остаётесь хозяином в этом браузере и после того, как офис
   // станет общим. Искать её потом в .settings.json — лишний шаг в неудачный
   // момент.
-  console.log(`  хозяин: http://localhost:${PORT}/#owner=${token}`);
+  console.log(`  хозяин: http://localhost:${port}/#owner=${token}`);
   if (s.access.mode === 'private') {
     console.log('  режим: private — всё с этой машины считается хозяйским.');
     console.log('  Перед тем как открыть офис наружу, переключите на shared.');
@@ -848,4 +875,12 @@ server.listen(PORT, HOST, async () => {
   }
   tick();
   peopleTick();
-});
+  return server;
+}
+
+// Запустили файл — поднимаем офис; импортировали — отдаём только обработчик.
+// Проверка по argv, а не по флагу: `npm start` и `node server/index.js` — это
+// одно и то же, а стенд ничего специального делать не должен.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await start();
+}
