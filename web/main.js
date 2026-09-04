@@ -1135,6 +1135,10 @@ function closeAll() {
   if (!document.getElementById('sky').hidden) return UI.closeSky();
   if (!document.getElementById('skin').hidden) return UI.closeSkin();
   if (!document.getElementById('notes').hidden) return UI.closeNotes();
+  // Приглашение стояло в panelsOpen() и не стояло здесь: панель держала офис,
+  // а Escape проваливался мимо неё в закрытие диалога и выглядел сломанным.
+  // Закрыть её можно было только крестиком — у него свой обработчик.
+  if (UI.inviteOpen()) return UI.closeInvite();
   if (first('esc')) return;
   state.dialogOpen = false; state.focus = null; state.notice = ''; UI.closeDialog();
 }
