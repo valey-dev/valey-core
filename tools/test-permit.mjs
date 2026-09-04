@@ -4,28 +4,13 @@
 // вся суть в том, что запрос ВИСИТ, пока хозяин не ответит, и отпускается ровно
 // один раз. Такое видно только по живому HTTP.
 //
-// Настройки уводятся во временный файл (`VALEY_SETTINGS`) и офис поднимается в
-// режиме shared: так проверяются обе стороны — хозяин с токеном и гость,
-// которому запросов не видно вовсе.
-import { spawn } from 'node:child_process';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+// Офис поднимается стендовым помощником на свободном порту и временных
+// настройках, в режиме shared: так проверяются обе стороны — хозяин с токеном
+// и гость, которому запросов не видно вовсе.
+import { startOffice } from './lib/office.mjs';
 
-const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-// Порт свой и ничей больше: 5393 уже занят стендом согласия, и на общем
-// прогоне два сервера дрались за него — падал то один, то другой, и всегда не
-// в том месте, где сломано.
-const PORT = Number(process.env.PERMIT_PORT || 5396);
-const base = `http://127.0.0.1:${PORT}`;
 const OWNER = 'owner-token-for-the-test';
 const GUEST = 'guest-pass-for-the-test';
-
-const settingsFile = path.join(os.tmpdir(), `valey-permit-test-${process.pid}.json`);
-fs.writeFileSync(settingsFile, JSON.stringify({
-  access: { mode: 'shared', token: OWNER, invites: [{ id: 'i1', guest: GUEST, from: 'Костя' }] },
-}));
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -34,16 +19,18 @@ const ok = (name, cond, got) => {
 };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const srv = spawn(process.execPath, ['server/index.js'], {
-  cwd: ROOT,
-  env: { ...process.env, PORT: String(PORT), VALEY_SETTINGS: settingsFile },
-  stdio: 'ignore',
+// Порт спрашивается у системы, а не выбирается. Раньше здесь стоял 5396 с
+// объяснением, почему не 5393: стенд согласия занимал тот, и на общем прогоне
+// два сервера дрались за один номер — падал то один, то другой, и никогда там,
+// где сломано. Выбранный номер лечит одно столкновение и ждёт следующего:
+// прогонов на машине столько, сколько открыто сессий, а свободных чисел из
+// головы — сколько успел придумать. `startOffice` берёт порт нулём у ядра,
+// поднимает офис на временных настройках и убирает за собой.
+const { base, stop } = await startOffice({
+  settings: {
+    access: { mode: 'shared', token: OWNER, invites: [{ id: 'i1', guest: GUEST, from: 'Костя' }] },
+  },
 });
-const stop = () => {
-  try { srv.kill(); } catch { /* уже мёртв */ }
-  try { fs.unlinkSync(settingsFile); } catch { /* и не было */ }
-};
-process.on('exit', stop);
 process.on('SIGINT', () => { stop(); process.exit(130); });
 
 const owner = { 'content-type': 'application/json', 'x-valey-owner': OWNER };
@@ -115,11 +102,8 @@ function openStream(query) {
 }
 
 try {
-  let up = false;
-  for (let i = 0; i < 60 && !up; i++) {
-    try { await fetch(base + '/api/whoami'); up = true; } catch { await wait(150); }
-  }
-  if (!up) throw new Error(`сервер не поднялся на ${PORT} — занят?`);
+  // Ждать, пока офис ответит, здесь больше нечем: startOffice возвращается
+  // только после первого удачного /api/whoami.
 
   // ------------------------------------------------- в офисе никого нет
   const alone = await askPermit(BASH('git push'));
@@ -235,6 +219,6 @@ try {
   console.log('УПАЛ  | исключение →', e.message);
 }
 
-stop();
+await stop();
 console.log(bad ? `\n${bad} ПРОВАЛ(ов)` : '\nвсё зелено');
 process.exit(bad ? 1 : 0);
