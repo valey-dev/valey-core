@@ -87,10 +87,15 @@ check('корень горит целиком', (bag.innerHTML.match(/tnode own/
 UI.bagKey('ArrowDown');
 check('вниз — следующий в колонке', UI.treeSelected() === 'easel', UI.treeSelected());
 UI.bagKey('ArrowLeft');
-check('влево — к родителю', UI.treeSelected() === 'art', UI.treeSelected());
+// Мольберт вырос из доски работ вместе с деревом гита, поэтому слева от него
+// не картины, а доска: у одного родителя два потомка, и это надо держать.
+check('влево — к родителю', UI.treeSelected() === 'board', UI.treeSelected());
 UI.bagKey('ArrowRight');
-check('вправо — к потомку', UI.treeSelected() === 'easel', UI.treeSelected());
-UI.bagKey('ArrowLeft'); UI.bagKey('ArrowUp');
+check('вправо — к первому потомку из двух', UI.treeSelected() === 'easel', UI.treeSelected());
+UI.bagKey('ArrowDown');
+check('вниз по колонке — второй потомок той же доски', UI.treeSelected() === 'gittree', UI.treeSelected());
+check('и слева у него тот же родитель', (UI.bagKey('ArrowLeft'), UI.treeSelected()) === 'board', UI.treeSelected());
+UI.bagKey('ArrowUp'); UI.bagKey('ArrowUp');
 check('вверх — предыдущий в колонке', UI.treeSelected() === 'floor1', UI.treeSelected());
 UI.bagKey('ArrowUp');
 check('вверх с первого — по кругу на последний', UI.treeSelected() === 'door', UI.treeSelected());

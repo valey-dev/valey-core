@@ -7,8 +7,8 @@
 //
 // Три яруса — три колонки в инвентаре: «Комната» (бесплатно, корень), «Офис»
 // (модули, разово), «Этаж» (сеть, подпиской, ещё не построен). Ребро идёт от
-// того, что расширяется, к тому, что расширяет: мольберт растёт из картин на
-// стене, дерево гита — из доски работ. `row` — строка в колонке, как на
+// того, что расширяется, к тому, что расширяет: дерево гита и мольберт растут
+// из доски работ, картотека — из пультовой. `row` — строка в колонке, как на
 // макете; строки нижних веток корня совпадают со строками «Этажа», чтобы
 // ребро шло по прямой мимо «Офиса» — это сеть, а не модули.
 //
@@ -75,10 +75,14 @@ export const LIBRARY = [
     gives: { ru: 'Книга метода в читальне на этаже 0: как давать задание, работать в параллель, писать отчёт, которому верят.',
              en: 'The book of method in the reading room on floor 0: how to give a task, work in parallel, write a report people trust.' },
     without: { ru: 'Этажа 0 нет вовсе: ни комнаты, ни остановки лифта.', en: 'There is no floor 0 at all: no room, no lift stop.' } },
-  { id: 'easel', tier: 'office', row: 1, parent: 'art', module: 'easel',
+  // Мольберт растёт из доски работ, а не из картин на стене: 4 сентября 2026
+  // решено, что это рабочий инструмент, притом профессиональный — без Figma
+  // он не нужен вовсе, — и среди кота со скейтом стоял по внешности, а не по
+  // делу. У доски из-за этого два потомка, и ребро к мольберту идёт коленом.
+  { id: 'easel', tier: 'office', row: 1, parent: 'board', module: 'easel',
     name: { ru: 'Мольберт с макетами', en: 'The easel' },
-    gives: { ru: 'Страница WIP твоего файла Figma на стене комнаты: секции, кадры и кружок состояния.',
-             en: 'The WIP page of your Figma file on the room wall: sections, frames and the state circle.' },
+    gives: { ru: 'Страница WIP твоего файла Figma на стене комнаты: секции, кадры и кружок состояния. Видно, что утверждено и что ещё рисуется.',
+             en: 'The WIP page of your Figma file on the room wall: sections, frames and the state circle — what is approved and what is still being drawn.' },
     without: { ru: 'Мольберта в комнате нет.', en: 'There is no easel in the room.' } },
   { id: 'gittree', tier: 'office', row: 2, parent: 'board', module: 'gittree',
     name: { ru: 'Дерево гита', en: 'The git tree' },
