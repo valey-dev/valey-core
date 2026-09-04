@@ -20,9 +20,19 @@ const COOKIE = 'valey_net';
 // написан. Сравнение строгое, по полному адресу: «начинается на 127.» пустило
 // бы сюда 127.0.0.1.evil.com.
 export function isLocal(req) {
+  // Пришло через посредника — значит не «с этой машины», чей бы адрес ни был в
+  // сокете: туннель (cloudflared, ngrok, любой обратный прокси) соединяется с
+  // офисом с петли. До 3 сентября 2026 это знал только isOwner, а гейт нет —
+  // и запрос из туннеля проходил порог как свой, без токена. Заголовки ставит
+  // сам посредник; страница из браузера тоже может их поставить, но тогда она
+  // сама отказывается от петли и получает то, что получил бы посторонний.
+  if (proxied(req)) return false;
   const a = (req.socket && req.socket.remoteAddress) || '';
   return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1';
 }
+
+export const PROXIED = ['x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'forwarded'];
+export const proxied = (req) => PROXIED.some((h) => req.headers && req.headers[h]);
 
 export function newToken() {
   return crypto.randomBytes(24).toString('base64url');
@@ -40,7 +50,10 @@ function cookieToken(req) {
   const raw = (req.headers && req.headers.cookie) || '';
   for (const part of raw.split(';')) {
     const [k, ...v] = part.trim().split('=');
-    if (k === COOKIE) return decodeURIComponent(v.join('='));
+    // Кука приходит с чужой машины и разбирается до любой проверки. Битый
+    // процент в ней — URIError, и до 3 сентября 2026 он ронял весь офис одним
+    // запросом без токена. Битая кука — это просто не токен.
+    if (k === COOKIE) { try { return decodeURIComponent(v.join('=')); } catch { return ''; } }
   }
   return '';
 }

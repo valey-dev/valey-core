@@ -11,6 +11,7 @@
 //
 // Каталог свой, не `~/.claude`: офис сегодня читает состояние оттуда, но это
 // источник данных, а не наш дом, и оркестратор со временем может быть другим.
+import crypto from 'node:crypto';
 import fsp from 'node:fs/promises';
 import { moduleDefaults, moduleMerge, modulePublic } from './modules.js';
 import path from 'node:path';
