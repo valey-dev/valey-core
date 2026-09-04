@@ -6,6 +6,7 @@
 // должен читаться, а не растягиваться вместе с холстом.
 import { pxText, drawSwitcher } from './office.js';
 import { t as tr, lang } from './i18n.js';
+import { esc } from './esc.js';
 import { drawPerson } from './sprites.js';
 import * as PF from './pixfont.js';
 
@@ -294,7 +295,6 @@ function paintFocus() {
   }
 }
 
-const esc = (v) => String(v).replace(/[<&]/g, (c) => ({ '<': '&lt;', '&': '&amp;' }[c]));
 
 // Меню и нижняя служебная строка рисуются одинаково во всех трёх карточках
 // входа — хозяйской, гостевой и отказной, — поэтому лежат здесь, а не тремя
@@ -311,7 +311,7 @@ function menuButtons() {
     `<button class="tbtn${i === 0 ? ' main' : ''}${on && i === T.idx ? ' focus' : ''}">${tr(m.k)}<kbd>${m.key}</kbd></button>`).join('')}</div>`;
 }
 
-const metaRow = () => `<div class="tmeta left">v${S?.version || '—'} · localhost:5177</div>
+const metaRow = () => `<div class="tmeta left">v${esc(S?.version || '—')} · localhost:5177</div>
     <div class="tmeta center">${tr('title.walk')}</div>
     <div class="tmeta right">valey.dev</div>`;
 
@@ -325,7 +325,7 @@ function menuHtml(n) {
       <div class="tcard">
         <span class="tlabel">${tr('title.inviteLabel')}</span>
         <b>${tr('title.inviteBad')}</b>
-        <span class="twait">${tr(entry.refused)}</span>
+        <span class="twait">${esc(tr(entry.refused))}</span>
         <span class="tidle">${tr('title.inviteAskAgain')}</span>
       </div>
       ${metaRow()}`;

@@ -17,7 +17,7 @@ import { radio, toUri, stationName } from './radio.js';
 import { auth, player } from './spotify.js';
 
 const $ = (s) => document.querySelector(s);
-const esc = (v) => String(v).replace(/[<&]/g, (c) => ({ '<': '&lt;', '&': '&amp;' }[c]));
+import { esc } from '../../web/esc.js';
 const px = (ctx, x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); };
 
 // Панель модуля — свой элемент: дырки под неё в разметке ядра быть не должно.

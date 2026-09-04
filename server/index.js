@@ -13,20 +13,13 @@ import { deliver, deliveryStatus, isBusy, MODES } from './deliver.js';
 import { releaseNudge } from './release.js';
 import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff } from './modules.js';
 import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
+import { MIME, fileType, fileHeaders } from './files.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const WEB = path.join(ROOT, 'web');
 const MODS = path.join(ROOT, 'modules');
 const PORT = Number(process.env.PORT || 5177);
 const POLL_MS = 2500;
-
-const MIME = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif', '.svg': 'image/svg+xml', '.webp': 'image/webp',
-  '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8',
-};
 
 // Версия офиса — из своего package.json, а не строкой в интерфейсе: её
 // показывает табличка на титульном экране, и в релизном ролике она должна
@@ -270,8 +263,8 @@ async function tick() {
   setTimeout(tick, POLL_MS);
 }
 
-function send(res, code, body, type = 'application/json; charset=utf-8') {
-  res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' });
+function send(res, code, body, type = 'application/json; charset=utf-8', extra = {}) {
+  res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store', ...extra });
   res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
 }
 
@@ -740,9 +733,8 @@ async function handle(req, res) {
     try {
       const st = await fsp.stat(p);
       if (st.size > 8 * 1024 * 1024) return send(res, 413, { error: 'too big' });
-      const ext = path.extname(p).toLowerCase();
-      const type = MIME[ext] || 'text/plain; charset=utf-8';
-      return send(res, 200, await fsp.readFile(p), type);
+      // Показать, но не исполнить: html и svg уходят вложением, см. files.js.
+      return send(res, 200, await fsp.readFile(p), fileType(p), fileHeaders(p));
     } catch {
       return send(res, 404, { error: 'gone' });
     }
