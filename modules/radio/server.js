@@ -14,6 +14,26 @@ export const merge = (prev, patch) => ({
   spotify: { ...prev.spotify, ...(patch.spotify || {}) },
 });
 
+// Сколько обложки нам надо. Картинка для корпуса 40×40, а самый большой
+// вариант у Spotify — 640×640 jpeg, это десятки килобайт; два мегабайта — не
+// потолок для обложки, а потолок для того, что обложкой не является.
+const MAX_COVER = 2 * 1024 * 1024;
+
+// Один поход за картинкой. Проверка хоста стоит выше, но сама по себе она
+// обходится: открытый редирект на CDN уводил бы fetch куда угодно, а тип
+// ответа уходил в браузер как есть. Поэтому редирект — ошибка, не-картинка —
+// ошибка, и размер ограничен до и после чтения.
+async function fetchCover(src) {
+  const img = await fetch(src, { signal: AbortSignal.timeout(8000), redirect: 'error' });
+  if (!img.ok) throw new Error(`cover ${img.status}`);
+  const type = (img.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  if (!type.startsWith('image/')) throw new Error(`not an image: ${type || 'no type'}`);
+  if (Number(img.headers.get('content-length') || 0) > MAX_COVER) throw new Error('cover too big');
+  const buf = Buffer.from(await img.arrayBuffer());
+  if (buf.length > MAX_COVER) throw new Error('cover too big');
+  return { buf, type };
+}
+
 // Обложка волны для пиксельного корпуса. Наружу ходит сервер, а не страница:
 // адрес картинки берётся из oEmbed Spotify и принимается только с его же CDN.
 export async function route(url, req, res, send) {
@@ -31,8 +51,7 @@ export async function route(url, req, res, send) {
       if (!/(^|\.)scdn\.co$/.test(src.hostname)) return reply(res, 502, { error: 'unexpected cover host' });
       const hitDirect = covers.get(direct);
       if (hitDirect) return reply(res, 200, hitDirect.buf, hitDirect.type);
-      const img = await fetch(src, { signal: AbortSignal.timeout(8000) });
-      const entry = { buf: Buffer.from(await img.arrayBuffer()), type: img.headers.get('content-type') || 'image/jpeg' };
+      const entry = await fetchCover(src);
       if (covers.size > 64) covers.clear();
       covers.set(direct, entry);
       return reply(res, 200, entry.buf, entry.type);
@@ -52,14 +71,11 @@ export async function route(url, req, res, send) {
       { signal: AbortSignal.timeout(8000) }).then((r) => r.json());
     const thumb = new URL(meta.thumbnail_url || '');
     if (!/(^|\.)scdn\.co$/.test(thumb.hostname)) return reply(res, 502, { error: 'unexpected cover host' });
-    const img = await fetch(thumb, { signal: AbortSignal.timeout(8000) });
-    const buf = Buffer.from(await img.arrayBuffer());
-    const entry = { buf, type: img.headers.get('content-type') || 'image/jpeg' };
+    const entry = await fetchCover(thumb);
     if (covers.size > 32) covers.clear();
     covers.set(uri, entry);
     return reply(res, 200, entry.buf, entry.type);
   } catch (e) {
     return reply(res, 502, { error: e.message });
   }
-  return true;
 }
