@@ -64,7 +64,8 @@ const DICT = {
     'hint.liftCall': '[ ПРОБЕЛ ] вызвать лифт',
     'hint.board': '[ ПРОБЕЛ ] посмотреть доску',
     // у человечка-переключателя подписано, куда он переключит, а не что он такое
-    'hint.lang': '[ ПРОБЕЛ ] in English',
+    // Подпись целиком на языке, куда зовёт: американец не говорит «ПРОБЕЛ»
+    'hint.lang': '[ SPACE ] in English',
     'hint.kicker': '[ ПРОБЕЛ ] сыграть',
     'label.me': 'ТЫ',
     'label.gulp': 'буль',
@@ -539,7 +540,7 @@ const DICT = {
     'task.resent': '✈ Отправил заново, с полным доступом.',
     'task.noteSent': '✈ Записка ушла в чат {name}. Ответ придёт сюда же.',
 
-    'help': 'WASD — ходить · SHIFT — бежать · B — скейт · ПРОБЕЛ — заговорить и попить · TAB — обход · N — заметки · C — переодеться · P — окно в мир · U — цвет офиса · M — звук · + 0 — масштаб (×6…×8) · SECURITY внизу — камеры по этажу (T — автообход) · ESC — назад',
+    'help': 'WASD — ходить · SHIFT — бежать · B — скейт · ПРОБЕЛ — заговорить и попить · TAB — обход · N — заметки · C — переодеться · P — окно в мир · U — цвет офиса · M — звук · + 0 — масштаб (×6…×8) · SECURITY внизу — камеры по этажу (T — автообход) · I — пригласить · ESC — назад',
     'doc.title': 'Valey — офис',
   },
 
@@ -1056,7 +1057,7 @@ const DICT = {
     'task.resent': '✈ Sent again, with full access.',
     'task.noteSent': '✈ The note went to {name}’s chat. The answer lands right here.',
 
-    'help': 'WASD to walk · SHIFT to run · B skateboard · SPACE to talk and to drink · TAB the round · N notes · C to change · P window on the world · U office colour · M sound · + 0 scale (×6…×8) · SECURITY below — floor cameras (T to cycle) · ESC back',
+    'help': 'WASD to walk · SHIFT to run · B skateboard · SPACE to talk and to drink · TAB the round · N notes · C to change · P window on the world · U office colour · M sound · + 0 scale (×6…×8) · SECURITY below — floor cameras (T to cycle) · I invite · ESC back',
     'doc.title': 'Valey — the office',
   },
 };
@@ -1109,7 +1110,17 @@ export function onLang(fn) { listeners.add(fn); return () => listeners.delete(fn
 // Полнота словаря проверяется здесь же, а не тестом: расхождение ключей между
 // языками — это дыра, которую в игре видно только на том экране, куда редко
 // заходят. В консоли она видна на первой же загрузке.
-const missing = LANGS.flatMap((l) => Object.keys(DICT.ru).filter((k) => DICT[l][k] == null).map((k) => `${l}:${k}`));
+// Спрашиваются только те формы числа, которые язык объявляет: у английского
+// нет «few», и `title.day.few` в его словаре не пропуск, а грамматика.
+// Предупреждение об этом печаталось при каждой загрузке и приучало не читать
+// строку, которая ловит настоящие дыры. «many» просят у всех: это запасная
+// форма резолвера, и в английском она стоит вместо «other».
+const FORMS = ['one', 'few', 'many', 'other'];
+const wanted = (l, k) => {
+  const f = FORMS.find((s) => k.endsWith('.' + s));
+  return !f || f === 'many' || new Intl.PluralRules(l).resolvedOptions().pluralCategories.includes(f);
+};
+const missing = LANGS.flatMap((l) => Object.keys(DICT.ru).filter((k) => DICT[l][k] == null && wanted(l, k)).map((k) => `${l}:${k}`));
 if (missing.length) console.warn('i18n: нет перевода —', missing.join(', '));
 
 // Словарь модуля вливается в общий: искать его будет тот же tr, поэтому модуль

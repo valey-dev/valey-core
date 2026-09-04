@@ -87,7 +87,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // Z — лупа в просмотрщике. Без них строгая проверка ниже отвергает половину
 // того, ради чего стенд и заводился.
 const VK = { Enter: 13, ' ': 32, Escape: 27, Tab: 9, F9: 120,
-  w: 87, a: 65, s: 83, d: 68, e: 69, b: 66, c: 67, m: 77, n: 78, p: 80, r: 82, t: 84, u: 85, z: 90,
+  w: 87, a: 65, s: 83, d: 68, e: 69, b: 66, c: 67, i: 73, m: 77, n: 78, o: 79, p: 80, r: 82, t: 84, u: 85, z: 90,
   ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39 };
 // Цифры: с 31 августа 2026 они выбирают пункт в открытой панели — вкладку
 // инвентаря и карточки, этаж в лифте, волну в радио. Без них снять эти экраны
@@ -95,7 +95,7 @@ const VK = { Enter: 13, ' ': 32, Escape: 27, Tab: 9, F9: 120,
 for (let d = 0; d <= 9; d++) VK[String(d)] = 48 + d;
 const CODE = { Enter: 'Enter', ' ': 'Space', Escape: 'Escape', Tab: 'Tab', F9: 'F9',
   ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight' };
-for (const ch of 'wasdebcmnprtuz') CODE[ch] = 'Key' + ch.toUpperCase();
+for (const ch of 'wasdebcmnoprtuz') CODE[ch] = 'Key' + ch.toUpperCase();
 for (let d = 0; d <= 9; d++) CODE[String(d)] = 'Digit' + d;
 
 // Пробел пишется в --keys буквальным пробелом между запятыми, и это неудобно

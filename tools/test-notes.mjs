@@ -4,12 +4,14 @@
 // хвостовой реплики, не пропадает ли, когда её сообщение уехало за окно, и что
 // остаётся в хранилище после правок. Всё это чистая логика над localStorage.
 
-let store = {};
-globalThis.localStorage = {
-  getItem: (k) => (k in store ? store[k] : null),
-  setItem: (k, v) => { store[k] = String(v); },
-  removeItem: (k) => { delete store[k]; },
-};
+import { memoryStorage } from './lib/dom.mjs';
+
+// Хранилище тут не заглушка, а участник проверки: стенд и пишет в него мимо
+// notes.js, и читает результат. Общая машинка отдаёт свою карту наружу — это
+// та же карта, что видит код.
+const ls = memoryStorage();
+globalThis.localStorage = ls;
+const store = ls.store;
 
 const { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } =
   await import('../web/notes.js');
@@ -19,7 +21,7 @@ const ok = (name, cond, got) => {
   if (cond) console.log('ok    | ' + name);
   else { bad++; console.log('УПАЛ  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
 };
-const reset = () => { store = {}; };
+const reset = () => ls.clear();
 
 // ------------------------------------------------------------ круг жизни
 reset();

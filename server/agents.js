@@ -7,7 +7,11 @@ import os from 'node:os';
 import { getSettings, patchSettings } from './settings.js';
 import { projectInfo, repoRoot, repoRootCached } from './stack.js';
 
-const CLAUDE_DIR = path.join(os.homedir(), '.claude');
+// Откуда офис читает сессии. Переменная — ради стендов: до 4 сентября 2026
+// каталог был жёстко привязан к домашнему, и проверить разбор транскрипта
+// можно было только на живых сессиях этой машины. Стенд, которому нужен
+// настоящий агент, — это стенд, который не проходит на чистой машине и в CI.
+const CLAUDE_DIR = process.env.VALEY_CLAUDE_DIR || path.join(os.homedir(), '.claude');
 const SESSIONS_DIR = path.join(CLAUDE_DIR, 'sessions');
 const PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
 const FIRST_READ_BYTES = 1024 * 1024;

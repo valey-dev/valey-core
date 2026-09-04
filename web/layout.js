@@ -39,7 +39,7 @@ export function planSignature(agents) {
 const SLOTS = new Map();
 
 // только у них: у остальных нечего на него вешать.
-export function buildLayout(agents) {
+export function buildLayout(agents, opts = {}) {
   const groups = new Map();
   for (const a of agents) {
     if (!groups.has(a.project)) groups.set(a.project, []);
@@ -166,7 +166,16 @@ export function buildLayout(agents) {
   const security = buildSecurity(w, rowY);
   const meeting = buildMeeting(w, rowY);
   const greenhouse = buildGreenhouse(w, roofY);
-  const h = security.y + security.h + MARGIN;
+  // Комнаты модулей. Спрашиваем здесь, а не после сборки: ниже считается высота
+  // мира и собирается лифт, и комната, добавленная позже, оказалась бы за
+  // границей этажа и без остановки. Точка `layout` для этого не годится — она
+  // зовётся по готовой планировке и умеет довешивать предметы, а не комнаты.
+  // Модуль получает якорь (нижнюю комнату яруса и ширину этажа) и возвращает
+  // готовую комнату — считать её геометрию ядру нечем, оно про неё не знает.
+  const extra = (typeof opts.rooms === 'function'
+    ? [].concat(opts.rooms({ w, security, meeting, rowY, below: security.y + security.h + CORRIDOR }) || [])
+    : []).filter(Boolean);
+  const h = Math.max(security.y + security.h, ...extra.map((r) => r.y + r.h)) + MARGIN;
   // Вертикальные проходы между колоннами комнат и вдоль внешних стен. Комнаты во
   // всех рядах стоят по одной сетке, поэтому такой проход свободен сверху донизу —
   // по нему можно спуститься из любого коридора в любой другой.
@@ -242,7 +251,7 @@ export function buildLayout(agents) {
   // push она вставала предпоследней, между вторым этажом и первым.
   const topRow = bands.reduce((m, b) => Math.max(m, b.row), 0) + 1;
   bands.unshift({ y: MARGIN, h: CORRIDOR, row: topRow, roof: true });
-  const lift = buildLift(w, bands, [...rooms, greenhouse], security, meeting);
+  const lift = buildLift(w, bands, [...rooms, greenhouse], security, meeting, extra);
   // rooms лежат в порядке отрисовки — сверху вниз, как их клали. Наружу проектные
   // комнаты отдаются в порядке слотов: первый слот — это левая комната нижнего
   // ряда, то есть первое, что видит вошедший. На ней же стоит спавн по умолчанию,
@@ -254,7 +263,7 @@ export function buildLayout(agents) {
     // отрисовки, а нижний ярус лежит ниже всех рядов и перекрывать его нечем.
     // projectRooms — для всего, что считает проекты: таблички этажей, титульный
     // экран, спавн, камеры. Отличать «комнату» от «проекта» приходится ровно там.
-    rooms: [...rooms, security, meeting, greenhouse], projectRooms: bySlot, security, meeting, greenhouse,
+    rooms: [...rooms, security, meeting, greenhouse, ...extra], projectRooms: bySlot, security, meeting, greenhouse,
     byAgent, bands, props, lanes, lounge, kicker, lift,
     wallArt: hangCorridorPictures(worldW),
     w: worldW, h: Math.max(h, 480),
@@ -268,7 +277,7 @@ export function buildLayout(agents) {
 const LIFT_W = 60;
 export const LIFT_DOOR_H = 34;
 
-function buildLift(w, bands, rooms, security, meeting) {
+function buildLift(w, bands, rooms, security, meeting, extra = []) {
   const x = w + 10;
   const byRow = new Map();
   for (const r of rooms) {
@@ -294,6 +303,14 @@ function buildLift(w, bands, rooms, security, meeting) {
     n: 1, y: security.y - 30, tier: true,
     rooms: [security, meeting].filter(Boolean).sort((a, b) => a.x - b.x).map((r) => r.title),
   });
+
+  // Этаж комнаты модуля — ниже сервисного яруса и с номером 0, а не минус
+  // первым: подвалом он читался бы как место, куда незачем ходить. Ноль ещё и
+  // не сдвигает номера жилых этажей — они считаются от ряда комнат, а ярус
+  // пультовой прибит к единице отдельной строкой выше.
+  for (const r of extra) {
+    floors.push({ n: 0, y: r.y - 30, tier: true, rooms: [r.title] });
+  }
 
   // Стойка секретаря — на каждом жилом этаже, слева от шахты: вышел из кабины,
   // она перед тобой. В подвале её нет: пультовая гостей не принимает.

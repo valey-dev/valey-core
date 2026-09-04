@@ -8,6 +8,7 @@ import { collect, moduleIds } from './modules.js';
 import { LIBRARY, TIERS, byId, children, colOf } from './library.js';
 import { theme, applyTheme, resetTheme, PRESETS, ui, UI_STEPS, applyUiScale } from './theme.js';
 import { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } from './notes.js';
+import { esc } from './esc.js';
 
 const $ = (s) => document.querySelector(s);
 const el = { hud: null, dialog: null, viewer: null, roster: null, bag: null, toasts: null };
@@ -52,13 +53,13 @@ export function renderHud() {
   const waiting = S.agents.filter((a) => a.status === 'awaiting').length;
   const working = S.agents.filter((a) => a.status === 'working').length;
   const d = new Date();
-  const room = S.currentRoom ? `<span class="chip room">▣ ${S.currentRoom.title}</span>` : `<span class="chip room">${tr('hud.corridor')}</span>`;
+  const room = S.currentRoom ? `<span class="chip room">▣ ${esc(S.currentRoom.title)}</span>` : `<span class="chip room">${tr('hud.corridor')}</span>`;
   const w = S.weather || { kind: 'clear' };
   const temp = w.temp != null ? ` ${Math.round(w.temp)}°` : '';
   const z = S.zoom || { dev: 1, auto: true, clamped: false };
-  const place = w.label ? ` · ${w.label}` : '';
+  const place = w.label ? ` · ${esc(w.label)}` : '';
   el.hud.innerHTML = `<b>VALEY</b> · ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}
-    <span class="chip sky" title="${tr('hud.skyTitle', { source: w.source === 'выдумана' ? tr('sky.made') : (w.source || '') })}">${WEATHER_ICON[w.kind] || '·'} ${tr('sky.' + w.kind)}${temp}${place}</span>
+    <span class="chip sky" title="${tr('hud.skyTitle', { source: w.source === 'выдумана' ? tr('sky.made') : esc(w.source || '') })}">${WEATHER_ICON[w.kind] || '·'} ${tr('sky.' + w.kind)}${temp}${place}</span>
     ${room}<span class="chip work">⌨ ${working}</span><span class="chip wait">! ${waiting}</span>
     <span class="chip">👥 ${S.agents.length}</span>
     <span class="chip zoom${z.tight ? ' wait' : ''}" title="${tr('hud.zoomTitle')}${
@@ -87,7 +88,7 @@ export const ago = (sec) => sec == null || !Number.isFinite(sec) ? ''
   : sec < 5400 ? tr('ago.min', { n: Math.round(sec / 60) })
   : sec < 172800 ? tr('ago.hour', { n: Math.round(sec / 3600) })
   : tr('ago.day', { n: Math.round(sec / 86400) });
-const metaLine = (a) => `${a.project}${a.branch ? ' · ' + a.branch : ''} · ${statusWord(a)}`
+const metaLine = (a) => `${esc(a.project)}${a.branch ? ' · ' + esc(a.branch) : ''} · ${statusWord(a)}`
   + (a.status !== 'working' && a.idleFor > 300 ? tr('meta.spoke', { ago: ago(a.idleFor) }) : '');
 const chatLine = (a) => (a.title ? `<span class="chatname">💬 ${esc(a.title)}</span>` : '');
 // Сервер присылает ключ занятия, а готовую русскую фразу оставляет для
@@ -99,7 +100,10 @@ export const actText = (a) => {
   return tr('act.' + a.act.key, { arg });
 };
 export const roleText = (a) => (a && a.roleKey ? tr('role.' + a.roleKey) : (a && a.role) || '');
-const actLine = (a) => `${actText(a)}${(a.outbox || []).length ? ` · 📋 ${a.outbox.length}` : ''}`;
+// actText и roleText — текст: их же кладут в textContent. В разметку они
+// входят только через esc, потому что arg занятия — имя файла или команда из
+// транскрипта, а неизвестный ключ tr возвращает как есть.
+const actLine = (a) => `${esc(actText(a))}${(a.outbox || []).length ? ` · 📋 ${a.outbox.length}` : ''}`;
 const readLabel = (a) => {
   const cut = (a.saidLen || 0) - (a.lastSaid || '').length;
   return cut > 0 ? tr('dlg.readOnArrow', { n: cut }) : tr('dlg.readAll');
@@ -116,7 +120,7 @@ const noteList = (a) => (a.outbox || []).map((t) => {
     : t.state === 'failed' ? `<span class="ntail bad">${esc(said(t) || tr('note.failed'))}</span>`
     : `<span class="ntail">${tr('note.onDesk')}</span>`;
   const retry = t.blocked
-    ? `<button class="retry" data-retry="${esc(t.text).replace(/"/g, '&quot;')}">${tr('note.retry')}</button>`
+    ? `<button class="retry" data-retry="${esc(t.text)}">${tr('note.retry')}</button>`
     : '';
   const armed = armedNote === t.id;
   const toChat = t.state === 'note'
@@ -124,18 +128,19 @@ const noteList = (a) => (a.outbox || []).map((t) => {
     : '';
   return `<li>${icon} ${esc(t.text.slice(0, 90))}${tail}${retry}${toChat}</li>`;
 }).join('');
-const esc = (v) => String(v).replace(/[<&]/g, (c) => ({ '<': '&lt;', '&': '&amp;' }[c]));
 const fileList = (a) => (a.files || []).map((f) =>
-  `<li data-path="${encodeURIComponent(f.path)}"><span class="ic">${f.image ? '▨' : '▤'}</span>${f.name}</li>`).join('');
+  `<li data-path="${encodeURIComponent(f.path)}"><span class="ic">${f.image ? '▨' : '▤'}</span>${esc(f.name)}</li>`).join('');
 const MODE_KEY = { default: 'default', acceptEdits: 'acceptEdits', bypassPermissions: 'bypass' };
 const MODE_LABEL = () => ({
   default: tr('mode.default'), acceptEdits: tr('mode.acceptEdits'), bypassPermissions: tr('mode.bypass'),
 });
 const modeNote = (mode) => tr('modeNote.' + (MODE_KEY[mode] || 'acceptEdits'));
 const hintText = () => {
-  if (S.notice) return S.notice;
+  // Ответ сервера — и в notice, и в why — текст, который claude вернул или
+  // с которым упал; в словаре его нет, значит и доверять ему как разметке нельзя.
+  if (S.notice) return esc(S.notice);
   const d = S.delivery || {};
-  if (!d.available) return tr('hint.noCli', { why: said(d, 'hint') || said(d) || tr('hint.noCliDefault') });
+  if (!d.available) return tr('hint.noCli', { why: esc(said(d, 'hint') || said(d) || tr('hint.noCliDefault')) });
   const mode = (S.settings && S.settings.delivery && S.settings.delivery.mode) || 'acceptEdits';
   return tr('hint.deliver', { note: modeNote(mode) });
 }
@@ -286,7 +291,7 @@ function buildDialog(a) {
   el.dialog.innerHTML = `
     <div class="portrait"><canvas width="48" height="48" id="pf"></canvas></div>
     <div class="content">
-      <div class="who"><b>${a.name}</b> <span class="role r-${a.roleKey}">${roleText(a)}</span>
+      <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${esc(roleText(a))}</span>
         <span class="meta">${metaLine(a)}</span>${chatLine(a)}</div>
       <div class="act">${actLine(a)}</div>
       <div class="body">${body}</div>
@@ -439,6 +444,7 @@ function typewriter() {
 
 export function closeDialog() {
   el.dialog.hidden = true; dialogKey = ''; armedNote = 0; btnIndex = 0; linkFocused = false; fileIdx = -1;
+  clearInterval(S.tw);   // машинка дописывала бы реплику в закрытую карточку
 }
 
 // ---- arrows walk along the bottom row, Enter presses ----
@@ -599,11 +605,17 @@ function renderGallery() {
       <button id="vx">✕</button></div>
     <div class="grid">${items.map((f, i) => `<figure data-i="${i}" class="${i === sel ? 'sel' : ''}">
       <div class="thumb">${f.image
-        ? `<img src="/api/file?path=${encodeURIComponent(f.path)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'✕'}))">`
+        ? `<img src="/api/file?path=${encodeURIComponent(f.path)}" loading="lazy" class="thumbimg">`
         : '▤'}</div>
       <figcaption>${esc(f.name)}<span>${f.agent ? esc(f.agent.name + ' · ' + f.agent.project) : ''}</span></figcaption></figure>`).join('')
       || `<p class="empty">${tr('gal.empty')}</p>`}</div></div>`;
   $('#vx').onclick = closeViewer;
+  // Обработчик вешается кодом, а не атрибутом onerror в разметке: строка в
+  // атрибуте — это скрипт, собранный из текста, и однажды в него попала бы
+  // кавычка из словаря. Заодно это то, что запретит CSP, когда он появится.
+  el.viewer.querySelectorAll('img.thumbimg').forEach((im) => {
+    im.onerror = () => im.replaceWith(Object.assign(document.createElement('span'), { textContent: '✕' }));
+  });
   el.viewer.querySelectorAll('figure').forEach((f) => f.onclick = () => {
     gallery.sel = Number(f.dataset.i);
     openFile(gallery.items[gallery.sel].path, gallery.items, gallery.sel, gallery.title);
@@ -722,7 +734,7 @@ let mdSource = null;
 let docKind = null;        // 'md' | 'html' — what the switch is switching
 let htmlScripts = false;   // scripts stay off until you ask for them
 
-const plainText = (t) => t.slice(0, 20000).replace(/[<&]/g, (c) => ({ '<': '&lt;', '&': '&amp;' }[c]));
+const plainText = (t) => esc(t.slice(0, 20000));
 
 // js/css/json get coloured; everything else stays plain text
 const codeBody = (txt, lang) => (lang
@@ -734,14 +746,10 @@ const mdBody = (txt) => (mdRaw
 
 // The page is rendered inside a sandboxed frame: its styles cannot leak into the
 // office, and its scripts stay dead until you press the button.
-const attrEsc = (s) => String(s)
-  .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-  .replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
 const htmlBody = (txt) => (htmlRaw
   ? `<pre class="code lang-html">${highlight(txt.slice(0, 60000), 'html')}</pre>`
   : `<iframe class="htmlframe" sandbox="${htmlScripts ? 'allow-scripts' : ''}"
-       srcdoc="${attrEsc(txt.slice(0, 400000))}"></iframe>
+       srcdoc="${esc(txt.slice(0, 400000))}"></iframe>
      <div class="framebar">${tr('doc.sandbox', { state: htmlScripts ? tr('doc.scriptsOn') : tr('doc.scriptsOff') })}
        <button id="htmlscripts">${htmlScripts ? tr('doc.stopScripts') : tr('doc.runScripts')}</button></div>`);
 
@@ -792,8 +800,7 @@ export async function openFile(p, items = null, index = -1, title = '') {
   const isHtml = /\.html?$/i.test(p);
   let inner;
   if (isImg) {
-    inner = `<div class="zoomwrap"><img class="full" id="zimg" src="${url}"
-      onerror="this.replaceWith(Object.assign(document.createElement('p'),{className:'empty',textContent:'${tr('gal.gone')}'}))"></div>`;
+    inner = `<div class="zoomwrap"><img class="full" id="zimg" src="${url}"></div>`;
   } else {
     const txt = await fetch(url).then((r) => r.ok ? r.text() : tr('gal.notServed') + r.status).catch((e) => e.message);
     if (mine !== viewToken) return;   // arrows moved on while this one was loading
@@ -812,7 +819,10 @@ export async function openFile(p, items = null, index = -1, title = '') {
   bindDocControls();
   paintCopyHint();
   const img = $('#zimg');
-  if (img) img.onclick = () => { img.classList.toggle('pixel'); };
+  if (img) {
+    img.onclick = () => { img.classList.toggle('pixel'); };
+    img.onerror = () => img.replaceWith(Object.assign(document.createElement('p'), { className: 'empty', textContent: tr('gal.gone') }));
+  }
 }
 
 function leaf(step) {
@@ -943,12 +953,12 @@ export function renderRoster() {
   el.roster.innerHTML = `<div class="rwrap">
     <div class="vhead"><span id="rcount">${tr('round.title', { done, n: waiting.length })}</span><button id="rx">✕</button></div>
     <div class="rbody">${[...byRoom.entries()].map(([room, list]) => `
-      <div class="rgroup"><h4>▣ ${room}</h4>${list.map((a) => `
-        <div class="rrow ${S.visited.has(a.id) ? 'done' : ''}" data-id="${a.id}">
-          <span class="rname">${S.visited.has(a.id) ? '✓' : '·'} ${a.name}</span>
+      <div class="rgroup"><h4>▣ ${esc(room)}</h4>${list.map((a) => `
+        <div class="rrow ${S.visited.has(a.id) ? 'done' : ''}" data-id="${esc(a.id)}">
+          <span class="rname">${S.visited.has(a.id) ? '✓' : '·'} ${esc(a.name)}</span>
           <span class="rwhat"><b>${esc(a.title || tr('round.untitled'))}</b>
             <i>${esc(clean(a.lastSaid).slice(0, 60) || actText(a))} · ${ago(a.idleFor)}</i></span>
-          <button class="go" data-go="${a.id}">${tr('round.lead')}</button>
+          <button class="go" data-go="${esc(a.id)}">${tr('round.lead')}</button>
         </div>`).join('')}</div>`).join('') || `<p class="empty">${tr('round.nobody')}</p>`}
     </div></div>`;
 
@@ -1465,7 +1475,7 @@ export function renderSky(results = null, busy = '') {
   const status = !cfg.enabled
     ? tr('sky.fakeNote')
     : live && live.error
-      ? tr('sky.noReach', { err: live.error })
+      ? tr('sky.noReach', { err: esc(live.error) })
       : live && live.code != null
         ? tr('sky.updated', {
             what: tr('sky.' + w.kind),
@@ -1478,7 +1488,7 @@ export function renderSky(results = null, busy = '') {
     <div class="skybody">
       <div class="skyrow">
         <button id="skytoggle" class="${cfg.enabled ? 'on' : ''}">${cfg.enabled ? tr('sky.real') : tr('sky.fake')}</button>
-        <span class="skyplace">${cfg.label || tr('sky.noPlace')}</span>
+        <span class="skyplace">${esc(cfg.label || tr('sky.noPlace'))}</span>
       </div>
       <p class="skystatus">${status}</p>
       <label class="skysearch">${tr('sky.city')}
@@ -1521,7 +1531,7 @@ export function renderSky(results = null, busy = '') {
       const r = await api.geocode(text);
       const box = $('#skyresults');
       if (!box) return;
-      box.innerHTML = r.error ? `<p class="hint">${tr('sky.searchFailed', { err: r.error })}</p>` : renderResults(r.results);
+      box.innerHTML = r.error ? `<p class="hint">${tr('sky.searchFailed', { err: esc(r.error) })}</p>` : renderResults(r.results);
       bindResults(text);
     }, 350);
   };
@@ -1531,8 +1541,9 @@ export function renderSky(results = null, busy = '') {
 function renderResults(results) {
   if (!results) return '';
   if (!results.length) return `<p class="hint">${tr('sky.nothing')}</p>`;
-  return results.map((r) => `<button class="skyhit" data-lat="${r.lat}" data-lon="${r.lon}" data-label="${r.label}">
-    ${r.label}<span>${r.detail || ''}</span></button>`).join('');
+  // Метки и детали приходят от геокодера — это чужой текст, как и всё снаружи.
+  return results.map((r) => `<button class="skyhit" data-lat="${esc(r.lat)}" data-lon="${esc(r.lon)}" data-label="${esc(r.label)}">
+    ${esc(r.label)}<span>${esc(r.detail || '')}</span></button>`).join('');
 }
 
 function bindResults() {
@@ -1626,7 +1637,7 @@ export function focusRing(nodeOf, selector, opts = {}) {
 }
 
 const skyRing = focusRing(() => el.sky, '#skytoggle, #skyq, .skyhit, #skygeo');
-export function closeSky() { el.sky.hidden = true; skyRing.reset(); }
+export function closeSky() { el.sky.hidden = true; skyRing.reset(); clearTimeout(geoTimer); }
 export function skyKey(raw) { return skyRing.key(raw, el.sky && !el.sky.hidden); }
 
 // ------------------------------------------------------------- цвет офиса
@@ -2088,7 +2099,7 @@ async function loadChat(fresh) {
   const box = $('#chatlog');
   if (!box) return;
   if (r.error) {
-    if (chatView.msgs.length) chatStatus(tr('chat.rereadFailed', { err: r.error }));
+    if (chatView.msgs.length) chatStatus(tr('chat.rereadFailed', { err: esc(r.error) }));
     else box.innerHTML = `<p class="empty">${esc(r.error)}</p>`;
     return;
   }

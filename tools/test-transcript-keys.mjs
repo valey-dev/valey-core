@@ -2,56 +2,36 @@
 // DOM подставной: проверяется не вёрстка, а что делает нажатие — куда уезжает
 // прокрутка и что приносит R, когда реплик прибавилось и когда нет.
 
-function node(id = '') {
-  const classes = new Set();
-  return {
-    id, innerHTML: '', textContent: '', scrollTop: 0, hidden: false,
-    scrollHeight: 2000, clientHeight: 300, offsetTop: 0,
-    classList: {
-      add: (c) => classes.add(c), remove: (c) => classes.delete(c),
-      contains: (c) => classes.has(c),
-      toggle: (c, on) => (on === undefined ? (classes.has(c) ? classes.delete(c) : classes.add(c)) : (on ? classes.add(c) : classes.delete(c))),
-    },
-    querySelector(sel) {
-      // новая реплика ищется в логе — она есть ровно тогда, когда её нарисовали
-      if (sel === '.msg.fresh' && this.innerHTML.includes('fresh')) return Object.assign(node(), { offsetTop: 1500 });
-      return null;
-    },
-    querySelectorAll: () => [],
-    click() {},
-  };
-}
+import { node, installDom } from './lib/dom.mjs';
 
-const viewer = node('viewer');
-const chatlog = node('chatlog');
-const chatst = node('chatst');
-const vx = node('vx');
-const toasts = Object.assign(node('toasts'), {
+// У лога своя высота и свой поиск: новая реплика есть ровно тогда, когда её
+// нарисовали. Остальное — общая машинка.
+const withLog = (id) => node('', {
+  id, scrollHeight: 2000, clientHeight: 300,
+  querySelector(sel) {
+    if (sel === '.msg.fresh' && this.innerHTML.includes('fresh')) return node('', { offsetTop: 1500 });
+    return null;
+  },
+});
+
+const viewer = node('', { id: 'viewer' });
+const chatlog = withLog('chatlog');
+const chatst = node('', { id: 'chatst' });
+const vx = node('', { id: 'vx' });
+const toasts = Object.assign(node('', { id: 'toasts' }), {
   children: [], appendChild(n) { this.children.push(n); }, get firstChild() { return this.children[0]; },
   removeChild(n) { this.children = this.children.filter((x) => x !== n); },
 });
-const stub = { querySelector: () => null, querySelectorAll: () => [], classList: node().classList };
 // пока разговор «закрыт», лога в документе нет — как после closeViewer
 let logPresent = true;
 
-const byId = (sel) => ({
-  '#toasts': toasts, '#viewer': viewer, '#chatlog': logPresent ? chatlog : null, '#chatst': logPresent ? chatst : null, '#vx': vx,
-}[sel]);
-
-globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
-const withStyle = (n) => Object.assign(n, { style: { setProperty: () => {}, removeProperty: () => {} } });
-globalThis.document = {
-  querySelector: (sel) => byId(sel) || stub,
-  querySelectorAll: () => [],
-  addEventListener: () => {},
-  documentElement: withStyle(node()),
-  body: withStyle(node()),
-  createElement: () => withStyle(node()),
-};
-globalThis.window = globalThis;
-globalThis.addEventListener = () => {};
+installDom({
+  find: (sel) => ({
+    '#toasts': toasts, '#viewer': viewer, '#chatlog': logPresent ? chatlog : null,
+    '#chatst': logPresent ? chatst : null, '#vx': vx,
+  }[sel] || null),
+});
 globalThis.setTimeout = setTimeout;
-globalThis.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
 let served = { messages: [] };
 let calls = 0;
