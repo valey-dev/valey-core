@@ -26,7 +26,7 @@ const ok = (name, cond, got) => {
 // Панели, которые ставят себя сами и в общий список не входят по замыслу.
 // Список короткий и осознанный: если панель попала сюда, значит у неё есть
 // своё правило в style.css — это и проверяется ниже.
-const OWN = ['dialog', 'viewer', 'title'];
+const OWN = ['dialog', 'viewer', 'title', 'pager'];
 
 const hidden = [...html.matchAll(/<div id="([\w-]+)" hidden><\/div>/g)].map((m) => m[1]);
 ok('панели в разметке нашлись', hidden.length >= 8, hidden);

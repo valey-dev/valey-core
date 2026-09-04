@@ -235,6 +235,27 @@ export const sound = {
     });
   },
 
+  // Пейджер: два коротких писка квадратной волной. Не chime — тот мягкий и
+  // сообщает о хорошем, а этот должен подобрать голову от чужого окна. Звук
+  // включён по умолчанию, как и весь остальной офис: выключается на M, вместе
+  // со всем прочим, и это единственный переключатель.
+  pager() {
+    if (!this.ready || !this.on) return;
+    const c = this.ctx, now = c.currentTime;
+    for (let i = 0; i < 2; i++) {
+      const at = now + i * 0.16;
+      const osc = c.createOscillator(); osc.type = 'square';
+      osc.frequency.setValueAtTime(1720, at);
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(0.05, at + 0.008);
+      g.gain.setValueAtTime(0.05, at + 0.07);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.1);
+      osc.connect(g); g.connect(this.master);
+      osc.start(at); osc.stop(at + 0.14);
+    }
+  },
+
   thunder(strength = 1) {
     if (!this.ready || !this.on) return;
     const c = this.ctx, now = c.currentTime;
