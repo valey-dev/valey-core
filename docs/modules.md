@@ -75,6 +75,8 @@ Two calling conventions, and confusing them is expensive:
 
 `layout` is called on every plan rebuild **and** once after the modules load, because the floor is usually built before they arrive. Make it idempotent, or you will push the same thing twice.
 
+Your `style.css` is loaded and applied **before** your `register` runs, so the first thing you draw is already yours. That order is not free — the loader waits for the stylesheet — and it exists because a panel measured before its own CSS measures the whole window: the office bible once laid a chapter out as one column across both pages of the spread, from a single reading taken a few milliseconds early.
+
 Your panel is your own element, created by you and appended to `body`. The core markup has no holes waiting for it. Panel chrome (`.vwrap`, `.vhead`, `.grid`) and `focusRing` from `web/ui.js` are yours to reuse: the keyboard walks panels the same way everywhere, and a second way to walk buttons is a second office.
 
 If your thing stands on the floor, give it `w` and `h` — the collision table in `blocked()` cannot know a stranger's kind. Measure from the core's constants, never from a number you copied: a hand-copied wall thickness once put an object fourteen pixels inside a wall, with every hook answering correctly.
