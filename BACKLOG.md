@@ -46,6 +46,17 @@
   radio/server.js, `/api/file`, гейт 404/401 и redirect токена.
 - Общий DOM-шим в `tools/lib/` вместо семи копий; убрать тавтологии
   (test-art:65, test-floors:80), `!== 403` в test-guest:93, `scrollTop < 0`.
+- Запросы разрешений Claude Code — в офис. Хук `PermissionRequest` (в
+  `~/.claude/settings.json`, срабатывает и в терминале, и в desktop-приложении)
+  шлёт `session_id`, `tool_name`, `tool_input` и `permission_suggestions` на
+  `/api/permit` и ждёт; офис поднимает у стола агента карточку с командой и
+  тремя кнопками, `/api/permit/answer` — только хозяину, гостю карточку не
+  показывать вовсе. Пустой ответ хука возвращает штатный диалог, поэтому
+  кнопка «отвечу в терминале» и мгновенный «никого нет» при пустом `clients`.
+  «Всегда разрешать» — `updatedPermissions` из `permission_suggestions` с
+  `destination: localSettings`. Тот же хук закрывает `BLOCKED_RE` в
+  deliver.js: доставка в чат больше не упирается в права вслепую.
+  Сначала кадр. Проверено по документации 4 сентября 2026, CLI 2.1.252.
 
 ## Someday
 
