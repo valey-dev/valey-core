@@ -1452,6 +1452,16 @@ export function closeInvite() { if (el.invite) el.invite.hidden = true; }
 
 export async function openInvite() {
   el.invite.hidden = false;
+  // Панель закрывает себя сама, как и редактор заметки. Поле «кого зовём»
+  // забирает клавиши себе: onKey в main.js возвращается на любом INPUT, и до
+  // closeAll Escape не доходит — а поле в этой панели первое, так что вся
+  // панель выглядела запертой. Обработчик висит на самой панели, а не на поле:
+  // renderInvite переписывает её нутро на каждый ответ сервера, а она сама
+  // остаётся.
+  el.invite.onkeydown = (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault(); e.stopPropagation(); closeInvite();
+  };
   await renderInvite();
 }
 
