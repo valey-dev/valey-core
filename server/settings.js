@@ -121,8 +121,24 @@ export async function getSettings() {
     // имён. Сказать вслух дешевле, чем угадать.
     if (m.reason === 'both') console.log(`Настройки есть и в ${m.file}, и в ${m.legacy}. Взят первый; второй не тронут.`);
   } catch (e) { console.log(`Настройки не переехали: ${e.message}. Старый файл цел.`); }
-  try {
-    const saved = JSON.parse(await fsp.readFile(FILE, 'utf8'));
+  // Нет файла и битый файл — разные случаи. Первый — обычный первый запуск.
+  // Второй до 4 сентября 2026 выглядел так же: офис молча стартовал с
+  // умолчаний, а следующее сохранение переписывало файл — и имена агентов,
+  // токен хозяина и приглашения пропадали без единой строки в логе. Теперь
+  // битый файл откладывается в копию рядом, и об этом говорится вслух.
+  let raw = null;
+  try { raw = await fsp.readFile(FILE, 'utf8'); } catch { /* первый запуск */ }
+  let saved = null;
+  if (raw !== null) {
+    try { saved = JSON.parse(raw); } catch (e) {
+      const backup = `${FILE}.broken-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+      try { await fsp.writeFile(backup, raw); } catch { /* хотя бы сказать */ }
+      console.error(`Настройки не читаются: ${e.message}. Файл отложен в ${backup}; `
+        + `офис стартует с умолчаний, и следующее сохранение перепишет ${FILE}. `
+        + 'Имена, токен и приглашения — в отложенной копии.');
+    }
+  }
+  if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
     // Мерж поверхностный ровно на один уровень вглубь: файл, записанный до
     // появления нового ключа, иначе прячет его целиком. На этом молча
     // отвалился мольберт: в файле лежала половина его секции, и комната
@@ -133,7 +149,7 @@ export async function getSettings() {
     for (const [k, v] of Object.entries(base)) {
       if (v && typeof v === 'object' && !Array.isArray(v)) cache[k] = { ...v, ...(saved[k] || {}) };
     }
-  } catch {
+  } else {
     cache = structuredClone(withModules());
     // seed from the old env-var way, if it is still around
     const spec = process.env.AI_VALEY_WEATHER || '';
@@ -176,9 +192,27 @@ export async function patchSettings(patch) {
     // ключи они знают то, чего не знает ядро.
     ...moduleMerge(s, patch),
   };
-  await fsp.mkdir(path.dirname(FILE), { recursive: true });
-  await fsp.writeFile(FILE, JSON.stringify(cache, null, 2));
+  await persist();
   return cache;
+}
+
+// Запись — через временный файл и rename, и по одной. Такт офиса и обработчики
+// запросов сохраняют настройки независимо друг от друга; две записи в один
+// файл напрямую перемешивали байты, и битый JSON, который получался, при
+// следующем старте молча превращался в умолчания. rename на одном диске
+// атомарен: на диске всегда лежит либо прошлая версия целиком, либо новая.
+// Очередь пишет то состояние кэша, которое было в момент вызова, — кто
+// последний позвал, тот и на диске.
+let writing = Promise.resolve();
+function persist() {
+  const text = JSON.stringify(cache, null, 2);
+  writing = writing.catch(() => {}).then(async () => {
+    await fsp.mkdir(path.dirname(FILE), { recursive: true });
+    const tmp = `${FILE}.tmp-${process.pid}`;
+    await fsp.writeFile(tmp, text);
+    await fsp.rename(tmp, FILE);
+  });
+  return writing;
 }
 
 // Всё, что можно показать странице. Токен сюда не попадает никогда: настройки
