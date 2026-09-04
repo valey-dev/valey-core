@@ -10,6 +10,10 @@
 //  - Esc — «перезвоню»: агенту не уходит ничего, вопрос продолжает висеть,
 //    в шапке остаётся счётчик, H возвращает пейджер;
 //  - ничего — через девять минут сервер сам отпустит вопрос в терминал.
+//
+// Макет: [Пейджер · входящий](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=958-2)
+// Очередь: [Пейджер · очередь из двух](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=958-66)
+// Чип в шапке: [HUD · пейджер отложен](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=958-20)
 import { t as tr } from './i18n.js';
 import { sound } from './sound.js';
 
