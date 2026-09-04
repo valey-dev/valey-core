@@ -130,5 +130,47 @@ logPresent = false;                  // лога в документе боль�
 check('на закрытом экране стрелки офису возвращаются', UI.viewerKey('ArrowUp', false) === false, 'перехвачены');
 check('и R тоже', UI.viewerKey('r', false) === false, 'перехвачен');
 
+// --- копирование блока кода клавишей C ---
+// Граница тут важнее самого копирования: пока в просмотре есть блок кода, C
+// принадлежит ему; когда блоков нет — проваливается в офис и открывает
+// инвентарь, как было всегда.
+// Экран к этому месту закрыт предыдущей проверкой — открываем обратно, иначе
+// viewerKey вернёт false просто потому, что смотреть нечего, и проверка про
+// клавишу окажется проверкой ни про что.
+viewer.hidden = false;
+logPresent = true;
+check('без блоков кода C не забирается просмотром', UI.viewerKey('c') === false, 'забрала');
+
+let copied = null;
+// В node у globalThis.navigator есть только getter, поэтому подменяем через
+// defineProperty, а не присваиванием.
+const setClipboard = (writeText) => Object.defineProperty(globalThis, 'navigator', {
+  value: { clipboard: { writeText } }, configurable: true, writable: true });
+setClipboard(async (t) => { copied = t; });
+const codeNode = Object.assign(node(), { textContent: 'git push origin main' });
+const cbtn = Object.assign(node(), { textContent: 'копировать', scrollIntoView() {} });
+const cblock = Object.assign(node(), {
+  getBoundingClientRect: () => ({ top: 10, bottom: 60 }),
+  querySelector: (sel) => (sel === 'pre.mdcode code' ? codeNode : sel === '.mdcopy' ? cbtn : null),
+});
+cbtn.closest = (sel) => (sel === '.mdblock' ? cblock : null);
+viewer.querySelector = (sel) => (sel === '.mdblock' ? cblock : sel === '#chatlog' ? chatlog : null);
+viewer.querySelectorAll = (sel) => (sel === '.mdblock' ? [cblock] : []);
+chatlog.getBoundingClientRect = () => ({ top: 0, bottom: 400 });
+
+check('с блоком кода C забирает просмотр', UI.viewerKey('c') === true, 'не забрала');
+await new Promise((r) => setTimeout(r, 0));
+check('в буфер ушёл текст кода, а не подсветка', copied === 'git push origin main', copied);
+check('кнопка сказала «скопировано»', cbtn.textContent === 'скопировано', cbtn.textContent);
+check('и подсветилась', cbtn.classList.contains('done'), 'нет класса');
+
+// Отказ буфера — то, что увидит всякий, кто открыл офис по туннелю.
+copied = null;
+setClipboard(async () => { throw new Error('нет доступа'); });
+globalThis.document.execCommand = () => false;
+UI.viewerKey('с');                        // и по-русски тоже
+await new Promise((r) => setTimeout(r, 0));
+check('отказ виден на кнопке', cbtn.classList.contains('fail') && /не вышло/.test(cbtn.textContent), cbtn.textContent);
+
 console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
 process.exit(failed ? 1 : 0);

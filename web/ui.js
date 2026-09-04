@@ -22,6 +22,9 @@ export function initUI(state, callbacks) {
   el.lift = $('#lift');
   el.invite = $('#invite');
   el.notes = $('#notes');
+  // Один обработчик на всю панель просмотра, поставленный на входе: разметка
+  // внутри неё перерисовывается постоянно, а он это переживает.
+  bindCopyButtons();
 }
 
 export const clean = (s) => (s || '').replace(/```[\s\S]*?```/g, tr('clean.code')).replace(/[*#`]/g, '').replace(/\n{3,}/g, '\n\n').trim();
@@ -609,6 +612,104 @@ function renderGallery() {
   if (picked) picked.scrollIntoView({ block: 'nearest' });
 }
 
+// ------------------------------------------------ копирование блоков кода
+// Кнопку рисует markdown.js, нажатие ловится здесь и одной делегацией на
+// панель: блоков в транскрипте бывают сотни, и вешать обработчик на каждый —
+// это сотни обработчиков, переживающих перерисовку.
+//
+// Буфер обмена в браузере доступен только на localhost или по https. Офис
+// открывают и по туннелю, и по адресу в сети — там `navigator.clipboard` либо
+// отсутствует, либо отказывает, поэтому за ним стоит старый `execCommand`, а
+// если и он не сработал, кнопка говорит «не вышло» вместо того, чтобы соврать
+// зелёным.
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* туннель или http — падаем на запасной путь */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+// Состояние живёт на самой кнопке полторы секунды и возвращается в покой.
+// Отдельной строки статуса нет нарочно: кнопка и есть ответ.
+async function copyBlock(btn) {
+  const block = btn.closest('.mdblock');
+  const code = block && block.querySelector('pre.mdcode code');
+  if (!code) return false;
+  const ok = await copyText(code.textContent);
+  btn.classList.remove('done', 'fail');
+  btn.classList.add(ok ? 'done' : 'fail');
+  btn.textContent = tr(ok ? 'md.copied' : 'md.copyFail');
+  clearTimeout(btn._back);
+  btn._back = setTimeout(() => {
+    btn.classList.remove('done', 'fail');
+    btn.textContent = tr('md.copy');
+  }, ok ? 1500 : 4000);
+  return ok;
+}
+
+// Клавиша копирует верхний блок, попавший в экран, — тот, который читают.
+// Ниже экрана блоки есть почти всегда, и копировать первый в документе значило
+// бы копировать не то, что видно.
+function copyTopBlock() {
+  const box = el.viewer.querySelector('#chatlog') || el.viewer.querySelector('.vbody') || el.viewer;
+  const top = box.getBoundingClientRect ? box.getBoundingClientRect().top : 0;
+  const blocks = [...el.viewer.querySelectorAll('.mdblock')];
+  if (!blocks.length) return false;
+  const seen = blocks.find((b) => b.getBoundingClientRect().bottom > top + 4) || blocks[0];
+  const btn = seen.querySelector('.mdcopy');
+  if (!btn) return false;
+  btn.scrollIntoView({ block: 'nearest' });
+  copyBlock(btn);
+  return true;
+}
+
+// Строка клавиш внизу перечисляет то, что работает, — и обещание должно быть
+// правдой: C копирует, только когда в панели есть блок кода, поэтому и в
+// подсказке она появляется только тогда. Пустое обещание клавиши офис уже
+// проходил на радио, когда «R — радио» стояло в строке бесплатной сборки.
+export function paintCopyHint() {
+  if (!el.viewer || el.viewer.hidden) return;
+  const line = el.viewer.querySelector('.vpath');
+  if (!line || line.dataset.copyHint) return;
+  if (!el.viewer.querySelector('.mdblock')) return;
+  line.dataset.copyHint = '1';
+  const piece = document.createElement('span');
+  piece.textContent = ` · C — ${tr('md.copy')}`;
+  line.appendChild(piece);
+}
+
+// Делегация ставится один раз на панель просмотра: разметка внутри неё
+// перерисовывается постоянно, а обработчик переживает это, потому что висит
+// выше.
+export function bindCopyButtons() {
+  // Подставной DOM клавиатурных стендов слушателей не умеет, и это не повод
+  // им падать: они проверяют состояние, а не подписку.
+  if (!el.viewer || !el.viewer.addEventListener || el.viewer._copyBound) return;
+  el.viewer._copyBound = true;
+  el.viewer.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest && e.target.closest('.mdcopy');
+    if (!btn) return;
+    e.preventDefault();
+    copyBlock(btn);
+  });
+}
+
 // `title` is what Esc goes back to: a board has one, an agent's file list does not
 let viewToken = 0;
 
@@ -709,6 +810,7 @@ export async function openFile(p, items = null, index = -1, title = '') {
     <div class="single">${inner}</div><div class="vpath">${esc(p)}</div></div>`;
   $('#vx').onclick = closeViewer;
   bindDocControls();
+  paintCopyHint();
   const img = $('#zimg');
   if (img) img.onclick = () => { img.classList.toggle('pixel'); };
 }
@@ -755,6 +857,12 @@ function paintHeadFocus() {
 export function viewerKey(raw, big = false) {
   if (el.viewer.hidden) return false;
   const key = raw.toLowerCase();
+  // C копирует верхний блок кода — и в транскрипте, и в файле. Снаружи эта
+  // буква открывает инвентарь на «на себе», и до 4 сентября 2026 она делала
+  // это прямо поверх открытого просмотра: буквы проваливались сюда сквозь
+  // панель. Внутри просмотра переодеваться незачем, а копировать — постоянно;
+  // инвентарь остаётся на I, одним нажатием.
+  if ((key === 'c' || key === 'с') && el.viewer.querySelector('.mdblock')) return copyTopBlock();
   if (transcriptKey(key, big)) return true;
   const n = gallery.items.length;
 
@@ -1875,6 +1983,7 @@ function paintChat(msgs, fresh = 0, force = false) {
   if (first) box.scrollTop = Math.max(0, first.offsetTop - box.offsetTop - 12);
   else if (atBottom || !keep) box.scrollTop = box.scrollHeight;
   else box.scrollTop = keep;
+  paintCopyHint();
 }
 
 function paintNoteCount() {
