@@ -100,7 +100,11 @@ textarea:focus{outline:none; border-color:var(--warn)}
 .acts{display:flex; gap:6px; margin-top:10px; flex-wrap:wrap}
 .acts button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 10px; cursor:pointer}
-.acts button:hover{background:var(--wood-lit); color:#fff}
+.acts button:hover:not(:disabled){background:var(--wood-lit); color:#fff}
+/* Погашенная вкладка обязана выглядеть погашенной: «Дать задание» темнеет,
+   пока агент ждёт разрешения, — доставлять ему в этот момент нечего, и кнопка,
+   которая выглядит живой и не нажимается, читается как поломка. */
+.acts button:disabled{opacity:.45; cursor:not-allowed}
 .acts button.on{background:var(--wood-lit); color:var(--warn); border-color:var(--warn)}
 kbd{color:var(--muted); font-size:10px}
 
@@ -125,6 +129,22 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .single pre{white-space:pre-wrap; font-size:12px; color:var(--ink-dim); margin:0}
 .vpath{padding:6px 12px; font-size:10px; color:var(--muted-dim); border-top:2px solid var(--wood); word-break:break-all}
 .empty{padding:30px; color:var(--muted); text-align:center}
+
+/* ---- карточка разрешения ---- */
+/* Команда — единственное, по чему принимают решение, поэтому у неё своё поле,
+   а не строка в потоке текста: тёмная врезка, как в терминале, откуда вопрос и
+   пришёл. Переносится, а не обрезается — обрезанная команда это обманутый
+   хозяин, а горизонтальная прокрутка внутри карточки читается как «всё». */
+.cmd{margin:8px 0; padding:6px 8px; background:var(--field); border:2px solid var(--frame);
+  color:var(--ink); font:inherit; font-size:12px; line-height:18px;
+  white-space:pre-wrap; word-break:break-all; max-height:200px; overflow:auto}
+.prow{display:flex; gap:8px; align-items:center; margin:8px 0 6px; flex-wrap:wrap}
+.prow button.primary{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
+/* «В терминале» — не отказ и не разрешение, а «спрошу не здесь»: отодвигается
+   от тройки решений, чтобы не читаться четвёртым вариантом ответа. */
+.prow button[data-a="terminal"]{margin-left:auto}
+#denyNote{width:100%; box-sizing:border-box; margin:8px 0 0; padding:6px;
+  background:var(--field); border:2px solid var(--frame); color:var(--ink); font:inherit; font-size:13px}
 
 /* ---- пейджер ---- */
 /* Свой угол: тосты слева внизу, диалог по центру, пейджер справа — три вещи

@@ -14,7 +14,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const PORT = Number(process.env.PERMIT_PORT || 5393);
+// Порт свой и ничей больше: 5393 уже занят стендом согласия, и на общем
+// прогоне два сервера дрались за него — падал то один, то другой, и всегда не
+// в том месте, где сломано.
+const PORT = Number(process.env.PERMIT_PORT || 5396);
 const base = `http://127.0.0.1:${PORT}`;
 const OWNER = 'owner-token-for-the-test';
 const GUEST = 'guest-pass-for-the-test';
@@ -53,6 +56,19 @@ const post = (p, body, headers = owner) => fetch(base + p, {
 const state = (headers = { 'x-valey-owner': OWNER }) =>
   fetch(base + '/api/state', { headers }).then((r) => r.json());
 
+// Ждём, пока запрос доедет до офиса, а не «примерно четверть секунды». Под
+// нагрузкой — а стенды гоняются подряд — четверти секунды не хватало, и стенд
+// падал на ровном месте раз на десяток прогонов, показывая пустой список там,
+// где на самом деле было «ещё не дошло».
+async function untilPermits(n) {
+  for (let i = 0; i < 100; i++) {
+    const s = await state();
+    if ((s.permits || []).length >= n) return s;
+    await wait(50);
+  }
+  throw new Error(`запрос не доехал до офиса за 5 секунд`);
+}
+
 // Запрос от хука: не ждём его, он висит. Возвращаем промис с ответом.
 const askPermit = (payload) => post('/api/permit', payload, owner);
 
@@ -68,9 +84,17 @@ const BASH = (command) => ({
 
 // Открытый поток — это и есть «в офисе кто-то есть». Без него сервер обязан
 // ответить хуку сразу.
+//
+// Возвращаемое обещание `ready` ждёт первого события, а не «примерно двухсот
+// миллисекунд». Сервер кладёт соединение в список зрителей сразу после того,
+// как напишет в него первый снимок, — значит пришедший кадр и есть признак,
+// что зритель посчитан. Со `sleep` вместо этого стенд падал примерно раз на
+// три прогона, и падал не там, где сломано: «запрос виден хозяину → []».
 function openStream(query) {
   const ctl = new AbortController();
   const events = [];
+  let first;
+  const ready = new Promise((r) => { first = r; });
   const done = fetch(`${base}/api/stream?${query}`, { signal: ctl.signal }).then(async (r) => {
     const reader = r.body.getReader();
     const dec = new TextDecoder();
@@ -83,10 +107,11 @@ function openStream(query) {
       while ((i = buf.indexOf('\n\n')) >= 0) {
         events.push(buf.slice(0, i));
         buf = buf.slice(i + 2);
+        first();
       }
     }
   }).catch(() => { /* закрыли — так и было задумано */ });
-  return { events, close: () => { ctl.abort(); return done; } };
+  return { events, ready, close: () => { ctl.abort(); return done; } };
 }
 
 try {
@@ -102,18 +127,17 @@ try {
 
   // Гость не считается зрителем: пейджер до него не доходит.
   const g = openStream(`guest=${GUEST}`);
-  await wait(200);
+  await g.ready;
   const onlyGuest = await askPermit(BASH('git push'));
   ok('один гость — тоже «никого»', onlyGuest.status === 200 && !onlyGuest.j.decision, onlyGuest);
 
   // ------------------------------------------------------- хозяин смотрит
   const o = openStream(`owner=${OWNER}`);
-  await wait(200);
+  await o.ready;
 
   // --------------------------------------------------------- разрешить
   let held = askPermit(BASH('git push -u origin HEAD'));
-  await wait(250);
-  let s = await state();
+  let s = await untilPermits(1);
   ok('запрос виден хозяину', (s.permits || []).length === 1, s.permits);
   const p1 = (s.permits || [])[0] || {};
   ok('команда видна целиком', p1.command === 'git push -u origin HEAD', p1.command);
@@ -136,8 +160,7 @@ try {
 
   // ---------------------------------------------------- всегда разрешать
   held = askPermit(BASH('git push'));
-  await wait(250);
-  s = await state();
+  s = await untilPermits(1);
   await post('/api/permit/answer', { id: s.permits[0].id, decision: 'always' });
   got = await held;
   ok('«всегда» — allow с правилами', got.j.decision === 'allow' && got.j.updatedPermissions.length === 1, got.j);
@@ -147,24 +170,21 @@ try {
 
   // ---------------------------------------------------------- отказать
   held = askPermit(BASH('rm -rf /'));
-  await wait(250);
-  s = await state();
+  s = await untilPermits(1);
   await post('/api/permit/answer', { id: s.permits[0].id, decision: 'deny', message: 'сделай ветку' });
   got = await held;
   ok('отказ доходит с запиской', got.j.decision === 'deny' && got.j.message === 'сделай ветку', got.j);
 
   // -------------------------------------------------------- в терминале
   held = askPermit(BASH('npm publish'));
-  await wait(250);
-  s = await state();
+  s = await untilPermits(1);
   await post('/api/permit/answer', { id: s.permits[0].id, decision: 'terminal' });
   got = await held;
   ok('«в терминале» — пустой ответ, а не отказ', got.status === 200 && !got.j.decision, got.j);
 
   // ------------------------------------------------------- дважды нельзя
   held = askPermit(BASH('ls'));
-  await wait(250);
-  s = await state();
+  s = await untilPermits(1);
   const id = s.permits[0].id;
   await post('/api/permit/answer', { id, decision: 'allow' });
   await held;
@@ -172,14 +192,15 @@ try {
   ok('второй ответ на тот же запрос не проходит', again.status === 404, again);
 
   // ------------------------------------------------ сессия ушла из офиса
-  held = askPermit({ ...BASH('ls'), session_id: 'sess-gone' });
-  await wait(250);
+  // Сессии `sess-1` на диске нет ни у одного из этих запросов, и это нарочно:
+  // так выглядит агент, которого офис ещё не проиндексировал. Он обязан
+  // дождаться ответа, а не быть отпущенным первым же тактом.
+  held = askPermit(BASH('ls -la'));
+  await wait(3000);                              // такт снимка проходит за 2.5 с
   s = await state();
-  ok('чужая сессия сначала ждёт', (s.permits || []).length === 1, s.permits);
-  // Снимок собирается раз в 2.5 с и не находит такой сессии на диске — вопрос
-  // отпускается сам.
-  got = await Promise.race([held, wait(4000).then(() => 'висит')]);
-  ok('вопрос исчезнувшей сессии отпускается', got !== 'висит' && !(got.j || {}).decision, got);
+  ok('неизвестную офису сессию такт не отпускает', (s.permits || []).length === 1, s.permits);
+  await post('/api/permit/answer', { id: s.permits[0].id, decision: 'terminal' });
+  await held;
 
   // ------------------------------------------- событие приходит сразу
   held = askPermit(BASH('git status'));
@@ -195,6 +216,20 @@ try {
   await held;
 
   await o.close(); await g.close();
+
+  // ------------------------------------- само правило отсрочки, без сервера
+  // Отсрочка нужна ровно затем, чтобы вопрос всё-таки отпускался, когда сессия
+  // действительно кончилась. Проверяется прямым импортом: ждать полминуты по
+  // часам стенд не должен, поэтому `now` передаётся параметром.
+  const P = await import('../server/permit.js');
+  const one = P.ask({ session_id: 'sess-x', tool_name: 'Bash', tool_input: { command: 'ls' } }, { audience: true });
+  P.forgetGone(['sess-other'], Date.now());
+  ok('только что пришедший вопрос переживает такт', P.permits().length === 1, P.permits());
+  P.forgetGone([], Date.now() + P.GRACE_MS + 1000);
+  ok('пустой снимок не считается доказательством', P.permits().length === 1, P.permits());
+  P.forgetGone(['sess-other'], Date.now() + P.GRACE_MS + 1000);
+  ok('а через отсрочку — отпускается', P.permits().length === 0, P.permits());
+  ok('и хук получает пустоту, а не отказ', (await one.verdict) === null, await one.verdict);
 } catch (e) {
   bad += 1;
   console.log('УПАЛ  | исключение →', e.message);

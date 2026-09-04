@@ -40,6 +40,7 @@ export function toast(text, kind = '') {
 // tr, а не t: в ui.js `t` уже занят локальными переменными в нескольких
 // функциях, и импорт там молча перекрывался
 import { t as tr, lang } from './i18n.js';
+import { cardClosed } from './pager.js';
 
 const WEATHER_ICON = { clear: '☀', clouds: '☁', rain: '☂', storm: '⚡', snow: '❄', fog: '≋' };
 
@@ -530,6 +531,9 @@ function typewriter() {
 export function closeDialog() {
   el.dialog.hidden = true; dialogKey = ''; armedNote = 0; btnIndex = 0; linkFocused = false; fileIdx = -1;
   denying = false;
+  // Карточка закрылась — пейджер должен узнать: вопрос, отданный ей, иначе
+  // пропадает с экрана совсем.
+  cardClosed();
 }
 
 // Esc на шаге «отказать с запиской» — это «назад к кнопкам», а не «закрыть

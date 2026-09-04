@@ -627,6 +627,10 @@ async function handle(req, res) {
       ...seen,
       people: livePeople(),
       access: guest ? accessForGuest(guest.guest) : accessForOwner(),
+      // По той же причине, что присутствие и доступ: запрос разрешения живёт
+      // секунды и приходит между тактами. Вкладка, открытая только что, обязана
+      // увидеть тот, что висит прямо сейчас, — а не пустоту до первого такта.
+      permits: guest ? [] : permits(),
     });
   }
 

@@ -20,6 +20,10 @@ let el = null, S = null, api = null;
 // ней: отложенный вопрос не должен пережить перезагрузку страницы молча, а
 // сервер о нём и так помнит — после F5 пейджер зазвонит снова.
 const deferred = new Set();
+// Отданные карточке. Пейджер их не показывает — вопрос уже на экране целиком,
+// и держать его ещё и в углу значит спрашивать дважды. В счётчик отложенных не
+// идут: они не ждут, на них смотрят.
+const opened = new Set();
 // Кому уже звонили. Один сигнал на запрос: пейджер, зовущий повторно, — это
 // будильник, а не уведомление.
 const rung = new Set();
@@ -29,7 +33,7 @@ export function initPager(state, callbacks) {
 }
 
 // Что показывать прямо сейчас: первый по времени неотложенный запрос.
-const current = () => (S.permits || []).find((p) => !deferred.has(p.id)) || null;
+const current = () => (S.permits || []).find((p) => !deferred.has(p.id) && !opened.has(p.id)) || null;
 export const waitingCount = () => (S.permits || []).filter((p) => deferred.has(p.id)).length;
 export const pagerOpen = () => !!el && !el.hidden;
 
@@ -54,7 +58,7 @@ export function renderPager() {
   if (!el) return;
   const p = current();
   if (!p) { el.hidden = true; return; }
-  const queue = (S.permits || []).filter((x) => !deferred.has(x.id)).length;
+  const queue = (S.permits || []).filter((x) => !deferred.has(x.id) && !opened.has(x.id)).length;
   el.hidden = false;
   el.innerHTML = `
     <div class="phead"><span class="pbrand">VALEY · PAGER</span><span class="plamp">●</span></div>
@@ -79,6 +83,7 @@ export function seePermits(list) {
   S.permits = list || [];
   const live = new Set(S.permits.map((p) => p.id));
   for (const id of [...deferred]) if (!live.has(id)) deferred.delete(id);
+  for (const id of [...opened]) if (!live.has(id)) opened.delete(id);
   for (const id of [...rung]) if (!live.has(id)) rung.delete(id);
   ring();
   renderPager();
@@ -104,8 +109,20 @@ function ring() {
 function answer() {
   const p = current();
   if (!p) return;
-  el.hidden = true;
+  opened.add(p.id);
+  renderPager();                       // следующий в очереди выйдет сам
   api.openPermit(p);
+}
+
+// Карточку закрыли, ничего не ответив. Вопрос никуда не делся, поэтому он
+// возвращается в отложенные: иначе он исчезает с экрана целиком — ни пейджера,
+// ни счётчика, — и агент ждёт девять минут молча.
+export function cardClosed() {
+  if (!opened.size) return;
+  for (const id of opened) deferred.add(id);
+  opened.clear();
+  renderPager();
+  api.hudChanged();
 }
 
 // Esc: «перезвоню». Не отказ и не ответ — агенту не уходит ничего.
@@ -142,6 +159,6 @@ export function pagerKey(raw) {
 // Запрос ответили или он ушёл сам — убрать со стола, не дожидаясь снимка.
 export function forgetPermit(id) {
   S.permits = (S.permits || []).filter((p) => p.id !== id);
-  deferred.delete(id);
+  deferred.delete(id); opened.delete(id);
   renderPager();
 }
