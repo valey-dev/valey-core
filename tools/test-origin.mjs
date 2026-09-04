@@ -146,6 +146,11 @@ try {
   ok('чужой метод в ручку входа — не 500', method.status !== 500, method.status);
   await alive('после чужого метода');
 
+  // ------------------------------------------------------------ модули
+  const boot = await req('/api/settings');
+  ok('секция модуля есть в настройках с первого запроса, до любого сохранения',
+    boot.status === 200 && boot.j && boot.j.settings && 'spotify' in boot.j.settings, boot.j && Object.keys(boot.j.settings || {}));
+
   // --------------------------------------------------------------- файлы
   const file = await req('/api/file?path=' + encodeURIComponent('/etc/hosts'));
   ok('файл не из транскрипта не отдают', file.status === 403, file.status);
