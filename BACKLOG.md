@@ -56,7 +56,9 @@
   «Всегда разрешать» — `updatedPermissions` из `permission_suggestions` с
   `destination: localSettings`. Тот же хук закрывает `BLOCKED_RE` в
   deliver.js: доставка в чат больше не упирается в права вслепую.
-  Сначала кадр. Проверено по документации 4 сентября 2026, CLI 2.1.252.
+  Проверено по документации 4 сентября 2026, CLI 2.1.252. Кадр нарисован,
+  ждёт утверждения:
+  [WIP — Запрос разрешения из Claude Code](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=945-2)
 
 ## Someday
 
