@@ -440,6 +440,7 @@ function typewriter() {
 
 export function closeDialog() {
   el.dialog.hidden = true; dialogKey = ''; armedNote = 0; btnIndex = 0; linkFocused = false; fileIdx = -1;
+  clearInterval(S.tw);   // машинка дописывала бы реплику в закрытую карточку
 }
 
 // ---- arrows walk along the bottom row, Enter presses ----
@@ -1396,7 +1397,7 @@ export function focusRing(nodeOf, selector, opts = {}) {
 }
 
 const skyRing = focusRing(() => el.sky, '#skytoggle, #skyq, .skyhit, #skygeo');
-export function closeSky() { el.sky.hidden = true; skyRing.reset(); }
+export function closeSky() { el.sky.hidden = true; skyRing.reset(); clearTimeout(geoTimer); }
 export function skyKey(raw) { return skyRing.key(raw, el.sky && !el.sky.hidden); }
 
 // ------------------------------------------------------------- цвет офиса
