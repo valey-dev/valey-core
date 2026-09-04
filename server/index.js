@@ -809,6 +809,11 @@ async function handle(req, res) {
 // вообще, а это `0.0.0.0` — офис отвечал всей сети Wi-Fi без единой проверки.
 // Открыть наружу можно, но только вместе с токеном: одно без другого и есть
 // та самая дыра.
+// Модули — раньше первого чтения настроек: их умолчания входят в кэш при
+// сборке, а кэш собирается один раз. До 4 сентября 2026 порядок был обратный,
+// и секция модуля появлялась в настройках только после первого сохранения —
+// клиент радио маскировал это через `|| {}`.
+const mods = await loadModules(ROOT);
 let boot = await getSettings();
 const EXTERNAL = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
 if (EXTERNAL && !(boot.network || {}).token) {
@@ -818,7 +823,6 @@ if (EXTERNAL && !(boot.network || {}).token) {
 const HOST = process.env.HOST || (EXTERNAL ? '0.0.0.0' : '127.0.0.1');
 
 server.listen(PORT, HOST, async () => {
-  const mods = await loadModules(ROOT);
   const token = await ownerToken();
   const s = await getSettings();
   console.log(`Valey office at http://localhost:${PORT}`);

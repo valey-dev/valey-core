@@ -9,7 +9,7 @@
 //   first   — отдаём событие первому, кто взялся (клавиша, ПРОБЕЛ, ESC).
 import { addDict } from './i18n.js';
 
-const HOOKS = ['sig', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'esc', 'tick', 'hud', 'lang', 'help', 'busy'];
+const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'esc', 'tick', 'hud', 'lang', 'help', 'busy'];
 const hooks = Object.fromEntries(HOOKS.map(h => [h, []]));
 const dicts = [];
 let ids = [];
@@ -32,13 +32,25 @@ export async function loadModules() {
   // этаж и «нужно приглашение» вместо комнат: найдено 1 сентября 2026 первым же
   // кадром в режиме shared.
   if (!Array.isArray(list)) return [];
+  // Стили — раньше клиентов и с ожиданием. Ссылка, добавленная в head, не
+  // задерживает ничего: страница живёт дальше, а стиль приезжает когда приедет.
+  // Пока он в пути, разметка модуля уже может быть на экране и уже может быть
+  // измерена — и намерить она способна что угодно. 3 сентября 2026 книга в
+  // читальне так и вышла: панель без своих стилей растянулась во всё окно,
+  // ширина колонки посчиталась по 1372 пикселям вместо 886, и глава легла одной
+  // колонкой поперёк разворота. Тайм-аут на случай стиля, который не приедет
+  // никогда: офис важнее одного модуля.
+  const styles = list.filter((m) => m.style).map((m) => new Promise((done) => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = `/modules/${m.id}/${m.style}`;
+    link.onload = link.onerror = done;
+    document.head.appendChild(link);
+    setTimeout(done, 3000);
+  }));
+  if (styles.length) await Promise.all(styles);
+
   for (const m of list) {
-    if (m.style) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = `/modules/${m.id}/${m.style}`;
-      document.head.appendChild(link);
-    }
     if (!m.client) continue;
     try {
       const mod = await import(`/modules/${m.id}/${m.client}`);

@@ -60,6 +60,7 @@ Two calling conventions, and confusing them is expensive:
 | Point | Kind | Called with | You return |
 | --- | --- | --- | --- |
 | `sig` | collect | `state` | a string folded into the floor-plan signature; the plan rebuilds when it changes |
+| `room` | collect | `{ w, security, meeting, rowY, below }` | a room object, or nothing if your module is not a room |
 | `layout` | collect | `L, state` | nothing; attach your things to the layout |
 | `near` | collect | `p, L, room` | `{ kind, d, … }` — the nearest candidate wins |
 | `draw` | collect | `L, t, near` | `{ y, fn(ctx) }`, or an array of them; sorted by `y` with everything else |
@@ -73,6 +74,8 @@ Two calling conventions, and confusing them is expensive:
 | `help` | collect | — | a string appended to the key strip at the bottom |
 
 `layout` is called on every plan rebuild **and** once after the modules load, because the floor is usually built before they arrive. Make it idempotent, or you will push the same thing twice.
+
+Your `style.css` is loaded and applied **before** your `register` runs, so the first thing you draw is already yours. That order is not free — the loader waits for the stylesheet — and it exists because a panel measured before its own CSS measures the whole window: the office bible once laid a chapter out as one column across both pages of the spread, from a single reading taken a few milliseconds early.
 
 Your panel is your own element, created by you and appended to `body`. The core markup has no holes waiting for it. Panel chrome (`.vwrap`, `.vhead`, `.grid`) and `focusRing` from `web/ui.js` are yours to reuse: the keyboard walks panels the same way everywhere, and a second way to walk buttons is a second office.
 
@@ -105,6 +108,10 @@ browser is often closed while the office keeps running. Observers are awaited,
 so a journal can rely on order; one that throws is logged and does not stop the
 tick or the other observers. An event is a difference, so both snapshots are
 handed over — the core does not compute the diff for you.
+
+A room you hand over is yours to paint. The core paints only the rooms it knows — a room with a `draw` kind of its own is skipped in the room pass, and you draw it from the `draw` point. Give it a very small `y` so it lands under the boards, desks and people that sort into the same list.
+
+`room` and `layout` are two different moments, and the difference matters. `room` is asked **while the plan is being built**, before the world's height is known and before the lift is assembled, and it is the only way to add a room: one handed over later would sit outside the floor and have no lift stop. `layout` is called on the finished plan and is for attaching things to it — a prop, a target, a rectangle nobody walks through. The core cannot compute your room's geometry for you, so `room` hands you an anchor — the service tier's bottom room and the floor width — and takes a finished room back.
 
 `route` **must return `true`** when it answers. Returning the result of `send` returns `undefined`, the core reads that as "not mine", and then tries to answer a second time into headers that are already gone.
 

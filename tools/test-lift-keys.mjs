@@ -3,21 +3,7 @@
 // вёрстка, а состояние фокуса — на каком этаже он стоит при открытии, куда
 // ходит стрелками и что нажимает Enter.
 
-function node(cls = '') {
-  const classes = new Set(cls.split(' ').filter(Boolean));
-  return {
-    disabled: false, textContent: '', clicked: 0, dataset: {},
-    classList: {
-      add: (c) => classes.add(c),
-      remove: (c) => classes.delete(c),
-      contains: (c) => classes.has(c),
-      toggle: (c, on) => (on === undefined ? (classes.has(c) ? classes.delete(c) : classes.add(c)) : (on ? classes.add(c) : classes.delete(c))),
-    },
-    has: (c) => classes.has(c),
-    click() { this.clicked += 1; },
-    scrollIntoView() {},
-  };
-}
+import { node, proxy, installDom } from './lib/dom.mjs';
 
 // В панели живут либо этажи, либо строки стойки — узел el.lift один и тот же.
 function makeLift(kind = 'floors', n = 3) {

@@ -84,5 +84,25 @@ ok('и в ней три стола', plan.rooms[0]?.desks.length === 3, plan.roo
 ok('и все трое за ними', plan.rooms[0]?.agents.length === 3, plan.rooms[0]?.agents);
 ok('комната названа репозиторием', plan.rooms[0]?.title === 'my-project', plan.rooms[0]?.title);
 
+// --- комната от модуля ---
+// Точка `room` спрашивается внутри сборки, до того как посчитается высота мира
+// и соберётся лифт: комната, добавленная позже, оказалась бы за границей этажа
+// и без остановки. Стенд ловит именно это — не «вызвалась ли функция», а
+// попала ли комната в мир и в лифт.
+const withRoom = buildLayout(agents, {
+  rooms: ({ below, security }) => ({
+    key: '__test', title: 'ЧИТАЛЬНЯ', service: true, draw: 'library',
+    x: security.x, y: below, w: 360, h: 138, door: { x: security.x + 34, w: 36 },
+    agents: [], desks: [], art: [],
+  }),
+});
+const lib = withRoom.rooms.find((r) => r.key === '__test');
+ok('комната модуля попала в список комнат', !!lib, withRoom.rooms.map((r) => r.title));
+ok('мир вырос под неё, а не обрезал', lib && withRoom.h >= lib.y + lib.h, `h=${withRoom.h}`);
+ok('у неё появилась остановка лифта',
+  (withRoom.lift.floors || []).some((f) => (f.rooms || []).includes('ЧИТАЛЬНЯ')),
+  (withRoom.lift.floors || []).map((f) => `${f.n}:${(f.rooms || []).join('/')}`));
+ok('без модулей план прежний', buildLayout(agents).rooms.every((r) => r.key !== '__test'));
+
 await fsp.rm(tmp, { recursive: true, force: true });
 process.exit(bad ? 1 : 0);

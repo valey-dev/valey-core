@@ -6,15 +6,8 @@
 //
 // Проверяется граница, а не кнопка. Кнопку у гостя мы прячем, но прятать — не
 // значит запрещать: страница чужая, и всё, что она может послать, она пошлёт.
-import { spawn } from 'node:child_process';
-import fsp from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { startOffice } from './lib/office.mjs';
 
-const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const PORT = Number(process.env.GUEST_PORT || 5392);
-const base = `http://127.0.0.1:${PORT}`;
 const TOKEN = 'test-owner-token-0001';
 
 let bad = 0;
@@ -22,22 +15,12 @@ const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
   else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
 };
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-guest-'));
-const settingsFile = path.join(dir, 'settings.json');
-await fsp.writeFile(settingsFile, JSON.stringify({
-  access: { mode: 'shared', token: TOKEN, invites: [] },
-  weather: { enabled: false }, delivery: { mode: 'default' },
-}, null, 2));
-
-const srv = spawn(process.execPath, ['server/index.js'], {
-  cwd: ROOT,
-  env: { ...process.env, PORT: String(PORT), VALEY_SETTINGS: settingsFile },
-  stdio: 'ignore',
+// Каталог сессий свой и пустой: стенд про порог и права, агенты ему не нужны.
+const { base, stop } = await startOffice({
+  settings: { access: { mode: 'shared', token: TOKEN, invites: [] } },
+  claudeDir: '/nonexistent-claude-dir',
 });
-const stop = () => { try { srv.kill(); } catch { /* уже мёртв */ } };
-process.on('exit', stop);
 
 let GUEST = '';
 const call = (p, { as = 'nobody', method = 'POST', body = {} } = {}) => {
@@ -49,12 +32,6 @@ const call = (p, { as = 'nobody', method = 'POST', body = {} } = {}) => {
 };
 
 try {
-  let up = false;
-  for (let i = 0; i < 60 && !up; i++) {
-    try { await fetch(base + '/api/whoami'); up = true; } catch { await wait(150); }
-  }
-  if (!up) throw new Error(`сервер не поднялся на ${PORT} — занят?`);
-
   // ------------------------------------------------- без приглашения никак
   const cold = await call('/api/state', { method: 'GET' });
   ok('без приглашения офис не показывают вовсе', cold.status === 403, cold.status);
@@ -131,8 +108,7 @@ try {
   bad += 1;
   console.log('УПАЛ  | стенд не доехал →', e.message);
 } finally {
-  stop();
-  await fsp.rm(dir, { recursive: true, force: true });
+  await stop();
 }
 
 console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
