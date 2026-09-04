@@ -520,6 +520,13 @@ for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
 function onKey(e) {
   const k = e.key.toLowerCase();
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+  // Сочетание с Cmd, Ctrl или Alt принадлежит браузеру и системе, а не офису.
+  // Без этой строки Cmd+R перезагружал страницу и заодно выкатывал приёмник —
+  // буква доходила сюда голой, модификатор никто не смотрел. То же самое было
+  // с Cmd+N, Cmd+C и всяким сочетанием, чья буква занята в офисе: человек
+  // делает обычную вещь браузера и получает вдобавок панель. Shift не в счёт —
+  // он тут свой: Shift+F9 и бег.
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
   // the open board eats the arrows before the office sees them
   if (UI.viewerKey(e.key, e.shiftKey)) { e.preventDefault(); return; }
   // Панель лифта и стойка — то же самое: пока они открыты, стрелки ходят по
