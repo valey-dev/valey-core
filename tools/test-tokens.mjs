@@ -136,5 +136,20 @@ const used = new Set([...css.matchAll(/var\(\s*(--[\w-]+)/g)].map((m) => m[1]));
 const unknown = [...used].filter((n) => !declared.has(n) && !OUTSIDE.has(n));
 ok('каждый var() ведёт в :root или в известный список снаружи', unknown.length === 0, unknown);
 
+// ------------------------------------------------------------------ theme.js
+// The office turns its whole brown palette from one hue, and it does it by
+// name: theme.js writes the variables straight onto the root element, so a name
+// that has drifted apart in the two files is not an error anywhere — the office
+// simply stops repainting that one place and nobody notices until a screenshot
+// in another tone.
+const js = fs.readFileSync(path.join(ROOT, 'web/theme.js'), 'utf8');
+const painted = [
+  ...[...js.matchAll(/\['(--[\w-]+)',/g)].map((m) => m[1]),
+  ...[...js.matchAll(/setProperty\('(--[\w-]+)'/g)].map((m) => m[1]),
+];
+ok(`theme.js красит ${new Set(painted).size} переменных`, painted.length > 15, painted.length);
+const orphans = [...new Set(painted)].filter((n) => !declared.has(n) && !OUTSIDE.has(n));
+ok('и каждая из них объявлена в :root', orphans.length === 0, orphans);
+
 console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
 process.exit(bad ? 1 : 0);
