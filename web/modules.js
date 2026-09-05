@@ -9,7 +9,14 @@
 //   first   — we give the event to the first one who took it (a key, SPACE, ESC).
 import { addDict } from './i18n.js';
 
-const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'esc', 'tick', 'hud', 'lang', 'help', 'busy'];
+// `note` — the ninth seam, from 5 September 2026. A note used to hang on a
+// reply in a conversation and nothing else; now it hangs on an address, and a
+// module can name addresses of its own. The list of notes stays in the core,
+// and opening one belongs to whoever owns the address: the core shows it to
+// everyone and takes the first module that answers. It never reads such an
+// address itself. Nobody answered — the row says so out loud, and the note is
+// still readable from the line of context stored with it.
+const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'esc', 'tick', 'hud', 'lang', 'help', 'busy', 'note'];
 const hooks = Object.fromEntries(HOOKS.map(h => [h, []]));
 const dicts = [];
 let ids = [];

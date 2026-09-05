@@ -410,6 +410,10 @@ const DICT = {
     'notes.closed': 'разговор закрыт',
     'notes.noProject': 'без проекта',
     'notes.noCtx': 'контекст не сохранился · заметка старше правки',
+    // A note whose address is not a session shows the line its owner wrote, and
+    // the button is named by whoever can open it. The core keeps no words about
+    // what such a note hangs on: it does not read those addresses.
+    'notes.noOpener': 'нечем открыть',
     'notes.nothingFound': 'Ничего не нашлось.',
     'notes.emptyHead': 'Здесь пока ничего',
     'notes.emptyWhy': 'Заметка заводится в разговоре: открой «дочитать» у любого агента и нажми N. Мысль привяжется к реплике, которую ты в этот момент читаешь, и попадёт сюда.',
@@ -989,6 +993,7 @@ const DICT = {
     'notes.closed': 'conversation closed',
     'notes.noProject': 'no project',
     'notes.noCtx': 'context was not kept · note predates the fix',
+    'notes.noOpener': 'nothing to open it with',
     'notes.nothingFound': 'Nothing found.',
     'notes.emptyHead': 'Nothing here yet',
     'notes.emptyWhy': 'Notes are made inside a conversation: open “read on” for any agent and press N. The thought attaches to the message you were reading and shows up here.',
