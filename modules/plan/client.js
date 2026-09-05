@@ -19,6 +19,8 @@ import { WALL, LIFT_DOOR_H, MARGIN } from '../../web/layout.js';
 const DICT = {
   ru: {
     'plan.hint': 'план офиса',
+    'plan.place': 'план офиса', 'plan.place.close': 'закрыть',
+    'plan.place.go': 'вести туда', 'plan.place.room': 'комната',
     'plan.title': 'ПЛАН ОФИСА',
     'plan.floors': 'one:{n} этаж|few:{n} этажа|many:{n} этажей',
     'plan.projects': 'one:{n} проект|few:{n} проекта|many:{n} проектов',
@@ -45,6 +47,8 @@ const DICT = {
   },
   en: {
     'plan.hint': 'office plan',
+    'plan.place': 'the office plan', 'plan.place.close': 'close',
+    'plan.place.go': 'lead me there', 'plan.place.room': 'room',
     'plan.title': 'OFFICE PLAN',
     'plan.floors': 'one:{n} floor|other:{n} floors',
     'plan.projects': 'one:{n} project|other:{n} projects',
@@ -521,6 +525,20 @@ export function register(api) {
   });
   api.on('esc', () => (planOpen() ? (closePlan(), true) : false));
   api.on('busy', () => planOpen());
+  // Its own place on the keys board. The module says what its keys mean while the
+  // plan is up — the arrows walk rooms here, not buttons — and answers `place` with
+  // that id while it owns the screen. The core never learns the id: it asks.
+  const [MAP] = api.places([{
+    id: 'map',
+    title: 'plan.place',
+    caps: {
+      Escape: 'plan.place.close', KeyK: 'plan.place.close',
+      Enter: 'plan.place.go', Space: 'plan.place.go',
+      ArrowUp: 'plan.place.room', ArrowDown: 'plan.place.room',
+      ArrowLeft: 'plan.place.room', ArrowRight: 'plan.place.room',
+    },
+  }]);
+  api.on('place', () => (planOpen() ? MAP : null));
   api.on('tick', (state) => {
     S = state;
     if (!planOpen()) return;
