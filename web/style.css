@@ -141,6 +141,14 @@ kbd{color:var(--muted); font-size:10px}
 .thumb img{max-width:100%; max-height:100%; image-rendering:auto}
 figcaption{font-size:11px; margin-top:6px; color:var(--ink); word-break:break-all}
 figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2px}
+/* Читаемое выделяется мышью. У `body` стоит `user-select:none` — для холста
+   это правильно: перетаскивание не должно подсвечивать интерфейс. Но панель,
+   которую читают, холстом не является, а запрет наследовался и туда, и в
+   транскрипте нельзя было выделить ни ссылку, ни путь, ни обычную строку.
+   Найдено 5 сентября 2026, когда искали, почему ссылку из ответа агента
+   нельзя скопировать: кнопка у блоков кода появилась ровно из-за этого
+   запрета, а не потому, что блок особенный. */
+.single, .chatlog, .md, .notes, .lcard, .tcard{user-select:text}
 .single{overflow:auto; padding:14px}
 .single .full{max-width:100%; display:block; margin:0 auto}
 .single pre{white-space:pre-wrap; font-size:12px; color:var(--ink-dim); margin:0}
