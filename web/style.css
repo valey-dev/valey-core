@@ -290,7 +290,19 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
    fitted, so the missing scroll was invisible; the second scale is what asked
    the question. The tabs and the tree's own header stay put while it moves. */
 .bagwrap{width:min(700px, calc(94vw / var(--ui, 1)))}
-.bagwrap .bbody{overflow-y:auto; min-height:0}
+.bagwrap .bbody{min-height:0}
+/* The tree keeps one height whatever branch is open. Its content varies a lot —
+   five nodes in one direction, one in another, a card of two lines or of six —
+   and a panel that resizes under every keypress reads as the office twitching.
+   So the height is set once, from the same ceiling the panel already has, and
+   what varies scrolls inside. Reported 5 September 2026: «высота окна прыгает,
+   если переключаюсь даже между направлениями».
+   The tabs, the tree's own header and the direction tiles stay put; everything
+   below them moves. */
+.bagwrap.steady{height:min(616px, calc(84vh / var(--ui, 1)))}
+.bagwrap.steady .bbody{flex:1 1 auto; overflow:hidden}
+.tscroll{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain;
+  display:flex; flex-direction:column; gap:10px; padding-right:2px}
 .bagwrap{display:flex; flex-direction:column}
 
 /* Вкладки инвентаря. Переключаются цифрой, а не стрелкой: стрелки внутри
