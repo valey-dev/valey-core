@@ -118,20 +118,31 @@ const cache = new Map(); // sessionId -> { file, offset, pending, st }
 // It does not block the tick: the snapshot goes out at once and the grades
 // arrive a second later. Otherwise the first look into the office would wait
 // for every session to be re-read.
+//
+// The shift — replies, characters and the gaps between them — is counted in the
+// same pass, for the same reason: on the tail it would be a percentage of a
+// day. The filter widens from a tool call to any assistant line, which is what
+// a reply is; measured at the same 350 ms on the largest file here.
 async function deepSkills(st, file, until) {
   if (until <= 0) return;
+  const own = { last: 0 };
   const rl = createInterface({
     input: createReadStream(file, { encoding: 'utf8', start: 0, end: until - 1 }),
     crlfDelay: Infinity,
   });
   for await (const line of rl) {
-    // JSON.parse only where a call can be: on 63 MB that is the difference
+    // JSON.parse only where the agent speaks: on 63 MB that is the difference
     // between 350 ms and parsing the whole file for nothing.
-    if (line.length < 40 || !line.includes('"tool_use"')) continue;
+    if (line.length < 40 || !line.includes('"assistant"')) continue;
     let r;
     try { r = JSON.parse(line); } catch { continue; }
     if (r.type !== 'assistant' || !r.message) continue;
+    // The head keeps its own clock. It runs after the tail has been applied and
+    // its stamps are all older, so sharing one would produce negative gaps; the
+    // single gap across the boundary is lost, and that is one per session.
+    gap(st.shift, Date.parse(r.timestamp || '') || 0, own);
     for (const b of Array.isArray(r.message.content) ? r.message.content : []) {
+      if (b?.type === 'text' && b.text) { st.shift.turns++; st.shift.chars += b.text.length; }
       if (b?.type !== 'tool_use') continue;
       const d = describeTool(b.name, b.input);
       const mood = (IMAGE_RE.test(b.input?.file_path || '') && /Write|Edit/.test(b.name)) ? 'design' : d.mood;
@@ -338,6 +349,30 @@ const SKILL_OF = {
   test: 'qa', build: 'release', ship: 'release', read: 'archive',
 };
 const SKILL_BRANCHES = ['design', 'research', 'plan', 'code', 'qa', 'release', 'archive'];
+
+// The shift: how much was done in this reporting period, next to what the
+// grades say he can do. Three numbers and no more, because only three survived
+// the measuring on 6 September 2026 — replies, characters said, and the gaps
+// between them. Files read did not: half the reads go through the terminal
+// without a path in the call, and the count would be quietly low. The walks to
+// the coffee machine and the cooler did not either: the office draws those
+// itself, so counting them measures our own screensaver.
+//
+// A gap is what it is and is named so in the office: a pause between two
+// replies is the conversation waiting for a human, not an agent daydreaming.
+const IDLE_GAP = 10 * 60 * 1000;
+const newShift = () => ({ turns: 0, chars: 0, idleN: 0, idleMs: 0 });
+
+// `clock` is passed in rather than kept on the shift: the tail and the head are
+// two passes over one file, and they must not share one last-seen stamp.
+function gap(shift, ts, clock) {
+  if (!ts) return;
+  if (clock.last && ts > clock.last) {
+    const d = ts - clock.last;
+    if (d > IDLE_GAP) { shift.idleN++; shift.idleMs += d; }
+  }
+  clock.last = Math.max(clock.last, ts);
+}
 const newSkills = () => Object.fromEntries(SKILL_BRANCHES.map((b) => [b, 0]));
 
 function roleScores(acts, now) {
@@ -391,6 +426,8 @@ function emptyState() {
     lastUserPrompt: '', awaitingUser: false, acts: [], role: '', files: new Map(),
     turns: 0, model: '', branch: '', slug: '', title: '', aiTitle: '', task: null,
     skills: newSkills(),   // the grade counter: it grows and is never trimmed
+    shift: newShift(),     // replies, characters and idle gaps, over the whole file
+    clock: { last: 0 },    // the tail's own last-seen stamp, see gap()
     recent: [],   // rolling window of the actual conversation, read on demand
   };
 }
@@ -409,11 +446,14 @@ function applyLine(st, line) {
   if (r.type === 'last-prompt' && r.lastPrompt) st.lastUserPrompt = String(r.lastPrompt).slice(0, 400);
 
   if (r.type === 'assistant' && r.message) {
+    gap(st.shift, Date.parse(r.timestamp || '') || 0, st.clock);
     st.model = r.message.model || st.model;
     const content = r.message.content || [];
     const txt = textOf(content);
     if (txt) {
       st.lastAssistantText = txt; st.turns++; remember(st, 'assistant', txt, r.timestamp);
+      // The same three numbers the deep pass keeps for the head of the file.
+      st.shift.turns++; st.shift.chars += txt.length;
       // The task is held until the next one is named, rather than taken from
       // the last message. While an agent answers it says a dozen replies with no
       // tail — going by the last one, the line went out exactly during the
@@ -815,6 +855,10 @@ export async function snapshot() {
       // Raw per-branch counters. Whoever shows them turns them into grades:
       // the ladder belongs to the filing cabinet, not to the core.
       skills: { ...t.skills },
+      // Minutes, not milliseconds: nobody reads an idle gap to the second, and
+      // a rounded number cannot pretend to a precision it does not have.
+      shift: { turns: t.shift.turns, chars: t.shift.chars, idleN: t.shift.idleN,
+        idleMin: Math.round(t.shift.idleMs / 60000) },
       files,
       artifacts,
       hasNews: t.awaitingUser && artifacts.length > 0,
