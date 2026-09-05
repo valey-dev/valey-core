@@ -1,32 +1,36 @@
-// Приёмная для запросов разрешения из Claude Code.
+// The waiting room for permission requests from Claude Code.
 //
-// Хук `PermissionRequest` срабатывает ровно тогда, когда в терминале должен
-// появиться диалог «Allow Claude to run …?», и ждёт ответа на stdout. Пока он
-// ждёт, диалога в терминале НЕТ: вопрос держим мы. Отсюда всё остальное в этом
-// файле — это про то, чтобы вопрос не завис навсегда.
+// The `PermissionRequest` hook fires exactly when the "Allow Claude to run …?"
+// dialog should appear in the terminal, and waits for an answer on stdout.
+// While it waits there is NO dialog in the terminal: we are holding the
+// question. Everything else in this file is about not holding it forever.
 //
-// Три способа отпустить его обратно:
-//  - хозяин ответил в офисе: allow, deny или always;
-//  - хозяин сказал «в терминале» — отвечаем пустотой, и Claude Code спрашивает сам;
-//  - никто не ответил за WAIT_MS — то же самое, но без человека.
+// Three ways to let it go:
+//  - the owner answered in the office: allow, deny or always;
+//  - the owner said "in the terminal" — we answer with nothing, and Claude Code
+//    asks for itself;
+//  - nobody answered within WAIT_MS — the same, without a person.
 //
-// Пустой ответ — это не отказ. Хук, вернувший `{}`, пропускает вопрос дальше по
-// штатному пути, и человек видит родной диалог. Поэтому «отложить» и «истекло»
-// сделаны одинаково: офис отходит в сторону, а не решает за хозяина.
-// Кадры: [19 · Запрос разрешения из Claude Code](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=1033-2)
+// An empty answer is not a refusal. A hook that returns `{}` lets the question
+// continue down the normal path, and the person sees the native dialog. That is
+// why "defer" and "timed out" are made the same way: the office steps aside
+// rather than deciding for the owner.
+// Frames: [19 · a permission request from Claude Code](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=1033-2)
 import crypto from 'node:crypto';
 
-// Хук ждёт 600 секунд (умолчание Claude Code). Отвечаем заметно раньше, чтобы
-// вопрос вернулся в терминал по нашему решению, а не по чужому таймауту: иначе
-// момент, когда карточка в офисе перестала что-то значить, наступает молча.
+// The hook waits 600 seconds (the Claude Code default). We answer noticeably
+// earlier so the question returns to the terminal by our decision rather than
+// by someone else's timeout: otherwise the moment the card in the office stops
+// meaning anything arrives in silence.
 export const WAIT_MS = 9 * 60 * 1000;
 
-// id -> { ...публичные поля, resolve, timer }
+// id -> { ...public fields, resolve, timer }
 const waiting = new Map();
 
-// Что из tool_input показывать на пейджере и в карточке. Bash — главный
-// случай, ради него всё и делалось: там решают по тексту команды. Остальные
-// инструменты показывают то, что у них есть за «что именно ты трогаешь».
+// What of tool_input to show on the pager and in the card. Bash is the main
+// case and the reason for all of this: there the decision is made on the text
+// of the command. The other tools show whatever they have that answers "what
+// exactly are you touching".
 function commandOf(tool, input) {
   if (!input || typeof input !== 'object') return '';
   const first = (...keys) => {
@@ -36,30 +40,32 @@ function commandOf(tool, input) {
   if (tool === 'Bash') return first('command');
   const named = first('file_path', 'path', 'url', 'pattern', 'query', 'notebook_path');
   if (named) return named;
-  // Незнакомый инструмент — показываем его вход как есть, а не «…». Обрезать
-  // будем в одном месте, ниже, и одинаково для всех.
+  // An unknown tool — show its input as it is, not as "…". Trimming happens in
+  // one place, below, and the same way for everyone.
   try { return JSON.stringify(input); } catch { return ''; }
 }
 
-// Потолок на то, что уходит в браузер. Команда, которую невозможно прочитать
-// целиком, — это обманутый хозяин, поэтому предел щедрый; но `tool_input` для
-// Write — это весь файл, и класть его в снимок каждые 2.5 секунды незачем.
+// A ceiling on what goes to the browser. A command that cannot be read in full
+// is an owner being misled, so the limit is generous; but `tool_input` for
+// Write is the whole file, and putting that into the snapshot every 2.5 seconds
+// serves nothing.
 const CUT = 4000;
 const cut = (s) => (String(s || '').length > CUT ? String(s).slice(0, CUT) + ' …' : String(s || ''));
 
-// Публичная часть записи: то, что уходит хозяину в снимке и в событии.
+// The public part of an entry: what goes to the owner in the snapshot and in the event.
 const shown = (e) => ({
   id: e.id, agentId: e.agentId, tool: e.tool, command: e.command,
   description: e.description, at: e.at, until: e.until,
-  // Правило, которое ляжет в настройки по «всегда разрешать». Показываем
-  // словами до нажатия: молча записанное правило — это разрешение, которое
-  // хозяин не давал.
+  // The rule that "always allow" would write into the settings. Shown in words
+  // before the press: a rule written silently is a permission the owner never
+  // gave.
   rule: e.rule,
 });
 
-// Правило для «всегда». Claude Code присылает свои предложения в
-// permission_suggestions — берём их, а не сочиняем свои: кнопка «Always allow»
-// в терминале запишет ровно это, и офис не должен расходиться с ней.
+// The rule for "always". Claude Code sends its own proposals in
+// permission_suggestions — we take those rather than inventing ours: the
+// "Always allow" button in the terminal writes exactly this, and the office
+// must not disagree with it.
 function ruleOf(suggestions) {
   const list = Array.isArray(suggestions) ? suggestions : [];
   for (const s of list) {
@@ -72,14 +78,15 @@ function ruleOf(suggestions) {
   return '';
 }
 
-// Пришёл запрос. Возвращает промис с вердиктом для хука; `null` означает
-// «офис отходит в сторону» — хук отвечает пустотой, спрашивает терминал.
+// A request arrived. Returns a promise with the verdict for the hook; `null`
+// means "the office steps aside" — the hook answers with nothing and the
+// terminal asks.
 export function ask(payload, { audience }) {
   const agentId = String((payload && payload.session_id) || '');
   const tool = String((payload && payload.tool_name) || '');
   const input = (payload && payload.tool_input) || {};
-  // Некому смотреть — некому и отвечать. Держать вопрос в офисе, которого
-  // никто не открыл, значит воровать девять минут у человека в терминале.
+  // Nobody watching means nobody to answer. Holding a question in an office
+  // nobody opened steals nine minutes from the person at the terminal.
   if (!audience) return { held: false, verdict: null };
 
   const e = {
@@ -95,15 +102,15 @@ export function ask(payload, { audience }) {
   };
   const verdict = new Promise((resolve) => { e.resolve = resolve; });
   e.timer = setTimeout(() => finish(e.id, null), WAIT_MS);
-  // Таймер не должен держать процесс живым сам по себе: девять минут ожидания
-  // не повод не дать серверу закрыться.
+  // The timer must not keep the process alive by itself: nine minutes of
+  // waiting is no reason to stop the server from closing.
   if (e.timer.unref) e.timer.unref();
   waiting.set(e.id, e);
   return { held: true, verdict, entry: shown(e) };
 }
 
-// Отпустить вопрос. Один раз: второй ответ на тот же запрос — это гонка между
-// офисом и таймером, и выигрывать её должен первый.
+// Let a question go. Once: a second answer to the same request is a race
+// between the office and the timer, and the first one must win it.
 function finish(id, verdict) {
   const e = waiting.get(id);
   if (!e) return false;
@@ -113,8 +120,8 @@ function finish(id, verdict) {
   return true;
 }
 
-// Ответ хозяина. `always` — это allow плюс правило в настройки проекта;
-// `terminal` — офис отходит в сторону, как при истёкшем ожидании.
+// The owner's answer. `always` is allow plus a rule in the project settings;
+// `terminal` is the office stepping aside, as on a timeout.
 export function answer(id, { decision, message } = {}) {
   const e = waiting.get(id);
   if (!e) return null;
@@ -122,7 +129,7 @@ export function answer(id, { decision, message } = {}) {
   if (decision === 'allow' || decision === 'always') {
     return finish(id, {
       decision: 'allow',
-      // Правила отдаём хуку теми же объектами, какими их прислал Claude Code.
+      // The rules go back to the hook as the very objects Claude Code sent.
       updatedPermissions: decision === 'always' ? e.suggestions : [],
     }) ? { ok: true, decision } : null;
   }
@@ -133,36 +140,38 @@ export function answer(id, { decision, message } = {}) {
   return null;
 }
 
-// Что показать хозяину. Порядок — по времени прихода: пейджер зовёт по
-// очереди, и «первый» должен значить «первый спросил».
+// What to show the owner. Ordered by arrival: the pager calls them in turn, and
+// "first" has to mean "asked first".
 export function permits() {
   return [...waiting.values()].sort((a, b) => a.at - b.at).map(shown);
 }
 
-// Сколько ждать, прежде чем поверить, что сессии нет. Снимок собирается раз в
-// 2.5 секунды, а список транскриптов на диске кешируется на десять: сессия,
-// начавшаяся только что, доезжает до офиса не мгновенно. Без этой отсрочки
-// первый же такт отпускал вопрос нового агента как «сессии нет» — то есть
-// офис молча отказывался работать ровно с теми, кто только сел за стол.
+// How long to wait before believing a session is gone. The snapshot is built
+// every 2.5 seconds and the list of transcripts on disk is cached for ten: a
+// session that has just started does not reach the office instantly. Without
+// this grace the very first tick released a new agent's question as "no such
+// session" — that is, the office quietly refused to work with exactly those
+// who had just sat down at a desk.
 export const GRACE_MS = 30_000;
 
-// Сессия исчезла из офиса — держать её вопрос незачем: отвечать некому и не о
-// чем. Зовётся из такта снимка.
+// The session vanished from the office — there is no point holding its
+// question: nobody to answer, and nothing to answer about. Called from the
+// snapshot tick.
 //
-// `now` параметром, а не Date.now() внутри: иначе правило можно проверить
-// только настоящим ожиданием в полминуты, а стенд, который спит, — это стенд,
-// который выключают.
+// `now` is a parameter rather than Date.now() inside: otherwise the rule could
+// only be checked by really waiting half a minute, and a stand that sleeps is a
+// stand people switch off.
 export function forgetGone(aliveIds, now = Date.now()) {
   const alive = new Set(aliveIds || []);
-  // Пустой офис — это не доказательство того, что сессии нет: так выглядит и
-  // снимок, который ещё не собрался.
+  // An empty office is no proof that a session is gone: a snapshot that has not
+  // been built yet looks exactly the same.
   if (!alive.size) return;
   for (const e of [...waiting.values()]) {
     if (e.agentId && !alive.has(e.agentId) && now - e.at > GRACE_MS) finish(e.id, null);
   }
 }
 
-// Для тестов и для остановки сервера: отпустить всё, что ждёт.
+// For the stands and for shutting the server down: release everything waiting.
 export function releaseAll() {
   for (const id of [...waiting.keys()]) finish(id, null);
 }

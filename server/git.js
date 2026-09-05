@@ -1,10 +1,11 @@
-// Есть ли в каталоге репозиторий. Это всё, что ядро знает про git: панель
-// истории уехала модулем в modules/gittree/ 3 сентября 2026, а здесь остался
-// один вопрос — от него зависит, вырастет ли в комнате дерево и что покажет
-// стек версии в stack.js.
+// Whether a directory holds a repository. That is all the core knows about
+// git: the history panel left for modules/gittree/ on 3 September 2026, and
+// one question stayed here — the answer decides whether a tree grows in the
+// room, and what the version stack in stack.js shows.
 //
-// `git` отдаётся наружу нарочно: модулю нужен тот же запускатель с теми же
-// таймаутами, а скопированный руками помощник расходится с оригиналом молча.
+// `git` is exported on purpose: the module needs the same runner with the
+// same timeouts, and a helper copied by hand drifts from the original in
+// silence.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -16,7 +17,7 @@ export const git = (dir, args, opts = {}) => run('git', args, {
   maxBuffer: opts.maxBuffer || 8 * 1024 * 1024,
 });
 
-// Отдельным вопросом, потому что от ответа зависит не только панель.
+// Its own question, because more than the panel depends on the answer.
 export async function hasRepo(dir) {
   if (!dir) return false;
   try {
