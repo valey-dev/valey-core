@@ -1,9 +1,9 @@
-// Цвет офиса. Вся коричневая палитра интерфейса выведена из одного тона:
-// крутим его — и панели, рамки, поля ввода едут следом. Холст с пикселями
-// живёт отдельно, его дерево здесь не трогается.
+// The colour of the office. The whole brown palette of the interface is derived
+// from one hue: turn it, and the panels, the frames and the input fields follow.
+// The pixel canvas lives separately, its tree is not touched here.
 const KEY = 'valey-theme';
 
-// [переменная, сдвиг тона от базового, насыщенность, светлота] — снято с исходной палитры (тон 25°).
+// [variable, hue shift from the base, saturation, lightness] — taken off the original palette (hue 25°).
 const TOKENS = [
   ['--bg', -1, 39, 8], ['--bg-hi', 2, 35, 13], ['--bg-deep', 0, 43, 6],
   ['--field', 2, 35, 9], ['--wood-dark', 0, 33, 12], ['--wood-hi', 0, 31, 17],
@@ -15,8 +15,8 @@ const TOKENS = [
   ['--cab-edge', 5, 39, 48], ['--cab-dial', 8, 47, 60],
 ];
 
-// Имя пресета — ключ словаря, а не готовое слово: панель цвета говорит на том
-// же языке, что и остальной офис.
+// The name of a preset is a dictionary key rather than a ready word: the colour
+// panel speaks the same language as the rest of the office.
 export const PRESETS = [
   { key: 'oak', hue: 25, sat: 100, accent: '#9fe0a8' },
   { key: 'cherry', hue: 355, sat: 105, accent: '#ffa8b6' },
@@ -51,10 +51,11 @@ export function resetTheme() { applyTheme({ ...DEFAULTS }); }
 
 applyTheme();
 
-// ------------------------------------------------------- размер текста панелей
-// Холст сюда не входит: у него свой масштаб на + и 0. Здесь только панели, и
-// растут они целиком — вместе с отступами, рамками и полями ввода. Растить один
-// кегль было бы дешевле, но при 150% текст упирался бы в неизменившиеся края.
+// ------------------------------------------------------- the size of the panel text
+// The canvas is not part of this: it has its own scale on + and 0. Here it is the
+// panels only, and they grow whole — together with the paddings, the borders and
+// the input fields. Growing one font size would have been cheaper, but at 150%
+// the text would run into edges that had not changed.
 const UI_KEY = 'valey-uiscale';
 export const UI_STEPS = [1, 1.15, 1.3, 1.5, 1.75];
 export const ui = { scale: 1 };

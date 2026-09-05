@@ -38,8 +38,8 @@ export const sound = {
     return this.on;
   },
 
-  // Пока играет музыка, офис отходит на второй план: клавиши и дождь становятся
-  // тише. Зовёт это тот, кто её играет, — сейчас модуль радио.
+  // While the music plays the office steps back: the keys and the rain go
+  // quieter. It is called by whoever is playing it — for now, the radio module.
   duck(on) {
     if (on === this.ducked) return;
     this.ducked = on;
@@ -184,7 +184,8 @@ export const sound = {
   },
 
   // someone finished something
-  // лифт: створки — сухой шорох с лязгом, приезд — две ноты вниз, как в кабине
+  // the lift: the doors are a dry rustle with a clang, the arrival two notes
+  // down, as in the cabin
   lift(kind, vol = 1) {
     if (!this.ready || !this.on) return;
     const c = this.ctx, now = c.currentTime;
@@ -202,7 +203,7 @@ export const sound = {
       });
       return;
     }
-    // ход кабины и створки — узкополосный шум, у створок короче и выше
+    // the cabin moving and the doors — narrow-band noise, shorter and higher for the doors
     const long = kind === 'move';
     const dur = long ? 0.9 : 0.32;
     const len = Math.floor(c.sampleRate * dur);
@@ -233,6 +234,28 @@ export const sound = {
       osc.connect(g); g.connect(this.master);
       osc.start(now + i * 0.09); osc.stop(now + i * 0.09 + 0.6);
     });
+  },
+
+  // The pager: two short beeps on a square wave. Not a chime — that one is soft
+  // and reports something good, while this one has to lift a head away from
+  // somebody else's window. The sound is on by default, like the rest of the
+  // office: it goes off on M together with everything else, and that is the only
+  // switch.
+  pager() {
+    if (!this.ready || !this.on) return;
+    const c = this.ctx, now = c.currentTime;
+    for (let i = 0; i < 2; i++) {
+      const at = now + i * 0.16;
+      const osc = c.createOscillator(); osc.type = 'square';
+      osc.frequency.setValueAtTime(1720, at);
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(0.05, at + 0.008);
+      g.gain.setValueAtTime(0.05, at + 0.07);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.1);
+      osc.connect(g); g.connect(this.master);
+      osc.start(at); osc.stop(at + 0.14);
+    }
   },
 
   thunder(strength = 1) {

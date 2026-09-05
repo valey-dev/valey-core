@@ -1,9 +1,10 @@
-// node tools/test-skate.mjs — физика скейта, без браузера.
+// node tools/test-skate.mjs — the skateboard physics, without a browser.
 //
-// Инерция ломается тихо и неприятно: скорость либо не гаснет (игрок «плывёт»
-// по коридору с отпущенными клавишами), либо разгоняется без предела, либо по
-// диагонали едет в полтора раза быстрее, чем прямо. Всё это видно только на
-// длинной серии кадров, поэтому проверяется здесь, а не глазами.
+// Momentum breaks quietly and unpleasantly: either the speed never dies (the
+// player "floats" down the corridor with the keys released), or it accelerates
+// without limit, or a diagonal runs half again as fast as a straight line. All
+// of that is only visible over a long series of frames, so it is checked here
+// rather than by eye.
 import { skateStep, rolling, CRUISE, CRUISE_PUSH, STOP,
   ollieStep, canOllie, OLLIE_POP } from '../web/skate.js';
 
@@ -13,13 +14,13 @@ const ok = (what, cond, got) => {
   bad++; console.log('УПАЛ  | ' + what + (got === undefined ? '' : ' → ' + JSON.stringify(got)));
 };
 const speed = (v) => Math.hypot(v.vx, v.vy);
-// n кадров с одним и тем же вводом
+// n frames with the same input
 const run = (v, input, n, dt = 1) => {
   for (let i = 0; i < n; i++) v = skateStep(v, input, dt);
   return v;
 };
 
-// ---------------------------------------------------------------- разгон
+// ------------------------------------------------------------ acceleration
 
 const still = { vx: 0, vy: 0 };
 ok('стоя на месте без ввода никуда не едет', speed(skateStep(still, {}, 1)) === 0);
@@ -37,14 +38,14 @@ const pushed = run(still, { x: 1, push: true }, 200);
 ok('SHIFT поднимает потолок', Math.abs(pushed.vx - CRUISE_PUSH) < 0.05, pushed.vx);
 ok('и отпущенный SHIFT возвращает к обычной', run(pushed, { x: 1 }, 120).vx <= CRUISE + 1e-9);
 
-// ---------------------------------------------------------------- диагональ
+// --------------------------------------------------------------- diagonals
 
 const diag = run(still, { x: 1, y: 1 }, 200);
 ok('по диагонали не быстрее, чем прямо', speed(diag) <= CRUISE + 1e-9, speed(diag));
 ok('и при этом обе оси живые', diag.vx > 0 && diag.vy > 0, diag);
 ok('диагональ симметрична', Math.abs(diag.vx - diag.vy) < 1e-9, diag);
 
-// ------------------------------------------------------------------ накат
+// ------------------------------------------------------------------ coasting
 
 let coast = run(still, { x: 1 }, 60);
 const atRelease = coast.vx;
@@ -56,15 +57,15 @@ ok('но в конце концов встаёт ровно в ноль', stoppe
 ok('rolling() честно говорит, что уже не едет', !rolling(stopped));
 ok('и что едет, когда едет', rolling(run(still, { x: 1 }, 30)));
 
-// сколько кадров занимает остановка — чтобы накат нельзя было втихую удвоить
+// how many frames a stop takes — so the coast cannot be quietly doubled
 let v = run(still, { x: 1 }, 60), frames = 0;
 while (rolling(v) && frames < 600) { v = skateStep(v, {}, 1); frames++; }
 ok('накат длится от полусекунды до двух', frames > 30 && frames < 120, frames);
 
-// --------------------------------------------------------- длинные кадры
+// ------------------------------------------------------------- long frames
 
-// dt = 3 — это кадр из фоновой вкладки; на нём трение вычитанием увело бы
-// скорость в минус, и игрок поехал бы назад
+// dt = 3 is a frame from a background tab; on it friction by subtraction would
+// take the speed below zero and the player would ride backwards
 const laggy = run(run(still, { x: 1 }, 60), {}, 40, 3);
 ok('на длинных кадрах не уезжает назад', laggy.vx >= 0, laggy);
 ok('и всё-таки останавливается', laggy.vx === 0, laggy);
@@ -72,14 +73,14 @@ ok('и всё-таки останавливается', laggy.vx === 0, laggy);
 const laggyPush = run(still, { x: 1 }, 40, 3);
 ok('на длинных кадрах не перескакивает потолок', speed(laggyPush) <= CRUISE + 1e-9, laggyPush);
 
-// ------------------------------------------------------------ мелочи
+// ------------------------------------------------------------ small things
 
 ok('разворот гасит старую скорость', run(run(still, { x: 1 }, 60), { x: -1 }, 30).vx < 0);
 ok('порог остановки не нулевой', STOP > 0);
 ok('вызов без аргументов не падает', speed(skateStep()) === 0);
 
 
-// --- олли ---
+// --- the ollie ---
 ok('с земли на доске оттолкнуться можно', canOllie({ skate: true, z: 0 }) === true);
 ok('пешком — нельзя', canOllie({ skate: false, z: 0 }) === false);
 ok('в воздухе второй раз — нельзя', canOllie({ skate: true, z: 5 }) === false);
@@ -96,7 +97,7 @@ ok('высшая точка около 14 пикселей', top > 12 && top < 2
 ok('в воздухе меньше секунды', aloft < 60, aloft);
 ok('после приземления высота и скорость обнулены', air.z === 0 && air.vz === 0, air);
 ok('на земле без толчка ничего не происходит', ollieStep({ z: 0, vz: 0 }).z === 0);
-// длинный кадр — вкладка была в фоне: игрок должен приземлиться, а не уйти под пол
+// a long frame — the tab was in the background: the player must land, not go through the floor
 ok('длинный кадр приземляет, а не роняет ниже пола', ollieStep({ z: 1, vz: -5 }, 4).landed === true);
 ok('вызов без аргументов не падает', ollieStep().z === 0);
 

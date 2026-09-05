@@ -1,6 +1,6 @@
 // Drawing the building: corridors, rooms, desks, boards, props, light.
 import { hash, drawPerson } from './sprites.js';
-import { lang, other, t as tr } from './i18n.js';
+import { lang, t as tr } from './i18n.js';
 import { WALL, LIFT_DOOR_H } from './layout.js';
 import { drawSky, flash } from './weather.js';
 import { drawPainting, drawPoster, artOf } from './paintings.js';
@@ -61,9 +61,10 @@ export function drawCorridor(ctx, L, t, night = 0.5, weather = { kind: 'clear', 
   }
 }
 
-// ----------------------------------------------------------------------- лифт
-// Шахта во всю высоту этажа, по проёму на каждый коридор. Кабина одна: видно её
-// только на том этаже, где она стоит, — на остальных за створками темнота.
+// ----------------------------------------------------------------------- the lift
+// A shaft the full height of the floor, with an opening onto every corridor. There
+// is one cabin: it is visible only on the floor it is standing on — on the others
+// there is darkness behind the doors.
 export function drawLift(ctx, L, t, st) {
   const lf = L.lift;
   if (!lf) return;
@@ -84,11 +85,11 @@ export function drawLift(ctx, L, t, st) {
     if (here) {
       px(ctx, x + 4, top + 1, w - 8, LIFT_DOOR_H - 2, '#3b4650');
       px(ctx, x + 4, top + 1, w - 8, 2, '#55626e');
-      px(ctx, x + w / 2 - 5, top + 3, 10, 2, '#ffe9a8');       // лампа в кабине
+      px(ctx, x + w / 2 - 5, top + 3, 10, 2, '#ffe9a8');       // the lamp in the cabin
       px(ctx, x + 6, top + LIFT_DOOR_H - 4, w - 12, 2, '#2a333c');
     }
 
-    // створки разъезжаются от середины
+    // the doors part from the middle
     const open = here ? st.open : 0;
     const leaf = Math.max(0, Math.round((w - 8) / 2 * (1 - open)));
     if (leaf > 0) {
@@ -100,10 +101,10 @@ export function drawLift(ctx, L, t, st) {
       px(ctx, x + w - 4 - leaf, top + 1, 1, LIFT_DOOR_H - 2, '#4e5862');
     }
 
-    px(ctx, x + 2, top - 2, w - 4, 2, '#46505a');              // притолока
-    px(ctx, x + 2, top + LIFT_DOOR_H, w - 4, 2, '#46505a');    // порог
+    px(ctx, x + 2, top - 2, w - 4, 2, '#46505a');              // the lintel
+    px(ctx, x + 2, top + LIFT_DOOR_H, w - 4, 2, '#46505a');    // the threshold
 
-    // табло этажа и кнопка вызова
+    // the floor indicator and the call button
     px(ctx, x + w / 2 - 8, top - 12, 16, 9, '#12161a');
     pxText(ctx, String(f.n), x + w / 2 - 3, top - 5, here ? '#9fe0a8' : '#4a6a58', 7);
     px(ctx, x - 7, f.y - 22, 4, 7, '#3a444e');
@@ -111,29 +112,30 @@ export function drawLift(ctx, L, t, st) {
   }
 }
 
-// ------------------------------------------------------------ стойка секретаря
-// Стоит напротив лифта на каждом жилом этаже. Секретарь — единственный житель
-// офиса не из живой сессии, поэтому и внешность у него своя, постоянная.
+// ------------------------------------------------------------ the reception desk
+// It stands opposite the lift on every inhabited floor. The receptionist is the only
+// resident of the office who is not from a live session, so his looks are his own
+// and constant.
 export function drawReception(ctx, L, t) {
   for (const r of (L.lift && L.lift.reception) || []) {
     const { x, y, w } = r;
 
-    // Табличка над стойкой: этаж и сколько на нём проектов. Плашка на 13
-    // пикселей кончалась на y-17, а вторая строка ставилась на y-15 — то есть
-    // на стену за табличкой, тусклым по тусклому. Номер этажа при этом не
-    // читался вовсе; нашлось 30 августа 2026, когда номера развернули снизу
-    // вверх и захотелось убедиться, что на табличке правда «этаж 1».
+    // The plaque over the desk: the floor and how many projects are on it. A 13-pixel
+    // plate ended at y-17, while the second line was placed at y-15 — that is, on the
+    // wall behind the plaque, dim on dim. The floor number was not readable at all;
+    // found on 30 August 2026, when the numbers were turned bottom-up and somebody
+    // wanted to make sure the plaque really said "floor 1".
     const sign = tr('sign.floor', { n: r.n, projects: projectCount(r.rooms.length) });
     px(ctx, x + 2, y - 30, w - 4, 20, '#2a1d15');
     px(ctx, x + 2, y - 30, w - 4, 1, '#a9784c');
-    // Имя из main (офис называется VALEY), геометрия отсюда: там табличка
-    // осталась 13 пикселей высотой, и вторая строка по-прежнему ложилась ниже
-    // плашки, на стену. Цвет тоже здешний — ради него всё и чинилось.
+    // The name from main (the office is called VALEY), the geometry from here: there
+    // the plaque stayed 13 pixels tall, and the second line still lay below the plate,
+    // on the wall. The colour is local too — it is what all of this was fixed for.
     px(ctx, x + 2, y - 11, w - 4, 1, '#6d5040');
     pxText(ctx, 'VALEY', x + 6, y - 27, '#ffd166', 6);
     pxText(ctx, sign, x + 6, y - 18, '#c2a184', 5);
 
-    // секретарь за стойкой: видно по грудь, дышит
+    // the receptionist behind the desk: visible to the chest, breathing
     const bob = Math.floor(t / 900) % 2;
     const sx = r.who.x, sy = r.who.y + bob;
     px(ctx, sx - 5, sy - 12, 10, 3, '#3a2a20');
@@ -144,21 +146,21 @@ export function drawReception(ctx, L, t) {
     px(ctx, sx - 7, sy - 2, 14, 9, '#8fc8ff');
     px(ctx, sx - 7, sy - 2, 14, 2, '#a8d6ff');
 
-    // сама стойка поверх — секретарь за ней, а не на ней
+    // the desk itself on top — the receptionist is behind it, not on it
     px(ctx, x, y, w, 4, '#9a6a44');
     px(ctx, x, y + 4, w, 8, '#7d5334');
     px(ctx, x, y + 10, w, 2, '#5e3f27');
     px(ctx, x, y, 2, 12, '#6b472a');
     px(ctx, x + w - 2, y, 2, 12, '#6b472a');
-    px(ctx, x + 5, y - 4, 10, 4, '#d8cdb4');          // бумаги
+    px(ctx, x + 5, y - 4, 10, 4, '#d8cdb4');          // the papers
     px(ctx, x + 5, y - 4, 10, 1, '#f0e7d2');
-    px(ctx, x + w - 18, y - 7, 12, 7, '#3b4650');     // монитор
+    px(ctx, x + w - 18, y - 7, 12, 7, '#3b4650');     // the monitor
     px(ctx, x + w - 17, y - 6, 10, 5, '#5f8ea8');
   }
 }
 
-// Проекты на табличке: формы берутся из словаря, потому что в английском их
-// две, а в русском три — иначе на этаже оказывается «3 project».
+// The projects on the plaque: the forms come from the dictionary, because English
+// has two of them and Russian three — otherwise the floor ends up with "3 project".
 const projectCount = (n) => {
   const key = lang() === 'en'
     ? (n === 1 ? 'rec.project.one' : 'rec.project.many')
@@ -173,60 +175,78 @@ const plural = (n, one, few, many) => {
   return b === 1 ? one : many;
 };
 
-// Кто стоит у входа, зависит от языка: при английском интерфейсе — мужик в
-// кожанке и джинсах, при русском — приезжий в бейсболке. На табличке над
-// головой написан язык, на который он переключит, а не тот, что включён.
-// Ключ здесь — включённый язык, а не национальность человечка: под `en` стоит
-// русский. Путается при каждом чтении, поэтому сказано прямо.
+// Who stands at the entrance depends on the language: with an English interface it
+// is a fellow in a leather jacket and jeans, with a Russian one a newcomer in a
+// baseball cap. On the plaque above his head is the language he will switch to, not
+// the one that is on. The key here is the language that is ON, not the nationality of
+// the figure: under `en` stands the Russian one. It confuses on every reading, so it
+// is said outright.
 //
-// У каждого по предмету, и это одна пара, а не два независимых человека:
-// сигарета против стакана кофе. Неподвижный человечек в коридоре получает
-// занятие, а незнакомец — два разных силуэта вместо двух мужиков.
-// Рубашка американца светло-голубая, а не белая, по одной причине: рукав
-// рисуется цветом рубашки, стакан стоит к нему вплотную, и на белом он пропал
-// целиком — нашлось на кадре из макета до того, как это попало в код.
+// Each has a thing, and it is one pair rather than two independent people: a
+// cigarette against a cup of coffee. A motionless figure in the corridor gets an
+// occupation, and a stranger gets two different silhouettes instead of two fellows.
+// The American's shirt is light blue rather than white for one reason: the sleeve is
+// drawn in the colour of the shirt, the cup stands right against it, and on white it
+// disappeared entirely — found on a frame from the mock-up before it got into the code.
 const SWITCHER = {
   ru: { skin: '#e8ad7e', hair: '#a8542a', shirt: '#aebccb', pants: '#5a6b8a', boots: '#6b4a2a', style: 2, head: 'ball', glasses: false, face: 'none', tall: 1, hands: 'cup' },
   en: { skin: '#f4c9a0', hair: '#3a2a20', shirt: '#38302a', pants: '#3f4a63', boots: '#2a2118', style: 0, head: 'none', glasses: false, face: 'beard', tall: 0, hands: 'none', cig: true },
 };
 
+// What is written on the plaque. It comes from outside, like the liveliness of the
+// kicker: the name pack lives in the settings, and the drawing does not know about
+// them and must not.
+//
+// Since 4 September 2026 the plaque names what is ON rather than what it will switch
+// to: there is no click any more, there is a panel, and promising a language with it
+// would be a lie. "RU·EN" — the names are detached from the language: the interface
+// is Russian, the names are English.
+export const switcherSign = { code: '' };
+
 export function drawSwitcher(ctx, p, t, facing = 0) {
   const look = SWITCHER[lang()] || SWITCHER.ru;
   drawPerson(ctx, p.x, p.y, look, { pose: 'stand', frame: (t / 260) | 0, dir: facing, ms: t });
-  // табличка висит выше обычного пузыря: на прежней высоте её закрывала строка
-  // подсказки — ровно в тот момент, когда человек подошёл нажать
-  const top = p.y - 22 - look.tall - 20;
-  px(ctx, p.x - 9, top, 18, 10, 'rgba(20,13,8,0.86)');
-  px(ctx, p.x - 9, top, 18, 1, '#8a6247');
+  // The plaque stands ABOVE the hint line, as on the frame, rather than below it.
+  // While it was two glyphs wide the order did not matter; with "RU·EN" it grew to
+  // thirty pixels and drove into the plate with the player's name, who is standing
+  // right there at that moment — the "R" was eaten for good. This is visible only on
+  // a real ×4 frame, the mock-up has nothing to do with it.
+  const top = p.y - 22 - look.tall - 34;
+  const code = switcherSign.code || lang().toUpperCase();
+  // Five glyphs do not fit into a plaque of eighteen pixels: it grows exactly for
+  // "RU·EN" and exactly when that is what stands there.
+  const w = code.length > 2 ? 30 : 18;
+  px(ctx, p.x - w / 2, top, w, 10, 'rgba(20,13,8,0.86)');
+  px(ctx, p.x - w / 2, top, w, 1, '#8a6247');
   px(ctx, p.x - 1, top + 10, 2, 9, 'rgba(20,13,8,0.86)');
-  const code = other().toUpperCase();
   ctx.font = '7px "JetBrains Mono", "Courier New", monospace';
   pxText(ctx, code, p.x - ctx.measureText(code).width / 2, top + 7, '#ffd166');
 }
 
 
-// Настольный футбол. Стол живой ровно тогда, когда за него кто-то встал:
-// штанги качаются и мяч катается, пустой стол стоит смирно. Живость приходит
-// снаружи — рисовалка не знает ни про агентов, ни про игрока, ей говорят.
+// Table football. The table is alive exactly when somebody has stepped up to it: the
+// bars swing and the ball rolls, an empty table stands still. The liveliness comes
+// from outside — the drawing knows neither about the agents nor about the player, it
+// is told.
 export const kickerBusy = { since: 0 };
 
 function drawKicker(ctx, x, y, t) {
   const live = kickerBusy.since && t - kickerBusy.since < 400;
-  px(ctx, x - 20, y, 3, 6, '#3a2a1e');                 // ножки
+  px(ctx, x - 20, y, 3, 6, '#3a2a1e');                 // the legs
   px(ctx, x + 17, y, 3, 6, '#3a2a1e');
-  px(ctx, x - 22, y - 18, 44, 20, '#6b4a2e');          // корпус
+  px(ctx, x - 22, y - 18, 44, 20, '#6b4a2e');          // the body
   px(ctx, x - 22, y - 18, 44, 2, '#8a6247');
   px(ctx, x - 22, y, 44, 2, '#4a3423');
-  px(ctx, x - 19, y - 16, 38, 15, '#2f6b3a');          // поле
+  px(ctx, x - 19, y - 16, 38, 15, '#2f6b3a');          // the field
   px(ctx, x - 19, y - 16, 38, 1, '#3f8a4c');
-  px(ctx, x, y - 16, 1, 15, '#7fae87');                // центральная линия
-  px(ctx, x - 3, y - 11, 7, 5, '#7fae87');             // круг в центре
+  px(ctx, x, y - 16, 1, 15, '#7fae87');                // the centre line
+  px(ctx, x - 3, y - 11, 7, 5, '#7fae87');             // the centre circle
   px(ctx, x - 2, y - 10, 5, 3, '#2f6b3a');
-  px(ctx, x - 22, y - 12, 3, 7, '#241a12');            // ворота
+  px(ctx, x - 22, y - 12, 3, 7, '#241a12');            // the goals
   px(ctx, x + 19, y - 12, 3, 7, '#241a12');
 
-  // Штанги: крайние с одним человечком, средние с двумя. Красные против синих
-  // через одну — так же, как стоят на любом столе в любом коридоре.
+  // The bars: the outer ones with one figure, the middle ones with two. Red against
+  // blue every other one — the way they stand on any table in any corridor.
   [-13, -5, 5, 13].forEach((dx, i) => {
     px(ctx, x + dx, y - 20, 1, 19, '#b9b2a4');
     px(ctx, x + dx - 2, y - 20, 5, 1, '#d6cfc0');
@@ -237,7 +257,7 @@ function drawKicker(ctx, x, y, t) {
     }
   });
 
-  // Мяч. Пока играют — мечется по полю, потом ложится у центрального круга.
+  // The ball. While the game is on it darts about the field, afterwards it lies by the centre circle.
   const bx = live ? x - 16 + ((t / 60) % 32) : x + 7;
   const by = live ? y - 13 + Math.sin(t / 130) * 4 : y - 6;
   px(ctx, bx, by, 2, 2, '#f0ead8');
@@ -262,25 +282,25 @@ function drawCorridorProp(ctx, p, t) {
     px(ctx, x - 8, y - 2, 16, 2, '#8f9a9e');
   }
   if (kind === 'lounge') {
-    // продавленный диван курилки
-    px(ctx, x - 26, y - 18, 52, 12, '#4a5a6e');          // спинка
+    // the sagging sofa of the smoking room
+    px(ctx, x - 26, y - 18, 52, 12, '#4a5a6e');          // the back
     px(ctx, x - 26, y - 18, 52, 2, '#5e7089');
-    px(ctx, x - 26, y - 7, 52, 8, '#3f4f61');            // сиденье
+    px(ctx, x - 26, y - 7, 52, 8, '#3f4f61');            // the seat
     px(ctx, x - 26, y - 8, 52, 1, '#5e7089');
-    px(ctx, x - 29, y - 16, 4, 16, '#3a4a5c');           // подлокотники
+    px(ctx, x - 29, y - 16, 4, 16, '#3a4a5c');           // the armrests
     px(ctx, x + 25, y - 16, 4, 16, '#3a4a5c');
-    px(ctx, x - 24, y + 1, 3, 3, '#2a3542');             // ножки
+    px(ctx, x - 24, y + 1, 3, 3, '#2a3542');             // the legs
     px(ctx, x + 21, y + 1, 3, 3, '#2a3542');
-    px(ctx, x - 20, y - 15, 9, 7, '#6b5a7a');            // подушка
+    px(ctx, x - 20, y - 15, 9, 7, '#6b5a7a');            // the cushion
     px(ctx, x - 19, y - 14, 7, 2, '#8a749c');
     return;
   }
   if (kind === 'kicker') { drawKicker(ctx, x, y, t); return; }
   if (kind === 'ashtray') {
-    // урна с песком: над ней всегда вьётся дымок
+    // the sand bin: a wisp of smoke always curls above it
     px(ctx, x - 5, y - 14, 10, 14, '#5a5a5f');
     px(ctx, x - 5, y - 14, 10, 2, '#7a7a80');
-    px(ctx, x - 4, y - 16, 8, 2, '#8a8068');            // песок
+    px(ctx, x - 4, y - 16, 8, 2, '#8a8068');            // the sand
     for (let i = 0; i < 3; i++) {
       const life = ((t / 2600 + i / 3) % 1);
       ctx.globalAlpha = 0.28 * (1 - life);
@@ -298,8 +318,8 @@ function drawCorridorProp(ctx, p, t) {
   }
 }
 
-// Приёмник на тумбе: корпус, обложка волны, сетка динамика, шкала настройки
-// и эквалайзер, который дышит, только когда музыка действительно идёт.
+// The radio on the cabinet: the body, the cover of the wave, the speaker grille, the
+// tuning scale and the equaliser, which breathes only when the music is really playing.
 
 // ---------------------------------------------------------------------- room
 export function drawRoom(ctx, r, t) {
@@ -362,34 +382,35 @@ export function drawRoom(ctx, r, t) {
   drawNameplate(ctx, r, d);
 }
 
-// Табличка над дверью: имя проекта, а под ним — версия и стек, когда сервер
-// нашёл их в манифесте. Растёт вверх, в коридор: нижняя кромка обязана остаться
-// на месте, иначе вторая строка наползает на проём (Figma 249:2).
+// The plaque over the door: the name of the project, and under it the version and the
+// stack, when the server found them in a manifest. It grows upwards, into the corridor:
+// the bottom edge has to stay where it is, or the second line creeps over the opening
+// (Figma 249:2).
 //
-// Написана пиксельным шрифтом 3×5, а не fillText: на снимке из живого офиса
-// «v0.1.0 · Node» читалось как «v8.1.8 · Mode» — см. web/pixfont.js. Строка
-// без своих знаков (кириллическое имя папки) откатывается на fillText: мыльное
-// имя лучше отсутствующего.
+// It is written in the 3×5 pixel font rather than by fillText: on a shot from a live
+// office "v0.1.0 · Node" read as "v8.1.8 · Mode" — see web/pixfont.js. A string
+// without its own glyphs (a Cyrillic folder name) falls back to fillText: a soapy name
+// is better than a missing one.
 export function drawNameplate(ctx, r, d) {
   const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
   const label = cut(r.title, 18);
   const sub = r.sub ? cut(r.sub, 18) : '';
   const measure = (s) => (PF.canDraw(s) ? PF.textWidth(s) : ctx.measureText(s).width);
 
-  ctx.font = '7px "JetBrains Mono", "Courier New", monospace';   // для отката
-  // ширина чётная: гвоздик шириной в два пикселя иначе встаёт на полпикселя
-  // мимо середины двери, и табличка выглядит подвешенной криво
+  ctx.font = '7px "JetBrains Mono", "Courier New", monospace';   // for the fallback
+  // the width is even: a nail two pixels wide would otherwise stand half a pixel off
+  // the middle of the door, and the plaque would look hung crooked
   let w = Math.max(40, Math.round(Math.max(measure(label), sub ? measure(sub) : 0)) + 10);
   if (w % 2) w++;
-  // 9 = рамка, отступ, пять рядов буквы, отступ, рамка. Со второй строкой к
-  // этому добавляются линейка и такой же ряд: 17.
+  // 9 = the frame, a padding, five rows of a letter, a padding, the frame. With a
+  // second line a rule and another such row are added to that: 17.
   const h = sub ? 17 : 9;
   const nx = Math.round(d.x + d.w / 2 - w / 2), ny = r.y - 1 - h;
   px(ctx, nx, ny, w, h, '#6b4a2e');
   px(ctx, nx + 1, ny + 1, w - 2, h - 2, '#8a6242');
   px(ctx, nx + w / 2 - 1, ny - 3, 2, 3, '#5a4030');
-  // строка по центру таблички: у пиксельного шрифта ширина известна точно, и
-  // центрировать по ней честнее, чем отступом слева
+  // the line centred on the plaque: the pixel font's width is known exactly, and
+  // centring by it is more honest than by a left padding
   const line = (s, top, color) => {
     const x = nx + Math.round((w - measure(s)) / 2);
     if (PF.canDraw(s)) PF.drawText(ctx, s, x, top, color);
@@ -397,7 +418,7 @@ export function drawNameplate(ctx, r, d) {
   };
   line(label, ny + 2, '#f6e3c0');
   if (sub) {
-    // волосяная линейка: без неё на такой высоте две строки читаются одним пятном
+    // a hairline rule: without it two lines at this height read as one blot
     px(ctx, nx + 1, ny + 8, w - 2, 1, '#74502f');
     line(sub, ny + 10, '#e6cda4');
   }
@@ -462,9 +483,10 @@ export function drawDesk(ctx, d, agent, t) {
   if ((h >>> 3) % 2) px(ctx, x - 22, y - 1, 7, 4, '#efe6d2');
 }
 
-// Микроволновка в кухонном углу. Всё интересное в ней — за стеклом: пока
-// греет, окно светится и рыба едет по кругу вместе с тарелкой; после звонка
-// из щелей идёт запах, и это единственное, что видно из другого конца этажа.
+// The microwave in the kitchen corner. Everything interesting about it is behind the
+// glass: while it heats, the window glows and a fish rides around with the plate; after
+// the ping a smell comes out of the seams, and that is the only thing visible from the
+// other end of the floor.
 export function drawMicro(ctx, m, t, run) {
   const x = m.x, y = m.y;
   const on = !!run && run.phase === 'run';
@@ -475,7 +497,7 @@ export function drawMicro(ctx, m, t, run) {
   px(ctx, x - 13, y - 2, 26, 2, '#2a2a30');
   px(ctx, x - 11, y - 16, 17, 13, '#2a2a30');
   px(ctx, x - 10, y - 15, 15, 11, on ? '#6b4a1e' : '#1b1b22');
-  // панель: лампочка горит, пока идёт нагрев
+  // the panel: the lamp is lit while the heating goes on
   px(ctx, x + 7, y - 16, 5, 13, '#2f2f38');
   px(ctx, x + 8, y - 15, 3, 3, on ? '#ffd166' : '#5a5a66');
   for (let i = 0; i < 3; i++) px(ctx, x + 8, y - 10 + i * 3, 3, 1, '#5a5a66');
@@ -491,9 +513,9 @@ export function drawMicro(ctx, m, t, run) {
       ctx.globalAlpha = 1;
     }
   }
-  // Запах — это вся шутка, поэтому он заметный: семь струек, широкие и почти
-  // непрозрачные у самой дверцы. На первом кадре они были в шестнадцать
-  // процентов и терялись в тёплом свете комнаты.
+  // The smell is the whole joke, so it is conspicuous: seven wisps, wide and nearly
+  // opaque right at the door. On the first frame they were at sixteen per cent and got
+  // lost in the warm light of the room.
   if (run && run.phase === 'smell') {
     for (let i = 0; i < 7; i++) {
       const s = Math.sin(t / 380 + i * 1.1);
@@ -519,7 +541,7 @@ export function drawRoomProps(ctx, r, t) {
   px(ctx, c.x - 4, c.y - 34 - s * 2, 2, 5, '#e8dcc8');
   ctx.globalAlpha = 1;
 
-  // в углу либо обычный цветок, либо фикус — если комната его заслужила
+  // in the corner either an ordinary flower or a ficus — if the room has earned one
   if (r.ficus) { drawFicus(ctx, r.ficus.x, r.ficus.y, r.key, t); return; }
 
   // plant in the left corner
@@ -532,24 +554,25 @@ export function drawRoomProps(ctx, r, t) {
   }
 }
 
-// Мольберт с макетами: стоит на полу, ростом чуть выше человека (30 против 24).
-// Карточки на планшете — фичи со страницы WIP в Figma, кружок у каждой это её
-// состояние. Пустой планшет с запиской значит «Figma не ответила», а не «фич
-// нет»: без ответа офис не знает даже их списка.
+// The easel with the mock-ups: it stands on the floor, a little taller than a person
+// (30 against 24). The cards on the board are the features from the WIP page in Figma,
+// and the circle by each is its state. An empty board with a note means "Figma did not
+// answer" rather than "there are no features": without an answer the office does not
+// even know their list.
 
 
-// Большой фикус: в полтора человека ростом, поэтому кадка, ствол и крона рисуются
-// по отдельности — иначе на такой высоте он читается кустом, а не деревом.
+// A big ficus: one and a half people tall, so the tub, the trunk and the crown are
+// drawn separately — otherwise at that height it reads as a bush rather than a tree.
 function drawFicus(ctx, x, y, seed, t) {
-  px(ctx, x - 11, y - 14, 22, 14, '#8a4a34');           // кадка
+  px(ctx, x - 11, y - 14, 22, 14, '#8a4a34');           // the tub
   px(ctx, x - 11, y - 14, 22, 3, '#a85c40');
   px(ctx, x - 11, y - 3, 22, 3, '#6e3a28');
-  px(ctx, x - 9, y - 12, 18, 2, '#4a2f22');             // земля
-  px(ctx, x - 2, y - 40, 4, 26, '#6b4a32');             // ствол
+  px(ctx, x - 9, y - 12, 18, 2, '#4a2f22');             // the earth
+  px(ctx, x - 2, y - 40, 4, 26, '#6b4a32');             // the trunk
   px(ctx, x - 2, y - 40, 1, 26, '#8a6247');
   for (const [dx, dy] of [[-1, -30], [2, -34]]) px(ctx, x + dx, y + dy, 3, 1, '#6b4a32');
 
-  // крона: два слоя листьев, верхний светлее, оба чуть дышат
+  // the crown: two layers of leaves, the upper one lighter, both breathing a little
   for (let i = 0; i < 22; i++) {
     const h = hash(`fic${seed}${i}`);
     const ring = i < 8 ? 0 : 1;
@@ -597,8 +620,8 @@ export function drawLight(ctx, L, t, night) {
 }
 
 // ------------------------------------------------------------------ security
-// Пультовая рисуется отдельно от проектных комнат: холодный кафель, стойка с
-// мониторами и считыватель у двери, который зеленеет, когда подходишь ты.
+// The control room is drawn separately from the project rooms: cold tiles, a desk with
+// monitors and a reader by the door that goes green when it is you walking up.
 export function drawSecurity(ctx, s, t, opts = {}) {
   const { unlocked = false, camsOn = false, near = false } = opts;
 
@@ -610,10 +633,10 @@ export function drawSecurity(ctx, s, t, opts = {}) {
       px(ctx, x + 15, y, 1, 16, '#333940');
     }
   }
-  // разметка на полу перед стойкой
+  // the markings on the floor in front of the desk
   for (let x = s.x + 18; x < s.x + s.w - 18; x += 14) px(ctx, x, s.y + s.h - 26, 8, 2, '#7a6a2e');
 
-  // стены
+  // the walls
   px(ctx, s.x, s.y, s.w, WALL, '#3c4550');
   for (let x = s.x; x < s.x + s.w; x += 8) px(ctx, x, s.y, 1, WALL - 6, '#00000020');
   px(ctx, s.x, s.y + WALL - 6, s.w, 3, '#59677a');
@@ -624,7 +647,7 @@ export function drawSecurity(ctx, s, t, opts = {}) {
   px(ctx, s.x, s.y + s.h - 10, s.w, 10, '#333c46');
   px(ctx, s.x, s.y + s.h - 10, s.w, 2, '#59677a');
 
-  // дверь: створки разъезжаются, когда карточка принята
+  // the door: the leaves part when the card is accepted
   const d = s.door, gap = unlocked ? 12 : 2;
   px(ctx, d.x, s.y, d.w, WALL, '#161b20');
   px(ctx, d.x, s.y, d.w / 2 - gap, WALL, '#4d5763');
@@ -635,7 +658,7 @@ export function drawSecurity(ctx, s, t, opts = {}) {
   px(ctx, d.x + d.w, s.y, 3, WALL, '#6d7c8c');
   px(ctx, d.x + 4, s.y + WALL, d.w - 8, 2, unlocked ? '#3f8f5a' : '#4a5560');
 
-  // считыватель
+  // the reader
   const r = s.reader;
   px(ctx, r.x, r.y, 9, 13, '#232a31');
   px(ctx, r.x + 1, r.y + 1, 7, 11, '#39424c');
@@ -651,7 +674,7 @@ export function drawSecurity(ctx, s, t, opts = {}) {
     ctx.globalAlpha = 1;
   }
 
-  // вывеска
+  // the sign
   ctx.font = '7px "JetBrains Mono", "Courier New", monospace';
   const label = 'SECURITY';
   const w = ctx.measureText(label).width + 12;
@@ -668,23 +691,24 @@ export function drawSecurity(ctx, s, t, opts = {}) {
   if (near) pxText(ctx, '', 0, 0);
 }
 
-// Картотека личных дел (кадр 333:2). Три ящика, у каждого бумажная наклейка и
-// ручка; средний выдвигается, когда дело открыто. Выдвинутый ящик рисуется
-// поверх корпуса и ниже него — так видно, что он торчит в комнату, а не внутрь.
+// The card index of personal files (frame 333:2). Three drawers, each with a paper
+// label and a handle; the middle one slides out when a file is open. A drawer that is
+// out is drawn over the body and below it — that is how you see it sticks into the room
+// rather than inwards.
 function drawConsole(ctx, s, t, on) {
   const c = s.console, x0 = c.x - c.w / 2;
-  // стойка
+  // the desk
   px(ctx, x0, c.y, c.w, c.h, '#2f3841');
   px(ctx, x0, c.y, c.w, 3, '#4c5866');
   px(ctx, x0 + 3, c.y + c.h, 4, 6, '#232a31');
   px(ctx, x0 + c.w - 7, c.y + c.h, 4, 6, '#232a31');
-  // клавиатура и джойстик
+  // the keyboard and the joystick
   px(ctx, c.x - 18, c.y + 8, 30, 6, '#1e242b');
   for (let i = 0; i < 9; i++) px(ctx, c.x - 16 + i * 3, c.y + 10, 2, 2, '#48535f');
   px(ctx, c.x + 18, c.y + 9, 6, 5, '#1e242b');
   px(ctx, c.x + 20, c.y + 5, 2, 5, on ? '#ffd166' : '#5b6672');
 
-  // ряд мониторов над стойкой
+  // the row of monitors above the desk
   for (let i = 0; i < 4; i++) {
     const mx = x0 + 6 + i * 31, my = c.y - 30;
     px(ctx, mx, my, 26, 22, '#20262d');
@@ -702,19 +726,20 @@ function drawConsole(ctx, s, t, on) {
   }
 }
 
-// --------------------------------------------------------------- переговорка
-// Рисуется по утверждённому плану 400:2 (он нарисован ×3). Дерево и сукно
-// вместо кафеля: это не пультовая, сюда приходят разговаривать. Считывателя у
-// двери нет намеренно — его отсутствие и есть половина смысла комнаты.
-// --------------------------------------------------------------- оранжерея
-// Комната на крыше. Всё в ней подчинено одному: за стеклом настоящее небо —
-// тот же drawSky, что в окнах коридора, с погодой и временем суток. Кадры,
-// с которых снята геометрия: 734:2 (день) и 734:1654 (ночь в дождь).
+// --------------------------------------------------------------- the meeting room
+// Drawn to the approved plan 400:2 (it is drawn ×3). Wood and baize instead of tiles:
+// this is not the control room, people come here to talk. There is deliberately no
+// reader by the door — its absence is half the meaning of the room.
+// --------------------------------------------------------------- the conservatory
+// A room on the roof. Everything in it is subordinate to one thing: behind the glass is
+// a real sky — the same drawSky as in the corridor windows, with the weather and the
+// time of day. The frames the geometry was taken off: 734:2 (day) and 734:1654 (night
+// in the rain).
 //
-// Растение живёт тремя состояниями: сухое, политое, цветёт. Разницу на
-// двадцати пикселях делает цвет, а не поза — наклон листа на пиксель там не
-// читается, проверено на кадре 1:1. Поэтому мокрая земля в горшке — ДВЕ
-// строки пикселей: это и есть ответ на «я полил», и одной строки для него мало.
+// A plant lives in three states: dry, watered, in flower. At twenty pixels the
+// difference is made by colour rather than by a pose — a leaf tilted by one pixel does
+// not read there, checked on a 1:1 frame. So wet earth in the pot is TWO rows of
+// pixels: that is the answer to "I have watered it", and one row is not enough for it.
 const GLASS_FRAME = '#4a3628';
 
 export function drawPot(ctx, x, y, kind, state) {
@@ -765,8 +790,9 @@ export function drawPot(ctx, x, y, kind, state) {
   }
 }
 
-// Лейка: тело 7×5, вода — полоса на дне. Уровень тут не прочитать, и он и не
-// должен читаться: сколько поливов осталось, говорит строка подсказки.
+// The watering can: a body of 7×5, the water a strip at the bottom. The level cannot
+// be read here, and it is not meant to be: how many waterings are left is told by the
+// hint line.
 export function drawCan(ctx, x, y, left = 0) {
   px(ctx, x, y, 7, 5, '#7f9aa8');
   px(ctx, x, y, 7, 1, '#9ab4c2');
@@ -778,14 +804,14 @@ export function drawCan(ctx, x, y, left = 0) {
 }
 
 export function drawGreenhouse(ctx, r, t, opts = {}) {
-  // Погода обязана быть объектом: drawSky читает weather.kind без проверки, и
-  // на первых кадрах — пока /api/settings не ответил — её ещё нет. Комната со
-  // стеклянной стеной падала бы на каждом таком кадре.
+  // The weather has to be an object: drawSky reads weather.kind without a check, and on
+  // the first frames — until /api/settings has answered — there is none yet. A room with
+  // a glass wall would fall over on every such frame.
   const { night = 0, garden = null } = opts;
   const weather = opts.weather || { kind: 'clear' };
   const x0 = r.x, y0 = r.y, W = r.w, H = r.h;
 
-  // --- стеклянная стена: небо, переплёт, блики, конденсат
+  // --- the glass wall: the sky, the glazing bars, the glints, the condensation
   drawSky(ctx, x0 + 2, y0 + 2, W - 4, 22, t, night, weather);
   for (let x = 0; x < W; x += 30) px(ctx, x0 + x, y0, 2, WALL, GLASS_FRAME);
   px(ctx, x0, y0 + 12, W, 1, GLASS_FRAME);
@@ -794,8 +820,8 @@ export function drawGreenhouse(ctx, r, t, opts = {}) {
   ctx.globalAlpha = 0.16;
   for (let x = 8; x < W; x += 30) px(ctx, x0 + x, y0 + 2, 1, 22, '#e8f2f8');
   ctx.globalAlpha = 1;
-  // Конденсат — по стеклу поверх переплёта, а дождь идёт ЗА ним: это и есть
-  // разница между «капли снаружи» и «запотело изнутри».
+  // The condensation is on the glass over the bars, while the rain goes BEHIND it: that
+  // is the difference between "drops outside" and "misted up from within".
   const wet = weather && (weather.kind === 'rain' || weather.kind === 'storm');
   ctx.globalAlpha = wet ? 0.55 : 0.3;
   for (let i = 0; i < 14; i++) {
@@ -804,8 +830,8 @@ export function drawGreenhouse(ctx, r, t, opts = {}) {
   }
   ctx.globalAlpha = 1;
 
-  // --- пол: кирпич со сдвигом рядов. Квадратная плитка вместе со светом из-под
-  // переплёта читалась досками, и на двух кадрах подряд правилось не то.
+  // --- the floor: brick with the rows offset. Square tiles together with the light from
+  // under the bars read as floorboards, and on two frames in a row the wrong thing was fixed.
   for (let y = y0 + WALL; y < y0 + H; y += 8) {
     const off = (((y - y0 - WALL) / 8) % 2) ? 8 : 0;
     for (let x = -8; x < W; x += 16) {
@@ -820,8 +846,8 @@ export function drawGreenhouse(ctx, r, t, opts = {}) {
   px(ctx, x0, y0, 8, H, '#4a3b31');
   px(ctx, x0 + W - 8, y0, 8, H, '#4a3b31');
 
-  // --- луч из-под переплёта. Наклонный и гаснущий: вертикальная полоса во всю
-  // глубину — это доска пола, а не свет. Ночью лучей два и они лунные.
+  // --- the shaft from under the bars. Slanted and fading: a vertical strip the whole
+  // depth is a floorboard, not light. At night there are two shafts and they are moonlit.
   const beams = night > 0.5 ? [140, 320] : [30, 90, 150, 210, 270, 330, 390];
   for (const bx of beams) {
     for (let i = 0; i < 16; i++) {
@@ -833,7 +859,7 @@ export function drawGreenhouse(ctx, r, t, opts = {}) {
   }
   ctx.globalAlpha = 1;
 
-  // --- дверь
+  // --- the door
   px(ctx, r.door.x - 2, y0 + 2, r.door.w + 4, WALL - 2, '#241e1a');
   px(ctx, r.door.x, y0 + 4, r.door.w, WALL - 6, night > 0.5 ? '#2b3138' : '#5b7f92');
   px(ctx, r.door.x, y0 + 4, r.door.w, 2, '#55626e');
@@ -841,7 +867,7 @@ export function drawGreenhouse(ctx, r, t, opts = {}) {
   px(ctx, r.door.x + r.door.w / 2 - 5, y0 + 13, 3, 1, '#c9a06a');
   px(ctx, r.door.x + r.door.w / 2 + 2, y0 + 13, 3, 1, '#c9a06a');
 
-  // --- стеллаж, подвесные кашпо, пересадочный столик
+  // --- the shelving, the hanging planters, the potting table
   px(ctx, x0 + 28, y0 + 60, 172, 4, '#8a6247');
   px(ctx, x0 + 28, y0 + 64, 172, 2, '#6b4a32');
   px(ctx, x0 + 32, y0 + 66, 3, 16, '#6b4a32');
@@ -864,7 +890,7 @@ export function drawGreenhouse(ctx, r, t, opts = {}) {
   px(ctx, x0 + 60, y0 + 101, 9, 3, '#3a2a1e');
   px(ctx, x0 + 72, y0 + 100, 14, 4, '#7a6a4a');
 
-  // --- кран, раковина, ведро, лужа, шланг
+  // --- the tap, the sink, the bucket, the puddle, the hose
   px(ctx, x0 + 348, y0 + 66, 58, 4, '#8a6247');
   px(ctx, x0 + 354, y0 + 70, 46, 13, '#aab8bc');
   px(ctx, x0 + 357, y0 + 72, 40, 9, '#7f8c90');
@@ -877,7 +903,7 @@ export function drawGreenhouse(ctx, r, t, opts = {}) {
   px(ctx, x0 + 392, y0 + 92, 14, 2, '#3f5a44');
   px(ctx, x0 + 390, y0 + 94, 18, 2, '#4a6b50');
   px(ctx, x0 + 392, y0 + 96, 14, 2, '#3f5a44');
-  // мешок земли и стопка пустых горшков
+  // a bag of earth and a stack of empty pots
   px(ctx, x0 + 298, y0 + 96, 17, 15, '#7a6a4a');
   px(ctx, x0 + 298, y0 + 96, 17, 3, '#8f7f5a');
   px(ctx, x0 + 302, y0 + 93, 9, 4, '#3a2a1e');
@@ -886,11 +912,11 @@ export function drawGreenhouse(ctx, r, t, opts = {}) {
   px(ctx, x0 + 324, y0 + 96, 11, 8, '#8a4a34');
   px(ctx, x0 + 324, y0 + 96, 11, 2, '#a85c40');
 
-  // --- крючок с лейкой: пустой, если лейку унесли
+  // --- the hook with the watering can: empty if the can has been taken
   px(ctx, x0 + 336, y0 + 52, 2, 4, '#6b4a32');
   if (!garden || !garden.canTaken) drawCan(ctx, x0 + 328, y0 + 56, garden ? garden.canLeft : 4);
 
-  // --- скамейка
+  // --- the bench
   px(ctx, x0 + 268, y0 + 124, 46, 4, '#8a6247');
   px(ctx, x0 + 268, y0 + 128, 46, 2, '#6b4a32');
   px(ctx, x0 + 270, y0 + 130, 3, 8, '#6b4a32');
@@ -899,14 +925,14 @@ export function drawGreenhouse(ctx, r, t, opts = {}) {
   px(ctx, x0 + 270, y0 + 113, 3, 11, '#6b4a32');
   px(ctx, x0 + 309, y0 + 113, 3, 11, '#6b4a32');
 
-  // --- сами растения
+  // --- the plants themselves
   for (const p of r.pots) drawPot(ctx, p.x, p.y, p.kind, (garden && garden.state && garden.state[p.i]) || 'wet');
 
-  // --- табличка над дверью. Та же, что у комнат проектов, и вторая строка у неё
-  // ровно так же собирается из того, что в комнате происходит: «полито 5 из 7».
+  // --- the plaque over the door. The same as on the project rooms, and its second line
+  // is assembled exactly the same way out of what goes on in the room: «полито 5 из 7».
   drawNameplate(ctx, { ...r, sub: (garden && garden.sign) || '' }, r.door);
 
-  // --- лампа над стеллажом: ночью это единственное тёплое пятно в комнате
+  // --- the lamp over the shelving: at night it is the only warm spot in the room
   if (night > 0.35) {
     px(ctx, x0 + 112, y0 + WALL, 1, 6, '#6b4a32');
     px(ctx, x0 + 107, y0 + 32, 11, 4, '#3a2a1e');
@@ -925,17 +951,17 @@ export function drawGreenhouse(ctx, r, t, opts = {}) {
 export function drawMeeting(ctx, m, t) {
   const x0 = m.x, y0 = m.y, W = m.w, H = m.h;
 
-  // пол: доски со швами каждые 16 и стыками по длине
+  // the floor: boards with seams every 16 and joints along the length
   px(ctx, x0, y0 + WALL, W, H - WALL, '#7a5a41');
   for (let y = y0 + WALL; y < y0 + H; y += 16) px(ctx, x0, y, W, 1, '#6a4c36');
   for (const dx of [40, 120, 200, 280]) px(ctx, x0 + dx, y0 + WALL, 1, H - WALL, '#6a4c36');
 
-  // стена к коридору: рама, стекло, канты
+  // the wall to the corridor: the frame, the glass, the edging
   px(ctx, x0, y0, W, WALL, '#3a2c22');
   px(ctx, x0, y0, W, 3, '#8a6247');
   for (const g of m.glass) {
     px(ctx, g.x, y0 + 5, g.w, 16, '#8fb0bd');
-    // блик по верхней кромке: без него стекло читается как крашеная панель
+    // a glint along the top edge: without it the glass reads as a painted panel
     ctx.globalAlpha = 0.35;
     px(ctx, g.x, y0 + 5, g.w, 2, '#e8f4f8');
     ctx.globalAlpha = 1;
@@ -947,7 +973,7 @@ export function drawMeeting(ctx, m, t) {
   px(ctx, x0, y0 + WALL - 4, d.x - x0, 3, '#5a4232');
   px(ctx, d.x + d.w + 1, y0 + WALL - 4, x0 + W - d.x - d.w - 1, 3, '#5a4232');
 
-  // боковые и нижняя стены — там же, где их видит blocked()
+  // the side and bottom walls — exactly where blocked() sees them
   px(ctx, x0, y0 + WALL, 8, H - WALL, '#4a382c');
   px(ctx, x0 + W - 8, y0 + WALL, 8, H - WALL, '#4a382c');
   px(ctx, x0, y0 + H - 10, W, 10, '#4a382c');
@@ -955,18 +981,18 @@ export function drawMeeting(ctx, m, t) {
   px(ctx, x0 + W - 8, y0 + WALL, 8, 2, '#8a6247');
   px(ctx, x0, y0 + H - 10, W, 2, '#8a6247');
 
-  // стулья: рисунок, а не мебель — сквозь них ходят
+  // the chairs: a drawing, not furniture — people walk through them
   for (const s of m.seats) {
     px(ctx, s.x, s.y, 20, 14, '#4a3628');
     px(ctx, s.x, s.back === 'top' ? s.y : s.y + 11, 20, 3, '#5e4633');
   }
 
-  // стол под зелёным сукном
+  // the table under green baize
   const tb = m.table;
   px(ctx, tb.x, tb.y, tb.w, tb.h, '#5c4230');
   px(ctx, tb.x + 4, tb.y + 4, tb.w - 8, tb.h - 8, '#3f6b4a');
 
-  // вывеска над дверью
+  // the sign over the door
   ctx.font = '7px "JetBrains Mono", "Courier New", monospace';
   const label = m.title;
   const w = ctx.measureText(label).width + 12;

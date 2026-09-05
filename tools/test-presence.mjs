@@ -1,11 +1,12 @@
-// node tools/test-presence.mjs — присутствие людей в офисе.
+// node tools/test-presence.mjs — the people present in the office.
 //
-// Поднимает настоящий сервер и разговаривает с ним по HTTP: проверять тут
-// нечего в чистых функциях, вся логика — в реестре и в том, что он отдаёт
-// наружу. Порт спрашивается у системы, настройки свои, каталог сессий пустой:
-// до 4 сентября 2026 стенд стартовал на НАСТОЯЩИХ настройках пользователя —
-// в режиме shared получал каскад 403, а с включённой погодой ходил в
-// open-meteo. Гасится свой потомок, чужие офисы не трогаются.
+// It raises a real server and talks to it over HTTP: there is nothing to check
+// in pure functions here, all the logic is in the registry and in what it serves
+// outward. The port is asked of the system, the settings are its own and the
+// sessions directory is empty: until 4 September 2026 the stand started on the
+// user's REAL settings — in shared mode it got a cascade of 403s, and with the
+// weather on it went to open-meteo. Its own child is killed; other offices are
+// left alone.
 import { startOffice } from './lib/office.mjs';
 
 let bad = 0;
@@ -15,7 +16,7 @@ const ok = (name, cond, got) => {
 };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Каталог сессий свой и пустой: этому стенду агенты не нужны вовсе, он про людей.
+// The sessions directory is its own and empty: this stand needs no agents at all, it is about people.
 const { base, stop } = await startOffice({
   settings: { access: { mode: 'private', token: 'presence-owner-0001', invites: [] } },
   claudeDir: '/nonexistent-claude-dir',
@@ -28,7 +29,7 @@ const post = (p, body) => fetch(base + p, {
 const state = () => fetch(base + '/api/state').then((r) => r.json());
 
 try {
-  // ------------------------------------------------------------- пришли
+  // ------------------------------------------------------------- arrived
   await post('/api/here', { id: 'aaa', name: 'Сергей', look: { shirt: '#4fa89a' }, x: 100.6, y: 200.4, dir: -1, moving: true, room: 'ai-valey' });
   await post('/api/here', { id: 'bbb', name: 'Костя', look: {}, x: 300, y: 400, dir: 1, moving: false, room: null });
   let s = await state();
@@ -38,7 +39,7 @@ try {
   ok('координаты округлены', a && a.x === 101 && a.y === 200, a && [a.x, a.y]);
   ok('направление и движение сохранены', a && a.dir === -1 && a.moving === true, a);
 
-  // ---------------------------------------------------------- поток людей
+  // ------------------------------------------------------- the people stream
   const ctl = new AbortController();
   const res = await fetch(base + '/api/stream', { signal: ctl.signal });
   const reader = res.body.getReader();
@@ -49,19 +50,19 @@ try {
     const { value, done } = await reader.read();
     if (done) break;
     buf += dec.decode(value, { stream: true });
-    // берём последний целиком пришедший блок события people
+    // take the last fully arrived people event block
     const blocks = buf.split('\n\n');
     for (const b of blocks) {
       if (!b.startsWith('event: people')) continue;
       const line = b.split('\n').find((l) => l.startsWith('data: '));
-      if (line) { try { got = JSON.parse(line.slice(6)); } catch { /* половина кадра */ } }
+      if (line) { try { got = JSON.parse(line.slice(6)); } catch { /* half a frame */ } }
     }
     if (!got) await wait(50);
   }
   ctl.abort();
   ok('поток присылает событие people', Array.isArray(got) && got.length === 2, got && got.length);
 
-  // ---------------------------------------------------------- мусор наружу
+  // ------------------------------------------------------- rubbish going out
   const bigName = await post('/api/here', { id: 'ccc', name: 'я'.repeat(200), x: 1, y: 1 });
   ok('длинное имя обрезано', bigName.status === 200, bigName.status);
   s = await state();
@@ -71,7 +72,7 @@ try {
     (await post('/api/here', { id: 'ddd', x: 'нет', y: null })).status === 200
       && (await state()).people.find((p) => p.id === 'ddd').x === 0, null);
 
-  // ------------------------------------------------- внешность просеивается
+  // ------------------------------------------------- the look is sieved
   await post('/api/here', {
     id: 'eee', name: 'мусорный',
     look: {
@@ -94,13 +95,13 @@ try {
   const junk = await fetch(base + '/api/here', { method: 'POST', body: 'не json' }).then((r) => r.status);
   ok('мусор вместо json не роняет сервер', junk === 400, junk);
 
-  // ------------------------------------------------------------- ушли
+  // ------------------------------------------------------------- left
   await post('/api/gone', { id: 'bbb' });
   s = await state();
   ok('ушедший исчезает сразу', !(s.people || []).some((p) => p.id === 'bbb'), (s.people || []).map((p) => p.id));
   ok('остальные на месте', (s.people || []).some((p) => p.id === 'aaa'), null);
 
-  // ------------------------------------------------- ничего лишнего наружу
+  // ------------------------------------------------- nothing extra goes out
   const fields = Object.keys((await state()).people[0]).sort().join(',');
   ok('в проекции человека только присутствие',
     fields === 'at,dir,id,look,moving,name,room,x,y', fields);

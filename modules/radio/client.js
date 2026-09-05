@@ -1,13 +1,13 @@
-// Радио с приёмником у входа — модуль. Бесплатный: тариф в module.json стоит
-// «core», и это первый модуль, который не про деньги. Шов проверяется ровно
-// этим: он про структуру, а не про кассу.
+// The radio with the receiver by the entrance is a module. A free one: the tier in
+// module.json says "core", and it is the first module that is not about money. The seam
+// is checked by exactly that: it is about structure, not about the till.
 //
-// Что понадобилось от ядра сверх прежних точек — три новые, и все общие:
-// `tick` (приглушить офис и вести громкость по расстоянию), `hud` (полоска
-// состояния в шапке), `lang` (перерисовать свою панель при смене языка) и
-// `help` (своя клавиша в строке подсказки внизу). Первые две были объявлены в
-// загрузчике и ни разу не вызывались — то есть модуль, вставший в них, молча
-// ничего бы не делал.
+// What was needed from the core beyond the old points — four new ones, and all of them
+// shared: `tick` (damp the office and lead the volume by distance), `hud` (the state
+// strip in the header), `lang` (repaint its own panel on a change of language) and
+// `help` (its own key in the hint line at the bottom). The first two had been declared
+// in the loader and were never called once — that is, a module standing in them would
+// silently do nothing.
 import { pxText } from '../../web/office.js';
 import { t as tr } from '../../web/i18n.js';
 import { toast, renderHud, focusRing } from '../../web/ui.js';
@@ -20,7 +20,7 @@ const $ = (s) => document.querySelector(s);
 import { esc } from '../../web/esc.js';
 const px = (ctx, x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); };
 
-// Панель модуля — свой элемент: дырки под неё в разметке ядра быть не должно.
+// A module's panel is an element of its own: there must be no hole for it in the core's markup.
 const el = { radio: null };
 function ensurePanel() {
   if (document.querySelector('#radio')) return;
@@ -29,8 +29,8 @@ function ensurePanel() {
   document.body.appendChild(d);
 }
 
-// Состояние офиса приезжает в точках; ссылку держим, чтобы панель знала про
-// настройки, а корпус — про громкость.
+// The state of the office arrives at the points; we hold the reference so that the panel
+// knows about the settings and the body about the volume.
 let S = null;
 let prop = null;
 
@@ -38,7 +38,7 @@ const nowPlaying = () => (radio.sdk && player.track ? player.track.name : statio
 
 const DICT = {
   ru: {
-    // своя строчка в подсказке внизу экрана: клавиша модуля — забота модуля
+    // its own line in the hint at the bottom of the screen: a module's key is the module's business
     'help.radio': 'R — радио',
     'hud.radioTitle': 'радио — R',
     'hint.radioOn': '[ ПРОБЕЛ ] радио играет',
@@ -134,9 +134,10 @@ const DICT = {
   }
 };
 
-// -------------------------------------------------------------------- радио
-// Панель строится один раз: внутри живой iframe встроенного плеера, и пересобрать
-// её значит оборвать музыку. Закрытие — это класс, уводящий панель за экран.
+// -------------------------------------------------------------------- the radio
+// The panel is built once: inside it lives the iframe of the built-in player, and
+// rebuilding it means breaking the music off. Closing is a class that takes the panel off
+// screen.
 
 let radioBuilt = false;
 
@@ -148,29 +149,29 @@ function openRadio() {
   radio.probeDrm();
   if (!radio.sdk) radio.attach($('#radioslot'));
   paintRadio();
-  // Открытая панель обязана показывать, где стоит фокус. Красить это только из
-  // перерисовки списка волн — значит зависеть от того, что она вообще случится.
+  // An open panel has to show where the focus is. Painting that only from the repaint of
+  // the list of waves means depending on that happening at all.
   radioRing.paint();
 }
 
-// Радио открывалось клавишей R и дальше требовало мыши на всё: включить,
-// перемотать, выбрать волну, удалить её, вписать свою. Фокус ходит по всему,
-// что в панели можно нажать, в порядке разметки — крестик не в счёт, его
-// заменяет Escape. Громкость внутри кольца крутится стрелками в стороны, как
-// ползунок и должен.
-// numbers: '.rst' — цифра выбирает волну, а не ручку. Приехало из main
-// вместе с общей поддержкой цифр в кольце фокуса.
+// The radio opened on R and after that demanded a mouse for everything: switch on, seek,
+// choose a wave, delete it, type in your own. The focus walks over everything in the panel
+// that can be pressed, in the order of the markup — the cross does not count, Escape
+// replaces it. The volume inside the ring is turned by the sideways arrows, as a slider
+// should be.
+// numbers: '.rst' — a digit chooses a wave rather than a knob. It arrived from main
+// together with the shared support for digits in the focus ring.
 const radioRing = focusRing(() => el.radio, '.radioknobs button, .rst, .rdel, #radiovol, #radiouri, .radioauth button', { numbers: '.rst' });
 function closeRadio() { if (el.radio) el.radio.classList.remove('open'); radioRing.reset(); }
 function radioKey(raw) { return radioRing.key(raw, radioOpen()); }
 
-// Панель перекрашивается на каждое событие плеера, и список волн при этом
-// пересобирается целиком — класс фокуса уходит вместе со старыми кнопками.
+// The panel is repainted on every event of the player, and the list of waves is rebuilt
+// whole while that happens — the focus class goes away with the old buttons.
 function repaintRadioFocus() { if (radioOpen()) radioRing.paint(); }
 
-// Смена языка. Панель радио пересобрать нельзя — внутри живой iframe плеера, и
-// новая разметка оборвала бы музыку, — поэтому её подписи меняются на месте.
-// Остальные панели дешевле перерисовать целиком, но только те, что открыты.
+// A change of language. The radio panel cannot be rebuilt — the live iframe of the player
+// is inside, and new markup would break the music off — so its captions are changed in
+// place. The other panels are cheaper to repaint whole, but only the ones that are open.
 
 function buildRadio() {
   if (radioBuilt) return;
@@ -224,8 +225,8 @@ function buildRadio() {
   radio.onChange = paintRadio;
 }
 
-// Что показывать в подвале панели: приглашение завести приложение, кнопку входа
-// или отметку о том, что играет уже полноценный плеер.
+// What to show in the footer of the panel: an invitation to set up an application, the
+// sign-in button, or a note that the full player is already playing.
 function authBlock() {
   const cfg = (S.settings && S.settings.spotify) || {};
   if (radio.needsLoopback) {
@@ -245,8 +246,8 @@ function authBlock() {
     <button id="radioforget" class="thin">${tr('radio.changeApp')}</button></div>`;
 }
 
-// Обложка перерисовывается только когда она действительно сменилась: панель
-// перекрашивается на каждое событие плеера, а копирование пикселей тут ни к чему.
+// The cover is repainted only when it has really changed: the panel is repainted on every
+// event of the player, and copying pixels has nothing to do there.
 let artKey = '';
 
 function paintCover() {
@@ -254,8 +255,8 @@ function paintCover() {
   const src = radio.coverBig;
   if (!art) return;
   if (!src) { artKey = ''; art.getContext('2d').clearRect(0, 0, art.width, art.height); return; }
-  // сверяемся с тем, чья обложка действительно лежит в canvas'е: пока новая едет,
-  // coverBig пуст, и рисовать нечего
+  // we check against whose cover really lies in the canvas: while a new one is on its way
+  // coverBig is empty, and there is nothing to draw
   if (artKey === radio.coverFor) return;
   artKey = radio.coverFor;
   const c = art.getContext('2d');
@@ -280,7 +281,7 @@ function paintRadio() {
   $('#radioprev').onclick = () => (live ? player.prev() : radio.tune(radio.current - 1));
   $('#radionext').onclick = () => (live ? player.next() : radio.tune(radio.current + 1));
 
-  // у полноценного плеера своё лицо: встроенный со своими превью тут не нужен
+  // the full player has a face of its own: the built-in one with its previews is not needed here
   el.radio.querySelector('.radioglass').hidden = live;
   const face = $('#radioface');
   face.hidden = !live;
@@ -321,8 +322,8 @@ function paintRadio() {
     paintRadio();
   };
 
-  // Тридцатисекундная длительность трека — верный признак, что встроенный плеер
-  // отдаёт превью, а не музыку: иначе обрыв выглядит поломкой радио.
+  // A track length of thirty seconds is a sure sign that the built-in player is giving out
+  // a preview rather than music: otherwise the break-off looks like a broken radio.
   const preview = !live && radio.duration > 0 && radio.duration <= 35_000;
   $('#radiohint').textContent = player.error || radio.error
     || (live
@@ -338,24 +339,24 @@ function paintRadio() {
 function drawRadio(ctx, x, y, t) {
   const on = radio.playing;
 
-  // тумба
+  // the cabinet
   px(ctx, x - 16, y - 12, 32, 12, '#5f4530');
   px(ctx, x - 16, y - 12, 32, 2, '#7a5a3e');
   px(ctx, x - 13, y - 2, 3, 2, '#3a2a1e');
   px(ctx, x + 10, y - 2, 3, 2, '#3a2a1e');
 
-  // корпус
+  // the body
   px(ctx, x - 17, y - 38, 34, 26, '#8a5f3a');
   px(ctx, x - 17, y - 38, 34, 2, '#a9784c');
   px(ctx, x - 17, y - 38, 2, 26, '#a9784c');
   px(ctx, x + 15, y - 38, 2, 26, '#5e3f27');
   px(ctx, x - 17, y - 14, 34, 2, '#5e3f27');
 
-  // окошко с обложкой волны; пока её нет — тёмное стекло
+  // the little window with the cover of the wave; while there is none — dark glass
   px(ctx, x - 16, y - 36, 15, 15, '#241a13');
   if (radio.cover) {
     ctx.drawImage(radio.cover, (x - 15) | 0, (y - 35) | 0);
-    // стекло поверх: сверху блик, снизу тень, иначе обложка выпадает из офиса
+    // the glass on top: a glint above, a shadow below, or the cover falls out of the office
     ctx.globalAlpha = 0.16;
     px(ctx, x - 15, y - 35, 13, 4, '#ffffff');
     ctx.globalAlpha = 0.22;
@@ -365,10 +366,10 @@ function drawRadio(ctx, x, y, t) {
     px(ctx, x - 14, y - 34, 11, 11, '#1a120c');
     pxText(ctx, '♪', x - 12, y - 26, '#4a3626', 8);
   }
-  px(ctx, x - 16, y - 36, 15, 1, '#c9a06a');   // рама окошка
+  px(ctx, x - 16, y - 36, 15, 1, '#c9a06a');   // the frame of the little window
   px(ctx, x - 16, y - 22, 15, 1, '#5e3f27');
 
-  // сетка динамика под обложкой, конус чуть пульсирует в такт
+  // the speaker grille under the cover, the cone pulsing a little in time
   const pulse = on ? Math.floor(t / 140) % 2 : 0;
   px(ctx, x - 16, y - 20, 15, 6, '#2e2119');
   for (let gy = 0; gy < 6; gy += 2) {
@@ -376,34 +377,34 @@ function drawRadio(ctx, x, y, t) {
   }
   px(ctx, x - 11 - pulse, y - 19 - pulse, 4 + pulse * 2, 4 + pulse * 2, '#3f2d20');
 
-  // шкала настройки со стрелкой
+  // the tuning scale with its needle
   px(ctx, x + 1, y - 36, 14, 7, '#241a13');
   px(ctx, x + 1, y - 36, 14, 1, '#c9a06a');
   for (let i = 0; i < 6; i++) px(ctx, x + 2 + i * 2, y - 34, 1, 2, '#6d5a3f');
   const needle = radio.stations.length > 1 ? radio.current / (radio.stations.length - 1) : 0.5;
   px(ctx, x + 2 + Math.round(needle * 10), y - 35, 1, 5, on ? '#ffd166' : '#8c7660');
 
-  // полоска: сколько трека отыграно. Пустой жёлоб виден и в тишине — тогда понятно,
-  // что это шкала времени, а не погасший индикатор
+  // the strip: how much of the track has played. The empty groove is visible in silence
+  // too — then it is clear that this is a time scale rather than an indicator gone out
   const done = radio.progress();
   px(ctx, x + 1, y - 27, 14, 3, '#241a13');
   px(ctx, x + 1, y - 27, 14, 1, '#1a120c');
   if (done > 0) {
     const w = Math.max(1, Math.round(done * 12));
     px(ctx, x + 2, y - 26, w, 1, on ? '#9fe0a8' : '#6d5a3f');
-    if (on && w < 12) px(ctx, x + 2 + w, y - 26, 1, 1, '#ffd166');   // головка воспроизведения
+    if (on && w < 12) px(ctx, x + 2 + w, y - 26, 1, 1, '#ffd166');   // the playhead
   }
 
-  // индикатор: горит, когда играет, тускнеет, когда пауза
+  // the indicator: lit while playing, dimmed on pause
   px(ctx, x + 1, y - 22, 2, 2, on ? (Math.sin(t / 420) > 0 ? '#9fe0a8' : '#7cc78a') : '#5a4a3a');
 
-  // эквалайзер
+  // the equaliser
   for (let i = 0; i < 4; i++) {
     const h = on ? 1 + Math.floor((Math.sin(t / (150 + i * 47) + i) * 0.5 + 0.5) * 6) : 1;
     px(ctx, x + 4 + i * 3, y - 15 - h, 2, h, on ? ['#9fe0a8', '#ffd166', '#8fc8ff', '#c39bff'][i] : '#4a3626');
   }
 
-  // ноты, вылетающие из динамика
+  // the notes flying out of the speaker
   if (on) {
     for (let i = 0; i < 3; i++) {
       const life = ((t / 900 + i / 3) % 1);
@@ -420,9 +421,9 @@ function drawRadio(ctx, x, y, t) {
 export function register(api) {
   api.i18n(DICT);
 
-  // Приёмник у самого входа, прижат к наружной стене: посреди коридора тумба
-  // перегородила бы проход. Размеры предмет называет сам — таблица в blocked()
-  // про чужие виды не знает.
+  // The receiver is right by the entrance, pressed to the outer wall: in the middle of the
+  // corridor the cabinet would block the way. The thing names its own dimensions — the table
+  // in blocked() knows nothing about foreign kinds.
   api.on('layout', (L) => {
     const b = (L.bands || [])[0];
     if (!b || !L.props || L.props.some((q) => q.kind === 'radio')) return;
@@ -453,7 +454,7 @@ export function register(api) {
     return q ? { y: q.y, fn: (ctx) => drawRadio(ctx, q.x, q.y, t) } : null;
   });
 
-  // R открывает и закрывает приёмник, а пока панель открыта — стрелки её.
+  // R opens and closes the receiver, and while the panel is open the arrows are its.
   api.on('key', (raw) => {
     if (radioKey(raw)) return true;
     const k = String(raw).toLowerCase();
@@ -462,15 +463,15 @@ export function register(api) {
     return true;
   });
   api.on('esc', () => (radioOpen() ? (closeRadio(), true) : false));
-  // Открытая панель держит экран: пока она видна, офис не считается свободным.
-  // Раньше это знало ядро строкой UI.radioOpen() в busy() — своих id у модуля
-  // ядро не знает, поэтому спрашивает.
+  // An open panel holds the screen: while it is visible the office does not count as free.
+  // The core used to know that by the line UI.radioOpen() in busy() — the core does not know
+  // a module's ids, so it asks.
   api.on('busy', () => radioOpen());
 
   api.on('tick', (state) => {
     S = state;
-    // Пока играет музыка, офис отходит на второй план; а слышно её тем тише,
-    // чем дальше ты ушёл по коридору.
+    // While the music plays the office steps back; and it is heard the quieter the further
+    // you have gone along the corridor.
     sound.duck(radio.playing);
     const q = prop || ((state.layout && state.layout.props) || []).find((x) => x.kind === 'radio');
     if (q) { prop = q; radio.listenFrom(Math.hypot(q.x - state.player.x, q.y - state.player.y)); }
@@ -484,8 +485,8 @@ export function register(api) {
   api.on('lang', () => relabelRadio());
   api.on('help', () => tr('help.radio'));
 
-  // Приёмник должен знать про приложение Spotify: без него он играет встроенным
-  // проигрывателем, с ним — своим. Настройки приезжают тем же тиком.
+  // The receiver has to know about the Spotify application: without it it plays through the
+  // built-in player, with it through its own. The settings arrive on the same tick.
   radio.load();
   const connect = () => {
     const id = (S && S.settings && S.settings.spotify && S.settings.spotify.clientId) || '';
@@ -495,10 +496,11 @@ export function register(api) {
 }
 
 function relabelRadio() {
-      // Панели может не быть вовсе: ядро зовёт `lang` у всех модулей при смене
-      // языка, а приёмник до первого открытия своего элемента не заводит.
-      // Без этой строки точка падала на каждой смене языка — загрузчик ловил и
-      // писал в лог, то есть ломалось молча и только в консоли.
+      // There may be no panel at all: the core calls `lang` on every module when the
+      // language changes, while the receiver starts no element of its own before the first
+      // opening. Without this line the point fell over on every change of language — the
+      // loader caught it and wrote to the log, that is, it broke silently and only in the
+      // console.
       if (!el.radio) return;
       const lead = (sel, text) => {
         const n = el.radio.querySelector(sel);

@@ -1,19 +1,21 @@
-// Заметки к репликам разговора.
+// Notes on the lines of a conversation.
 //
-// Живут только в браузере и наружу не ходят: это личные мысли, а не часть
-// офиса. Ключ тот же, что у остальных пользовательских настроек, — valey-*.
+// They live in the browser only and never go outside: these are private
+// thoughts, not part of the office. The key is the same as for the other user
+// settings — valey-*.
 //
-// Якорь — метка времени реплики (ts), а не её номер и не хеш текста. Номер
-// не годится: /api/chat отдаёт последние шестнадцать сообщений, окно едет по
-// мере разговора. Хеш не годится тоже: хвостовая реплика растёт, пока агент
-// печатает, и текст меняется под руками. ts выставляется на сервере один раз
-// при разборе транскрипта и дальше не двигается.
+// The anchor is the timestamp of a line (ts), not its number and not a hash of
+// its text. A number will not do: /api/chat gives out the last sixteen messages,
+// and the window moves as the conversation goes. A hash will not do either: the
+// trailing line grows while the agent types, and the text changes under your
+// hands. ts is set on the server once, when the transcript is parsed, and does
+// not move afterwards.
 
 const KEY = 'valey-chat-notes';
 
-// Date.now() не различает две записи внутри одной миллисекунды, и порядок в
-// общем списке становится делом удачи. Держим метку строго возрастающей: она
-// остаётся временем создания, но одинаковых больше не бывает.
+// Date.now() does not tell two records apart inside one millisecond, and the
+// order in the common list becomes a matter of luck. We keep the mark strictly
+// increasing: it stays the time of creation, but there are no equal ones any more.
 let lastAt = 0;
 const stampNow = () => (lastAt = Math.max(Date.now(), lastAt + 1));
 
@@ -25,8 +27,8 @@ function writeAll(all) {
   try { localStorage.setItem(KEY, JSON.stringify(all)); return true; } catch { return false; }
 }
 
-// Порядок — по времени создания: заметка к одной и той же реплике ложится под
-// предыдущую, а не перед ней.
+// The order is by creation time: a note on the same line lies under the previous
+// one rather than in front of it.
 export function notesOf(agentId) {
   return (readAll()[agentId] || []).slice().sort((a, b) => a.at - b.at);
 }
@@ -35,11 +37,12 @@ export function noteCount(agentId) {
   return (readAll()[agentId] || []).length;
 }
 
-// ctx — снимок того, где заметка родилась: имя агента, проект, заголовок чата и
-// начало реплики-якоря. Именно снимок, а не ссылка. Офис строится из ЖИВЫХ
-// сессий: закрыл чат — агента нет, /api/chat на его id отвечает 404. Значит
-// большинство заметок переживут свой разговор, и без снимка в общем списке
-// останется висящий идентификатор вместо контекста.
+// ctx is a snapshot of where the note was born: the agent's name, the project,
+// the title of the chat and the beginning of the anchor line. A snapshot
+// precisely, not a reference. The office is built out of LIVE sessions: close the
+// chat and the agent is gone, /api/chat on its id answers 404. So most notes will
+// outlive their conversation, and without the snapshot a dangling identifier is
+// what stays in the common list instead of the context.
 export function addNote(agentId, ts, text, ctx) {
   const body = String(text || '').trim();
   if (!body) return null;
@@ -58,8 +61,9 @@ export function addNote(agentId, ts, text, ctx) {
   return writeAll(all) ? note : null;
 }
 
-// Все заметки разом, свежие сверху. agentId возвращается рядом: по нему панель
-// решает, жив ли ещё разговор и можно ли в него провалиться.
+// All the notes at once, the fresh ones on top. agentId comes back alongside: by
+// it the panel decides whether the conversation is still alive and whether one
+// can fall into it.
 export function allNotes() {
   const all = readAll();
   const out = [];
@@ -74,7 +78,7 @@ export function editNote(agentId, id, text) {
   const all = readAll();
   const note = (all[agentId] || []).find((n) => n.id === id);
   if (!note) return null;
-  // пустой текст — то же самое, что удалить: иначе останется пустая карточка
+  // empty text is the same as deleting: otherwise an empty card stays behind
   if (!body) return removeNote(agentId, id) ? 'removed' : null;
   note.text = body;
   note.edited = Date.now();
@@ -91,9 +95,10 @@ export function removeNote(agentId, id) {
   return writeAll(all);
 }
 
-// Раскладывает заметки на две кучи: те, чья реплика сейчас в окне, и те, чья
-// уехала. Вторые нельзя молча прятать — записанное не должно пропадать вместе
-// с сообщением, к которому оно привязано.
+// Sorts the notes into two heaps: those whose line is in the window right now,
+// and those whose line has left. The second kind must not be quietly hidden —
+// what has been written down must not disappear along with the message it is
+// tied to.
 export function splitNotes(agentId, msgs) {
   const known = new Set((msgs || []).map((m) => m.ts).filter((t) => t != null));
   const byTs = new Map();

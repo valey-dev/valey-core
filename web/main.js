@@ -1,20 +1,21 @@
 import { lookOf, drawPerson, drawCat, normalizeLook, dressOf, dressMe } from './sprites.js';
 import { potState, water as waterPot, tally, CAN_FULL } from './garden.js';
-import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, WALL } from './layout.js';
+import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, pickRoom, WALL } from './layout.js';
 import { loadModules, collect, first } from './modules.js';
 import { initStand } from './stand.js';
-import { drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, pxText, kickerBusy } from './office.js';
+import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, pxText, kickerBusy } from './office.js';
 import { drawCamera, buildCameras } from './cctv.js';
 import { syncActors, tickActors } from './actors.js';
 import * as UI from './ui.js';
 import { proceduralWeather, fromWeatherCode, flash } from './weather.js';
 import { sound, tickSound } from './sound.js';
+import { initPager, seePermits, renderPager, pagerKey, recall, waitingCount, forgetPermit } from './pager.js';
 import { titleOf } from './paintings.js';
 import { drawBubble } from './badges.js';
 import { skateStep, rolling, drawSkateboard, ollieStep, canOllie, OLLIE_POP } from './skate.js';
 import { readPad, edges as padEdges } from './pad.js';
-// t переименован в tr: в main.js `t` — это время кадра у draw(t), и импорт
-// молча перекрывался числом внутри каждого колбэка отрисовки
+// t was renamed to tr: in main.js `t` is the frame time in draw(t), and the import
+// was silently shadowed by a number inside every drawing callback
 import { t as tr, lang, setLang, onLang } from './i18n.js';
 import { initTitle, drawTitle, renderTitle, titleKey, titleOpen, closeTitle, layoutTitle, tickTitle } from './title.js';
 
@@ -29,65 +30,73 @@ const DEFAULT_ME = {
   style: 0, head: 'none', glasses: false, face: 'none', tall: 1, hands: 'none', name: tr('label.me'),
 };
 
-// Что лежит в localStorage, писали мы же — но не обязательно этой версией и
-// не обязательно целиком: одно битое значение на верхнем уровне модуля
-// роняло весь офис до первого кадра, без единой строки в консоли.
+// What lies in localStorage was written by us — but not necessarily by this version
+// and not necessarily whole: one broken value at the top level of a module brought
+// the whole office down before the first frame, without a single line in the console.
 const stored = (key, fallback) => {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
 };
 
 const state = {
   agents: [], layout: null, sig: '', actors: new Map(), looks: new Map(),
-  // vx/vy — накат скейта: скорость живёт между кадрами, у пешей ходьбы её нет
+  // vx/vy — the glide of the skateboard: the speed lives between frames, walking has none
   player: { x: 120, y: 60, dir: 0, moving: false, skate: false, vx: 0, vy: 0, z: 0, vz: 0 }, spawned: false,
   cat: { x: 200, y: 60, tx: 200, ty: 60 },
   me: normalizeLook({ ...DEFAULT_ME, ...stored('valey-me', {}) }),
   visited: new Set(), waypoint: null, currentRoom: null,
+  // Where we sit: {x, y, dir, out} — the coordinate of the seat and the point people
+  // stand up to. While it is not null the player does not walk and is drawn in the sit pose.
+  seat: null,
   focus: null, dialogOpen: false, page: 'talk', typed: 0, notice: '', t: 0,
   prevStatus: new Map(),
   weather: proceduralWeather(), weatherAt: Date.now(), realWeather: null, wasFlashing: false,
   settings: { weather: { enabled: false }, delivery: { mode: 'default' } }, sun: null,
   delivery: { available: false },
-  // Хозяин офиса или гость. Спрашивается один раз при заходе: право не меняется
-  // на лету, а панель, нарисованная до ответа, показала бы гостю кнопку, которую
-  // сервер всё равно не примет.
+  // The owner of the office or a guest. Asked once on arrival: the right does not
+  // change on the fly, and a panel drawn before the answer would show a guest a button
+  // the server will not accept anyway.
   owner: true, accessMode: 'private',
-  // Как человек оказался на пороге: entry.from — кто позвал, entry.refused —
-  // почему не пустили. needsCode — офис общий, а пропуска нет.
+  // How the person ended up on the threshold: entry.from — who invited, entry.refused
+  // — why they were not let in. needsCode — the office is shared and there is no pass.
   entry: null, needsCode: false,
-  // Доступ к агентам: смысл зависит от того, кто смотрит. См. project() на
-  // сервере — он и решает, чей это вид.
+  // Access to the agents: the meaning depends on who is looking. See project() on the
+  // server — it is what decides whose view this is.
   access: null,
   stepDist: 0, doorRoom: null, dust: [], drink: null,
-  // пультовая: карточка признаётся, когда подходишь ты; камеры включаются с пульта
+  // the control room: the card is recognised when it is you walking up; the cameras are switched on from the desk
   cctv: {
     unlocked: false, on: false, idx: 0, since: 0,
-    // автообход: камеры сами идут по кругу; выбор запоминается между заходами
+    // the automatic round: the cameras go in a circle by themselves; the choice is remembered between visits
     auto: localStorage.getItem('valey-cctv-auto') !== '0',
   },
   camList: [], camsSig: null,
-  // лифт: кабина одна на этаж, поэтому её положение — часть состояния мира,
-  // а не панели. open — доля раскрытия створок, 0 закрыты, 1 разъехались.
+  // the lift: there is one cabin per floor, so its position is part of the state of the
+  // world rather than of a panel. open is the fraction the doors are open by, 0 closed,
+  // 1 parted.
   lift: { floor: 1, open: 0, phase: 'idle', to: null, t0: 0, span: 1, andOpen: false },
-  // Другие люди в офисе. Ключ — их id, значение — где они были в последний раз
-  // и куда едут: между посылками присутствия человек «доезжает» сам, иначе на
-  // 8 кадрах в секунду чужая ходьба выглядит телепортацией.
+  // Other people in the office. The key is their id, the value is where they were last
+  // and where they are going: between presence messages a person "arrives" by himself,
+  // otherwise at 8 frames a second somebody else's walking looks like teleportation.
   people: new Map(),
+  // The permission requests the agents are waiting on. For a guest the list is always
+  // empty — the server does not send it.
+  permits: [], pagerWaiting: 0,
   soundOn: sound.on,
-  // физических пикселей на пиксель игры; заполняется первым же fit()
+  // physical pixels per game pixel; filled in by the very first fit()
   zoom: { dev: 3, max: 3, auto: true, clamped: false },
 };
 
 const keys = new Set();
-// Ручки для отладки из консоли. __ui нужен ещё и потому, что мост расширения
-// Claude in Chrome не резолвит динамический import() в странице: вызов повисает
-// и уносит с собой весь канал, так что дотянуться до модуля можно только так.
+// Handles for debugging from the console. __ui is also needed because the bridge of the
+// Claude in Chrome extension does not resolve a dynamic import() in the page: the call
+// hangs and takes the whole channel with it, so reaching the module is only possible
+// this way.
 window.__game = state; window.__keys = keys; window.__ui = UI;
 
-// ------------------------------------------------------------------- хозяин
-// Право командовать приезжает один раз ссылкой из терминала и остаётся в этом
-// браузере. Из адреса токен сразу убирается: строка адреса копируется в чат
-// и в скриншот чаще, чем кажется.
+// ------------------------------------------------------------------- the owner
+// The right to command arrives once as a link from the terminal and stays in this
+// browser. The token is removed from the address at once: the address bar is copied into
+// a chat and into a screenshot more often than one thinks.
 let OWNER = (() => {
   const q = new URLSearchParams(location.hash.slice(1));
   const given = q.get('owner');
@@ -101,12 +110,14 @@ let OWNER = (() => {
   return localStorage.getItem('valey-owner') || '';
 })();
 
-// Токен гостя выдаётся за код и живёт рядом с хозяйским. Он не даёт прав —
-// он даёт войти: в общем режиме офис без него не покажет даже коридора.
+// A guest's token is given out in exchange for a code and lives next to the owner's. It
+// grants no rights — it grants entry: in shared mode the office will not show even a
+// corridor without it.
 let GUEST = localStorage.getItem('valey-guest') || '';
 
-// Код из ссылки. Как и токен хозяина, из адреса убирается сразу: одноразовый
-// он или нет, оставлять его в строке, которую копируют в чат, незачем.
+// The code from the link. Like the owner's token, it is removed from the address at
+// once: whether it is single-use or not, there is no reason to leave it in a string
+// people copy into a chat.
 const CODE = (() => {
   const q = new URLSearchParams(location.hash.slice(1));
   const given = q.get('code');
@@ -117,8 +128,8 @@ const CODE = (() => {
   return given;
 })();
 
-// Заголовок вместо куки: офис живёт на одном порту с чужими вкладками того же
-// localhost, а куку они делят.
+// A header rather than a cookie: the office lives on one port with other tabs of the
+// same localhost, and they share a cookie.
 const owned = (extra = {}) => {
   const h = { ...extra };
   if (OWNER) h['x-valey-owner'] = OWNER;
@@ -126,8 +137,8 @@ const owned = (extra = {}) => {
   return h;
 };
 
-// Дверь. Код меняется на токен ровно один раз; дальше живёт токен, и
-// перезагрузка страницы не выставляет человека обратно на улицу.
+// The door. A code is exchanged for a token exactly once; after that the token lives,
+// and a reload of the page does not put the person back out on the street.
 async function knock() {
   if (!CODE) return null;
   const r = await fetch('/api/enter', {
@@ -141,18 +152,33 @@ async function knock() {
   return r;
 }
 
-// Сохранение настроек нужно двоим: панелям через initUI и человечку-переключателю
-// в коридоре. Поэтому это функция с именем, а не метод объекта, который никому,
-// кроме UI, не виден.
+// Saving the settings is needed by two: the panels through initUI and the little switch
+// figure in the corridor. So it is a named function rather than a method of an object
+// that is visible to nobody but the UI.
 async function saveSettings(patch) {
   const r = await fetch('/api/settings', {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }), body: JSON.stringify(patch),
   }).then((x) => x.json()).catch((e) => ({ error: e.message }));
   if (r.settings) state.settings = r.settings;
+  if (r.packs) state.packs = r.packs;
   if (r.weather) applyWeather(r.weather);
   UI.renderHud();
   return r;
 }
+
+// One entrance for both sources: the event and the snapshot. The counter of deferred
+// ones lives in the state, because it is drawn by the header rather than by the pager.
+function takePermits(list) {
+  seePermits(list);
+  const n = waitingCount();
+  if (n !== state.pagerWaiting) { state.pagerWaiting = n; UI.renderHud(); }
+}
+
+initPager(state, {
+  openPermit: (p) => { UI.openPermit(p.agentId); },
+  toast: (text, kind) => UI.toast(text, kind),
+  hudChanged: () => { state.pagerWaiting = waitingCount(); UI.renderHud(); },
+});
 
 UI.initUI(state, {
   close: closeAll,
@@ -165,13 +191,16 @@ UI.initUI(state, {
     body: JSON.stringify({ agentId, text, deliver, mode, resend }),
   }).then((r) => r.json()).catch((e) => ({ error: e.message })),
   guideTo: (id) => { state.waypoint = id; UI.toast(tr('toast.guide')); },
-  // Инвентарь не повторяет панели языка, цвета и звука — он до них доводит.
+  // The bag does not repeat the language, colour and sound panels — it leads to them.
   lang: () => switchLang(),
+  setLang: (code) => switchLang(code),
+  names: () => fetch('/api/names', { headers: owned() })
+    .then((r) => r.json()).catch((e) => ({ error: e.message, packs: [] })),
   sound: () => { state.soundOn = sound.toggle(); UI.renderHud(); return state.soundOn; },
   geocode: (q) => fetch('/api/geocode?q=' + encodeURIComponent(q)).then((r) => r.json()).catch((e) => ({ error: e.message })),
-  // Карточка ключа спрашивает CLI заново: человек ушёл в терминал, залогинился
-  // и вернулся, а ответ сервера живёт минуту — ждать её, глядя на «не
-  // авторизован», незачем.
+  // The key card asks about the CLI again: somebody went to the terminal,
+  // logged in and came back, and the server's answer lives a minute — no
+  // reason to sit out that minute looking at «not logged in».
   recheckCli: () => fetch('/api/delivery?fresh=1', { headers: owned() })
     .then((r) => r.json()).then((d) => { state.delivery = d; return d; })
     .catch((e) => ({ error: e.message })),
@@ -180,21 +209,26 @@ UI.initUI(state, {
     .then((r) => r.json()).catch((e) => ({ error: e.message, invites: [] })),
   makeInvite: (name) => fetch('/api/invite', {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
-    // from — как гость увидит зовущего на экране входа. Сервер имени хозяина
-    // не знает: оно живёт в браузере, рядом с внешностью.
+    // from — how a guest will see the inviter on the entrance screen. The server does not
+    // know the owner's name: it lives in the browser, next to the look.
     body: JSON.stringify({ name, from: state.me.name || '' }),
   }).then((r) => r.json()).then((r) => {
-    // Забираем токен: офис только что стал общим, и без него эта же страница
-    // на следующем запросе окажется гостем в собственном офисе.
+    // We take the token: the office has just become shared, and without it this same page
+    // will turn out to be a guest in its own office on the next request.
     if (r && r.owner) {
       OWNER = r.owner; localStorage.setItem('valey-owner', OWNER);
-      // Поток помнит, кем открыт: сервер решает это один раз при подключении.
-      // Без переоткрытия старый поток после перехода в shared шёл гостевой
-      // проекцией — хозяин видел свой офис без реплик и файлов.
+      // The stream remembers who opened it: the server decides that once, at connection
+      // time. Without a reopen an old stream went on as a guest projection after the switch
+      // to shared — the owner saw his office with no lines and no files.
       openStream();
     }
     return r;
   }).catch((e) => ({ error: e.message })),
+  answerPermit: (id, decision, message) => fetch('/api/permit/answer', {
+    method: 'POST', headers: owned({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ id, decision, message }),
+  }).then((r) => r.json()).catch((e) => ({ error: e.message })),
+  forgetPermit: (id) => { forgetPermit(id); state.pagerWaiting = waitingCount(); UI.renderHud(); },
   askAccess: (agentId) => fetch('/api/access', {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({ agentId }),
@@ -213,47 +247,49 @@ UI.initUI(state, {
   }).then((r) => r.json()).catch((e) => ({ error: e.message })),
 });
 
-// Сначала стучимся, потом спрашиваем, кто мы: с кодом в руках ответ на второй
-// вопрос зависит от первого.
+// We knock first and ask who we are after: with a code in hand the answer to the second
+// question depends on the first.
 knock().then((entered) => {
   if (entered && entered.errorKey) state.entry = { refused: entered.errorKey };
   else if (entered && entered.ok) state.entry = { from: entered.from || '' };
   return fetch('/api/whoami', { headers: owned() }).then((r) => r.json());
 }).then((r) => {
-  // Токен уже на руках, если он вообще будет: поток можно открывать.
+  // The token is in hand, if there is going to be one at all: the stream can be opened.
   openStream();
   state.owner = !!r.owner;
   state.accessMode = r.mode || 'private';
   state.needsCode = !!r.needsCode;
   if (r.guest && !state.entry) state.entry = { from: r.from || '' };
-  // Экран входа рисуется первым: он и есть то, на что человек сейчас смотрит.
-  // Если HUD споткнётся — а он читает поля, которых у непущенной страницы нет,
-  // — карточка «тебя позвали» уже на месте, а не потеряна вместе с ним.
+  // The entrance screen is drawn first: it is what the person is looking at right now.
+  // If the HUD stumbles — and it reads fields a page that was not let in does not have —
+  // the "you have been invited" card is already in place rather than lost along with it.
   renderTitle();
   UI.renderHud();
-}).catch(() => { /* не ответил — считаем гостем: молча дать больше прав хуже */
+}).catch(() => { /* no answer — we count him a guest: silently giving more rights is worse */
   state.owner = false;
-  // Поток открывается и здесь: до 4 сентября 2026 упавший whoami оставлял
-  // офис пустым навсегда, без объяснения, — снимки просто не приходили.
+  // The stream is opened here as well: until 4 September 2026 a failed whoami left the
+  // office empty forever, with no explanation — the snapshots simply never came.
   if (!es) openStream();
 });
 
 fetch('/api/settings').then((r) => r.json()).then((r) => {
-  if (r.settings) { state.settings = r.settings; setLang(r.settings.lang); }
+  if (r.settings) { state.settings = r.settings; setLang(r.settings.lang); paintSign(); }
+  if (r.packs) state.packs = r.packs;
   if (r.weather) applyWeather(r.weather);
   UI.renderHud();
 }).catch(() => {});
 
-// Оранжерея. Сад общий и живёт в настройках офиса; в руках лейка — своя, и
-// только твоя: это не состояние офиса, а то, что ты сейчас держишь. Из-за
-// этого в общем офисе двое увидят лейку на крючке одновременно — цена, которую
-// платим за то, что носить её не нужно объяснять серверу.
+// The conservatory. The garden is shared and lives in the office settings; the
+// watering can in your hands is your own and only yours: it is not a state of the
+// office but what you are holding right now. Because of that, in a shared office two
+// people will see the can on its hook at the same time — the price paid for not having
+// to explain carrying it to the server.
 const garden = () => (state.settings && state.settings.garden) || { pots: {}, can: { left: CAN_FULL } };
 const canLeft = () => {
   const c = garden().can;
   return c && Number.isFinite(c.left) ? c.left : CAN_FULL;
 };
-// То, что показывает drawGreenhouse: состояние каждого горшка на сейчас.
+// What drawGreenhouse shows: the state of every pot as of now.
 function gardenView(room) {
   const g = garden(), now = Date.now(), st = {};
   for (const p of room.pots) st[p.i] = potState(g.pots && g.pots[p.i], now);
@@ -263,9 +299,9 @@ function gardenView(room) {
     sign: tr('sign.watered', { n: n.wet, total: n.total }),
   };
 }
-// Пишем и на сервер, и к себе сразу: полив должен быть виден в тот же кадр, а
-// не через такт потока. Если сервер откажет — гость, чужой офис — возвращаем
-// как было и говорим вслух.
+// We write both to the server and to ourselves at once: watering has to be visible in
+// the same frame rather than a stream tick later. If the server refuses — a guest,
+// somebody else's office — we put it back as it was and say so aloud.
 async function saveGarden(next, wasCarry) {
   const before = garden();
   state.settings = { ...state.settings, garden: next };
@@ -311,16 +347,17 @@ function pourOn(room, pot) {
   saveGarden(next);
   sound.pour(0.7);
   const after = potState(next.pots[pot.i], now);
-  // Сказать стоит только то, что человек и так не увидит: зацвёл — увидит,
-  // а вот «это был последний полив в лейке» на экране ничем не написано.
+  // The only thing worth saying is what the person will not see anyway: that it has
+  // flowered he will see, but "that was the last watering in the can" is written nowhere
+  // on the screen.
   if (after === 'bloom' && before !== 'bloom') UI.toast(tr('toast.bloomed'));
   else if (next.can.left === 0) UI.toast(tr('toast.canRanOut'), 'wait');
 }
 
-// Дресс-код — настройка офиса, а не браузера: он приезжает в settings и
-// разлетается по всем открытым вкладкам. Одетый вид считается один раз на смену
-// кода, а не в каждом кадре: людей на этаже три десятка, и новый объект на
-// каждого шестьдесят раз в секунду — мусор ради ничего.
+// The dress code is a setting of the office, not of the browser: it arrives in settings
+// and flies out to every open tab. The dressed look is computed once per change of the
+// code rather than in every frame: there are three dozen people on the floor, and a new
+// object for each of them sixty times a second is garbage for nothing.
 const dressCode = () => (state.settings && state.settings.dress && state.settings.dress.code) || 'casual';
 let wornCode = null;
 let myWorn = null;
@@ -351,17 +388,18 @@ function applyWeather(w) {
   }
 }
 
-// ---------------------------------------------------------------- присутствие
-// Кто ты для остальных: id, имя и внешность. id живёт в localStorage, а не в
-// sessionStorage — две вкладки одного браузера это один человек, а не двое.
+// ---------------------------------------------------------------- presence
+// Who you are to the others: an id, a name and a look. The id lives in localStorage
+// rather than in sessionStorage — two tabs of one browser are one person, not two.
 const MY_ID = (() => {
   let v = localStorage.getItem('valey-id');
   if (!v) { v = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()); localStorage.setItem('valey-id', v); }
   return v;
 })();
 
-// Пока идёшь — часто, пока стоишь — редко. Порог по расстоянию, а не по
-// «нажата ли клавиша»: лифт возит человека сам, и молчать в это время нельзя.
+// While you walk, often; while you stand, rarely. The threshold is by distance rather
+// than by "is a key pressed": the lift carries a person by itself, and staying silent
+// during that is not allowed.
 const HERE_MOVING_MS = 140, HERE_IDLE_MS = 1500;
 let hereAt = 0, hereX = null, hereY = null;
 
@@ -380,20 +418,20 @@ function tellWhereIAm(now) {
       x: p.x, y: p.y, dir: p.dir || 1, moving: !!p.moving,
       room: room ? room.key : null,
     }),
-  }).catch(() => { /* офис переживает потерянный пакет присутствия */ });
+  }).catch(() => { /* the office survives a lost presence packet */ });
 }
 
-// Закрыл вкладку — исчез сразу, а не через восемь секунд. sendBeacon потому,
-// что обычный fetch в pagehide браузер уже не обязан доводить.
+// Closed the tab — disappeared at once rather than in eight seconds. sendBeacon because
+// an ordinary fetch in pagehide is no longer something the browser has to deliver.
 addEventListener('pagehide', () => {
   try {
     navigator.sendBeacon('/api/gone', new Blob([JSON.stringify({ id: MY_ID })], { type: 'application/json' }));
-  } catch { /* не довели — TTL уберёт через восемь секунд */ }
+  } catch { /* not delivered — the TTL will remove him in eight seconds */ }
 });
 
-// Чужая внешность достраивается до полной теми же умолчаниями, что своя.
-// Сервер уже отбросил мусор, но недостающего он не выдумывает — а drawPerson
-// красит фигуру насквозь и на undefined падает.
+// Somebody else's look is completed to a full one by the same defaults as your own. The
+// server has already thrown out the junk, but it does not invent what is missing — while
+// drawPerson paints a figure through and through and falls over on undefined.
 const theirLook = (look) => normalizeLook({ ...DEFAULT_ME, ...(look && typeof look === 'object' ? look : {}) });
 
 function seePeople(list) {
@@ -403,7 +441,7 @@ function seePeople(list) {
     seen.add(q.id);
     const had = state.people.get(q.id);
     if (had) {
-      // прежнее место становится тем, откуда едем, новое — куда
+      // the old place becomes where we are coming from, the new one where to
       had.tx = q.x; had.ty = q.y; had.dir = q.dir; had.moving = q.moving;
       had.name = q.name; had.look = theirLook(q.look); had.room = q.room;
     } else {
@@ -417,31 +455,35 @@ function seePeople(list) {
 }
 
 // -------------------------------------------------------------------- stream
-// EventSource не умеет заголовки, поэтому в поток пропуск уходит параметром.
-// Это тот же токен: прятать его от строки запроса смысла нет — он и так
-// лежит в localStorage этой же страницы.
+// EventSource cannot do headers, so the pass goes into the stream as a parameter. It is
+// the same token: there is no sense hiding it from the query string — it lies in the
+// localStorage of this same page anyway.
 //
-// Поток открывается не сразу, а после того, как мы постучались: у гостя,
-// пришедшего по ссылке, токена в момент загрузки ещё нет — он выдаётся за код.
-// Открытый раньше поток получал 403, и человек видел пустой офис до первой
-// перезагрузки. Найдено 30 августа 2026 первым же настоящим входом по ссылке.
+// The stream is opened not at once but after we have knocked: a guest who came by a link
+// has no token at the moment of loading — it is given out in exchange for a code. A
+// stream opened earlier got a 403, and the person saw an empty office until the first
+// reload. Found on 30 August 2026 by the very first real entry by link.
 let es = null;
-// EventSource сам переподключается только после обрыва сети. Ответ 4xx/5xx —
-// офис перезапустился в другом режиме, пропуск отозван, сервер упал на
-// секунду — закрывает его насовсем, и страница молча замирает на последнем
-// снимке. Поэтому закрытый поток открывается заново, с растущей паузой.
+// EventSource reconnects by itself only after a break in the network. A 4xx/5xx answer
+// — the office restarted in another mode, the pass was revoked, the server fell over for
+// a second — closes it for good, and the page silently freezes on the last snapshot. So a
+// closed stream is opened again, with a growing pause.
 let streamRetry = 2000;
 function openStream() {
   if (es) es.close();
   const pass = OWNER ? 'owner=' + encodeURIComponent(OWNER)
     : GUEST ? 'guest=' + encodeURIComponent(GUEST) : '';
   es = new EventSource('/api/stream' + (pass ? '?' + pass : ''));
+  // The pager has to beep at once: in the snapshot tick it would be "somebody called me".
+  es.addEventListener('permits', (e) => {
+    try { takePermits(JSON.parse(e.data)); } catch { /* junk in the frame — we skip it */ }
+  });
   es.addEventListener('people', (e) => {
-    try { seePeople(JSON.parse(e.data)); } catch { /* мусор в кадре — пропускаем */ }
+    try { seePeople(JSON.parse(e.data)); } catch { /* junk in the frame — we skip it */ }
   });
   es.onmessage = (e) => { streamRetry = 2000; onSnapshot(e); };
   es.onerror = () => {
-    if (es.readyState !== EventSource.CLOSED) return;   // сеть моргнула — браузер сам вернётся
+    if (es.readyState !== EventSource.CLOSED) return;   // the network blinked — the browser will come back by itself
     const wait = streamRetry;
     streamRetry = Math.min(streamRetry * 2, 30000);
     setTimeout(() => { if (es.readyState === EventSource.CLOSED) openStream(); }, wait);
@@ -451,40 +493,40 @@ function openStream() {
 const onSnapshot = (e) => {
   const data = JSON.parse(e.data);
   state.agents = data.agents || [];
-  // Присутствие приходит и в снимке — им встречают вошедшего, чтобы люди были
-  // на экране сразу, а не через первый быстрый такт.
+  // Presence comes in the snapshot too — it is what greets an arrival, so that people are
+  // on the screen at once rather than after the first quick tick.
   if (data.people) seePeople(data.people);
-  // Доступ едет со снимком: у гостя это его собственный вид, у хозяина —
-  // кто просит и кому открыто.
+  // Access rides with the snapshot: for a guest it is his own view, for the owner who is
+  // asking and to whom it is open.
   state.access = data.access || null;
-  // Поток разбирается по полям, а не присваивается целиком, поэтому новое поле
-  // надо переносить руками — иначе титульный экран показывает прочерк вместо
-  // версии, и это видно только на кадре.
+  takePermits(data.permits || []);
+  // The stream is taken apart field by field rather than assigned whole, so a new field
+  // has to be carried over by hand — otherwise the title screen shows a dash instead of the
+  // version, and that is visible only on a frame.
   state.version = data.version || state.version;
   state.release = data.release || null;
   if (wornCode !== dressCode()) dressAll();
   else for (const a of state.agents) if (!state.looks.has(a.id)) state.looks.set(a.id, dressed(a));
 
-  // Модуль может влиять на состав плана — мольберт стоит не во всякой комнате,
-  // а только там, где в настройках назван файл. Подпись обязана это учитывать,
-  // иначе план не пересоберётся, когда состав изменился: предмет появится лишь
-  // после следующего прихода-ухода агента.
+  // A module can affect the composition of the plan — the easel does not stand in every
+  // room, only where a file is named in the settings. The signature has to take that into
+  // account, or the plan will not be rebuilt when the composition changed: the thing would
+  // appear only after the next arrival or departure of an agent.
   const sig = planSignature(state.agents) + collect('sig', state).join('');
   if (sig !== state.sig) {
     state.sig = sig;
-    // План пересобирается целиком, и комнаты в нём стоят на новых местах: ряды
-    // прирастают сверху, поэтому чужой проект, начавшийся минуту назад, сдвигает
-    // весь этаж вниз. Мировые координаты после такого указывают в соседнюю
-    // комнату, а человек при этом никуда не шёл. Поэтому перед пересборкой
-    // запоминаем, где он стоял относительно своей комнаты, и после — ставим
-    // обратно туда же.
+    // The plan is rebuilt whole, and the rooms in it stand in new places: the rows grow
+    // from the top, so somebody else's project that began a minute ago shifts the whole
+    // floor down. World coordinates after that point into the neighbouring room, while the
+    // person has gone nowhere. So before the rebuild we remember where he stood relative to
+    // his room, and afterwards put him back in the same place.
     const wasP = anchorOf(state.layout, state.player);
     const wasC = anchorOf(state.layout, state.cat);
-    // Комнаты модулей спрашиваются внутри сборки: планировке нужно знать про
-    // них до того, как посчитается высота мира и соберётся лифт.
+    // The rooms of modules are asked for inside the assembly: the plan has to know about
+    // them before the height of the world is counted and the lift is put together.
     state.layout = buildLayout(state.agents, { rooms: (anchor) => collect('room', anchor, state) });
-    // Модули довешивают своё на готовую планировку: предмет, точку подхода
-    // и прямоугольник, через который не ходят.
+    // The modules hang their own things on the finished plan: a thing, an approach point
+    // and a rectangle nobody walks through.
     collect('layout', state.layout, state);
     applyAnchor(state.layout, state.player, wasP);
     applyAnchor(state.layout, state.cat, wasC);
@@ -494,7 +536,7 @@ const onSnapshot = (e) => {
 
   if (!state.spawned && state.layout.projectRooms.length) {
     const q = new URLSearchParams(location.hash.slice(1));
-    const named = q.get('room') && state.layout.projectRooms.find((r) => r.title.startsWith(q.get('room')));
+    const named = pickRoom(state.layout, q.get('room'));
     const r = named || state.layout.projectRooms[0];
     state.player.x = Number(q.get('x')) || (named ? r.x + r.w / 2 : r.doorPoint.x);
     state.player.y = Number(q.get('y')) || (named ? r.y + r.h - 60 : r.y - 30);
@@ -515,11 +557,12 @@ const onSnapshot = (e) => {
   if (data.settings) {
     const changed = JSON.stringify(data.settings) !== JSON.stringify(state.settings);
     state.settings = data.settings;
-    // дресс-код мог переключить кто-то в соседней вкладке — переодеваемся на
-    // месте, без перезагрузки: офис на то и офис
+    // the dress code could have been switched by somebody in a neighbouring tab — we change
+    // clothes on the spot, without a reload: an office is an office for a reason
     if (wornCode !== dressCode()) dressAll();
-    // язык мог переключить кто-то в соседней вкладке — догоняем
+    // the language could have been switched by somebody in a neighbouring tab — we catch up
     setLang(data.settings.lang);
+    paintSign();
     if (changed && !document.getElementById('sky').hidden) UI.renderSky();
   }
   if (data.delivery) state.delivery = data.delivery;
@@ -527,17 +570,18 @@ const onSnapshot = (e) => {
   UI.renderHud();
   if (state.dialogOpen) UI.renderDialog();
   if (!document.getElementById('roster').hidden) UI.renderRoster();
-  // счётчики на экране входа живые: он и нужен, чтобы узнать это до входа
+  // the counters on the entrance screen are live: that is what it is for, to learn this before entering
   if (titleOpen()) renderTitle();
 };
 
 // --------------------------------------------------------------------- input
 for (const ev of ['keydown', 'pointerdown']) addEventListener(ev, () => sound.init(), { once: true });
 
-// Щипок на трекпаде и Ctrl+колесо браузер считает своим зумом — забираем себе.
-// Клавиатурный зум (Cmd+= / Cmd+−) перехватить нельзя, это акселератор самого
-// браузера; но он игре и не вредит: масштаб считается от devicePixelRatio, и
-// холст после браузерного зума остаётся того же физического размера.
+// A pinch on the trackpad and Ctrl+wheel are counted by the browser as its own zoom — we
+// take them for ourselves. The keyboard zoom (Cmd+= / Cmd+−) cannot be intercepted, it is
+// an accelerator of the browser itself; but it does the game no harm either: the scale is
+// counted from devicePixelRatio, and after a browser zoom the canvas stays the same
+// physical size.
 addEventListener('wheel', (e) => {
   if (!e.ctrlKey && !e.metaKey) return;
   e.preventDefault();
@@ -548,22 +592,22 @@ for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
   addEventListener(ev, (e) => e.preventDefault());
 }
 
-// Один обработчик на клавиатуру и геймпад: кнопки геймпада приходят сюда
-// именами клавиш, и панели отвечают им, не зная, откуда нажатие.
+// One handler for the keyboard and the gamepad: the gamepad's buttons arrive here as the
+// names of keys, and the panels answer them without knowing where the press came from.
 function onKey(e) {
   const k = e.key.toLowerCase();
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
-  // Сочетание с Cmd, Ctrl или Alt принадлежит браузеру и системе, а не офису.
-  // Без этой строки Cmd+R перезагружал страницу и заодно выкатывал приёмник —
-  // буква доходила сюда голой, модификатор никто не смотрел. То же самое было
-  // с Cmd+N, Cmd+C и всяким сочетанием, чья буква занята в офисе: человек
-  // делает обычную вещь браузера и получает вдобавок панель. Shift не в счёт —
-  // он тут свой: Shift+F9 и бег.
+  // A combination with Cmd, Ctrl or Alt belongs to the browser and to the system, not to
+  // the office. Without this line Cmd+R reloaded the page and rolled the radio out into the
+  // bargain — the letter arrived here bare, and nobody looked at the modifier. The same
+  // happened with Cmd+N, Cmd+C and any combination whose letter is taken in the office: a
+  // person does an ordinary browser thing and gets a panel on top. Shift does not count —
+  // it is ours here: Shift+F9 and running.
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   // the open board eats the arrows before the office sees them
   if (UI.viewerKey(e.key, e.shiftKey)) { e.preventDefault(); return; }
-  // Панель лифта и стойка — то же самое: пока они открыты, стрелки ходят по
-  // этажам, а не по офису.
+  // The lift panel and the reception desk are the same: while they are open the arrows
+  // walk the floors rather than the office.
   if (UI.liftKey(e.key)) { e.preventDefault(); return; }
   if (UI.rosterKey(e.key)) { e.preventDefault(); return; }
   if (first('key', e.key, e.shiftKey)) { e.preventDefault(); return; }
@@ -571,18 +615,26 @@ function onKey(e) {
   if (UI.bagKey(e.key)) { e.preventDefault(); return; }
   if (UI.skyKey(e.key)) { e.preventDefault(); return; }
   if (UI.skinKey(e.key)) { e.preventDefault(); return; }
+  if (UI.langKey(e.key)) { e.preventDefault(); return; }
   if (['tab', ' ', 'e', 'escape'].includes(k)) e.preventDefault();
   if (state.dialogOpen && (k.startsWith('arrow') || k === 'enter')) e.preventDefault();
   keys.add(k);
 
-  // Экран входа забирает клавиши себе — но только когда поверх него ничего не
-  // открыто: «переодеться» и «окно в мир» зовутся прямо отсюда и должны сами
-  // отвечать на стрелки и ESC.
+  // The entrance screen takes the keys for itself — but only while nothing is open over
+  // it: "change clothes" and "the window on the world" are called straight from here and
+  // have to answer the arrows and ESC themselves.
   if (titleFree()) {
     if (titleKey(e.key)) { e.preventDefault(); return; }
   }
 
-  if (k === 'escape') return closeAll();
+  // The pager holds its two keys while there is no card: Enter answers, Esc defers. An
+  // open card takes them for itself — it is on top, and it already has both "allow" and
+  // "close".
+  if (!state.dialogOpen && pagerKey(e.key)) { e.preventDefault(); return; }
+
+  // Esc on "deny with a note" is a step back to the buttons rather than closing the card:
+  // the person pressed deny and has not sent anything yet.
+  if (k === 'escape') { if (UI.permitEscape()) return; return closeAll(); }
 
   // the character sheet is keyboard-driven too: arrows walk its bottom row
   if (state.dialogOpen) {
@@ -593,10 +645,10 @@ function onKey(e) {
     if (k === 'arrowdown') return UI.dialogDown();
     if (k === 'enter' || k === ' ') return UI.pressDialogFocus();
   }
-  // F9 выше всего остального: он служебный и должен работать в любом состоянии
-  // офиса. Пока он стоял ниже, ветка камер возвращалась раньше — и снять вид с
-  // камеры было нельзя вообще, ровно тот кадр, которым Prod и иллюстрирует
-  // пультовую. Нашлось 30 августа 2026 при пересъёмке плит.
+  // F9 stands above everything else: it is a service key and has to work in any state of
+  // the office. While it stood lower, the camera branch returned earlier — and taking a
+  // shot of a camera view was impossible at all, exactly the frame Prod illustrates the
+  // control room with. Found on 30 August 2026 while reshooting the plates.
   if (e.key === 'F9') { e.preventDefault(); saveShot(e.shiftKey ? 4 : 1); return; }
 
   if (state.cctv.on) {
@@ -606,31 +658,33 @@ function onKey(e) {
     if (k === ' ' || k === 'e' || k === 'у' || k === 'enter') return closeCams();
     return;
   }
-  // масштаб: работает всегда, даже поверх открытых панелей
+  // the scale: works always, even over open panels
   if (k === '+' || k === '=') { e.preventDefault(); return stepZoom(1); }
   if (k === '-' || k === '_') { e.preventDefault(); return stepZoom(-1); }
   if (k === '0') { e.preventDefault(); return setZoom(0); }
 
   if (k === 'tab') return toggle('roster', UI.renderRoster, UI.closeRoster);
-  // N снаружи показывает все заметки; внутри разговора та же клавиша их пишет
+  // N from outside shows all the notes; inside a conversation the same key writes them
   if (k === 'n' || k === 'т') return toggle('notes', UI.renderNotes, UI.closeNotes);
-  // C открывает инвентарь на «на себе» — там, где эта клавиша была всегда.
+  // C opens the bag on "worn" — where this key has always led.
   if (k === 'c' || k === 'с') return toggle('bag', () => UI.renderBag('self'), UI.closeBag);
   if (k === 'p' || k === 'з') return toggle('sky', UI.renderSky, UI.closeSky);
   if (k === 'u' || k === 'г') return toggle('skin', UI.renderSkin, UI.closeSkin);
-  // I — пригласить. Кадры клавишу не задают, это выбор здесь: G занята
-  // нарисованным «этажом команды», а из свободных букв I — единственная,
-  // которая читается и по-русски (ш) как та же кнопка. Панель только у
-  // хозяина; гостю звать некого, и у него I открывает инвентарь на той
-  // вкладке, где он был. Две ветки претендовали на букву с 2 сентября 2026,
-  // инвентарь стоял выше и приглашение не открывалось ни у кого — а другого
-  // входа у панели нет.
+  // I — invite. The frames do not fix the key, it is a choice made here: G is taken by
+  // the drawn "team floor", and of the free letters I is the only one that reads as the
+  // same button in Russian too («ш»). The panel is the owner's only; a guest has nobody to
+  // invite, and for him I opens the bag on the tab he was on. Two branches laid claim to
+  // the letter from 2 September 2026, the bag stood higher and the invitation opened for
+  // nobody — and the panel has no other entrance.
   if (k === 'i' || k === 'ш') {
     if (state.owner !== false) return UI.inviteOpen() ? UI.closeInvite() : UI.openInvite();
     return toggle('bag', UI.renderBag, UI.closeBag);
   }
-  // B — скейт. Не S: та занята шагом вниз в WASD, и переназначить её нельзя,
-  // не сломав ходьбу.
+  // H — bring back a deferred pager. Not E: in the office that one is the same as SPACE,
+  // and "I will call back" with a return on one key would be a conversation with an agent.
+  if ((k === 'h' || k === 'р') && recall()) return;
+  // B — the skateboard. Not S: that one is taken by the step down in WASD, and it cannot
+  // be reassigned without breaking the walking.
   if (k === 'b' || k === 'и') return toggleSkate();
   if (k === 'm' || k === 'ь') {
     state.soundOn = sound.toggle();
@@ -639,26 +693,26 @@ function onKey(e) {
     return;
   }
   if ((k === ' ' || k === 'e' || k === 'у') && !state.dialogOpen) {
-    // На доске ПРОБЕЛ прыгает — но только там, где ему раньше нечего было
-    // делать. Иначе с агентом стало бы не поговорить, не слезая с доски.
+    // On the board SPACE jumps — but only where it had nothing to do before. Otherwise
+    // talking to an agent without getting off the board would become impossible.
     if (canOllie(state.player) && !nearest()) state.player.vz = OLLIE_POP;
     else interact();
   }
 }
 addEventListener('keydown', onKey);
-// Экран входа открыт и поверх него ничего нет — значит и клавиши, и ходьба
-// по коридору принадлежат ему.
+// The entrance screen is open and nothing is over it — so both the keys and the walking
+// along the corridor belong to it.
 const titleFree = () => titleOpen()
-  && ['bag', 'sky', 'viewer', 'roster'].every((id) => document.getElementById(id).hidden);
+  && ['bag', 'sky', 'viewer', 'roster', 'lang'].every((id) => document.getElementById(id).hidden);
 const NO_KEYS = new Set();
 
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 addEventListener('blur', () => keys.clear());
 
-// Геймпад опрашивается раз в кадр: у Gamepad API нет событий на кнопки, только
-// снимок. Кнопки уходят в onKey как клавиши, отпускания — в keys, как keyup.
-// Оси остаются здесь, аналогом: update() берёт их вместо клавиш, когда стик
-// наклонён.
+// The gamepad is polled once a frame: the Gamepad API has no events for buttons, only a
+// snapshot. The buttons go into onKey as keys, the releases into keys, as a keyup. The
+// axes stay here, as an analogue: update() takes them instead of the keys when the stick
+// is tilted.
 const pad = { x: 0, y: 0, down: new Set(), seen: false };
 const typing = () => {
   const el = document.activeElement;
@@ -673,8 +727,8 @@ function tickPad() {
   const { pressed, released } = padEdges(pad, next);
   for (const key of pressed) {
     sound.init();
-    // Пока печатают, стрелки со стика остаются при тексте: стик под большим
-    // пальцем дрожит, а фокус в карточке от этого уезжать не должен.
+    // While typing, the arrows from the stick stay with the text: a stick under a thumb
+    // trembles, and the focus in the card must not ride off because of it.
     if (typing() && key.startsWith('Arrow')) continue;
     onKey({ key, shiftKey: next.down.has('Shift'), target: { tagName: 'GAMEPAD' }, preventDefault() {} });
   }
@@ -687,8 +741,8 @@ function toggle(id, open, close) {
   if (node.hidden) open(); else close();
 }
 
-// Слезая, скорость обнуляем: без этого игрок уезжает ещё полторы секунды уже
-// пешком, и это читается как залипшая клавиша.
+// Getting off, we zero the speed: without that the player rides on for another second
+// and a half already on foot, and it reads as a stuck key.
 function toggleSkate() {
   const p = state.player;
   p.skate = !p.skate;
@@ -696,15 +750,15 @@ function toggleSkate() {
   UI.toast(tr(p.skate ? 'toast.skateOn' : 'toast.skateOff'));
 }
 
-// Снимок холста на диск, в .shots рядом с кодом. Смысл в том, что headless-
-// браузер этот офис не снимает: страница держит открытым /api/stream, событие
-// load не наступает, и `chrome --screenshot` просто ждёт вечно. А судить о
-// мелком тексте по макету нельзя — 400×225 растягиваются целыми пикселями, и
-// увидеть настоящую букву можно только здесь.
+// A shot of the canvas onto disk, into .shots next to the code. The point is that a
+// headless browser does not photograph this office: the page keeps /api/stream open, the
+// load event never happens, and `chrome --screenshot` simply waits forever. And small text
+// cannot be judged from a mock-up — 400×225 is stretched by whole pixels, and a real
+// letter can be seen only here.
 //
-// Снимается ТОЛЬКО холст: панели, HUD и тосты — обычный DOM поверх него, и в
-// canvas.toDataURL они не попадают. Масштаб ×4 повторяет то, что делает сам
-// офис: увеличение без сглаживания, пиксель в квадрат.
+// ONLY the canvas is shot: the panels, the HUD and the toasts are ordinary DOM over it,
+// and they do not get into canvas.toDataURL. The ×4 scale repeats what the office itself
+// does: magnification without smoothing, a pixel into a square.
 async function saveShot(scale) {
   let url = canvas.toDataURL('image/png');
   if (scale > 1) {
@@ -715,7 +769,7 @@ async function saveShot(scale) {
     octx.drawImage(canvas, 0, 0, off.width, off.height);
     url = off.toDataURL('image/png');
   }
-  // имя со временем, иначе второй снимок затирает первый и сравнивать нечего
+  // the name carries the time, or a second shot overwrites the first and there is nothing to compare
   const stamp = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
   const name = `office-${stamp}${scale > 1 ? `-x${scale}` : ''}`;
   try {
@@ -728,17 +782,26 @@ async function saveShot(scale) {
   }
 }
 
-// Всё, что написано словами, перерисовывается при смене языка. Холст не в
-// счёт: он и так перерисовывается каждый кадр и берёт строки из t() на лету.
+// Everything written in words is repainted on a change of language. The canvas does not
+// count: it is repainted every frame anyway and takes its strings from t() on the fly.
+// The plaque above the little switch figure. "RU" — the interface and the names are
+// Russian, "RU·EN" — the names are detached from the language. It is computed here rather
+// than in the drawing: the office settings are not visible to it and must not be.
+function paintSign() {
+  const choice = (state.settings && state.settings.namePack) || 'auto';
+  const l = lang().toUpperCase();
+  switcherSign.code = (choice === 'auto' || choice === lang()) ? l : `${l}·${choice.toUpperCase()}`;
+}
+
 function renderStatic() {
   const help = document.getElementById('help');
-  // Строка помощи перечисляет клавиши, а часть клавиш принадлежит модулям.
-  // Пока «R — радио» стояло в самой строке, бесплатная сборка обещала клавишу,
-  // которой в ней нет: подсказка врала ровно там, где её и читают — когда не
-  // знаешь, что нажать.
+  // The help line lists the keys, and some of the keys belong to modules. While "R — the
+  // radio" stood in the line itself, a free build promised a key it does not have: the hint
+  // lied exactly where it is read — when you do not know what to press.
   if (help) help.textContent = [tr('help'), ...collect('help')].join(' · ');
   document.title = tr('doc.title');
   document.documentElement.lang = lang();
+  paintSign();
   UI.relabel();
   if (titleOpen()) renderTitle();
 }
@@ -771,8 +834,31 @@ function nearest() {
     if (d < bestD) { bestD = d; best = { kind: 'water', prop }; }
   }
 
+  // The benches: for the corridor one the seats are counted from its width (34 px, drawn
+  // from the centre), for the conservatory one they lie ready in the layout. They are
+  // approached from the front — both have a back behind.
+  for (const prop of (state.layout.props || [])) {
+    if (prop.kind !== 'bench') continue;
+    for (const sx of [prop.x - 8, prop.x + 8]) {
+      const d = Math.hypot(sx - p.x, prop.y + 4 - p.y);
+      if (d < bestD) {
+        bestD = d;
+        best = { kind: 'seat', seat: { x: sx, y: prop.y - 6 }, out: { x: sx, y: prop.y + 14 } };
+      }
+    }
+  }
+
   const gh = state.layout.greenhouse;
   if (gh) {
+    if (gh.bench) {
+      for (const st of gh.bench.seats) {
+        const d = Math.hypot(st.x - p.x, st.y - p.y);
+        if (d < bestD) {
+          bestD = d;
+          best = { kind: 'seat', seat: st, out: { x: st.x, y: gh.bench.y + 22 } };
+        }
+      }
+    }
     for (const pot of gh.pots) {
       const d = Math.hypot(pot.spot.x - p.x, pot.spot.y - p.y);
       if (d < bestD) { bestD = d; best = { kind: 'pot', room: gh, pot }; }
@@ -806,7 +892,7 @@ function nearest() {
     const c = sec.consolePoint;
     const d = Math.hypot(c.x - p.x, c.y - p.y);
     if (d < bestD) { bestD = d; best = { kind: 'cams', sec }; }
-    // на плакат смотрят с пола под ним, как и на картины
+    // the poster is looked at from the floor below it, like the paintings
     if (sec.poster) {
       const a = sec.poster;
       const dp = Math.hypot(a.x + a.w / 2 - p.x, a.y + a.h + 14 - p.y);
@@ -817,7 +903,7 @@ function nearest() {
   const lf = state.layout.lift;
   if (lf) {
     for (const f of lf.floors) {
-      // к дверям подходят слева: справа от шахты этажа уже нет
+      // the doors are approached from the left: to the right of the shaft there is no floor any more
       const d = Math.hypot(lf.x - 16 - p.x, f.y - 8 - p.y);
       if (d < bestD) { bestD = d; best = { kind: 'lift', floor: f }; }
     }
@@ -833,8 +919,8 @@ function nearest() {
     const d = Math.hypot(b.x + b.w / 2 - p.x, b.y + b.h + 16 - p.y);
     if (d < bestD) { bestD = d; best = { kind: 'board', room }; }
   }
-  // Модули добавляют свои цели тем же способом: кандидат с расстоянием,
-  // ближайший побеждает. Ядро не знает, что это за предмет.
+  // The modules add their own targets the same way: a candidate with a distance, the
+  // nearest wins. The core does not know what kind of thing it is.
   for (const c of collect('near', p, state.layout, room)) {
     if (c && c.d < bestD) { bestD = c.d; best = c; }
   }
@@ -872,8 +958,8 @@ function startDrink(target) {
   sound.pour(water ? 1 : 0.7);
 }
 
-// Настольный футбол. Сторон две, и занять их могут агенты: если обе заняты —
-// играют без тебя, и это честнее, чем втискивать третьего к столу на двоих.
+// Table football. There are two sides, and agents can take them: if both are taken, they
+// play without you, and that is more honest than squeezing a third in at a table for two.
 const PLAY_MS = 5400;
 
 function freeSide() {
@@ -918,15 +1004,15 @@ function tickPlay(now) {
   UI.toast(tr(key, { a: g.mine, b: g.his }));
 }
 
-// Рыба в микроволновке. Шесть секунд она греется, потом звонок — и ещё
-// четырнадцать секунд по этажу идёт запах. Ничего, кроме запаха, не
-// происходит: в этом и шутка.
+// The fish in the microwave. It heats for six seconds, then the ping — and for another
+// fourteen seconds the smell goes along the floor. Nothing except the smell happens: that
+// is the joke.
 const MICRO_RUN = 6000, MICRO_SMELL = 14000;
 
 function startMicro(room) {
   if (state.micro) {
-    // Уже греется — второй рыбе места нет. Молчать тут нельзя: человек жмёт
-    // ПРОБЕЛ и не понимает, почему ничего не случилось.
+    // It is already heating — there is no room for a second fish. Staying silent here is
+    // not allowed: the person presses SPACE and does not understand why nothing happened.
     UI.toast(tr(state.micro.phase === 'run' ? 'toast.microBusy' : 'toast.microSmell'), 'wait');
     return;
   }
@@ -944,11 +1030,40 @@ function tickMicro(now) {
     m.phase = 'smell';
     sound.chime();
     UI.toast(tr('toast.microDing'), 'wait');
-    // Агенты узнают о рыбе так же, как обо всём остальном в офисе, — новостью
+    // The agents learn about the fish the same way as about everything else in the office — as news
     const who = state.agents[Math.floor(Math.random() * state.agents.length)];
     if (who) UI.toast(tr('news.micro', { name: who.name }), 'news');
   }
   if (m.phase === 'smell' && passed > MICRO_RUN + MICRO_SMELL) state.micro = null;
+}
+
+// ------------------------------------------------------------------ the bench
+// Sitting down and doing nothing is the whole mechanic, and two small things matter in it.
+//
+// The first: the seat lies inside furniture, and furniture takes up the floor. So people
+// stand up not where they sat but onto a point in front of the bench: otherwise a person
+// ends up inside a block and comes out of it sideways, as out of a wardrobe.
+//
+// The second: any movement lifts you. A separate "stand up" key would be honest but
+// inconvenient — somebody sitting presses forward and expects to go, not to have the
+// office answer "no".
+function sitDown(n) {
+  const p = state.player;
+  state.seat = { x: n.seat.x, y: n.seat.y, out: n.out, dir: p.dir || 1 };
+  p.x = n.seat.x; p.y = n.seat.y;
+  p.moving = false; p.running = false; p.vx = 0; p.vy = 0;
+  if (p.skate) p.skate = false;              // people do not sit with a board
+  state.stepDist = 22;
+}
+
+function standUp() {
+  const s = state.seat;
+  if (!s) return;
+  const p = state.player;
+  p.x = s.out.x; p.y = s.out.y;
+  p.moving = false;
+  state.seat = null;
+  sound.step(0.7, surfaceUnder(state.layout, p.x, p.y));
 }
 
 function tickDrink(now) {
@@ -986,10 +1101,13 @@ function boardItems(room) {
 }
 
 function interact() {
+  // While sitting, SPACE lifts you — and only that. Otherwise it would find the same
+  // bench again and the person would stay seated, pressing the "stand up" key.
+  if (state.seat) return standUp();
   const n = nearest();
   if (!n) return;
-  // Модулю отдаём событие раньше ядра — но только про его собственные цели:
-  // чужой kind он не узнает и вернёт ложь.
+  // We give the event to the module before the core — but only about its own targets:
+  // it will not recognise somebody else's kind and will return a lie.
   if (first('act', n, state)) return;
   if (n.kind === 'agent') {
     const a = state.agents.find((x) => x.id === n.id);
@@ -1005,6 +1123,8 @@ function interact() {
     UI.toast(`«${tr('poster.name')}» · ${tr('poster.medium')}`);
   } else if (n.kind === 'water' || n.kind === 'coffee') {
     startDrink(n);
+  } else if (n.kind === 'seat') {
+    sitDown(n);
   } else if (n.kind === 'hook') {
     takeCan();
   } else if (n.kind === 'tap') {
@@ -1016,7 +1136,7 @@ function interact() {
   } else if (n.kind === 'kicker') {
     startPlay();
   } else if (n.kind === 'lang') {
-    switchLang();
+    UI.openLang();
     } else if (n.kind === 'cams') {
     openCams();
     } else if (n.kind === 'reception') {
@@ -1028,7 +1148,7 @@ function interact() {
   }
 }
 
-// список камер пересобирается вместе с планом этажа
+// the list of cameras is rebuilt along with the plan of the floor
 function cameras() {
   if (state.camsSig !== state.sig) { state.camsSig = state.sig; state.camList = buildCameras(state.layout); }
   return state.camList;
@@ -1052,7 +1172,7 @@ function closeCams() {
   UI.renderHud();
 }
 
-// сколько пульт держит одну камеру в автообходе
+// how long the desk holds one camera in the automatic round
 const CAM_DWELL = 6200;
 
 function switchCam(step, auto = false) {
@@ -1071,10 +1191,10 @@ function toggleAutoCams() {
   UI.toast(c.auto ? tr('toast.autoOn') : tr('toast.autoOff'));
 }
 
-// --------------------------------------------------------------------- лифт
-// Три фазы по кругу: створки закрылись → кабина поехала → створки открылись.
-// Человек переезжает вместе с кабиной только если сам выбрал этаж в панели;
-// когда лифт просто вызвали, он приезжает пустым к тому, кто нажал кнопку.
+// --------------------------------------------------------------------- the lift
+// Three phases in a circle: the doors closed → the cabin moved → the doors opened. A
+// person rides with the cabin only if he chose the floor in the panel himself; when the
+// lift was simply called, it arrives empty to whoever pressed the button.
 const LIFT_DOORS = 320, LIFT_PER_SCREEN = 260;
 
 const floorOf = (n) => (state.layout.lift.floors || []).find((f) => f.n === n);
@@ -1140,8 +1260,16 @@ function closeAll() {
   if (!document.getElementById('bag').hidden) return UI.closeBag();
   if (!document.getElementById('sky').hidden) return UI.closeSky();
   if (!document.getElementById('skin').hidden) return UI.closeSkin();
+  if (!document.getElementById('lang').hidden) return UI.closeLang();
   if (!document.getElementById('notes').hidden) return UI.closeNotes();
+  // The invitation stood in panelsOpen() and did not stand here: the panel held the
+  // office, while Escape fell past it into closing the dialog and looked broken. It could
+  // only be closed by the cross — that one has a handler of its own.
+  if (UI.inviteOpen()) return UI.closeInvite();
   if (first('esc')) return;
+  // Standing up is "back" too: sitting is a state Escape has to lead out of, or it is
+  // the only thing in the office that does nothing.
+  if (state.seat) return standUp();
   state.dialogOpen = false; state.focus = null; state.notice = ''; UI.closeDialog();
 }
 
@@ -1157,16 +1285,16 @@ function surfaceUnder(L, x, y) {
 }
 
 function panelsOpen() {
-  // едущая кабина тоже держит человека на месте: створки закрыты, выходить некуда
+  // a moving cabin holds the person in place too: the doors are closed, there is nowhere to go out to
   return titleOpen() || state.dialogOpen || state.cctv.on || UI.inviteOpen() || state.lift.phase !== 'idle'
-    // Панель модуля тоже держит экран: своих id ядро не знает и знать не должно.
+    // A module panel holds the screen too: the core does not know its ids and must not.
     || collect('busy').some(Boolean)
-    || ['viewer', 'roster', 'bag', 'sky', 'lift', 'invite'].some((id) => !document.getElementById(id).hidden);
+    || ['viewer', 'roster', 'bag', 'sky', 'lift', 'invite', 'lang'].some((id) => !document.getElementById(id).hidden);
 }
 
 function update(dt, now) {
-  // Коридор перед дверью — единственное место, где ходят до того, как офис
-  // построен: layout ниже может быть ещё пустым, а идти уже надо.
+  // The corridor in front of the door is the only place people walk in before the office
+  // is built: the layout below may still be empty, while walking is already needed.
   if (titleOpen()) tickTitle(dt, titleFree() ? keys : NO_KEYS);
 
   const L = state.layout;
@@ -1179,11 +1307,11 @@ function update(dt, now) {
   tickLift(now);
   tellWhereIAm(now);
 
-  // Чужие доезжают до последнего известного места сами. Скорость взята чуть
-  // выше пешей: догнать надо к следующей посылке, иначе человек всё время
-  // тянется позади себя настоящего. Прыжок больше половины экрана — это лифт
-  // или чужая перезагрузка, и его честнее показать прыжком, чем проездом
-  // сквозь стены.
+  // Other people arrive at their last known place by themselves. The speed is taken
+  // slightly above walking: catching up has to happen by the next message, otherwise a
+  // person is always trailing behind his real self. A jump of more than half the screen is
+  // a lift or somebody else's reload, and showing it as a jump is more honest than as a
+  // ride through the walls.
   for (const q of state.people.values()) {
     const dx = q.tx - q.x, dy = q.ty - q.y;
     const d = Math.hypot(dx, dy);
@@ -1195,23 +1323,26 @@ function update(dt, now) {
 
   if (!panelsOpen() && !state.drink && !state.play) {
     const running = keys.has('shift');
-    // Стик берёт верх над клавишами: он же и кладёт стрелки в keys, когда
-    // наклонён за порог, и складывать их с аналогом значило бы терять аналог.
+    // The stick takes precedence over the keys: it also puts arrows into keys when tilted
+    // past the threshold, and adding them to the analogue would mean losing the analogue.
     const ix = pad.x || (keys.has('arrowright') || keys.has('d') || keys.has('в') ? 1 : 0)
       - (keys.has('arrowleft') || keys.has('a') || keys.has('ф') ? 1 : 0);
     const iy = pad.y || (keys.has('arrowdown') || keys.has('s') || keys.has('ы') ? 1 : 0)
       - (keys.has('arrowup') || keys.has('w') || keys.has('ц') ? 1 : 0);
+    // Somebody sitting is lifted by the very first movement — and in the same frame he is already walking.
+    if (state.seat && (ix || iy)) standUp();
     let dx = 0, dy = 0;
     if (p.skate) {
-      // на скейте клавиши задают не смещение, а толчок: скорость живёт между
-      // кадрами, поэтому отпустил — и ещё катишься
+      // on a board the keys set not a displacement but a push: the speed lives between
+      // frames, so let go and you are still rolling
       const v = skateStep(p, { x: ix, y: iy, push: running }, dt);
       p.vx = v.vx; p.vy = v.vy;
       dx = p.vx * dt; dy = p.vy * dt;
       p.moving = rolling(p);
       p.running = false;
-      // Полёт считается отдельно от качения: по земле едет доска, вверх летит
-      // всё вместе. landed поднимается один кадр — под звук приземления.
+      // The flight is counted separately from the rolling: along the ground the board
+      // moves, upwards everything flies together. landed goes up for one frame — under the
+      // sound of the landing.
       const air = ollieStep(p, dt);
       p.z = air.z; p.vz = air.vz;
       if (air.landed) sound.step(0.8, surfaceUnder(L, p.x, p.y));
@@ -1224,8 +1355,8 @@ function update(dt, now) {
     }
     if (dx) p.dir = Math.sign(dx);
     const was = { x: p.x, y: p.y };
-    // Если игрок всё-таки оказался внутри мебели — сдвинутая тумба, новый предмет
-    // на старом месте — стены его не держат, пока он не выберется наружу.
+    // If the player has ended up inside furniture after all — a cabinet that moved, a new
+    // thing in an old place — the walls do not hold him until he gets out.
     const stuck = blocked(L, p.x, p.y);
     // walked in small increments: a sprint on a laggy frame must not tunnel a wall
     const glide = (axis, delta) => {
@@ -1234,8 +1365,8 @@ function update(dt, now) {
       for (let i = 0; i < steps; i++) {
         const nx = axis === 'x' ? p.x + inc : p.x;
         const ny = axis === 'y' ? p.y + inc : p.y;
-        // упёрлись: на скейте накат по этой оси надо погасить, иначе игрок
-        // стоит в стене и продолжает «ехать» — выглядит как зависшая игра
+        // ran into something: on a skateboard the glide along this axis has to be killed,
+        // or the player stands in a wall and goes on "riding" — it looks like a frozen game
         if (!stuck && blocked(L, nx, ny)) { if (axis === 'x') p.vx = 0; else p.vy = 0; break; }
         p.x = nx; p.y = ny;
       }
@@ -1245,8 +1376,8 @@ function update(dt, now) {
 
     const travelled = Math.hypot(p.x - was.x, p.y - was.y);
     state.stepDist += travelled;
-    // running takes shorter, harder steps; на скейте это уже не шаги, а стыки
-    // половиц под колёсами — реже и тише
+    // running takes shorter, harder steps; on a skateboard these are no longer steps but
+    // the joints of the floorboards under the wheels — rarer and quieter
     const stride = p.skate ? 46 : (p.running ? 22 : 30);
     if (state.stepDist > stride) {
       state.stepDist = 0;
@@ -1255,10 +1386,10 @@ function update(dt, now) {
     }
   } else {
     p.moving = false; p.running = false; state.stepDist = 22;
-    p.vx = 0; p.vy = 0;   // открытая панель или стакан в руке — накат обнуляется
+    p.vx = 0; p.vy = 0;   // an open panel or a cup in hand — the glide is zeroed
   }
   if (state.drink) { p.x += (state.drink.x - p.x) * Math.min(1, 0.12 * dt); p.y += (state.drink.y - p.y) * Math.min(1, 0.12 * dt); }
-  // у стола игрок стоит на своей стороне и никуда не съезжает
+  // at the table the player stands on his own side and does not slide anywhere
   if (state.play) { p.x += (state.play.x - p.x) * Math.min(1, 0.14 * dt); p.y += (state.play.y - p.y) * Math.min(1, 0.14 * dt); }
 
   for (const d of state.dust) d.life -= 0.045 * dt;
@@ -1282,7 +1413,7 @@ function update(dt, now) {
   const room = roomAt(L, p.x, p.y);
   if (room !== state.currentRoom) { state.currentRoom = room; UI.renderHud(); }
 
-  // считыватель узнаёт тебя за пару шагов и держит створки открытыми, пока ты рядом
+  // the reader recognises you a couple of steps away and holds the doors open while you are near
   const sec = L.security;
   if (sec) {
     const r = sec.reader;
@@ -1293,9 +1424,9 @@ function update(dt, now) {
       state.cctv.unlocked = near;
       if (near) { sound.chime(); UI.toast(tr('toast.badge'), 'news'); }
     }
-    // вышел из пультовой — камеры гаснут сами
+    // walked out of the control room — the cameras go off by themselves
     if (state.cctv.on && state.currentRoom !== sec) closeCams();
-    // автообход: пульт сам переходит к следующей камере, пока ты стоишь и смотришь
+    // the automatic round: the desk moves on to the next camera by itself while you stand and watch
     if (state.cctv.on && state.cctv.auto && now - state.cctv.since > CAM_DWELL) switchCam(1, true);
   }
 
@@ -1313,10 +1444,10 @@ function update(dt, now) {
   if (f > 0.55 && !state.wasFlashing) { state.wasFlashing = true; sound.thunder(0.6 + Math.random() * 0.5); }
   if (f === 0) state.wasFlashing = false;
   tickSound(state, dt, state.weather);
-  // Каждый кадр — модулям. Нужна тем, у кого есть что вести во времени: радио
-  // так приглушает офис и меняет громкость по расстоянию до приёмника. Точка
-  // была объявлена в загрузчике с самого начала и не вызывалась ни разу — то
-  // есть модуль, вставший в неё, молча ничего бы не делал.
+  // Every frame goes to the modules. It is needed by those with something to lead through
+  // time: that is how the radio damps the office and changes the volume by the distance to
+  // the receiver. The point was declared in the loader from the very beginning and was never
+  // called once — that is, a module standing in it would silently do nothing.
   collect('tick', state, dt);
 
   const c = state.cat;
@@ -1359,7 +1490,7 @@ function draw(t) {
   const L = state.layout;
   ctx.fillStyle = '#1b120c'; ctx.fillRect(0, 0, VW, VH);
 
-  // экран входа рисуется вместо офиса: за дверью его не видно
+  // the entrance screen is drawn instead of the office: behind the door it is not visible
   if (titleOpen()) { drawTitle(ctx, VW, VH, t); return; }
 
   if (!L) { pxText(ctx, tr('label.searching'), VW / 2 - 30, VH / 2, '#8c7660'); return; }
@@ -1372,7 +1503,7 @@ function draw(t) {
       player: state.player, me: myLook(), unlocked: state.cctv.unlocked,
       index: state.cctv.idx, total: cams.length,
       auto: state.cctv.auto, dwell: CAM_DWELL, since: state.cctv.since,
-      online: t - state.cctv.since > 260,   // короткая рябь при переключении
+      online: t - state.cctv.since > 260,   // a short ripple on switching
     }, t);
     return;
   }
@@ -1383,8 +1514,8 @@ function draw(t) {
   ctx.save(); ctx.translate(-camX, -camY);
 
   const night = nightAmount();
-  // Стол оживает, только пока за ним кто-то стоит. Рисовалка про агентов и
-  // игрока не знает — ей говорят отсюда, до отрисовки коридора.
+  // The table comes alive only while somebody is standing at it. The drawing knows nothing
+  // about the agents and the player — it is told from here, before the corridor is drawn.
   if (state.play) kickerBusy.since = t;
   else for (const act of state.actors.values()) {
     if (act.kicking && act.lounge && !act.path.length) { kickerBusy.since = t; break; }
@@ -1392,8 +1523,8 @@ function draw(t) {
   drawCorridor(ctx, L, t, night, state.weather);
   const visible = L.rooms.filter((r) => r.x < camX + VW + 40 && r.x + r.w > camX - 40 && r.y - 20 < camY + VH && r.y + r.h > camY - 40);
   for (const r of visible) {
-    // Своя кисть у комнаты — это её содержимое, а не особый случай в движке:
-    // отсечение по камере, порядок и коллизии у неё общие с проектными.
+    // A brush of its own is a room's content rather than a special case in the engine: the
+    // clipping by camera, the order and the collisions are shared with the project rooms.
     if (r.draw === 'security') {
       drawSecurity(ctx, r, t, { unlocked: state.cctv.unlocked, camsOn: state.cctv.on });
       continue;
@@ -1403,9 +1534,9 @@ function draw(t) {
       drawGreenhouse(ctx, r, t, { night: nightAmount(), weather: state.weather, garden: gardenView(r) });
       continue;
     }
-    // Комната модуля: своя кисть у неё своя, и красит её модуль в точке draw.
-    // Ядру тут делать нечего — drawRoom нарисовал бы поверх читальни обычный
-    // кабинет с тоном и столами, которых у неё нет.
+    // A module's room: its own brush is its own, and the module paints it at the draw point.
+    // The core has nothing to do here — drawRoom would paint an ordinary office with a tone
+    // and desks over the reading room, and it has neither.
     if (r.draw) continue;
     drawRoom(ctx, r, t); drawRoomProps(ctx, r, t);
     if (r.micro) drawMicro(ctx, r.micro, t, state.micro && state.micro.key === r.key ? state.micro : null);
@@ -1418,12 +1549,12 @@ function draw(t) {
   const byId = new Map(state.agents.map((a) => [a.id, a]));
 
   for (const r of visible) {
-    // Доска висит только у проектной комнаты: она про её задачи. У сервисных
-    // её нет — и это не «нечего показать», а отсутствующее поле. Без проверки
-    // drawBoard читает r.board.x у undefined и валится на каждом кадре; падение
-    // рвёт очередь draws, и всё, что стояло в ней ниже — агенты, кот, сам
-    // игрок, — просто перестаёт рисоваться. Найдено 30 августа 2026, когда
-    // человек пропал с экрана, стоило подойти к курилке на сервисном ярусе.
+    // The board hangs only in a project room: it is about that room's tasks. The service
+    // ones have none — and that is not "nothing to show" but a missing field. Without the
+    // check drawBoard reads r.board.x off undefined and falls over on every frame; the fall
+    // tears the draws queue, and everything below it — the agents, the cat, the player
+    // himself — simply stops being drawn. Found on 30 August 2026, when a person disappeared
+    // from the screen the moment he walked up to the smoking room on the service tier.
     if (r.board) {
       const showcasing = [...state.actors.values()].some((ac) => ac.room === r && ac.showcase > t && !ac.path.length);
       draws.push({ y: r.y - 1, fn: () => drawBoard(ctx, r, boardItems(r), t, showcasing) });
@@ -1436,8 +1567,8 @@ function draw(t) {
 
   for (const act of state.actors.values()) {
     const a = byId.get(act.id);
-    // судим по тому, где агент стоит, а не где его комната: в курилку он уходит
-    // в коридор, и там его тоже должно быть видно
+    // we judge by where the agent stands rather than by where his room is: he goes off to
+    // the smoking room into the corridor, and he has to be visible there too
     if (!a) continue;
     if (act.x < camX - 30 || act.x > camX + VW + 30 || act.y < camY - 40 || act.y > camY + VH + 40) continue;
     const sitting = act.state === 'sit';
@@ -1475,8 +1606,8 @@ function draw(t) {
     } });
   }
 
-  // Другие люди. Рисуются в той же очереди, что агенты и ты сам, поэтому кто
-  // ниже — тот и ближе, без отдельного слоя «гости».
+  // Other people. They are drawn in the same queue as the agents and you yourself, so
+  // whoever is lower is nearer, without a separate "guests" layer.
   for (const q of state.people.values()) {
     if (q.x < camX - 30 || q.x > camX + VW + 30 || q.y < camY - 40 || q.y > camY + VH + 40) continue;
     draws.push({ y: q.y + 0.5, fn: () => {
@@ -1485,8 +1616,8 @@ function draw(t) {
         frame: Math.floor(t / 130), dir: q.dir,
         bob: q.moving ? 0 : Math.floor(t / 800) % 2,
       });
-      // Имя над чужим — всегда, а не по подходу: иначе в коридоре стоят
-      // безымянные фигуры и непонятно, кто из них кто.
+      // A name over somebody else is always there rather than on approach: otherwise
+      // nameless figures stand in the corridor and it is unclear who is who.
       label(q.x, q.y - 34, q.name || '?', '#8fc8ff');
     } });
   }
@@ -1498,13 +1629,13 @@ function draw(t) {
       ctx.fillRect(d.x | 0, (d.y - 1 - (1 - d.life) * 3) | 0, 2, 1);
     }
     const dr = state.drink;
-    // доска под ногами — до человека, он на ней стоит
+    // the board underfoot — before the person, he is standing on it
     if (p.skate) drawSkateboard(ctx, p.x, p.y, p.dir, p.moving, t, p.z);
-    // Человек летит вместе с доской, тень остаётся на полу — её рисует сама
-    // доска и сжимает по высоте.
+    // The person flies together with the board, the shadow stays on the floor — the board
+    // draws it itself and squeezes it by the height.
     drawPerson(ctx, p.x, p.y - p.z, myLook(), {
-      // на скейте ноги стоят на деке, а не переступают
-      pose: p.skate ? 'stand' : (p.moving ? 'walk' : 'stand'),
+      // on a skateboard the feet stand on the deck rather than stepping
+      pose: state.seat ? 'sit' : p.skate ? 'stand' : (p.moving ? 'walk' : 'stand'),
       frame: Math.floor(t / (p.running ? 80 : 130)), dir: p.dir,
       bob: p.skate
         ? 2 + (p.moving && Math.floor(t / 90) % 2 ? 1 : 0)
@@ -1520,8 +1651,8 @@ function draw(t) {
       ctx.fillRect(cx, cy + 1, 2, 2);
       if (sipping) label(p.x, p.y - 40, dr.kind === 'water' ? tr('label.gulp') : tr('label.ah'), '#9fd4e8');
     }
-    // счёт висит над головой, пока идёт партия: без него понять, что вообще
-    // происходит у стола, можно только по мячу
+    // the score hangs above the head while a game is on: without it, what is going on at
+    // the table can only be understood from the ball
     if (state.play) label(p.x, p.y - 42, `${state.play.mine}:${state.play.his}`, '#ffd166');
     label(p.x, p.y - 34, state.me.name || tr('label.me'), '#9fe0a8');
   } });
@@ -1541,10 +1672,10 @@ function draw(t) {
     draws.push({ y: 1e9, fn: () => label(c.x, c.y + 40, state.cctv.on ? tr('hint.camsOn') : tr('hint.cams'), '#9fe0a8') });
   }
 
-  // Модули рисуют себя тем же списком и той же сортировкой по y: предмет
-  // модуля не должен оказаться поверх того, кто стоит перед ним.
-  // Холст отдаём в fn аргументом, а не даём модулю захватить его: захваченный
-  // однажды ctx переживёт смену масштаба и будет рисовать в старый буфер.
+  // The modules draw themselves with the same list and the same sorting by y: a module's
+  // thing must not end up over somebody standing in front of it.
+  // The canvas is given to fn as an argument rather than let the module capture it: a ctx
+  // captured once outlives a change of scale and will draw into the old buffer.
   for (const d of collect('draw', state.layout, t, near)) draws.push({ y: d.y, fn: () => d.fn(ctx) });
   for (const h of collect('hint', near, state)) {
     draws.push({ y: 1e9, fn: () => label(h.x, h.y, h.text, h.color || '#9fe0a8') });
@@ -1570,6 +1701,13 @@ function draw(t) {
       : near.kind === 'tap' ? 'hint.tap'
       : !state.carry ? 'hint.potNoCan' : left > 0 ? 'hint.pot' : 'hint.potEmpty';
     draws.push({ y: 1e9, fn: () => label(spot.x, spot.y + 12, tr(key, { n: left }), state.carry ? '#9fd4e8' : '#9fe0a8') });
+  }
+  if (state.seat) {
+    const s = state.seat;
+    draws.push({ y: 1e9, fn: () => label(s.x, s.y + 26, tr('hint.standUp'), '#9fe0a8') });
+  } else if (near && near.kind === 'seat') {
+    const st = near.seat;
+    draws.push({ y: 1e9, fn: () => label(st.x, st.y + 26, tr('hint.sit'), '#9fe0a8') });
   }
   if (near && near.kind === 'micro') {
     const m = near.room.micro;
@@ -1658,17 +1796,17 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) { lastT = performance.now(); cancelAnimationFrame(rafId); rafId = requestAnimationFrame(loop); }
 });
 
-// Холст масштабируется целым числом ФИЗИЧЕСКИХ пикселей, а не css-пикселей.
-// На дробном зуме (125%, 150%) css-пиксель перестаёт быть целым числом точек
-// экрана, и пиксель офиса растягивается на 3.3 точки: часть рядов выходит по
-// три точки, часть по четыре, и семипиксельный шрифт над головами превращается
-// в мыло. Считаем масштаб в точках — тогда каждый пиксель занимает ровно N.
-// Масштаб считается в ФИЗИЧЕСКИХ пикселях на пиксель игры — только целое число
-// даёт чёткую картинку. Ступени фиксированные, ×2…×8; ноль означает «по окну».
+// The canvas is scaled by a whole number of PHYSICAL pixels, not of css pixels. At a
+// fractional zoom (125%, 150%) a css pixel stops being a whole number of screen dots, and
+// an office pixel is stretched over 3.3 dots: some rows come out three dots, some four,
+// and the seven-pixel font above the heads turns into soap. We count the scale in dots —
+// then every pixel takes exactly N.
+// The scale is counted in PHYSICAL pixels per game pixel — only a whole number gives a
+// crisp picture. The steps are fixed, ×2…×8; a zero means "fit the window".
 const ZOOM_KEY = 'valey-zoom';
-// Ниже ×6 не опускаемся: на этой ступени подсказка снизу помещается целиком, а
-// мельче офис читается плохо. Уменьшение оставлено только как аварийный выход,
-// когда окно физически не вмещает ×6 — тогда ступень зажимается сама.
+// We do not go below ×6: at that step the hint at the bottom fits whole, and smaller than
+// that the office reads badly. Shrinking is left only as an emergency exit, for when the
+// window physically does not hold ×6 — then the step is clamped by itself.
 const ZOOM_MIN = 6, ZOOM_MAX = 8;
 let zoomWanted = Math.max(0, Number(localStorage.getItem(ZOOM_KEY)) || 0);
 if (zoomWanted && zoomWanted < ZOOM_MIN) zoomWanted = ZOOM_MIN;
@@ -1697,44 +1835,44 @@ function fit() {
   const dpr = window.devicePixelRatio || 1;
   const hud = document.getElementById('hud');
   const help = document.getElementById('help');
-  // сколько отъели полосы сверху и снизу — мерим, а не угадываем: подсказка
-  // переносится на три-четыре строки, стоит окно сузить или зазумить
+  // how much the strips at the top and bottom have eaten — we measure rather than guess:
+  // the hint wraps onto three or four lines the moment the window is narrowed or zoomed
   const top = (hud ? hud.offsetHeight : 0) + 20;
   const bottom = (help ? help.offsetHeight : 0) + 16;
   document.body.style.paddingTop = top + 'px';
   document.body.style.paddingBottom = bottom + 'px';
-  // тосты встают над подсказкой, а не поверх неё: она бывает и трёхстрочной
+  // the toasts stand above the hint rather than over it: it can be three lines tall
   const toasts = document.getElementById('toasts');
   if (toasts) toasts.style.bottom = (bottom + 8) + 'px';
 
   const availW = Math.max(VW, innerWidth - 16);
   const availH = Math.max(VH, innerHeight - top - bottom);
   const max = Math.max(1, Math.floor(Math.min(availW * dpr / VW, availH * dpr / VH)));
-  // выбранная ступень не может быть больше того, что влезает в окно
-  // «по окну» тоже не мельчит: берём ×6, даже если окно позволяет больше видеть
+  // the chosen step cannot be larger than what fits into the window
+  // "fit the window" does not go small either: we take ×6, even if the window allows more to be seen
   const dev = Math.max(1, Math.min(zoomWanted || Math.max(ZOOM_MIN, max), max));
   canvas.style.width = VW * dev / dpr + 'px';
   canvas.style.height = VH * dev / dpr + 'px';
   state.zoom = {
     dev, max, auto: !zoomWanted,
     clamped: !!zoomWanted && dev < zoomWanted,
-    tight: dev < ZOOM_MIN,   // окно меньше, чем нужно для ×6 — это видно в баре
+    tight: dev < ZOOM_MIN,   // the window is smaller than ×6 needs — that is visible in the bar
   };
-  layoutTitle();   // меню входа привязано к холсту, а не к окну
+  layoutTitle();   // the entrance menu is tied to the canvas rather than to the window
   return top + bottom;
 }
 
-// Подсказка переносится на новую строку от той же смены ширины, что вызвала
-// пересчёт, и первый замер застаёт её ещё однострочной. Меряем ещё раз по
-// следующему кадру и, если полосы выросли, ужимаем холст — один лишний проход.
+// The hint wraps onto a new line from the same change of width that caused the recount,
+// and the first measurement catches it still on one line. We measure again on the next
+// frame and, if the strips have grown, squeeze the canvas — one extra pass.
 function refit() {
   const was = fit();
   requestAnimationFrame(() => { if (fit() !== was) fit(); });
 }
 addEventListener('resize', refit);
 
-// Зум меняет devicePixelRatio, а resize за ним прилетает не в каждом браузере.
-// Подписка живёт ровно на текущее значение, поэтому её каждый раз переоформляем.
+// A zoom changes devicePixelRatio, and a resize does not arrive after it in every browser.
+// The subscription lives on exactly the current value, so we re-register it every time.
 let dprQuery = null;
 function watchDpr() {
   if (dprQuery) dprQuery.removeEventListener('change', onDpr);
@@ -1744,12 +1882,12 @@ function watchDpr() {
 function onDpr() { refit(); watchDpr(); }
 watchDpr();
 
-// ------------------------------------------------------------- экран входа
-// Человечек-переключатель стоит и в коридоре офиса, и на экране входа, поэтому
-// само переключение живёт здесь одно на двоих. Язык уходит в настройки, а не в
-// localStorage: пусть переключится во всех вкладках сразу, как это делает погода.
-function switchLang() {
-  const next = lang() === 'ru' ? 'en' : 'ru';
+// ------------------------------------------------------------- the entrance screen
+// The little switch figure stands both in the office corridor and on the entrance screen,
+// so the switching itself lives here, one for both. The language goes into the settings
+// rather than into localStorage: let it switch in every tab at once, as the weather does.
+function switchLang(next = lang() === 'ru' ? 'en' : 'ru') {
+  if (next === lang()) return;
   saveSettings({ lang: next });
   setLang(next);
   UI.toast(tr('toast.lang'));
@@ -1757,15 +1895,16 @@ function switchLang() {
 }
 
 initTitle(state, {
-  // roomKey — войти сразу в комнату. Второй источник — #room= в адресе: он
-  // был описан этим комментарием как отладочный вход, но не читался никем.
-  // На стенде без него не проверить служебные комнаты: пешком до пультовой
-  // не дойти, а в списке TAB её нет.
+  // roomKey — enter a room straight away. The second source is #room= in the address: it
+  // was described by this comment as a debug entrance and was read by nobody. On a stand
+  // there is no checking the service rooms without it: the control room cannot be walked to,
+  // and it is not in the TAB list.
   enter(roomKey) {
     const fromHash = (location.hash.match(/^#room=(.+)$/) || [])[1];
     const key = roomKey || (fromHash && decodeURIComponent(fromHash));
-    // Ищем среди всех комнат, а не только проектных: служебные — пультовая,
-    // переговорка — иначе не открываются вовсе, и проверить в них нечего.
+    // We search among all the rooms, not only the project ones: the service ones — the
+    // control room, the meeting room — cannot be opened otherwise at all, and there is
+    // nothing to check in them.
     const r = key && (state.layout.rooms || []).find((x) => x.key === key);
     if (r) {
       state.player.x = r.x + r.w / 2;
@@ -1786,20 +1925,21 @@ initTitle(state, {
 document.body.classList.add('titling');
 renderTitle();
 
-// Модули поднимаются до первого кадра: их предметы должны попасть в
-// планировку сразу, иначе первый проход нарисует офис без них и мигнёт.
+// The modules come up before the first frame: their things have to get into the plan at
+// once, or the first pass will draw the office without them and it will flicker.
 await loadModules();
-// Статику пересобрать: строка подсказки внизу собирается один раз на старте, а
-// клавиши модулей приезжают позже — без этого бесплатная и платная сборки
-// показывали бы одну и ту же подсказку.
+// Rebuild the static: the hint line at the bottom is assembled once at start-up, while the
+// keys of the modules arrive later — without this a free build and a paid one would show
+// the same hint.
 renderStatic();
 await initStand();
-// Планировка успевает собраться раньше, чем поднимутся модули: она строится по
-// первому же снимку из SSE, а модули едут отдельным запросом. Тогда точка
-// layout по ней не проходит, предмета модуля в планировке нет — и рисовать
-// нечего, хотя модуль встал и словарь влился. Ровно так пропал шкаф картотеки
-// 1 сентября 2026: в реестре он был, на экране его не было.
-// Догоняем один раз; точка обязана быть идемпотентной.
+// The plan manages to be assembled before the modules come up: it is built on the very
+// first snapshot from SSE, while the modules ride in on a separate request. The layout
+// point then does not run over it, a module's thing is not in the plan — and there is
+// nothing to draw, though the module came up and its dictionary was poured in. That is
+// exactly how the card-index cabinet disappeared on 1 September 2026: it was in the
+// registry, it was not on the screen.
+// We catch up once; the point has to be idempotent.
 if (state.layout) collect('layout', state.layout, state);
 
 refit();

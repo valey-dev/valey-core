@@ -1,8 +1,10 @@
-// node tools/test-stack.mjs — версия и стек на табличке над дверью.
+// node tools/test-stack.mjs — the version and the stack on the sign above the
+// door.
 //
-// Проверяется не «работает ли чтение файла», а две вещи, которые ломаются тихо:
-// порядок определения стека (у Next-проекта тоже есть package.json) и честность
-// деградации (нет версии — нет строки, а не выдуманный v0.0.0).
+// What is checked is not "does reading a file work" but the two things that
+// break quietly: the order the stack is decided in (a Next project has a
+// package.json too) and honest degradation (no version means no line, not an
+// invented v0.0.0).
 import { readManifest, pickManifest, MANIFESTS } from '../server/stack.js';
 import { buildLayout, planSignature } from '../web/layout.js';
 
@@ -12,7 +14,7 @@ const ok = (name, cond, got) => {
   else { bad++; console.log('УПАЛ  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
 };
 
-// ---------------------------------------------------------------- манифесты
+// ---------------------------------------------------------------- manifests
 
 const pkg = (o) => JSON.stringify(o);
 
@@ -64,13 +66,13 @@ ok('версии нет — null, а не пустая строка', empty.vers
 
 ok('битый json не роняет разбор', readManifest('package.json', '{ не json') === null);
 
-// Тег вида ios/1.0.0-build21 приходит из git describe — «v» ему не приписывать
+// A tag like ios/1.0.0-build21 comes from git describe — no "v" is prepended to it
 const tagged = readManifest('Cargo.toml', '[package]\nversion = "ios/1.0.0-build21"\n');
 ok('нечисловая версия остаётся как есть', tagged.version === 'ios/1.0.0-build21', tagged);
 const vTag = readManifest('Cargo.toml', '[package]\nversion = "v2.0.0"\n');
 ok('v перед числом не удваивается', vTag.version === 'v2.0.0', vTag);
 
-// ---- приоритет: первый манифест из списка отвечает за оба поля
+// ---- priority: the first manifest in the list answers for both fields
 const both = pickManifest({
   'pyproject.toml': '[project]\nversion = "9.9.9"\ndependencies = ["django"]\n',
   'package.json': pkg({ version: '1.0.0', dependencies: { next: '15' } }),
@@ -79,7 +81,7 @@ ok('package.json выигрывает у pyproject.toml', both.stack === 'Next 1
 ok('порядок MANIFESTS начинается с package.json', MANIFESTS[0] === 'package.json');
 ok('манифестов нет — pickManifest молчит', pickManifest({}) === null);
 
-// ------------------------------------------------------------------ комната
+// ---------------------------------------------------------------- the room
 
 const agents = [
   { id: 'a1', project: 'budget-app', startedAt: 1, version: 'v3.5.6', stack: 'Next 16' },
@@ -101,9 +103,9 @@ const bumped = planSignature(agents.map((a) => (a.id === 'a1' ? { ...a, version:
 ok('поднятая версия пересобирает план', sig !== bumped);
 ok('та же версия план не трогает', sig === planSignature([...agents].reverse()));
 
-// Геометрия таблички и пиксельный шрифт живут в tools/test-pixfont.mjs: здесь
-// проверяется только то, что комната получает вторую строку, а как она
-// нарисована — вопрос отдельный и ломается отдельно.
+// The geometry of the sign and the pixel font live in tools/test-pixfont.mjs:
+// here only the fact that the room gets a second line is checked, and how that
+// line is drawn is a separate question that breaks separately.
 
 console.log(bad ? `\nпровалено: ${bad}` : '\nвсё хорошо');
 process.exit(bad ? 1 : 0);

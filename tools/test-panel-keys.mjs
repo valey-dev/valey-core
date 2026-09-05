@@ -1,8 +1,9 @@
-// node tools/test-panel-keys.mjs — клавиши в панелях офиса.
+// node tools/test-panel-keys.mjs — the keys in the office panels.
 //
-// Радио уехало отсюда в modules/radio/test-keys.mjs вместе с самим радио.
-// DOM подставной, как и в остальных клавиатурных стендах: проверяется не
-// вёрстка, а состояние фокуса — куда он встаёт, как ходит и что нажимает.
+// The radio moved out of here into modules/radio/test-keys.mjs along with the
+// radio itself. The DOM is a stand-in, as in the other keyboard stands: what is
+// checked is not the layout but the focus state — where it lands, how it moves
+// and what it presses.
 
 import { node, proxy, installDom } from './lib/dom.mjs';
 
@@ -11,6 +12,7 @@ let notes = null;
 let bag = null;
 let sky = null;
 let skin = null;
+let langPanel = null;
 
 function makeRoster(n) {
   const gos = Array.from({ length: n }, () => node('go'));
@@ -21,8 +23,8 @@ function makeRoster(n) {
   };
 }
 
-// Слот одежды — строка с ◀ и ▶ внутри, а не кнопка. Стрелки в стороны должны
-// жать эти кнопки, а не перескакивать на соседний слот.
+// A clothing slot is a row with ◀ and ▶ inside, not a button. The sideways arrows
+// have to press those buttons rather than jump to the neighbouring slot.
 function makeBagSelf(slots) {
   const rows = [];
   const name = node('namerow');
@@ -44,8 +46,8 @@ function makeBagSelf(slots) {
   };
 }
 
-// Вкладка «вещи» — сетка: ряд на слот, в ряду клетки. Стрелки тут значат не то
-// же самое, что на «на себе», поэтому у неё свой стенд.
+// The "things" tab is a grid: a row per slot, cells in the row. The arrows here
+// do not mean the same as on "worn", so it has a stand of its own.
 function makeBagThings(rows) {
   const cats = rows.map((n) => {
     const cells = Array.from({ length: n }, () => node('bcell'));
@@ -61,7 +63,7 @@ function makeBagThings(rows) {
   };
 }
 
-// Вкладка «офис» — просто ряд кнопок, кольцо фокуса как у окна в мир.
+// The "office" tab is just a row of buttons, a focus ring like the window on the world.
 function makeBagOffice(n) {
   const btns = Array.from({ length: n }, () => node('obtn'));
   return {
@@ -71,17 +73,18 @@ function makeBagOffice(n) {
   };
 }
 
-// Вкладка «ключи» — полка карточек и подробная карточка под ней. Стрелки ходят
-// по полке, ⏎ уводит фокус внутрь: проверяется именно это, а не вёрстка.
+// The "keys" tab — a shelf of cards with the picked one opened underneath.
+// Arrows walk the shelf, ⏎ hands focus inside: that is what is checked here,
+// not the markup.
 function makeBagKeys(n) {
   const cards = Array.from({ length: n }, () => node('keycard'));
   const btn = node('obtn');
   const detail = node('keydetail');
   detail.querySelector = (sel) => (sel === '.keydetail input, .keydetail .obtn' ? btn : null);
   detail.querySelectorAll = () => [];
-  // Настоящий DOM отвечает и на составной селектор — панель спрашивает им
-  // первое, чему можно отдать фокус. Подставной обязан отвечать так же, иначе
-  // стенд проверяет не то, что делает браузер.
+  // A real DOM answers a compound selector too — the panel asks with one for
+  // the first thing it can hand focus to. The stand-in has to answer the same
+  // way, or the stand is checking something the browser never does.
   return {
     hidden: false, innerHTML: '', cards, btn,
     querySelector: (sel) => (sel === '.keydetail' ? detail
@@ -91,13 +94,38 @@ function makeBagKeys(n) {
   };
 }
 
-// Плоское кольцо: окно в мир и цвет офиса устроены одинаково.
+// A flat ring: the window on the world and the office colour are built the same way.
 function makeRing(items) {
   const btns = items.map((it) => node('', it));
   return {
     hidden: false, innerHTML: '', btns,
     querySelector: () => null,
     querySelectorAll: () => btns,
+  };
+}
+
+// The language and names panel. The rows here are not decoration: ↑↓ walk
+// between them, ←→ inside one, and the stand-in rows have to be able to say
+// whose button it is.
+function makeLang() {
+  const langBtns = [node('langbtn', { dataset: { lang: 'ru' } }), node('langbtn', { dataset: { lang: 'en' } })];
+  const packBtns = ['auto', 'ru', 'en'].map((id) => node('packbtn', { dataset: { pack: id } }));
+  const all = [...langBtns, ...packBtns];
+  const rows = [
+    { contains: (b) => langBtns.includes(b) },
+    { contains: (b) => packBtns.includes(b) },
+  ];
+  const warn = node('langwarn');
+  const status = node('langstatus');
+  return {
+    hidden: false, innerHTML: '', btns: all, langBtns, packBtns, warn, status,
+    querySelector: (sel) => (sel === '.langwarn' ? warn : sel === '.langstatus' ? status : null),
+    querySelectorAll: (sel) => (
+      sel === '.langbtn, .packbtn' ? all
+      : sel === '.langrow' ? rows
+      : sel === '.langbtn' ? langBtns
+      : sel === '.packbtn' ? packBtns
+      : []),
   };
 }
 
@@ -121,20 +149,22 @@ let viewer = null;
 const skyProxy = proxy(() => sky);
 const skinProxy = proxy(() => skin);
 const rosterProxy = proxy(() => roster);
+const langProxy = proxy(() => langPanel);
 const viewerProxy = proxy(() => viewer);
 
-// Правая панель дерева гита: её листают PgUp/PgDn, поэтому у неё должна быть
-// высота и прокрутка, а не общая заглушка с нулями.
+// The right panel of the git tree: it is paged with PgUp/PgDn, so it must have a
+// height and a scroll rather than the shared stub full of zeros.
 const pane = () => node('', { clientHeight: 400, scrollHeight: 4000 });
 const gcard = pane();
 const gcode = pane();
 
-// Адрес страницы нужен подсказке про Redirect URI в радио — второй кусок,
-// который отложенный ответ probeDrm достаёт из панели уже после её отрисовки.
+// The page address is needed by the hint about the Redirect URI in the radio —
+// the second piece the deferred answer of probeDrm pulls out of the panel after
+// it has been drawn.
 const { stub } = installDom({
   byId: {
     roster: rosterProxy, gcard, gcode, viewer: viewerProxy, notes: notesProxy,
-    bag: bagProxy, sky: skyProxy, skin: skinProxy,
+    bag: bagProxy, sky: skyProxy, skin: skinProxy, lang: langProxy,
   },
   location: {},
 });
@@ -145,7 +175,7 @@ const agents = (n) => Array.from({ length: n }, (_, i) => ({
   id: 'a' + i, name: 'Агент ' + i, project: 'AI valey', status: 'awaiting',
   title: 'задача', lastSaid: 'ждёт', idleFor: 60, roleKey: 'code',
 }));
-// me нужен: инвентарь рисует человечка и подписи слотов из него
+// me is needed: the bag draws the little person and the slot labels out of it
 const state = { agents: [], looks: new Map(), settings: {}, delivery: {}, visited: new Set(),
   me: { skin: '#e8ad7e', hair: '#3a2a20', shirt: '#c25a4b', pants: '#3f4a63', boots: '#2a2118',
         style: 0, tall: 0, face: 'none', head: 'none', glasses: false, hands: 'none', name: 'ТЫ' } };
@@ -154,7 +184,20 @@ notes = makeNotes(0);
 bag = makeBagSelf(0);
 sky = makeRing([]);
 skin = makeRing([]);
-UI.initUI(state, { guideTo: () => {}, saveMe: () => {} });
+const PACKS = {
+  choice: 'auto', pack: 'ru',
+  packs: [
+    { id: 'ru', size: 170, sample: ['Гоша', 'Марта'], names: { a0: 'Гоша', a1: 'Марта' } },
+    { id: 'en', size: 170, sample: ['Pete', 'Sally'], names: { a0: 'Pete', a1: 'Sally' } },
+  ],
+};
+let savedPatch = null;
+UI.initUI(state, {
+  guideTo: () => {}, saveMe: () => {},
+  names: async () => JSON.parse(JSON.stringify(PACKS)),
+  saveSettings: async (patch) => { savedPatch = patch; return {}; },
+  setLang: () => {},
+});
 
 let failed = 0;
 const check = (name, ok, got) => {
@@ -162,7 +205,7 @@ const check = (name, ok, got) => {
   else { failed++; console.log('ПЛОХО |', name, '→', got); }
 };
 
-// ------------------------------------------------------------------- обход
+// ------------------------------------------------------------------- the round
 const at = (list) => list.findIndex((b) => b.has('focus'));
 
 state.agents = agents(3);
@@ -177,20 +220,20 @@ check('Enter ведёт к выбранному, а не к первому', ros
 UI.rosterKey('ArrowUp'); UI.rosterKey('ArrowUp');
 check('список закольцован', at(roster.gos) === 2, at(roster.gos));
 
-// закрытая панель не должна забирать стрелки — иначе после первого же обхода
-// по офису перестанет ходить игрок
+// a closed panel must not take the arrows — otherwise after the very first round
+// the player stops walking around the office
 roster.hidden = true;
 check('закрытый обход стрелки не ест', UI.rosterKey('ArrowDown') === false, 'съел');
 
-// пустой обход: ждущих нет, нажимать нечего
+// an empty round: nobody is waiting, there is nothing to press
 state.agents = [];
 roster = makeRoster(0);
 UI.renderRoster();
 check('пустой обход стрелки не ест', UI.rosterKey('ArrowDown') === false, 'съел');
 check('и Enter не ест', UI.rosterKey('Enter') === false, 'съел');
 
-// ----------------------------------------------------------------- заметки
-notes = makeNotes(2);            // две заметки: у каждой «открыть» и ✕
+// ----------------------------------------------------------------- the notes
+notes = makeNotes(2);            // two notes: each has "open" and ✕
 UI.renderNotes();
 const nb = notes.btns;
 check('заметки: фокус встаёт на первую кнопку', at(nb) === 0, at(nb));
@@ -204,19 +247,19 @@ check('и только её', nb.filter((b) => b.clicked).length === 1, nb.filte
 UI.notesKey('ArrowUp'); UI.notesKey('ArrowUp'); UI.notesKey('ArrowUp');
 check('кольцо замкнуто', at(nb) === 3, at(nb));
 
-// закрытая панель клавиши не забирает
+// a closed panel does not take the keys
 UI.closeNotes();
 check('закрытые заметки стрелки не едят', UI.notesKey('ArrowDown') === false, 'съели');
 
-// пустая панель: нажимать нечего, стрелки должны уйти в офис
+// an empty panel: there is nothing to press, the arrows have to go to the office
 notes = makeNotes(0);
 UI.renderNotes();
 check('пустые заметки стрелки не едят', UI.notesKey('ArrowDown') === false, 'съели');
 
-// --------------------------------------------------------------- инвентарь
-// Вкладка «на себе» — бывшая панель C, слово в слово: стрелки вверх-вниз по
-// слотам, в стороны крутят значение того, на котором стоишь.
-bag = makeBagSelf(3);            // строка имени плюс три слота
+// --------------------------------------------------------------- the bag
+// The "worn" tab is the former panel C, word for word: up and down the slots,
+// sideways turns the value of the one you are standing on.
+bag = makeBagSelf(3);            // the name row plus three slots
 const rows = bag.rows;
 const focusRow = () => rows.findIndex((r) => r.has('focus'));
 UI.bagKey('ArrowDown');
@@ -230,12 +273,12 @@ check('соседний слот не тронут', rows[2].next.clicked === 0 
 UI.bagKey('Enter');
 check('Enter на слоте делает то же, что ▶', rows[1].next.clicked === 2, rows[1].next.clicked);
 
-// имя — поле ввода: Enter должен отдать ему фокус, иначе с клавиатуры не набрать
+// the name is an input: Enter has to give it the focus, or it cannot be typed from the keyboard
 UI.bagKey('ArrowUp');
 UI.bagKey('Enter');
 check('Enter на имени отдаёт полю фокус', rows[0].input.focused === 1, rows[0].input.focused);
 
-// Вкладки: цифра переключает, и стрелки после этого значат другое.
+// The tabs: a digit switches, and the arrows mean something else afterwards.
 bag = makeBagThings([3, 2]);
 check('цифра 2 обработана панелью', UI.bagKey('2') === true, 'не обработана');
 const cells = bag.cells;
@@ -257,30 +300,39 @@ check('подсвечена ровно одна клетка', cells.flat().filt
   cells.flat().filter((c) => c.has('focus')).length);
 check('вправо по кругу возвращает в начало ряда', (UI.bagKey('ArrowRight'), focusCell()) === '1:0', focusCell());
 
-// назад на «на себе»: фокус там начинается заново, а не помнит клетку сетки
+// back to "worn": the focus starts over there rather than remembering a cell of the grid
 bag = makeBagSelf(3);
 UI.bagKey('1');
 check('цифра 1 вернула на «на себе»', focusRow() === 0, focusRow());
 check('несуществующая вкладка не ловится', UI.bagKey('9') === false, 'поймана');
-check('и пятой вкладки нет', UI.bagKey('5') === false, 'поймана');
+check('шестой вкладки нет', UI.bagKey('6') === false, 'поймана');
 
-// Вкладка «ключи»: полка. Стрелки ходят по ней и наружу не выпускают, ⏎
-// отдаёт фокус первой кнопке карточки — оттуда дальше обычный Tab.
+// The "keys" tab: a shelf. Arrows walk it and do not leak out of the panel, ⏎
+// hands focus to the card's first button — from there it is ordinary Tab.
 bag = makeBagKeys(3);
-check('ключи: цифра 3 открыла вкладку', UI.bagKey('3') === true, 'не обработана');
+check('ключи: цифра 5 открыла вкладку', UI.bagKey('5') === true, 'не обработана');
 check('стрелка по полке обработана', UI.bagKey('ArrowRight') === true, 'не обработана');
 check('и вверх-вниз тоже: полка одна, а стрелок четыре', UI.bagKey('ArrowDown') === true, 'не обработана');
 UI.bagKey('Enter');
 check('Enter отдаёт фокус карточке, а не жмёт её', bag.btn.focused === 1 && bag.btn.clicked === 0,
   `${bag.btn.focused} / ${bag.btn.clicked}`);
 check('чужая клавиша с полки уходит в офис', UI.bagKey('q') === false, 'съедена');
+// A guest reads the cards and presses nothing: the class is what hides the
+// controls, and it also drops the fields out of the tab order.
+state.owner = false;
+UI.renderBag('keys');
+check('гость: карточка помечена как гостевая', /class="keydetail guest"/.test(bag.innerHTML), bag.innerHTML.slice(0, 60));
+check('и ему сказано, кто заводит ключи', /keys are set up|заводит хозяин/i.test(bag.innerHTML), 'молчит');
+state.owner = true;
+UI.renderBag('keys');
+check('хозяину гостевого класса нет', !/keydetail guest/.test(bag.innerHTML), 'есть');
 
-// Вкладка «офис»: ряд кнопок, и стрелка вниз должна по ним ходить. До
-// 31 августа 2026 она не делала ничего — обработчик знал только две вкладки из
-// трёх, и клавиша уезжала в офис из-под открытой панели. С появлением ключей
-// вкладка уехала с цифры 3 на 4 — стенд поймал это первым.
+// The "office" tab: a row of buttons, and the down arrow has to walk along them.
+// Until 31 August 2026 it did nothing — the handler knew only two tabs out of
+// three, and the key went off into the office from under an open panel. Keys
+// took the last slot on 5 September 2026, so the office stayed on digit 3.
 bag = makeBagOffice(5);
-check('офис: цифра 4 открыла вкладку', UI.bagKey('4') === true, 'не обработана');
+check('офис: цифра 3 открыла вкладку', UI.bagKey('3') === true, 'не обработана');
 check('вниз обработана', UI.bagKey('ArrowDown') === true, 'не обработана');
 check('и переводит на вторую кнопку', bag.btns[1].has('focus'), 'фокус не там');
 check('подсвечена ровно одна', bag.btns.filter((b) => b.has('focus')).length === 1,
@@ -293,7 +345,7 @@ check('вверх возвращает на первую', bag.btns[0].has('focu
 UI.closeBag();
 check('закрытый инвентарь стрелки не ест', UI.bagKey('ArrowDown') === false, 'съело');
 
-// ------------------------------------------- окно в мир и цвет офиса (кольцо)
+// ------------------------------------------- the window on the world and the office colour (the ring)
 sky = makeRing([{ id: 'skytoggle' }, { id: 'skyq', tagName: 'INPUT' }, { id: 'skygeo' }]);
 check('окно в мир: стрелка обработана', UI.skyKey('ArrowDown') === true, 'нет');
 UI.skyKey('Enter');
@@ -302,7 +354,7 @@ check('и не жмёт его как кнопку', sky.btns[1].clicked === 0, 
 UI.closeSky();
 check('закрытое окно в мир стрелки не ест', UI.skyKey('ArrowDown') === false, 'съело');
 
-// ползунок оттенка: стрелки в стороны крутят его, а не уводят фокус
+// the hue slider: the sideways arrows turn it rather than lead the focus away
 skin = makeRing([
   { className: 'swatch' },
   { id: 'skinhue', tagName: 'INPUT', type: 'range', min: '0', max: '359', value: '100' },
@@ -317,6 +369,37 @@ check('вправо крутит ползунок, а не уводит', skin.b
 check('и дёргает его обработчик', hueSet === 1, hueSet);
 UI.skinKey('ArrowDown');
 check('вниз с ползунка всё-таки уводит', !skin.btns[1].has('focus'), 'застряли');
+
+// ------------------------------------------------- the language and the agents' names
+// A panel of two rows: the interface and the names. A flat round would lie to
+// the hand here — the down arrow has to lead into the second row rather than
+// walk the first one to its end.
+state.agents = [{ id: 'a0', name: 'Гоша' }, { id: 'a1', name: 'Марта' }];
+langPanel = makeLang();
+await UI.openLang();
+const focused = () => langPanel.btns.findIndex((b) => b.has('focus'));
+check('язык: фокус встаёт на первую кнопку', focused() === 0, focused());
+check('стрелка вправо обработана', UI.langKey('ArrowRight') === true, 'нет');
+check('и ходит внутри строки интерфейса', focused() === 1, focused());
+UI.langKey('ArrowDown');
+check('вниз уводит во вторую строку, столбец сохраняя', focused() === 3, focused());
+check('и это «Русские», а не «как язык офиса»', langPanel.btns[3].dataset.pack === 'ru');
+
+// The price row: it has to change along with the focus, not on a press.
+check('на паке, который ничего не сменит, цены нет', langPanel.warn.hidden === true, langPanel.warn.textContent);
+UI.langKey('ArrowRight');
+check('дошли до English', langPanel.btns[4].dataset.pack === 'en' && focused() === 4, focused());
+check('цена показана до нажатия', langPanel.warn.hidden === false, 'скрыта');
+check('и называет число и пример', /2/.test(langPanel.warn.textContent) && /Pete/.test(langPanel.warn.textContent),
+  langPanel.warn.textContent);
+UI.langKey('ArrowLeft');
+check('шаг назад цену убирает', langPanel.warn.hidden === true, langPanel.warn.textContent);
+
+UI.langKey('ArrowRight');
+UI.langKey('Enter');
+check('Enter жмёт то, на чём фокус', langPanel.btns[4].clicked === 1, langPanel.btns[4].clicked);
+UI.closeLang();
+check('закрытая панель языка стрелки не ест', UI.langKey('ArrowDown') === false, 'съела');
 
 console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
 process.exit(failed ? 1 : 0);

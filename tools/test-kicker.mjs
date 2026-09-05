@@ -1,10 +1,11 @@
-// node tools/test-kicker.mjs — настольный футбол в курилке, без браузера.
+// node tools/test-kicker.mjs — the foosball table in the smoking spot, without a
+// browser.
 //
-// Стол проверяется здесь, а не глазами, потому что глазами его не поймать:
-// агент идёт играть по броску раз в 25–70 секунд, и кадр застаёт либо пустой
-// стол, либо уже сыгранное. Проверяется ровно то, что решает поведение: место
-// у стола достаётся двоим, третий садится курить, и все возвращаются за стол
-// сами, когда партия кончилась.
+// The table is checked here rather than by eye, because the eye cannot catch it:
+// an agent goes to play on a roll once every 25–70 seconds, and a frame finds
+// either an empty table or a game already over. What is checked is exactly what
+// decides the behaviour: a place at the table goes to two, a third sits down to
+// smoke, and everyone returns to their desk by themselves once the game ends.
 import { buildLayout, blocked } from '../web/layout.js';
 import { syncActors, tickActors } from '../web/actors.js';
 
@@ -31,15 +32,15 @@ const actors = new Map();
 syncActors(actors, agents, L);
 ok('все агенты на местах', actors.size === 6, actors.size);
 
-// Бросок «идти играть» — это Math.random() < 0.45 внутри редкой ветки. Подменяем
-// генератор на ноль: тогда каждая проверка «повезло?» отвечает да.
+// The "go and play" roll is a Math.random() < 0.45 inside a rare branch. We
+// replace the generator with zero: then every "lucky?" check answers yes.
 //
-// Смотреть на этот мир одним кадром нельзя: партия кончается, агент уходит за
-// свой стол, его место занимает следующий, — и снимок застаёт то двоих, то
-// одного, то никого. Поэтому мир крутится, а стенд смотрит не на конец, а на
-// всё, что случилось по дороге: было ли хоть раз двое у стола и не набежало ли
-// когда-нибудь трое. Первая попытка проверяла состояние на последнем тике и
-// проходила через раз — ровно потому, что ловила случайную фазу.
+// This world cannot be looked at in one frame: a game ends, an agent goes back to
+// his desk, the next one takes his place — and a snapshot finds now two, now one,
+// now nobody. So the world runs on, and the stand looks not at the end but at
+// everything that happened along the way: was there ever two at the table, and
+// did three ever pile up. The first attempt checked the state on the last tick
+// and passed every other time — precisely because it caught a random phase.
 const realRandom = Math.random;
 Math.random = () => 0;
 let now = 0;
@@ -68,18 +69,19 @@ ok('и на одну сторону вдвоём не встают', !sawWrongSe
 ok('у стола стоят, а не сидят', !sawSitting, sawSitting);
 ok('и смотрят на стол', sawFacing, sawFacing);
 
-// Возвращение с партии проверяется отдельным, неслучайным прогоном. Брать для
-// этого агента из общего мира выше нельзя: там их шестеро, партии идут внахлёст,
-// и «кто сейчас у стола» — это фаза, а не факт. Первая версия стенда именно так
-// и делала и краснела в семи прогонах из двенадцати, ни разу не поймав ошибку в
-// офисе: она ловила момент.
+// Coming back from a game is checked by a separate, non-random run. Taking an
+// agent for that from the shared world above is not on: there are six of them
+// there, the games overlap, and "who is at the table now" is a phase rather than
+// a fact. The first version of the stand did exactly that and went red in seven
+// runs out of twelve, without once catching a real fault in the office: it was
+// catching a moment.
 const solo = mk(1);
 const Ls = buildLayout(solo);
 const soloActors = new Map();
 syncActors(soloActors, solo, Ls);
 const act = [...soloActors.values()][0];
 const home = { x: act.seat.x, y: act.seat.y };
-act.nextIdea = 0;                       // не ждать своей минуты, бросок нужен сразу
+act.nextIdea = 0;                       // do not wait for its minute, the kick is needed at once
 Math.random = () => 0;
 let ts = 0;
 const until = (cond, ticks) => {
@@ -93,7 +95,7 @@ ok('и встал ровно на сторону стола',
   Math.abs(act.x - Ls.kicker.sides[act.seatIdx].x) < 2, [act.x, act.seatIdx]);
 ok('часы партии пошли с прихода, а не с решения', act.playUntil > ts, [act.playUntil, ts]);
 
-act.playUntil = ts - 1;                 // партия кончилась
+act.playUntil = ts - 1;                 // the game is over
 ok('после партии агент вернулся за рабочий стол',
   until(() => !act.lounge && !act.path.length, 80000)
     && Math.hypot(act.x - home.x, act.y - home.y) < 3,
@@ -101,7 +103,7 @@ ok('после партии агент вернулся за рабочий ст
 ok('и место у стола освободил', !act.kicking && act.seatIdx == null, [act.kicking, act.seatIdx]);
 Math.random = realRandom;
 
-// У кого кончился лимит — тому по-прежнему курилка, и стол ему не мешает.
+// Whoever has run out of limit still gets the smoking spot, and the table does not get in his way.
 const limited = mk(3, { limited: true });
 const L2 = buildLayout(limited);
 const actors2 = new Map();
