@@ -9,6 +9,7 @@ import { syncActors, tickActors } from './actors.js';
 import * as UI from './ui.js';
 import { proceduralWeather, fromWeatherCode, flash } from './weather.js';
 import { sound, tickSound } from './sound.js';
+import { initPager, seePermits, renderPager, pagerKey, recall, waitingCount, forgetPermit } from './pager.js';
 import { titleOf } from './paintings.js';
 import { drawBubble } from './badges.js';
 import { skateStep, rolling, drawSkateboard, ollieStep, canOllie, OLLIE_POP } from './skate.js';
@@ -76,6 +77,9 @@ const state = {
   // и куда едут: между посылками присутствия человек «доезжает» сам, иначе на
   // 8 кадрах в секунду чужая ходьба выглядит телепортацией.
   people: new Map(),
+  // Запросы разрешения, которых ждут агенты. У гостя список всегда пуст —
+  // сервер его не присылает.
+  permits: [], pagerWaiting: 0,
   soundOn: sound.on,
   // физических пикселей на пиксель игры; заполняется первым же fit()
   zoom: { dev: 3, max: 3, auto: true, clamped: false },
@@ -157,6 +161,20 @@ async function saveSettings(patch) {
   return r;
 }
 
+// Один вход для обоих источников: событие и снимок. Счётчик отложенных живёт
+// в состоянии, потому что рисует его шапка, а не пейджер.
+function takePermits(list) {
+  seePermits(list);
+  const n = waitingCount();
+  if (n !== state.pagerWaiting) { state.pagerWaiting = n; UI.renderHud(); }
+}
+
+initPager(state, {
+  openPermit: (p) => { UI.openPermit(p.agentId); },
+  toast: (text, kind) => UI.toast(text, kind),
+  hudChanged: () => { state.pagerWaiting = waitingCount(); UI.renderHud(); },
+});
+
 UI.initUI(state, {
   close: closeAll,
   saveMe: () => {
@@ -192,6 +210,11 @@ UI.initUI(state, {
     }
     return r;
   }).catch((e) => ({ error: e.message })),
+  answerPermit: (id, decision, message) => fetch('/api/permit/answer', {
+    method: 'POST', headers: owned({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ id, decision, message }),
+  }).then((r) => r.json()).catch((e) => ({ error: e.message })),
+  forgetPermit: (id) => { forgetPermit(id); state.pagerWaiting = waitingCount(); UI.renderHud(); },
   askAccess: (agentId) => fetch('/api/access', {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({ agentId }),
@@ -433,6 +456,10 @@ function openStream() {
   const pass = OWNER ? 'owner=' + encodeURIComponent(OWNER)
     : GUEST ? 'guest=' + encodeURIComponent(GUEST) : '';
   es = new EventSource('/api/stream' + (pass ? '?' + pass : ''));
+  // Пейджер должен пищать сразу: в такте снимка это было бы «мне звонили».
+  es.addEventListener('permits', (e) => {
+    try { takePermits(JSON.parse(e.data)); } catch { /* мусор в кадре — пропускаем */ }
+  });
   es.addEventListener('people', (e) => {
     try { seePeople(JSON.parse(e.data)); } catch { /* мусор в кадре — пропускаем */ }
   });
@@ -454,6 +481,7 @@ const onSnapshot = (e) => {
   // Доступ едет со снимком: у гостя это его собственный вид, у хозяина —
   // кто просит и кому открыто.
   state.access = data.access || null;
+  takePermits(data.permits || []);
   // Поток разбирается по полям, а не присваивается целиком, поэтому новое поле
   // надо переносить руками — иначе титульный экран показывает прочерк вместо
   // версии, и это видно только на кадре.
@@ -579,7 +607,14 @@ function onKey(e) {
     if (titleKey(e.key)) { e.preventDefault(); return; }
   }
 
-  if (k === 'escape') return closeAll();
+  // Пейджер держит свои две клавиши, пока карточки нет: Enter отвечает, Esc
+  // откладывает. Открытая карточка забирает их себе — она поверх, и в ней уже
+  // есть и «разрешить», и «закрыть».
+  if (!state.dialogOpen && pagerKey(e.key)) { e.preventDefault(); return; }
+
+  // Esc на «отказать с запиской» — шаг назад к кнопкам, а не закрытие карточки:
+  // человек нажал отказ и ещё ничего не отправил.
+  if (k === 'escape') { if (UI.permitEscape()) return; return closeAll(); }
 
   // the character sheet is keyboard-driven too: arrows walk its bottom row
   if (state.dialogOpen) {
@@ -626,6 +661,9 @@ function onKey(e) {
     if (state.owner !== false) return UI.inviteOpen() ? UI.closeInvite() : UI.openInvite();
     return toggle('bag', UI.renderBag, UI.closeBag);
   }
+  // H — вернуть отложенный пейджер. Не E: она в офисе равна ПРОБЕЛу, и
+  // «перезвоню» с возвратом на одну клавишу были бы разговором с агентом.
+  if ((k === 'h' || k === 'р') && recall()) return;
   // B — скейт. Не S: та занята шагом вниз в WASD, и переназначить её нельзя,
   // не сломав ходьбу.
   if (k === 'b' || k === 'и') return toggleSkate();

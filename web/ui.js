@@ -64,6 +64,7 @@ export function toast(text, kind = '') {
 // tr, а не t: в ui.js `t` уже занят локальными переменными в нескольких
 // функциях, и импорт там молча перекрывался
 import { t as tr, lang } from './i18n.js';
+import { cardClosed } from './pager.js';
 
 const WEATHER_ICON = { clear: '☀', clouds: '☁', rain: '☂', storm: '⚡', snow: '❄', fog: '≋' };
 
@@ -85,6 +86,7 @@ export function renderHud() {
     <span class="chip zoom${z.tight ? ' wait' : ''}" title="${tr('hud.zoomTitle')}${
       z.tight ? tr('hud.zoomTitleTight') : z.clamped ? tr('hud.zoomTitleClamped', { n: z.dev }) : ''
     }">⛶ ×${z.dev}${z.auto ? tr('hud.zoomAuto') : ''}${z.tight ? tr('hud.zoomTight') : z.clamped ? tr('hud.zoomMax') : ''}</span>
+    ${S.pagerWaiting ? `<span class="chip wait" title="${tr('hud.pagerTitle')}">📟 ${S.pagerWaiting}</span>` : ''}
     <span class="chip dim">${S.soundOn ? '🔊' : '🔇'} M</span>
     ${collect('hud', S).map((c) => `<span class="chip ${esc(c.kind || 'dim')}" title="${esc(c.title || '')}">${esc(c.text || '')}</span>`).join('')}
     <span class="chip dim">${tr('hud.round')}</span>`;
@@ -92,6 +94,9 @@ export function renderHud() {
 
 // ------------------------------------------------------------------- dialog
 let dialogKey = '';
+// Отказ в два шага: сначала кнопка, потом поле для записки. Живёт здесь, а не
+// в состоянии офиса, — это не то, что должно пережить закрытие карточки.
+let denying = false;
 
 // Сервер отдаёт и русский текст ошибки, и ключ, если ошибка его собственная.
 // Знаем ключ — переводим; не знаем — показываем как есть: то, что вернул claude,
@@ -186,7 +191,9 @@ export function renderDialog() {
   el.dialog.hidden = false;
   // Состояние доступа входит в ключ: без него смена «закрыто → просим →
   // отказали» не пересобирает тело, и человек жмёт кнопку в пустоту.
-  const key = a.id + '|' + S.page + '|' + accessOf(a.id);
+  // Запрос входит в ключ: он уходит по ответу — своему или чужому, — и
+  // карточка обязана пересобраться, а не остаться с кнопками в пустоту.
+  const key = a.id + '|' + S.page + '|' + accessOf(a.id) + '|' + ((permitOf(a.id) || {}).id || '') + '|' + (denying ? 'deny' : '');
   if (key === dialogKey && el.dialog.firstChild) return patchDialog(a);
   dialogKey = key;
   buildDialog(a);
@@ -237,6 +244,10 @@ function patchDialog(a) {
   // подсветку кладём заново: обновление могло переписать узел вместе с классом
   paintDialogFocus();
 }
+
+// Запрос разрешения, которого ждёт этот агент. У гостя списка нет вовсе —
+// сервер его не присылает, — поэтому проверять «хозяин ли» здесь не нужно.
+const permitOf = (id) => (S.permits || []).find((p) => p.agentId === id) || null;
 
 // Что гость знает про доступ к этому агенту. Три состояния и умолчание:
 // закрыто, попросили, отказали. Отдельного «открыто» не нужно — там просто
@@ -308,6 +319,38 @@ function buildDialog(a) {
         : ''}`;
   }
 
+  // Макет: [Диалог · Разрешение · Bash](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=947-2)
+  // Отказ с запиской: [Диалог · Разрешение · отказ](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=947-230)
+  else if (S.page === 'permit') {
+    const p = permitOf(a.id);
+    // Запрос могли ответить с другой вкладки или он истёк, пока карточка была
+    // открыта. Пустое место тут читалось бы как поломка.
+    if (!p) body = `<p class="say">${tr('permit.gone')}</p>`;
+    else if (denying) {
+      body = `<p class="q">${tr('permit.denyQ')}</p>
+        <p class="say">${esc(p.description || tr('permit.noDesc'))}</p>
+        <pre class="cmd">${esc(p.command)}</pre>
+        <textarea id="denyNote" rows="3" placeholder="${tr('permit.denyHint')}"></textarea>
+        <div class="prow">
+          <button data-a="deny" class="primary">${tr('permit.deny')} <kbd>⏎</kbd></button>
+          <button data-a="back">${tr('permit.back')} <kbd>Esc</kbd></button>
+        </div>
+        <p class="hint">${tr('permit.denyNote')}</p>`;
+    } else {
+      body = `<p class="q">${tr('permit.q')}</p>
+        <p class="say">${esc(p.description || tr('permit.noDesc'))}</p>
+        <pre class="cmd">${esc(p.command)}</pre>
+        ${p.rule ? `<p class="hint">${tr('permit.rule', { rule: esc(p.rule) })}</p>` : ''}
+        <div class="prow">
+          <button data-a="allow" class="primary">${tr('permit.allow')} <kbd>⏎</kbd></button>
+          <button data-a="always" ${p.rule ? '' : 'disabled'}>${tr('permit.always')}</button>
+          <button data-a="deny">${tr('permit.deny')}</button>
+          <button data-a="terminal">${tr('permit.terminal')}</button>
+        </div>
+        <p class="hint">${tr('permit.note')}</p>`;
+    }
+  }
+
   el.dialog.innerHTML = `
     <div class="portrait"><canvas width="48" height="48" id="pf"></canvas></div>
     <div class="content">
@@ -318,7 +361,7 @@ function buildDialog(a) {
       <div class="acts">
         <button data-p="talk" class="${S.page === 'talk' ? 'on' : ''}">${tr('tab.talk')} <kbd>1</kbd></button>
         <button data-p="work" class="${S.page === 'work' ? 'on' : ''}">${tr('tab.work')} <kbd>2</kbd></button>
-        <button data-p="task" class="${S.page === 'task' ? 'on' : ''}">${tr('tab.task')} <kbd>3</kbd></button>
+        <button data-p="task" class="${S.page === 'task' ? 'on' : ''}" ${permitOf(a.id) ? 'disabled' : ''}>${tr('tab.task')} <kbd>3</kbd></button>
         <button data-p="close">${tr('tab.close')} <kbd>Esc</kbd></button>
       </div>
     </div>`;
@@ -341,6 +384,7 @@ function buildDialog(a) {
     if (S.page === 'task') setTimeout(() => $('#taskInput')?.focus(), 30);
   });
   bindFiles();
+  bindPermit(a);
 
   const say = $('#say');
   if (say) say.onclick = () => finishTypewriter();
@@ -409,6 +453,54 @@ function buildDialog(a) {
 }
 
 // Buttons that live on the notes themselves: send a lying one, or retry a blocked one.
+// Ответ на запрос разрешения. Кнопки уходят сразу, не дожидаясь снимка:
+// агент по ту сторону ждёт живьём, и «нажалось или нет» — не тот вопрос,
+// который человек должен себе задавать.
+function bindPermit(a) {
+  const rows = [...el.dialog.querySelectorAll('.prow button')];
+  if (!rows.length) return;
+  const p = permitOf(a.id);
+  // Фокус на первой кнопке: карточку открыли ответить, и Enter должен
+  // отвечать, а не переключать вкладку под курсором.
+  fileIdx = 0;
+  paintDialogFocus();
+  // Поле записки слушает те же клавиши, что поле задания: Enter отправляет,
+  // Shift+Enter переносит строку, Esc возвращает к кнопкам. Другая раскладка в
+  // соседнем поле той же карточки — это ошибка, которую делают руками.
+  const note = $('#denyNote');
+  if (note) note.onkeydown = (e) => {
+    if (e.key === 'Escape') { denying = false; renderDialog(); return; }
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    e.preventDefault();
+    el.dialog.querySelector('.prow [data-a="deny"]')?.click();
+  };
+  for (const b of rows) {
+    b.onclick = async () => {
+      const act = b.dataset.a;
+      if (act === 'back') { denying = false; renderDialog(); return; }
+      if (act === 'deny' && !denying) { denying = true; renderDialog(); setTimeout(() => $('#denyNote')?.focus(), 30); return; }
+      if (!p) return;
+      for (const x of rows) x.disabled = true;
+      const message = act === 'deny' ? ($('#denyNote')?.value || '').trim() : '';
+      const r = await api.answerPermit(p.id, act, message);
+      denying = false;
+      // Сервер мог не найти запрос: ответили с другой вкладки или он истёк.
+      // Тогда карточка просто пересобирается и говорит об этом.
+      if (r && r.error) UI_toastKey(r);
+      else if (act === 'always' && p.rule) api.toast(tr('toast.permitAlways', { rule: p.rule }), 'news');
+      else if (act === 'allow') api.toast(tr('toast.permitAllowed', { who: a.name }));
+      else if (act === 'deny') api.toast(tr('toast.permitDenied', { who: a.name }), 'wait');
+      else if (act === 'terminal') api.toast(tr('toast.permitTerminal', { who: a.name }), 'wait');
+      api.forgetPermit(p.id);
+      S.page = 'talk';
+      renderDialog();
+    };
+  }
+}
+
+// Ошибка сервера — своим текстом, если ключ знаком, и чужим, если нет.
+const UI_toastKey = (r) => toast(said(r), 'wait');
+
 function bindNotes(a) {
   el.dialog.querySelectorAll('[data-retry]').forEach((b) => b.onclick = async () => {
     b.disabled = true; b.textContent = tr('note.sending');
@@ -465,6 +557,29 @@ function typewriter() {
 export function closeDialog() {
   el.dialog.hidden = true; dialogKey = ''; armedNote = 0; btnIndex = 0; linkFocused = false; fileIdx = -1;
   clearInterval(S.tw);   // машинка дописывала бы реплику в закрытую карточку
+  denying = false;
+  // Карточка закрылась — пейджер должен узнать: вопрос, отданный ей, иначе
+  // пропадает с экрана совсем.
+  cardClosed();
+}
+
+// Esc на шаге «отказать с запиской» — это «назад к кнопкам», а не «закрыть
+// карточку»: человек только что нажал отказ и ещё ничего не отправил. Зовётся
+// из main.js выше общего закрытия.
+export function permitEscape() {
+  if (!denying) return false;
+  denying = false;
+  renderDialog();
+  return true;
+}
+
+// Карточку разрешения открывает пейджер: он знает, у какого агента спросили.
+export function openPermit(agentId) {
+  const a = (S.agents || []).find((x) => x.id === agentId);
+  if (!a) return false;
+  S.focus = a; S.dialogOpen = true; S.page = 'permit'; denying = false; S.notice = '';
+  renderDialog();
+  return true;
 }
 
 // ---- arrows walk along the bottom row, Enter presses ----
@@ -488,7 +603,7 @@ const readLink = () => el.dialog.querySelector('#readAll');
 // который уводит стрелка вверх. Вкладки не открыты одновременно, поэтому
 // достаточно объединить селекторы и не разводить их по страницам.
 const bodyRows = () => [...el.dialog.querySelectorAll(
-  '.files li, .notes [data-retry], .notes [data-send], .notes [data-edit], .notes [data-del]')];
+  '.files li, .notes [data-retry], .notes [data-send], .notes [data-edit], .notes [data-del], .prow button')];
 
 // Стрелка вверх на оборванном ответе уводит фокус на «дочитать»: длинную реплику
 // всё равно читают целиком, и тянуться за ней мышью — лишний шаг.

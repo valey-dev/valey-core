@@ -74,7 +74,7 @@ canvas{image-rendering:pixelated; display:block; border:3px solid var(--frame);
   box-shadow:0 0 0 3px var(--bg), 0 14px 40px rgba(0,0,0,.7);}
 #dialog[hidden]{display:none}
 .portrait canvas{width:72px; height:72px; image-rendering:pixelated; border:2px solid var(--frame)}
-.content{flex:1; min-width:0}
+.content{flex:1; min-width:0; container-type:inline-size}
 .who b{color:var(--warn); font-size:15px; letter-spacing:.05em}
 .role{font-size:10px; padding:1px 6px; border:1px solid var(--frame-dim); margin-left:6px; color:var(--ink-dim)}
 .role.r-design{color:#c39bff;border-color:#5a4478} .role.r-research{color:#8fc8ff;border-color:#3f5c78}
@@ -99,8 +99,29 @@ textarea{width:100%; background:var(--field); color:var(--ink); border:2px solid
 textarea:focus{outline:none; border-color:var(--warn)}
 .acts{display:flex; gap:6px; margin-top:10px; flex-wrap:wrap}
 .acts button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
-  font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 10px; cursor:pointer}
-.acts button:hover{background:var(--wood-lit); color:#fff}
+  font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 10px; cursor:pointer;
+  white-space:nowrap}
+.acts button:hover:not(:disabled){background:var(--wood-lit); color:#fff}
+/* Погашенная вкладка обязана выглядеть погашенной: «Задание» темнеет,
+   пока агент ждёт разрешения, — доставлять ему в этот момент нечего, и кнопка,
+   которая выглядит живой и не нажимается, читается как поломка. */
+.acts button:disabled{opacity:.45; cursor:not-allowed}
+/* Четыре кнопки — один ряд, и место под них кончается не от размера окна, а от
+   масштаба офиса: ширина карточки поделена на --ui (см. ниже, там же история),
+   поэтому на 175% внутри остаётся тем меньше, чем уже окно. Замерено 4 сентября
+   2026 при 175%: внутри карточки 606 при окне 1400, 517 при 1200, 465 при 1100,
+   412 при 1000, 386 при 950. Ряду тогда нужно было 479 по-русски и 550 по-
+   английски — с окна 1150 и ниже «Отойти» уезжал на вторую строку.
+   Первым делом подписи стали короче («Показать работу» → «Работа», «What it is
+   up to» → «Doing now»): 380 и 444. Подсказки клавиш при этом остаются всегда —
+   цифры на кнопках держат половину обаяния этой карточки, и прятать их, чтобы
+   выиграть шесть пикселей, значит чинить не то.
+   Что ряд отдаёт, когда всё равно тесно: сначала поля и зазор (−32), потом
+   размер шрифта (−31). Обе ступени включаются только там, где иначе была бы
+   вторая строка. Мерит контейнер, а не окно: vw внутри zoom врёт, и именно на
+   этом уже спотыкались две панели. */
+@container (max-width: 470px){ .acts{gap:4px} .acts button{padding:4px 6px} }
+@container (max-width: 420px){ .acts button{font-size:11px} }
 .acts button.on{background:var(--wood-lit); color:var(--warn); border-color:var(--warn)}
 kbd{color:var(--muted); font-size:10px}
 
@@ -125,6 +146,79 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .single pre{white-space:pre-wrap; font-size:12px; color:var(--ink-dim); margin:0}
 .vpath{padding:6px 12px; font-size:10px; color:var(--muted-dim); border-top:2px solid var(--wood); word-break:break-all}
 .empty{padding:30px; color:var(--muted); text-align:center}
+
+/* ---- карточка разрешения ---- */
+/* Команда — единственное, по чему принимают решение, поэтому у неё своё поле,
+   а не строка в потоке текста: тёмная врезка, как в терминале, откуда вопрос и
+   пришёл. Переносится, а не обрезается — обрезанная команда это обманутый
+   хозяин, а горизонтальная прокрутка внутри карточки читается как «всё». */
+.cmd{margin:8px 0; padding:6px 8px; background:var(--field); border:2px solid var(--frame);
+  color:var(--ink); font:inherit; font-size:12px; line-height:18px;
+  white-space:pre-wrap; word-break:break-all; max-height:200px; overflow:auto}
+.prow{display:flex; gap:8px; align-items:center; margin:8px 0 6px; flex-wrap:wrap}
+/* Одеваются здесь же, а не наследуют от `.acts`: кнопки ответа живут в теле
+   карточки, а тот селектор — про нижний ряд вкладок. Без своего правила
+   браузер рисует их системными, и карточка разъезжается с макетом на глазах. */
+.prow button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 10px; cursor:pointer;
+  display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
+.prow button:hover:not(:disabled){background:var(--wood-lit); color:#fff}
+.prow button:disabled{opacity:.45; cursor:not-allowed}
+.prow button.primary{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
+.prow button.primary:hover{color:var(--warn)}
+/* Фокус со стрелок — своей обводкой снаружи рамки, как в нижнем ряду: на
+   основной кнопке рамка уже жёлтая, и подсветить его цветом рамки нечем. */
+.prow button.focus{outline:2px solid var(--ink); outline-offset:2px; color:#fff}
+.prow button.focus.primary{outline-color:var(--warn); color:var(--warn)}
+.prow kbd{font:inherit; font-size:10px; color:var(--ink-dim); border:0; background:none; padding:0}
+/* «В терминале» — не отказ и не разрешение, а «спрошу не здесь»: отодвигается
+   от тройки решений, чтобы не читаться четвёртым вариантом ответа. */
+.prow button[data-a="terminal"]{margin-left:auto}
+/* Ряд ответа — те же четыре кнопки и та же беда, что у нижнего ряда вкладок
+   (история там же, выше): на 175% ширина карточки поделена на --ui, и места
+   внутри тем меньше, чем уже окно. Ступени те же и по тем же причинам — сначала
+   поля и зазор, потом кегль, — но пороги свои: этот ряд длиннее, «Всегда
+   разрешать» одно тянет больше, чем вся тройка вкладок. Замерено на живой
+   карточке 5 сентября 2026, цифры — в отчёте коммита. Прижимать «В терминале»
+   к остальным на тесноте не даём: это его смысл, а не отступ. */
+@container (max-width: 560px){ .prow{gap:6px} .prow button{padding:4px 6px} }
+@container (max-width: 500px){ .prow button{font-size:11px} }
+@container (max-width: 440px){ .prow button[data-a="terminal"]{margin-left:0} }
+#denyNote{width:100%; box-sizing:border-box; margin:8px 0 0; padding:6px;
+  background:var(--field); border:2px solid var(--frame); color:var(--ink); font:inherit; font-size:13px}
+
+/* ---- пейджер ---- */
+/* Свой угол: тосты слева внизу, диалог по центру, пейджер справа — три вещи
+   поверх холста и ни одна не перекрывает другую. Выезжает снизу: входящее
+   должно появиться движением, иначе его не замечают. */
+#pager{position:fixed; right:14px; bottom:52px; z-index:26; width:360px;
+  background:linear-gradient(var(--wood-hi),var(--wood-dark)); border:3px solid var(--frame);
+  border-radius:6px; padding:10px 12px; box-shadow:0 14px 40px rgba(0,0,0,.7);
+  animation:pagerIn .22s ease-out}
+#pager[hidden]{display:none}
+@keyframes pagerIn{from{transform:translateY(26px); opacity:0} to{transform:none; opacity:1}}
+@media (prefers-reduced-motion:reduce){#pager{animation:none}}
+.phead{display:flex; align-items:center; gap:8px; font-size:9px; letter-spacing:.15em; color:var(--ink-dim)}
+.pbrand{flex:1}
+/* Лампочка мигает, пока не ответили: пейджер, замерший в углу, читается как
+   картинка, а не как ждущий вопрос. */
+.plamp{color:var(--warn); animation:pagerBlink 1.1s steps(1,end) infinite}
+@keyframes pagerBlink{50%{opacity:.15}}
+@media (prefers-reduced-motion:reduce){.plamp{animation:none}}
+.lcd{margin:8px 0; padding:6px 8px; background:#16200f; border:2px solid #0d1409; border-radius:2px;
+  color:#9fe0a8; font-size:12px; line-height:18px}
+.lcd .l1{font-weight:700}
+.lcd .pn{float:right; font-weight:400}
+/* Команда — одной строкой, как на настоящем пейджере: целиком её читают в
+   карточке, где по ней и решают. */
+.lcd .l2, .lcd .l3{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.lcd .l3{color:#6f9c76; font-size:11px; line-height:16px}
+.pkeys{display:flex; align-items:center; gap:8px}
+.pkeys button{font:inherit; font-size:11px; padding:3px 8px; border-radius:3px; cursor:pointer;
+  background:var(--wood); border:2px solid var(--frame); color:var(--ink)}
+.pkeys button.primary{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
+.pkeys kbd{font:inherit; font-size:9px; color:var(--ink-dim); border:0; background:none}
+.pmore{margin-left:auto; font-size:9px; color:var(--ink-dim)}
 
 /* ---- toasts ---- */
 #toasts{position:fixed; left:14px; bottom:52px; z-index:25; display:flex; flex-direction:column; gap:6px}
