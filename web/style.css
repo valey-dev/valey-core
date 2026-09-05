@@ -251,9 +251,22 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
   font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 10px; cursor:pointer;
   margin:10px 0 0; white-space:nowrap}
 #askAccess:hover{background:var(--wood-lit); color:var(--ink-hi)}
-/* The same focus ring the bottom row and the note buttons wear: the arrows walk
-   onto this button too, and a focus you cannot see is a focus you cannot use. */
-#askAccess.focus{outline:2px solid var(--ink); outline-offset:2px; color:var(--ink-hi)}
+/* The arrows walk onto this button, so it wears the ring of the body of a card
+   — yellow and inset, like the file rows and the buttons on a note — and not
+   the ring of the tabs at the bottom, which is the colour of ink. Copied from
+   the wrong neighbour first: it is a body row, not a tab. */
+#askAccess.focus{outline:2px solid var(--warn); outline-offset:-2px; color:var(--warn)}
+
+/* The rows of the invitation panel — «открыть», «отказать», «выгнать», «погасить»
+   — and the buttons on the notes on a desk. Buttons in this sheet are painted by
+   their container, and this container had no rule at all, so every one of them
+   came out a grey system button. Seen on a live build on 5 September 2026, in
+   the same panel as the ask-for-access button and for exactly the same reason.
+   Smaller than a card's row: these sit inside an 11px line. */
+.notes button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:11px "JetBrains Mono", "Courier New", monospace; padding:2px 6px; cursor:pointer;
+  white-space:nowrap}
+.notes button:hover{background:var(--wood-lit); color:var(--ink-hi)}
 
 /* ---- пейджер ---- */
 /* Свой угол: тосты слева внизу, диалог по центру, пейджер справа — три вещи

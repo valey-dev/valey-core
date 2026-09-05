@@ -2,6 +2,7 @@ import { lookOf, drawPerson, drawCat, normalizeLook, dressOf, dressMe } from './
 import { potState, water as waterPot, tally, CAN_FULL } from './garden.js';
 import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, pickRoom, WALL } from './layout.js';
 import { loadModules, collect, first } from './modules.js';
+import { owned, setTokens } from './owned.js';
 import { initStand } from './stand.js';
 import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, pxText, kickerBusy } from './office.js';
 import { drawCamera, buildCameras } from './cctv.js';
@@ -27,7 +28,9 @@ ctx.imageSmoothingEnabled = false;
 
 const DEFAULT_ME = {
   skin: '#ffdcb8', hair: '#3a2a20', shirt: '#4fa89a', pants: '#3f4a63', boots: '#2a2118',
-  style: 0, head: 'none', glasses: false, face: 'none', tall: 1, hands: 'none', name: tr('label.me'),
+  // No name of one's own until somebody types one: «ТЫ» is how the office
+  // addresses you, not how it introduces you to anybody else.
+  style: 0, head: 'none', glasses: false, face: 'none', tall: 1, hands: 'none', name: '',
 };
 
 // What lies in localStorage was written by us — but not necessarily by this version
@@ -130,12 +133,7 @@ const CODE = (() => {
 
 // A header rather than a cookie: the office lives on one port with other tabs of the
 // same localhost, and they share a cookie.
-const owned = (extra = {}) => {
-  const h = { ...extra };
-  if (OWNER) h['x-valey-owner'] = OWNER;
-  if (GUEST) h['x-valey-guest'] = GUEST;
-  return h;
-};
+setTokens({ owner: OWNER, guest: GUEST });
 
 // The door. A code is exchanged for a token exactly once; after that the token lives,
 // and a reload of the page does not put the person back out on the street.
@@ -147,6 +145,7 @@ async function knock() {
   }).then((x) => x.json()).catch((e) => ({ error: e.message }));
   if (r && r.guest) {
     GUEST = r.guest;
+    setTokens({ guest: GUEST });
     localStorage.setItem('valey-guest', GUEST);
   }
   return r;
@@ -210,7 +209,7 @@ UI.initUI(state, {
     // We take the token: the office has just become shared, and without it this same page
     // will turn out to be a guest in its own office on the next request.
     if (r && r.owner) {
-      OWNER = r.owner; localStorage.setItem('valey-owner', OWNER);
+      OWNER = r.owner; setTokens({ owner: OWNER }); localStorage.setItem('valey-owner', OWNER);
       // The stream remembers who opened it: the server decides that once, at connection
       // time. Without a reopen an old stream went on as a guest projection after the switch
       // to shared — the owner saw his office with no lines and no files.
@@ -266,7 +265,7 @@ knock().then((entered) => {
   if (!es) openStream();
 });
 
-fetch('/api/settings').then((r) => r.json()).then((r) => {
+fetch('/api/settings', { headers: owned() }).then((r) => r.json()).then((r) => {
   if (r.settings) { state.settings = r.settings; setLang(r.settings.lang); paintSign(); }
   if (r.packs) state.packs = r.packs;
   if (r.weather) applyWeather(r.weather);
@@ -406,9 +405,14 @@ function tellWhereIAm(now) {
   const room = state.currentRoom;
   fetch('/api/here', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({
-      id: MY_ID, name: state.me.name || tr('label.me'), look: myLook(),
+      // Outward the office sends a third-person name. Until 5 September 2026 it
+      // sent «ТЫ», so everyone who had not renamed themselves stood in somebody
+      // else's office labelled YOU — the one word that cannot be true of another
+      // person. Named yourself and the name goes as it is.
+      id: MY_ID, name: state.me.name || tr(state.owner === false ? 'label.guest' : 'label.host'),
+      look: myLook(),
       x: p.x, y: p.y, dir: p.dir || 1, moving: !!p.moving,
       room: room ? room.key : null,
     }),
@@ -419,7 +423,11 @@ function tellWhereIAm(now) {
 // an ordinary fetch in pagehide is no longer something the browser has to deliver.
 addEventListener('pagehide', () => {
   try {
-    navigator.sendBeacon('/api/gone', new Blob([JSON.stringify({ id: MY_ID })], { type: 'application/json' }));
+    // sendBeacon cannot set headers, so the pass travels in the query string —
+    // the same road the stream takes, and for the same reason.
+    const pass = OWNER ? '?owner=' + encodeURIComponent(OWNER)
+      : GUEST ? '?guest=' + encodeURIComponent(GUEST) : '';
+    navigator.sendBeacon('/api/gone' + pass, new Blob([JSON.stringify({ id: MY_ID })], { type: 'application/json' }));
   } catch { /* not delivered — the TTL will remove him in eight seconds */ }
 });
 
@@ -493,6 +501,9 @@ const onSnapshot = (e) => {
   // Access rides with the snapshot: for a guest it is his own view, for the owner who is
   // asking and to whom it is open.
   state.access = data.access || null;
+  // An open invitation panel is a register, not a snapshot of one moment: a
+  // request that arrives while it is open has to show up in it.
+  UI.syncInvite();
   takePermits(data.permits || []);
   // The stream is taken apart field by field rather than assigned whole, so a new field
   // has to be carried over by hand — otherwise the title screen shows a dash instead of the

@@ -24,12 +24,14 @@ let ids = [];
 // well": while it was not shown, the easel was silently missing from the office,
 // because register threw on an unknown point, and that was visible only in the
 // browser console. The stand now asks for this list.
+import { owned } from './owned.js';
+
 let failed = [];
 
 export async function loadModules() {
   let list = [];
   try {
-    list = await (await fetch('/api/modules')).json();
+    list = await (await fetch('/api/modules', { headers: owned() })).json();
   } catch {
     return [];                       // a server with no modules is the ordinary case
   }

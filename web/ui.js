@@ -9,6 +9,7 @@ import { LIBRARY, TIERS, DIRS, SUBS, byId, children, colOf, inDir, dirTally } fr
 import { theme, applyTheme, resetTheme, PRESETS, ui, UI_STEPS, applyUiScale } from './theme.js';
 import { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } from './notes.js';
 import { esc } from './esc.js';
+import { owned } from './owned.js';
 
 const $ = (s) => document.querySelector(s);
 const el = { hud: null, dialog: null, viewer: null, roster: null, bag: null, toasts: null };
@@ -1076,7 +1077,7 @@ export async function openFile(p, items = null, index = -1, title = '') {
   if (isImg) {
     inner = `<div class="zoomwrap"><img class="full" id="zimg" src="${url}"></div>`;
   } else {
-    const txt = await fetch(url).then((r) => r.ok ? r.text() : tr('gal.notServed') + r.status).catch((e) => e.message);
+    const txt = await fetch(url, { headers: owned() }).then((r) => r.ok ? r.text() : tr('gal.notServed') + r.status).catch((e) => e.message);
     if (mine !== viewToken) return;   // arrows moved on while this one was loading
     docKind = isMd ? 'md' : isHtml ? 'html' : null;
     mdSource = docKind ? txt : null;
@@ -1367,7 +1368,7 @@ const bodyRow = (f) => `<div class="drow"><button data-f="${f.key}" data-d="-1">
 const selfHtml = () => `<div class="dbody">
       <canvas id="me" width="72" height="86"></canvas>
       <div class="rows">
-        <label class="namerow">${tr('dress.name')} <input id="myname" maxlength="14" value="${S.me.name || tr('label.me')}"></label>
+        <label class="namerow">${tr('dress.name')} <input id="myname" maxlength="14" value="${esc(S.me.name || '')}" placeholder="${tr('label.me')}"></label>
         <p class="tally">${tr('dress.tally', { water: S.me.drinks || 0, coffee: S.me.coffees || 0 })}</p>
         <p class="dcap">${tr('dress.colors')}</p>
         ${colorFields().map(colorRow).join('')}
@@ -1797,7 +1798,9 @@ function bindSelf() {
     paint();
   };
   paint();
-  $('#myname').oninput = (e) => { S.me.name = e.target.value.toUpperCase().slice(0, 14) || tr('label.me'); api.saveMe(); };
+  // An empty field is an empty name, not the word «ТЫ» stored as one: that
+  // string used to travel outward and label a stranger YOU.
+  $('#myname').oninput = (e) => { S.me.name = e.target.value.toUpperCase().slice(0, 14); api.saveMe(); };
   paintBagFocus();
   const rowFields = () => [...colorFields(), ...BODY, bottomCut];
   el.bag.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => {
@@ -2360,7 +2363,43 @@ export function closeInvite() { if (el.invite) el.invite.hidden = true; }
 
 export async function openInvite() {
   el.invite.hidden = false;
+  inviteSig = accessSig();
   await renderInvite();
+}
+
+// What the panel is showing right now, as one string. The snapshot arrives every
+// couple of seconds; redrawing on each of them would be honest and unusable —
+// the caret would jump out of «кого зовём» mid-word.
+const accessSig = () => {
+  const a = S.access || {};
+  return JSON.stringify([
+    (a.requests || []).map((r) => [r.id, r.state, r.who, r.agentId]),
+    (a.open || []).map((o) => [o.guestId, o.agentId]),
+  ]);
+};
+let inviteSig = '';
+
+// A request that arrives while the panel is open used to be invisible: the panel
+// was drawn when it opened and after every button in it, and by nothing else. It
+// sat in the snapshot, the owner sat looking at the panel, and the two never met
+// — found on a live build on 5 September 2026. Nothing was lost: the request
+// waits on the server until it is answered. It simply could not be seen without
+// closing the panel and opening it again.
+export async function syncInvite() {
+  if (!el.invite || el.invite.hidden) return;
+  const sig = accessSig();
+  if (sig === inviteSig) return;
+  inviteSig = sig;
+  // Whatever is being typed survives the redraw, caret included: the name is
+  // usually half-written exactly when somebody knocks.
+  const input = $('#invWho');
+  const typed = input ? { value: input.value, at: input.selectionStart, focused: document.activeElement === input } : null;
+  await renderInvite();
+  if (!typed) return;
+  const back = $('#invWho');
+  if (!back) return;
+  back.value = typed.value;
+  if (typed.focused) { back.focus(); try { back.setSelectionRange(typed.at, typed.at); } catch { /* поле могло сменить тип */ } }
 }
 
 async function renderInvite() {
@@ -2395,7 +2434,7 @@ async function renderInvite() {
   // Ответ сервера несёт свежий список — берём его сразу, не дожидаясь снимка:
   // тот приходит раз в 2.5 секунды, и всё это время нажатая кнопка выглядела
   // бы ненажатой.
-  const took = async (r) => { if (r && r.access) S.access = r.access; await renderInvite(); };
+  const took = async (r) => { if (r && r.access) S.access = r.access; inviteSig = accessSig(); await renderInvite(); };
   el.invite.querySelectorAll('[data-yes]').forEach((b) => {
     b.onclick = async () => took(await api.answerAccess(b.dataset.yes, true));
   });
@@ -2780,7 +2819,7 @@ const chatStatus = (text) => { const st = $('#chatst'); if (st) st.textContent =
 async function loadChat(fresh) {
   const a = chatView.agent;
   const mine = ++chatView.token;
-  const r = await fetch('/api/chat?id=' + encodeURIComponent(a.id))
+  const r = await fetch('/api/chat?id=' + encodeURIComponent(a.id), { headers: owned() })
     .then((x) => x.json()).catch((e) => ({ error: e.message }));
   if (!chatView || chatView.token !== mine || el.viewer.hidden) return;
   const box = $('#chatlog');
