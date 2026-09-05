@@ -12,9 +12,10 @@ export const SHIRT  = ['#c25a4b', '#4a7fa8', '#7aa85a', '#d59a3c', '#8a6bb0', '#
 export const PANTS  = ['#3f4a63', '#4a3b32', '#2f4a3f', '#53415e', '#3a3a46'];
 export const BOOTS  = ['#2a2118', '#6b4a2a', '#c2a06b', '#8a3a3a'];
 
-// Офисный дресс-код. Светлый верх, тёмная обувь, галстук, пиджак и крой низа —
-// пять вещей поверх свободного вида; цвет штанов и юбки остаётся своим, иначе
-// весь этаж встанет в одинаковых, а по цвету людей и различают.
+// The office dress code. A light top, dark shoes, a tie, a jacket and the cut of
+// the bottom — five things over the free look; the colour of the trousers and of
+// the skirt stays their own, or the whole floor will stand there in identical ones,
+// and colour is how people are told apart.
 export const SHIRT_WORK = ['#eae7de', '#dfe6ef', '#e9e2d2'];
 export const BLOUSE     = ['#eae7de', '#efe0e6', '#e2e9e6', '#e9e2d2'];
 export const JACKET     = ['#2f3440', '#33333d', '#33403a', '#3a3340'];
@@ -29,10 +30,10 @@ export const HANDS  = ['none', 'mug', 'cup', 'pad'];
 
 export function lookOf(id) {
   const h = hash(id);
-  // Старый acc читается как два слота сразу: очки — на лицо, наушники и кепка —
-  // на голову. Никаких новых бит на это не нужно, поэтому каждый агент
-  // остаётся ровно в том, в чём был, а носить очки с наушниками умеет тот, кто
-  // одевается руками.
+  // The old acc reads as two slots at once: glasses on the face, headphones and a
+  // cap on the head. No new bits are needed for that, so every agent stays in
+  // exactly what he was in, while wearing glasses with headphones is for whoever
+  // dresses by hand.
   const acc = (h >>> 17) % 4;
   return {
     skin: pick(SKIN, h),
@@ -42,36 +43,38 @@ export function lookOf(id) {
     style: (h >>> 13) % 5,
     head: acc === 2 ? 'phones' : acc === 3 ? 'cap' : 'none',
     glasses: acc === 1,
-    // Щетина и усы агентам не раздаются: вид растительности взялся бы из
-    // свободных бит, и пятая часть бородатых сменила бы лицо. Своему
-    // персонажу они доступны в панели переодевания.
+    // Stubble and a moustache are not handed out to agents: the kind of growth
+    // would come from free bits, and a fifth of the bearded ones would change
+    // face. For your own character they are available in the changing panel.
     face: ((h >>> 21) % 5) === 0 ? 'beard' : 'none',
     tall: ((h >>> 23) % 3) === 0 ? 1 : 0,
-    // Новые слоты садятся на СВОБОДНЫЕ старшие биты, а не двигают существующие
-    // сдвиги: сдвинь любой — и перетасуется весь офис, Петя вернётся другим
-    // человеком. Биты 29–31 остаются в резерве под следующий слот.
+    // New slots sit on the FREE high bits rather than moving the existing shifts:
+    // move any one, and the whole office is reshuffled, «Петя» comes back a
+    // different person. Bits 29–31 stay in reserve for the next slot.
     boots: pick(BOOTS, h >>> 25),
     hands: ['none', 'mug', 'none', 'pad'][(h >>> 27) % 4],
   };
 }
 
-// Перебор значений слота стрелками. Значения из старого сохранения в списке
-// может не быть — тогда стрелка ставит первое, а не улетает в конец списка.
+// Cycling through the values of a slot with the arrows. A value from an old save
+// may not be in the list — then the arrow sets the first one rather than flying
+// off to the end of the list.
 export const cycle = (list, value, dir) => {
   const i = list.indexOf(value);
   return i < 0 ? list[0] : list[(i + dir + list.length) % list.length];
 };
 
-// Офисный вид считается ОТДЕЛЬНЫМ хешем, а не новыми битами в lookOf(): сдвинь
-// там хоть один — и перетасуется весь офис, Петя вернётся другим человеком.
-// Поэтому свободный стиль остаётся байт в байт тем, что был, биты 29–31 всё ещё
-// свободны, а офисная одежда живёт в своём числе и ни на что не давит.
+// The office look is counted as a SEPARATE hash rather than as new bits in
+// lookOf(): move even one there, and the whole office is reshuffled, «Петя» comes
+// back a different person. So the free style stays byte for byte what it was,
+// bits 29–31 are still free, and the office clothes live in a number of their own
+// and press on nothing.
 export function dressOf(look, id, gender, code) {
   if (code !== 'office') return look;
   const h = hash(id + ':office');
   const f = gender === 'f';
-  // Мужчины в галстуках почти все, женщины — редко и бабочкой: так офис
-  // читается офисом, а не съездом фокусников.
+  // Nearly all the men are in ties, the women rarely and in a bow tie: that way
+  // the office reads as an office rather than as a convention of magicians.
   const tie = f
     ? (((h >>> 13) % 5) === 0 ? { cut: 'bow', color: pick(TIE, h >>> 11) } : null)
     : { cut: ((h >>> 17) % 7) === 0 ? 'stripe' : ((h >>> 17) % 6) === 0 ? 'slim' : 'plain',
@@ -87,9 +90,10 @@ export function dressOf(look, id, gender, code) {
   };
 }
 
-// Свой персонаж одевается руками, а не хешем: галстук, пиджак и крой лежат в
-// его собственных слотах. Свободный верх при этом не теряется — офисный живёт
-// отдельным полем, иначе переключение туда-обратно съедало бы выбранный цвет.
+// Your own character dresses by hand rather than by hash: the tie, the jacket and
+// the cut lie in slots of his own. The free top is not lost meanwhile — the office
+// one lives in a separate field, or switching there and back would eat the chosen
+// colour.
 export function dressMe(me, code) {
   if (code !== 'office') return me;
   return {
@@ -102,9 +106,9 @@ export function dressMe(me, code) {
   };
 }
 
-// Look, сохранённый прошлой версией офиса, знает про acc и борода-да-нет.
-// Читаем его теми же правилами, что и хеш, чтобы свой персонаж не сбрасывался
-// в незнакомца после обновления.
+// A look saved by a previous version of the office knows about acc and about
+// beard-yes-no. We read it by the same rules as the hash, so that your own
+// character does not reset into a stranger after an update.
 export function normalizeLook(look) {
   const o = { ...look };
   if (o.head === undefined) o.head = o.acc === 2 ? 'phones' : o.acc === 3 ? 'cap' : o.acc === 5 ? 'ball' : 'none';
@@ -128,10 +132,11 @@ const shade = (hex, k) => {
 };
 
 // x = horizontal center, y = feet line
-// ms — время в миллисекундах, и нужно оно тому, что тлеет и парит: дыму
-// сигареты и пару над стаканом. Кадр ходьбы для этого не годится, он тикает
-// раз в 130 мс рывками. Имя не `t`:
-// оно внутри уже занято ростом (`look.tall`), и параметр молча его затенял.
+// ms is the time in milliseconds, and it is needed by what smoulders and steams:
+// the smoke of a cigarette and the vapour over a glass. The walking frame will not
+// do for that, it ticks once every 130 ms in jerks. The name is not `t`: inside,
+// that is already taken by the height (`look.tall`), and the parameter shadowed it
+// silently.
 export function drawPerson(ctx, x, y, look, { pose = 'stand', frame = 0, dir = 0, bob = 0, ms = 0 } = {}) {
   const p = (px, py, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(Math.round(px), Math.round(py), w, h); };
   const t = look.tall;
@@ -147,8 +152,8 @@ export function drawPerson(ctx, x, y, look, { pose = 'stand', frame = 0, dir = 0
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
   ctx.beginPath(); ctx.ellipse(x, feet + 1, 7, 2.5, 0, 0, Math.PI * 2); ctx.fill();
 
-  // legs — или юбка. Под ней две ноги по два пикселя, и качаются они тем же
-  // размахом ±1, что штанины: иначе шаг в юбке читается как скольжение.
+  // legs — or a skirt. Under it two legs two pixels each, and they swing with the
+  // same ±1 amplitude as the trouser legs: otherwise a step in a skirt reads as gliding.
   const swing = pose === 'walk' ? [0, 1, 0, -1][frame % 4] : 0;
   const sw = pose === 'walk' ? [0, -1, 0, 1][frame % 4] : 0;
   const skirt = look.bottom === 'skirt';
@@ -170,12 +175,12 @@ export function drawPerson(ctx, x, y, look, { pose = 'stand', frame = 0, dir = 0
     p(x - (skirt ? 5 : 4), hipY, skirt ? 10 : 8, 4, look.pants);
   }
 
-  // torso. Ремень в офисе тёмный: на светлой рубашке своя же тень читается
-  // грязным пятном, а не поясом.
+  // torso. The belt in the office is dark: on a light shirt its own shadow reads
+  // as a dirty patch rather than as a belt.
   p(x - 5, torsoTop, 10, hipY - torsoTop, look.shirt);
   p(x - 5, hipY - 2, 10, 2, look.office ? '#3a2a1e' : shade(look.shirt, 0.8));
 
-  // arms — рукав пиджака, если он надет, и манжета рубашки под ним
+  // arms — the sleeve of the jacket, if it is on, and the shirt cuff under it
   const sleeve = look.jacket || look.shirt;
   const typing = sitting ? [0, 1, 0, 2][frame % 4] : 0;
   if (sitting) {
@@ -194,9 +199,9 @@ export function drawPerson(ctx, x, y, look, { pose = 'stand', frame = 0, dir = 0
     p(x + 5, torsoTop + 7 - sw, 2, 2, look.skin);
   }
 
-  // Офисный верх поверх торса: пиджак закрывает бока, воротник — две зарубки,
-  // галстук — две колонки посередине. Всё это рисуется после рук, чтобы лацкан
-  // лёг на рукав, а не наоборот.
+  // The office top over the torso: the jacket covers the sides, the collar is two
+  // notches, the tie two columns down the middle. All of it is drawn after the
+  // arms, so that the lapel lies on the sleeve and not the other way round.
   if (look.office) {
     if (look.jacket) {
       p(x - 5, torsoTop, 3, hipY - torsoTop, look.jacket);
@@ -219,8 +224,8 @@ export function drawPerson(ctx, x, y, look, { pose = 'stand', frame = 0, dir = 0
       } else {
         p(x - 1, torsoTop, 2, 1, shade(tie.color, 0.7));
         p(x - 1, torsoTop + 1, 2, 5, tie.color);
-        // Полоска на двух пикселях ширины читается как галстук посветлее, а не
-        // как полоска. Так и задумано: это её честный предел, и он утверждён.
+        // A stripe on two pixels of width reads as a lighter tie rather than as a
+        // stripe. That is intended: it is its honest limit, and it has been approved.
         if (tie.cut === 'stripe') {
           p(x - 1, torsoTop + 2, 2, 1, shade(tie.color, 1.35));
           p(x - 1, torsoTop + 4, 2, 1, shade(tie.color, 1.35));
@@ -239,8 +244,8 @@ export function drawPerson(ctx, x, y, look, { pose = 'stand', frame = 0, dir = 0
   const ex = dir === -1 ? -1 : dir === 1 ? 1 : 0;
   p(x - 2 + ex, eyeY, 1, 1, '#2b2118');
   p(x + 1 + ex, eyeY, 1, 1, '#2b2118');
-  // Растительность рисуется до рта: рот — это тень на коже, и поверх бороды он
-  // читается ямкой, а из-под неё не виден вовсе.
+  // The growth is drawn before the mouth: the mouth is a shadow on the skin, and
+  // over a beard it reads as a dimple, while from under one it is not visible at all.
   if (look.face === 'stubble') p(x - 3, headTop + 6, 6, 2, shade(look.skin, 0.72));
   if (look.face === 'mous') p(x - 2, headTop + 5, 4, 1, shade(look.hair, 0.85));
   if (look.face === 'beard') {
@@ -258,14 +263,14 @@ export function drawPerson(ctx, x, y, look, { pose = 'stand', frame = 0, dir = 0
   if (look.style === 3) { p(x - 5, headTop + 1, 1, 4, H); p(x + 4, headTop + 1, 1, 4, H); p(x - 4, headTop - 1, 8, 1, H); }
   if (look.style === 4) { p(x - 4, headTop - 1, 8, 3, H); p(x - 1, headTop - 4, 4, 3, H); }
 
-  // лицо: очки — свой слот, поэтому надеваются вместе с чем угодно на голове
+  // the face: glasses are a slot of their own, so they go on together with anything on the head
   if (look.glasses) {
     p(x - 3, eyeY - 1, 3, 3, 'rgba(40,30,25,0.85)');
     p(x + 1, eyeY - 1, 3, 3, 'rgba(40,30,25,0.85)');
     p(x - 2, eyeY, 1, 1, '#cfe8ff'); p(x + 2, eyeY, 1, 1, '#cfe8ff');
   }
 
-  // голова: наушники, кепка, бейсболка
+  // the head: headphones, a flat cap, a baseball cap
   if (look.head === 'phones') {
     p(x - 5, headTop - 2, 10, 1, '#3a3a46');
     p(x - 6, headTop, 2, 4, '#3a3a46'); p(x + 4, headTop, 2, 4, '#3a3a46');
@@ -274,17 +279,18 @@ export function drawPerson(ctx, x, y, look, { pose = 'stand', frame = 0, dir = 0
     p(x - 5, headTop - 2, 10, 3, shade(H, 0.6));
     p(x - 6, headTop + 1, 12, 1, shade(H, 0.5));
   }
-  // Бейсболка. Отдельно от кепки: у той козырёк торчит в обе стороны и на
-  // человечке-переключателе читается шляпой, а не кепкой.
+  // The baseball cap. Separate from the flat cap: that one has a peak sticking out
+  // both ways and on the little switch figure it reads as a hat rather than a cap.
   if (look.head === 'ball') {
     p(x - 5, headTop - 2, 10, 3, shade(H, 0.6));
     p(x - 1, headTop + 1, 8, 1, shade(H, 0.5));
   }
 
-  // Сигарета. Не слот руки и не слот лица: она во рту, а рот на этой голове —
-  // два пикселя под бородой, и изо рта её не видно вовсе. Поэтому торчит из
-  // угла рта, и зеркалится вместе с dir — иначе при повороте влево вылезает из
-  // затылка. Дым остаётся вертикальным: он поднимается, а не летит за головой.
+  // The cigarette. Not a hand slot and not a face slot: it is in the mouth, and the
+  // mouth on this head is two pixels under the beard, so out of the mouth it is not
+  // visible at all. So it sticks out of the corner of the mouth, and is mirrored
+  // along with dir — otherwise on a turn to the left it comes out of the back of the
+  // head. The smoke stays vertical: it rises rather than trailing behind the head.
   if (look.cig) {
     const cd = dir === -1 ? -1 : 1;
     p(cd === 1 ? x + 2 : x - 5, headTop + 6, 3, 1, '#efe7d8');
@@ -299,8 +305,8 @@ export function drawPerson(ctx, x, y, look, { pose = 'stand', frame = 0, dir = 0
     ctx.globalAlpha = a;
   }
 
-  // Предмет в правой руке. Своей анимации не заводит — едет за той рукой,
-  // которая уже нарисована: на ходу качается с ней, за столом печатает.
+  // A thing in the right hand. It starts no animation of its own — it rides with
+  // the arm that is already drawn: on the move it swings with it, at the desk it types.
   if (look.hands && look.hands !== 'none') {
     const hy = sitting ? hipY - 1 + (2 - typing) : torsoTop + 7 - sw;
     if (look.hands === 'mug') {
@@ -308,21 +314,22 @@ export function drawPerson(ctx, x, y, look, { pose = 'stand', frame = 0, dir = 0
       p(x + 7, hy - 1, 3, 1, '#8a6247');
       p(x + 10, hy, 1, 1, '#d9d3c8');
     }
-    // Стакан с собой. Отдельно от кружки, а не вместо неё: у кружки есть ручка
-    // и нет крышки, и агент, которому хеш выдал кружку, остаётся с кружкой.
-    // Две правки пришли с первого настоящего кадра, а не из макета: крышка была
-    // тёмной и пропадала на тёмной стене целиком, а светлое тулово стояло
-    // вплотную к рукаву того же светлого тона и читалось пятном на рубашке.
-    // Поэтому крышка тёплая, а левый столбец тулова притенён — это тот самый
-    // край, которого не хватало.
+    // A glass to go. Separate from the mug rather than instead of it: the mug has a
+    // handle and no lid, and an agent whom the hash gave a mug stays with a mug.
+    // Two changes came from the first real frame rather than from the mock-up: the
+    // lid was dark and disappeared into a dark wall entirely, while the light body
+    // stood right against a sleeve of the same light tone and read as a stain on the
+    // shirt. So the lid is warm, and the left column of the body is shaded — that is
+    // the very edge that was missing.
     if (look.hands === 'cup') {
       p(x + 7, hy - 3, 3, 1, '#8a6247');
       p(x + 7, hy - 2, 3, 4, '#f0ece0');
       p(x + 7, hy - 2, 1, 4, '#c9c2b4');
       p(x + 7, hy, 3, 1, '#b8845a');
-      // Пар. Две струйки вместо трёх у сигареты и вдвое медленнее: кофе парит,
-      // а не дымит. Идёт столбцом x+8 — он проходит мимо туловища, поэтому пар
-      // виден на тёмной стене, а не тонет в светлой рубашке.
+      // Steam. Two wisps instead of the cigarette's three, and twice as slow: coffee
+      // steams, it does not smoke. It goes up column x+8 — that one passes clear of the
+      // torso, so the steam is visible against a dark wall rather than drowning in a
+      // light shirt.
       const ca = ctx.globalAlpha;
       for (let i = 0; i < 2; i++) {
         const f = ((ms / 1300) + i / 2) % 1;
@@ -331,8 +338,9 @@ export function drawPerson(ctx, x, y, look, { pose = 'stand', frame = 0, dir = 0
       }
       ctx.globalAlpha = ca;
     }
-    // Лейка. В HANDS её нет и не будет: её берут с крючка в оранжерее, а не
-    // выбирают в инвентаре, — поэтому и нарисована она только здесь.
+    // The watering can. It is not in HANDS and will not be: it is taken off a hook
+    // in the conservatory rather than chosen in the bag — which is why it is drawn
+    // only here.
     if (look.hands === 'can') {
       p(x + 7, hy - 2, 5, 4, '#7f9aa8');
       p(x + 7, hy - 2, 5, 1, '#9ab4c2');
@@ -360,10 +368,10 @@ export function drawCat(ctx, x, y, frame) {
   p(x - 4, y - 1, 2, 1, '#b87a44'); p(x + 1, y - 1, 2, 1, '#b87a44');
 }
 
-// Предмет крупно и без человека, в клетке 12×12: сетка инвентаря показывает
-// вещь, а не строку «голова — наушники». Куски те же самые, что рисуются на
-// фигурке, просто вынутые из неё, — поэтому кепка в клетке и кепка на голове
-// не могут разъехаться.
+// A thing large and without the person, in a 12×12 cell: the grid of the bag shows
+// the thing rather than the line "head — headphones". The pieces are the very ones
+// drawn on the figure, simply taken out of it — so a cap in a cell and a cap on a
+// head cannot drift apart.
 export function drawItem(ctx, slot, value, look = {}) {
   const p = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
   const H = look.hair || HAIR[1];
@@ -386,8 +394,8 @@ export function drawItem(ctx, slot, value, look = {}) {
     p(2, 6, 2, 2, '#cfe8ff'); p(8, 6, 2, 2, '#cfe8ff');
     return;
   }
-  // Офисные слоты. Галстук в клетке рисуется тем кроем, который сейчас выбран,
-  // а крой — цветом выбранного галстука: так две строки читаются как одна вещь.
+  // The office slots. A tie in a cell is drawn in the cut that is chosen right now,
+  // and the cut in the colour of the chosen tie: that way two rows read as one thing.
   if (slot === 'tie' || slot === 'cut') {
     const color = slot === 'tie' ? value : ((look.tie && look.tie.color) || TIE[0]);
     const cut = slot === 'cut' ? value : ((look.tie && look.tie.cut) || 'plain');
