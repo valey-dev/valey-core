@@ -26,6 +26,28 @@ const ROOM_TONES = [
 // room. Counting heads, one cannot tell "one left, another arrived" from "nothing
 // changed", and a newcomer was left without a place because the plan was not
 // rebuilt.
+// Where `#room=` in the address takes you. It searches the whole floor rather
+// than the project rooms alone: the control room, the meeting room and the
+// greenhouse are service rooms, absent from projectRooms and from the TAB round
+// — and they are exactly the ones the address is for, since walking there costs
+// a minute of held keys and a screenshot is needed right there.
+//
+// On 5 September 2026 that cost four attempts at photographing the personnel
+// files: the rulebook promised «including service rooms» while the code searched
+// the project ones only and silently dropped the player into the first room it
+// found. Nothing said it had missed. The key is now a key — `__security`; the
+// title stays for older links that said «carbonara». The leading underscores are
+// optional: `#room=security` is the same thing, and it is the first thing anyone
+// will type.
+export function pickRoom(layout, want) {
+  if (!want || !layout) return null;
+  const all = layout.rooms || layout.projectRooms || [];
+  return all.find((r) => r.key === want)
+    || all.find((r) => r.key === '__' + want)
+    || all.find((r) => (r.title || '').startsWith(want))
+    || null;
+}
+
 export function planSignature(agents) {
   // The version and the stack get into the signature because they live on the
   // plaque: raise the version in the manifest and the plan is rebuilt and the

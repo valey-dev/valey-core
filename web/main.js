@@ -1,6 +1,6 @@
 import { lookOf, drawPerson, drawCat, normalizeLook, dressOf, dressMe } from './sprites.js';
 import { potState, water as waterPot, tally, CAN_FULL } from './garden.js';
-import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, WALL } from './layout.js';
+import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, pickRoom, WALL } from './layout.js';
 import { loadModules, collect, first } from './modules.js';
 import { initStand } from './stand.js';
 import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, pxText, kickerBusy } from './office.js';
@@ -530,7 +530,7 @@ const onSnapshot = (e) => {
 
   if (!state.spawned && state.layout.projectRooms.length) {
     const q = new URLSearchParams(location.hash.slice(1));
-    const named = q.get('room') && state.layout.projectRooms.find((r) => r.title.startsWith(q.get('room')));
+    const named = pickRoom(state.layout, q.get('room'));
     const r = named || state.layout.projectRooms[0];
     state.player.x = Number(q.get('x')) || (named ? r.x + r.w / 2 : r.doorPoint.x);
     state.player.y = Number(q.get('y')) || (named ? r.y + r.h - 60 : r.y - 30);
