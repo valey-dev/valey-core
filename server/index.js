@@ -215,6 +215,10 @@ const forbidden = (res) => send(res, 403, {
 const people = new Map();
 const PEOPLE_MS = 120;
 const PEOPLE_TTL = 8000;
+// The key `buildMeeting` gives the room in web/layout.js. The server needs it
+// for one thing only: signalling is allowed between people standing in that
+// room and nowhere else.
+const MEETING_ROOM = '__meeting';
 
 // A look arrives from somebody else's machine, so it is sieved here rather than
 // at drawing time. On 30 August 2026 a person with half the fields brought
@@ -485,6 +489,11 @@ async function handle(req, res) {
     const guest = await guestOf(req);
     const who = guest ? guest.guest : null;
     res.valeyGuest = who;
+    // Who is on the other end of this stream, by the same id `/api/here` uses.
+    // Presence does not need it — it broadcasts to everyone — but the voice does:
+    // an SDP offer is addressed to one person, and without a name on the socket
+    // there is nobody to address it to.
+    res.valeyPerson = String(url.searchParams.get('me') || '').slice(0, 64) || null;
     res.write(`data: ${JSON.stringify(who ? project(last, who) : last)}\n\n`);
     // Whoever just came in sees who is already in the office at once, not a presence tick later.
     res.write(`event: people\ndata: ${JSON.stringify(livePeople())}\n\n`);
@@ -648,6 +657,47 @@ async function handle(req, res) {
       at: Date.now(),
     });
     return send(res, 200, { ok: true, people: people.size });
+  }
+
+  // The hub for the voice, and the whole of the server's part in it. Browsers
+  // negotiate a direct connection by swapping SDP and ICE candidates, and those
+  // have to travel over something; here they travel up by this POST and back
+  // down through the SSE stream that is already open. Once the two agree, the
+  // audio goes between them and never comes here — that is the difference
+  // between this and a conference server, and it is the reason the meeting room
+  // can promise that nobody's voice passes through anyone else's machine.
+  //
+  // What travels is opaque to us on purpose: an offer, an answer, a candidate.
+  // The office does not read them and could not use them if it did.
+  if (url.pathname === '/api/signal' && req.method === 'POST') {
+    // SDP is a few kilobytes and a candidate is a line. 32 KiB is room enough
+    // for a fat offer and still far too small to be a file transfer.
+    const raw = await readBody(req, 32 * 1024);
+    let b;
+    try { b = JSON.parse(raw); } catch { return send(res, 400, { error: 'не разобрать' }); }
+    const from = String((b && b.from) || '').slice(0, 64);
+    const to = String((b && b.to) || '').slice(0, 64);
+    const kind = String((b && b.kind) || '');
+    if (!from || !to) return send(res, 400, { error: 'нужны from и to' });
+    if (!['offer', 'answer', 'ice', 'bye'].includes(kind))
+      return send(res, 400, { error: 'неизвестный вид сигнала' });
+
+    // Both ends have to be standing in the meeting room. Without this the office
+    // is a message bus that any tab can use to reach any other, which is not
+    // what was built here — the room is the permission, exactly as the mic is
+    // switched by the zone and not by a button.
+    const here = livePeople();
+    const inRoom = (id) => here.some((p) => p.id === id && p.room === MEETING_ROOM);
+    if (!inRoom(from) || !inRoom(to))
+      return send(res, 409, { error: 'сигналы ходят только между теми, кто в переговорке' });
+
+    const payload = `event: signal\ndata: ${JSON.stringify({ from, kind, data: b.data })}\n\n`;
+    let delivered = 0;
+    for (const c of clients) if (c.valeyPerson === to) { c.write(payload); delivered += 1; }
+    // Nobody listening is not an error: the other side may have closed the tab
+    // half a second ago. The caller retries or gives up, and the office does not
+    // pretend the message arrived.
+    return send(res, 200, { ok: true, delivered });
   }
 
   // Left properly rather than by timeout: the tab closes, the spot is freed at
