@@ -4,6 +4,17 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.12.0 — 6 September 2026
+
+### Added
+
+- **plan:** the office plan names its own place on the keys board (ca80688)
+- **keys:** «?» shows the keys of the place you are standing in, not of the floor (4129cb8)
+
+### Fixed
+
+- **keys:** every footnote on a cap is one the frame can actually print (22091db)
+- **keys:** the caps say what the frame promised — the zoom keys, and the footnotes behind «·» (ade2ea7)
 ## v0.11.1 — 6 September 2026
 
 ### Fixed
