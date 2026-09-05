@@ -69,7 +69,7 @@ ok('токен длинный и разный', a.length >= 32 && a !== b, a.len
 ok('токен без символов, ломающих адрес', /^[A-Za-z0-9_-]+$/.test(a), a);
 
 // The token is carried to another machine by hand, so the alphabet must not
-// contain a pair a human can read wrong. On 4 September 2026 a two-machine test
+// contain a pair a human can read wrong. On 5 September 2026 a two-machine test
 // lost the same character twice — O read as 0 — and both times the office
 // answered that a token was needed, which reads as a broken office rather than
 // a misread letter.

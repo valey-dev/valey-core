@@ -125,7 +125,7 @@ try {
 
   // ------------------------------ the projection has to survive being drawn
   // Handing a guest a trimmed agent is only half of it — the office must be
-  // able to draw one. On 4 September 2026 it could not: syncActors read
+  // able to draw one. On 5 September 2026 it could not: syncActors read
   // a.artifacts.length and artifacts is not in SHOWN, so a guest on a second
   // laptop got a floor with rooms and no people. The plan is built a line
   // before the actors are placed, which is why the crash looked like an empty

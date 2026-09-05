@@ -39,7 +39,7 @@ export const proxied = (req) => PROXIED.some((h) => req.headers && req.headers[h
 // Crockford base32: no I, no L, no O, no U. This token exists to be carried to
 // another machine by hand — the office prints it at startup for exactly that —
 // and base64url was the wrong alphabet for the job: it puts O next to 0 and l
-// next to I and 1. On 4 September 2026 a two-machine test lost the same
+// next to I and 1. On 5 September 2026 a two-machine test lost the same
 // character twice, once in the owner link and once in the network token, and
 // both times the office answered «нужен токен», which reads as a broken office
 // rather than a misread letter.
