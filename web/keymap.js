@@ -31,12 +31,20 @@ export const GROUPS = ['move', 'act', 'panel', 'zoom', 'service'];
 // Declaration order is display order: this is the order the help strip and the
 // keys panel will read.
 const CORE = [
-  // Declaration order is the order of the strip at the bottom, so walking is
-  // declared the way it is said aloud: W, A, S, D.
-  { id: 'move.up', codes: ['KeyW', 'ArrowUp'], group: 'move', hint: 'hint.walk' },
-  { id: 'move.left', codes: ['KeyA', 'ArrowLeft'], group: 'move', hint: 'hint.walk' },
-  { id: 'move.down', codes: ['KeyS', 'ArrowDown'], group: 'move', hint: 'hint.walk' },
-  { id: 'move.right', codes: ['KeyD', 'ArrowRight'], group: 'move', hint: 'hint.walk' },
+  // Arrows, and no WASD. WASD is built for a hand that lives on the keyboard —
+  // it is worth its four letters in a game, where the hand never leaves. Here
+  // people come back to the office between other things, from the mouse, and
+  // they find the arrows without looking because the arrows sit apart. The four
+  // letters bought a habit almost nobody in this audience has, and letters are
+  // the scarce thing: giving them back leaves thirteen free for panels.
+  //
+  // Removed 5 September 2026 by the owner, knowing it takes walking away from
+  // anyone who learned WASD here. It comes back the day keys are configurable —
+  // by their own hand, which is the right way round.
+  { id: 'move.up', codes: ['ArrowUp'], group: 'move', hint: 'hint.walk' },
+  { id: 'move.left', codes: ['ArrowLeft'], group: 'move', hint: 'hint.walk' },
+  { id: 'move.down', codes: ['ArrowDown'], group: 'move', hint: 'hint.walk' },
+  { id: 'move.right', codes: ['ArrowRight'], group: 'move', hint: 'hint.walk' },
   { id: 'move.run', codes: ['ShiftLeft', 'ShiftRight'], group: 'move', held: true, hint: 'hint.run' },
   // Space alone. E was the second key here because a hand resting on WASD can
   // reach it without moving — which assumes a hand that rests on WASD, and this

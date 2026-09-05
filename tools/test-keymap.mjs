@@ -53,15 +53,19 @@ ok('NumpadAdd — он же', actionOf({ code: 'NumpadAdd' }) === 'zoom.in', act
 ok('Digit0 — сброс', actionOf({ code: 'Digit0' }) === 'zoom.reset', actionOf({ code: 'Digit0' }));
 
 // -------------------------------------------------------------------- ходьба
-ok('стрелка и буква — одно действие',
-  actionOf({ code: 'KeyA' }) === 'move.left' && actionOf({ code: 'ArrowLeft' }) === 'move.left', actionOf({ code: 'ArrowLeft' }));
+// Ходьба — только стрелки: WASD снят 5 сентября 2026, и четыре буквы вернулись
+// в свободные. Проверяется обе стороны: стрелка ходит, буква больше нет.
+ok('стрелка — это ходьба', actionOf({ code: 'ArrowLeft' }) === 'move.left', actionOf({ code: 'ArrowLeft' }));
+ok('а буква под ней свободна', actionOf({ code: 'KeyA' }) === null, actionOf({ code: 'KeyA' }));
+ok('и остальные три тоже', ['KeyW', 'KeyS', 'KeyD'].every((c) => actionOf({ code: c }) === null),
+  ['KeyW', 'KeyS', 'KeyD'].map((c) => actionOf({ code: c })));
 ok('бег помечен как удерживаемый', all().find((a) => a.id === 'move.run').held === true, all().find((a) => a.id === 'move.run'));
 
 // -------------------------------------------------------------------- подписи
 ok('буква печатается буквой', labelFor('KeyK') === 'K', labelFor('KeyK'));
 ok('пробел — словом', labelFor('Space') === 'SPACE', labelFor('Space'));
 ok('стрелка — стрелкой', labelFor('ArrowUp') === '↑', labelFor('ArrowUp'));
-ok('у действия все его подписи', labelsOf('move.left').join(' ') === 'A ←', labelsOf('move.left'));
+ok('у действия все его подписи', labelsOf('move.left').join(' ') === '←', labelsOf('move.left'));
 ok('неизвестный код печатается как есть', labelFor('IntlBackslash') === 'IntlBackslash', labelFor('IntlBackslash'));
 
 // -------------------------------------------------------------- модуль встаёт

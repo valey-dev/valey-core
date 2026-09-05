@@ -32,7 +32,7 @@ const COLOUR = {
 // making them configurable would buy a second office — but they are not free
 // either, and a keyboard that showed them blank would be lying.
 const IN_PANEL = new Set([
-  'Escape', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  'Escape', 'Enter',
   'PageUp', 'PageDown', 'Home', 'End',
   // Z — лупа в просмотрщике одного файла, R там же перечитывает. R занята и на
   // этаже радио, поэтому в реестре она уже есть; Z не занята нигде больше и без
@@ -139,9 +139,10 @@ function capHtml(code, units) {
   const freeLetter = !id && !IN_PANEL.has(code) && /^Key/.test(code);
   // Вторая клавиша действия подписывается «то же, что ПРОБЕЛ», а не повторяет
   // подпись целиком: так сделано на кадре, и на узкий колпачок длинная фраза
-  // всё равно не влезает. Ходьба — исключение: у неё стрелки не «вторые», а
-  // равноправные, и на кадре они подписаны своими словами.
-  const secondary = action && action.codes[0] !== code && action.group !== 'move';
+  // всё равно не влезает. Кроме случая, когда на обеих написано одно и то же:
+  // у правого SHIFT выходило «то же, что SHIFT».
+  const secondary = action && action.codes[0] !== code
+    && printed(action.codes[0]) !== printed(code);
   const caption = secondary ? tr('keys.sameAs', { key: named(action.codes[0]) })
     : action && action.hint ? tr(action.hint)
     : IN_PANEL.has(code) ? tr('keys.inPanel')
