@@ -4,6 +4,26 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.7.0 — 5 September 2026
+
+### Added
+
+- **tools:** an agent can sign what it drew and what it coded (0309d30)
+- **notes:** a note can hang on a commit or a file, and lands in the same list (011e7b9)
+- **script:** one take can cover several versions, not one each (7de3525)
+
+### Fixed
+
+- **office:** the tree keeps one height, whatever branch is open (f70c69d)
+
+### Other
+
+- refactor(landing): the public page leaves the office's repository (fd8df08)
+- refactor(notes): the core keeps an address, not a commit (8ba2445)
+- test(tokens): the names theme.js repaints must exist in :root (8924991)
+- test(tokens): a colour written past :root now fails the run (be29ed5)
+- refactor(office): the role and state accents got names in :root (2bb8e24)
+- refactor(office): the panel colours that already had a name now use it (63e046d)
 ## v0.6.0 — 5 September 2026
 
 ### Added
