@@ -71,8 +71,13 @@ if (!dry) {
 git('fetch', 'origin', '--tags', '--quiet');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'valey-land-'));
 const tmpBranch = `land/${Date.now()}`;
-console.log(`\nрелиз во временном дереве ${dir}:`);
-git('worktree', 'add', '--quiet', '-b', tmpBranch, dir, 'origin/main');
+// A dry run cuts from the head of the pull request rather than from main: main
+// does not have these commits yet, so a dry release there would always answer
+// «no commits since the tag» and show nothing. The head is what main is about to
+// become, which is exactly what the run is meant to show.
+const base = dry ? `origin/${info.headRefName}` : 'origin/main';
+console.log(`\nрелиз во временном дереве ${dir} (с ${base}):`);
+git('worktree', 'add', '--quiet', '-b', tmpBranch, dir, base);
 try {
   const args = [path.join(dir, 'tools/release.mjs')];
   if (kind) args.push(kind);
@@ -87,4 +92,6 @@ try {
   try { git('worktree', 'remove', '--force', dir); } catch { /* already gone, or held by something */ }
   try { git('branch', '-D', tmpBranch); } catch { /* the branch may not be there */ }
 }
-console.log('\nготово: PR слит, версия нарезана и опубликована.');
+console.log(dry
+  ? '\n--dry: ничего не слито и не выпущено. Выше — раздел, который уехал бы, и стенды, которые за него отвечают.'
+  : '\nготово: PR слит, версия нарезана и опубликована.');
