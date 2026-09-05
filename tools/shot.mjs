@@ -7,6 +7,7 @@
 //   node tools/shot.mjs --port 5179            # офис на другом порту
 //   node tools/shot.mjs --keys Enter,hold-w:1500,shift-F9
 //   node tools/shot.mjs --out /tmp/office.png --wait 6000
+//   node tools/shot.mjs --url .../soon.html --viewport 390,900   # ширина телефона
 //   node tools/shot.mjs --eval "document.title"   # заглянуть в живую страницу
 //   node tools/shot.mjs --video .shots/v0.2.0.mp4 --keys Enter,hold-w:4000
 //
@@ -74,6 +75,7 @@ const video = arg('video', '');
 // Окно шире обычного только под видео: у ролика 1920×1080 целевые, а у кадра
 // свой устоявшийся размер, и менять его задним числом значит переснять всё.
 const size = arg('size', video ? '1920,1080' : '1400,820');
+const viewport = arg('viewport', '');
 const steps = arg('keys', '').split(',').filter(Boolean);
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -159,8 +161,15 @@ try {
   // страницы вышла 1920×993, а h264 не кодирует нечётную высоту и падает уже на
   // сборке, когда все кадры сняты. Вычитать высоту хрома на глаз бессмысленно,
   // она своя у каждой версии, — поэтому вьюпорт задаётся явно.
-  if (video) {
-    const [w, h] = size.split(',').map(Number);
+  //
+  // --viewport делает то же самое для обычного кадра, и нужен он затем, что
+  // Chrome не сужает окно меньше пятисот пикселей: `--size 390,1000` молча
+  // даёт пятьсот, и мобильная вёрстка снимается не на той ширине, на которой
+  // её судят. По умолчанию флага нет и метрики не трогаются — иначе все
+  // прежние кадры офиса сменили бы высоту с ~733 на 820.
+  const forced = viewport || (video ? size : '');
+  if (forced) {
+    const [w, h] = forced.split(',').map(Number);
     await send('Emulation.setDeviceMetricsOverride', {
       width: w, height: h, deviceScaleFactor: 1, mobile: false,
     });
