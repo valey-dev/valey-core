@@ -9,6 +9,7 @@ import { LIBRARY, TIERS, DIRS, SUBS, byId, children, colOf, inDir, dirTally } fr
 import { theme, applyTheme, resetTheme, PRESETS, ui, UI_STEPS, applyUiScale } from './theme.js';
 import { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } from './notes.js';
 import { esc } from './esc.js';
+import { owned } from './owned.js';
 
 const $ = (s) => document.querySelector(s);
 const el = { hud: null, dialog: null, viewer: null, roster: null, bag: null, toasts: null };
@@ -1044,7 +1045,7 @@ export async function openFile(p, items = null, index = -1, title = '') {
   if (isImg) {
     inner = `<div class="zoomwrap"><img class="full" id="zimg" src="${url}"></div>`;
   } else {
-    const txt = await fetch(url).then((r) => r.ok ? r.text() : tr('gal.notServed') + r.status).catch((e) => e.message);
+    const txt = await fetch(url, { headers: owned() }).then((r) => r.ok ? r.text() : tr('gal.notServed') + r.status).catch((e) => e.message);
     if (mine !== viewToken) return;   // arrows moved on while this one was loading
     docKind = isMd ? 'md' : isHtml ? 'html' : null;
     mdSource = docKind ? txt : null;
@@ -2702,7 +2703,7 @@ const chatStatus = (text) => { const st = $('#chatst'); if (st) st.textContent =
 async function loadChat(fresh) {
   const a = chatView.agent;
   const mine = ++chatView.token;
-  const r = await fetch('/api/chat?id=' + encodeURIComponent(a.id))
+  const r = await fetch('/api/chat?id=' + encodeURIComponent(a.id), { headers: owned() })
     .then((x) => x.json()).catch((e) => ({ error: e.message }));
   if (!chatView || chatView.token !== mine || el.viewer.hidden) return;
   const box = $('#chatlog');

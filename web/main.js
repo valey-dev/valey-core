@@ -2,6 +2,7 @@ import { lookOf, drawPerson, drawCat, normalizeLook, dressOf, dressMe } from './
 import { potState, water as waterPot, tally, CAN_FULL } from './garden.js';
 import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, WALL } from './layout.js';
 import { loadModules, collect, first } from './modules.js';
+import { owned, setTokens } from './owned.js';
 import { initStand } from './stand.js';
 import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, pxText, kickerBusy } from './office.js';
 import { drawCamera, buildCameras } from './cctv.js';
@@ -130,12 +131,7 @@ const CODE = (() => {
 
 // A header rather than a cookie: the office lives on one port with other tabs of the
 // same localhost, and they share a cookie.
-const owned = (extra = {}) => {
-  const h = { ...extra };
-  if (OWNER) h['x-valey-owner'] = OWNER;
-  if (GUEST) h['x-valey-guest'] = GUEST;
-  return h;
-};
+setTokens({ owner: OWNER, guest: GUEST });
 
 // The door. A code is exchanged for a token exactly once; after that the token lives,
 // and a reload of the page does not put the person back out on the street.
@@ -147,6 +143,7 @@ async function knock() {
   }).then((x) => x.json()).catch((e) => ({ error: e.message }));
   if (r && r.guest) {
     GUEST = r.guest;
+    setTokens({ guest: GUEST });
     localStorage.setItem('valey-guest', GUEST);
   }
   return r;
@@ -210,7 +207,7 @@ UI.initUI(state, {
     // We take the token: the office has just become shared, and without it this same page
     // will turn out to be a guest in its own office on the next request.
     if (r && r.owner) {
-      OWNER = r.owner; localStorage.setItem('valey-owner', OWNER);
+      OWNER = r.owner; setTokens({ owner: OWNER }); localStorage.setItem('valey-owner', OWNER);
       // The stream remembers who opened it: the server decides that once, at connection
       // time. Without a reopen an old stream went on as a guest projection after the switch
       // to shared — the owner saw his office with no lines and no files.
