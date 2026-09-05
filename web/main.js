@@ -263,7 +263,7 @@ knock().then((entered) => {
   if (!es) openStream();
 });
 
-fetch('/api/settings').then((r) => r.json()).then((r) => {
+fetch('/api/settings', { headers: owned() }).then((r) => r.json()).then((r) => {
   if (r.settings) { state.settings = r.settings; setLang(r.settings.lang); paintSign(); }
   if (r.packs) state.packs = r.packs;
   if (r.weather) applyWeather(r.weather);
@@ -403,7 +403,7 @@ function tellWhereIAm(now) {
   const room = state.currentRoom;
   fetch('/api/here', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({
       id: MY_ID, name: state.me.name || tr('label.me'), look: myLook(),
       x: p.x, y: p.y, dir: p.dir || 1, moving: !!p.moving,
@@ -416,7 +416,11 @@ function tellWhereIAm(now) {
 // an ordinary fetch in pagehide is no longer something the browser has to deliver.
 addEventListener('pagehide', () => {
   try {
-    navigator.sendBeacon('/api/gone', new Blob([JSON.stringify({ id: MY_ID })], { type: 'application/json' }));
+    // sendBeacon cannot set headers, so the pass travels in the query string —
+    // the same road the stream takes, and for the same reason.
+    const pass = OWNER ? '?owner=' + encodeURIComponent(OWNER)
+      : GUEST ? '?guest=' + encodeURIComponent(GUEST) : '';
+    navigator.sendBeacon('/api/gone' + pass, new Blob([JSON.stringify({ id: MY_ID })], { type: 'application/json' }));
   } catch { /* not delivered — the TTL will remove him in eight seconds */ }
 });
 
