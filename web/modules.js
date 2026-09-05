@@ -23,7 +23,7 @@ import { define as defineKeys } from './keymap.js';
 // everyone and takes the first module that answers. It never reads such an
 // address itself. Nobody answered — the row says so out loud, and the note is
 // still readable from the line of context stored with it.
-const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'action', 'esc', 'tick', 'hud', 'lang', 'help', 'busy', 'note'];
+const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'action', 'esc', 'tick', 'hud', 'lang', 'busy', 'note'];
 const hooks = Object.fromEntries(HOOKS.map(h => [h, []]));
 const dicts = [];
 let ids = [];
