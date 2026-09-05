@@ -184,15 +184,15 @@ viewer.querySelectorAll = (sel) => (sel === '.mdblock, .mdcopyable' ? [cblock, w
 viewer.querySelector = (sel) => (sel === '.mdblock' ? cblock : sel === '#chatlog' ? chatlog : sel === '.vhead' ? head : null);
 
 setClipboard(async (t) => { copied = t; });
-UI.viewerKey('ArrowDown');                // сбросить «уже копировала»
-UI.viewerKey('c');                        // первое C — верхний блок
+UI.viewerKey('ArrowDown');                // clear «already copied»
+UI.viewerKey('c');                        // the first C takes the top block
 check('первое C копирует блок, номера не зажигая', UI.pickOn() === false, 'зажглись');
-UI.viewerKey('c');                        // второе подряд — номера
+UI.viewerKey('c');                        // the second in a row lights the numbers
 check('второе C зажигает номера', UI.pickOn() === true, 'не зажглись');
 check('номер достался каждому куску', [cblock, w1, w2].every((n, i) => n.dataset.pick === String(i + 1)),
   [cblock.dataset.pick, w1.dataset.pick, w2.dataset.pick].join(','));
 copied = null;
-UI.viewerKey('3');                        // третий — ссылка, у неё копируется адрес
+UI.viewerKey('3');                        // the third is the link: its address is what lands in the clipboard
 await new Promise((r) => setTimeout(r, 0));
 check('цифра копирует адрес ссылки, а не её текст', copied === 'https://valey.dev', copied);
 check('и номера гаснут после выбора', UI.pickOn() === false, 'горят');
