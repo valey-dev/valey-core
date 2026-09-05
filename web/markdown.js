@@ -52,6 +52,7 @@ export function renderMarkdown(src) {
     const code = body.replace(/\n$/, '');
     const kind = normaliseLang(lang);
     // highlight() escapes as it goes, so known languages skip escapeHtml here
+    // Макет: Figma, Prod, секция «20 · Кнопка копирования у блоков кода».
     // Кнопка стоит СНАРУЖИ <pre>, в обёртке: у самого блока `overflow-x: auto`,
     // и кнопка внутри него уезжала бы влево вместе с длинной строкой — ровно
     // тогда, когда её и хотят нажать. Текст она берёт из `textContent` блока,
