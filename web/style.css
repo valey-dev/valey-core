@@ -203,7 +203,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
    and in this sheet a button is painted by its container — .acts, .prow,
    .sendrow. With no rule of its own it fell through to the browser default and
    came out a grey system button, the only one in the office; a guest on a
-   second laptop saw it on 4 September 2026. The frames drew it wooden like
+   second laptop saw it on 5 September 2026. The frames drew it wooden like
    every other button from the start (378:3, 423:18) — the paint is what was
    missing, not the design.
    The .acts row is not an option for it: ui.js binds every .acts button to
@@ -212,6 +212,9 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
   font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 10px; cursor:pointer;
   margin:10px 0 0; white-space:nowrap}
 #askAccess:hover{background:var(--wood-lit); color:#fff}
+/* The same focus ring the bottom row and the note buttons wear: the arrows walk
+   onto this button too, and a focus you cannot see is a focus you cannot use. */
+#askAccess.focus{outline:2px solid var(--ink); outline-offset:2px; color:#fff}
 
 /* ---- пейджер ---- */
 /* Свой угол: тосты слева внизу, диалог по центру, пейджер справа — три вещи
