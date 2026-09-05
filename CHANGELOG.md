@@ -4,6 +4,133 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.4.0 — 5 September 2026
+
+### Added
+
+- **office:** the tree gets a second, detailed view — six directions of the office (5373095)
+
+### Fixed
+
+- **shot:** the office plan can be photographed — K was in no key table (d190e4c)
+
+### Other
+
+- docs(modules): the last Russian comments are in English, and the repository is done (c84b49c)
+- docs(radio): the comments of the radio module are in English (e38f454)
+- docs(office): the comments of main.js are in English, and the core is done (109e2e9)
+- docs(library): the last Russian comment in the tree data is in English (e184ad2)
+- docs(readme) removed obsolete parts (2d73c91)
+## v0.3.0 — 5 September 2026
+
+### Added
+
+- **agents:** the office counts what each agent actually does, by branch (f11eca5)
+- **office:** a path, a command or a link is copied by the fragment itself (dca6715)
+- **names:** the switcher opens a panel, and the office can be renamed from it (8a93059)
+- **office:** a bench you can sit on, and do nothing (a0b9cfd)
+- **office:** code blocks in the transcript and the viewer get a copy button (458aa77)
+- **names:** the office can be named from a pack, not from the one dictionary (9282e56)
+- **office:** the pager rings in the corner when an agent asks to run something (9aba40f)
+- **office:** a permission prompt from Claude Code now waits in the office instead of only in the terminal (4d484a2)
+- **pad:** the View button opens the office plan (25886b8)
+- **plan:** an office plan on K, so "where is everyone" needs no lift ride (89d8f89)
+- **office:** the inventory grows a «tree» tab showing what the next tier and the floor hold (3319a1b)
+- **modules:** a module room is painted by the module that owns it (0cf5e34)
+- **modules:** a module can add a room, which is what the seam promised (9240f33)
+- **pad:** a gamepad walks the office, the keyboard keeps the text (76f257e)
+- **skate:** ollie (6131f07)
+- **dialog:** a key finishes the typewriter, not just a click (cc601fc)
+- **modules:** a module can watch the office snapshot, on the server (e2966c0)
+
+### Fixed
+
+- **release:** the date of a section is English, like everything on its line (cb4d7f3)
+- **office:** the number over a fragment no longer moves the line it sits in (70cf9f6)
+- **office:** text in the panels can be selected again (154e207)
+- **office:** the answer row in the permission card holds one line where the tab row does (57f2447)
+- **dialog:** four buttons stay on one line at 175%, hints and all (5a52e5a)
+- **office:** the answer buttons in the permission card were drawn by the browser, not by the office (379b1ad)
+- **panels:** every panel with a field answers ESC, not just the invitation (fb4c3bb)
+- **invite:** ESC closes the invitation panel, from the office and from its field (810a7ab)
+- **office:** a question from a session the office has not indexed yet is no longer dropped on the first tick (1e88b3c)
+- **office:** the easel grows from the work board, not from the paintings (691e70a)
+- **test:** the module fixture says it is a module, and a missing file is a failure, not a crash (9821290)
+- **radio:** the cover proxy follows no redirect and returns only images (26f9d0a)
+- **settings:** a save cannot half-write the file, and a broken file is kept, not replaced (6d985fc)
+- **release:** the script works on its own repository, not on the cwd (2b514e8)
+- **server:** a module's default settings are there before the first save (1a6658d)
+- **i18n:** the dictionary check asks only for the forms a language has (3d683c0)
+- **office:** the stream comes back on its own, and I opens the invite panel (ca3022a)
+- **title:** the language switcher says SPACE, not ПРОБЕЛ, when it offers English (07aab8f)
+- **keys:** Cmd and Ctrl belong to the browser, not to the office (dd5c091)
+- **modules:** a module's stylesheet is in place before its client runs (e52a9cb)
+- **panels:** what an agent named stays text, and what it wrote is shown but never run (1dfa1a7)
+- **server:** a foreign tab is not the owner, and one bad request no longer takes the office down (521ea95)
+- **agents:** the rulebook page scrolls inside itself, and without animation (671cd4f)
+- **agents:** the rulebook page scrolls to a section where # navigation is refused (3db09a8)
+- **dialog:** Up finishes the reply, so the transcript block keeps the focus (4d526ac)
+- **dialog:** the typewriter stole Enter from the transcript link (60a84fd)
+- **rooms:** a worktree is the same project, so it gets the same room (0aa62a2)
+- **rooms:** the tree belonged to the core, so it grew without its module (6102f8c)
+- **office:** a constant the easel module still read out of the core (0a355c4)
+- **office:** the floor was black after the extraction took MY_ID with it (688f9b4)
+- **build:** the paid module's files were staged into the core by git mv (e4c0845)
+- **network:** the office answered the whole Wi-Fi, and now answers this machine (cdb076d)
+
+### Other
+
+- docs(office): the comments of the floor plan and the drawing are in English (8ef47db)
+- docs(office): the comments of i18n, the sprites and the entrance screen are in English (959485d)
+- docs(office): the comments of the canvas modules are in English (c94d545)
+- docs(office): the comments of fourteen small client files are in English (13c9c78)
+- test(transcript): the four lines the comments stand caught are in English (e8eccbd)
+- test(comments): a stand holds the English-comments rule instead of AGENTS.md alone (e7b96a5)
+- docs(tools): the comments of the stands are in English (ef00a35)
+- build(shot): --viewport, because Chrome will not make a window narrower than 500 (76ddd00)
+- refactor(title): the plaque is its own module, and the scene opens three slots (1930433)
+- docs(office): the copy button points at the frame it was promoted to (4e3057e)
+- docs(agents): the rulebook came out on the 5th, not the 4th (439f13c)
+- docs(server): the comments of the server half are in English (e9e6a15)
+- ci(coverage): a floor under the stands, counted without giving the project a dependency (4218515)
+- test(permit): the stand asks the system for a port instead of picking one (102f8f2)
+- docs(office): the pager code points at the frames it was built from (ee18d4b)
+- test(plan): the office plan stands on the shared DOM shim, like every other panel (dbfa119)
+- docs(backlog): copy takes C inside the viewer, where the character sheet is not needed (a4a73d0)
+- refactor(server): the office hands out its request handler, so routes are tested in this process (f0fd9bb)
+- build(agents): the rulebook rides into every worktree by list, not by commit (41857e5)
+- docs(backlog): a copy button for code blocks, drawn and waiting (18138aa)
+- test: one DOM shim for the stands, and the card stops asserting a scroll that cannot happen (bba266f)
+- ci: the actions move to v5, off the Node 20 runtime GitHub is switching off (49f781e)
+- test: the stands stop depending on this machine, and a workflow runs them on 18, 20 and 22 (b1e56d7)
+- docs(backlog): the permission request arrives as a pager, not a HUD line (64cfa6d)
+- build(agents): the core's backlog follows the rulebook out of the tree (eaa9909)
+- docs(backlog): the permission-request frame is drawn and linked from its item (ed7d9db)
+- docs(backlog): the silent-failure batch is closed (2ed8c14)
+- test(shot): the I key exists, so the invite panel can be photographed (1c84a54)
+- build(agents): the rulebook comes back out of the tree (fa61726)
+- docs(office): the tree's frames now live on Prod, section 18 (1329c20)
+- docs(backlog): permission prompts can be routed into the office through the PermissionRequest hook (8523e69)
+- docs(backlog): the help line still does not know about the ollie (a28a170)
+- docs(skate,garden): the ollie stays at 18.2 px, and the accepted frames are linked from the code (1ec9915)
+- docs(backlog): escaping and the file headers are done (d9ae041)
+- docs(backlog): five server items closed by the hardening commit (793c388)
+- chore(agents): git push asks instead of being denied outright (09349fe)
+- docs(backlog): the core gets a backlog of its own (06d6f80)
+- build(agents): the rulebook, its stamp and its page come into the tree (0c1add8)
+- build(shot): the O key, so a panel that uses it can be photographed (37bd9af)
+- refactor(core): the git tree leaves for a module of its own (fec248a)
+- build: the rulebook stays out of the public history (3352a64)
+- docs(agents): two rules were dropped by building this from a stale copy (34ba237)
+- docs: a rulebook, because an agent here was starting from nothing (e3f8665)
+- The core stops storing modules it does not own (deb1de6)
+- docs: name the repository valey-core, and say why it is core (cd56e2f)
+- docs: the landing page is not the office, and it does reach out (59c29be)
+- Rebuild from the merged branch: the office is current again (843ec0a)
+- docs: one line per paragraph, because these files are edited by hand (98212ae)
+- docs: say how to get Node, and stop half-translating the changelog (c9e913e)
+- docs: bring the changelog over, without the kitchen (7f1064a)
+- Valey — a pixel-art office for the agents you already run (46c1c23)
 ## v0.2.0 — 30 August 2026
 
 ### Added

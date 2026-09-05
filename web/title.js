@@ -262,13 +262,34 @@ export function drawTitle(ctx, VW, VH, t, opts = {}) {
 // The menu is tied to the canvas rather than to the window: the canvas is centred
 // with margins, and a panel fixed to the viewport would drift away from the door on
 // a wide screen.
+//
+// It is not shown until it stands there. #title is position:fixed with no
+// coordinates of its own; this function sets them from the canvas box, and on the
+// first render the canvas has not been measured yet — until 5 September 2026 the
+// menu flashed in the middle of the screen and then jumped into its corner. While
+// it is invisible the scene with its lamp is what fills the screen, so the entrance
+// assembles by fading in rather than by snapping into place.
 export function layoutTitle() {
   if (!el || el.hidden) return;
   const c = document.getElementById('game').getBoundingClientRect();
+  // A zero box means the canvas has not been laid out yet. Setting coordinates
+  // from it would pin the menu to a corner of the screen; we wait for the next
+  // frame, and there are sixty of those a second.
+  if (!(c.width > 0 && c.height > 0)) {
+    // It calls itself back: a screen whose canvas was measured late would
+    // otherwise lose its menu for good, which is worse than the flash being
+    // fixed here.
+    requestAnimationFrame(layoutTitle);
+    return;
+  }
   el.style.left = c.left + 'px';
   el.style.top = c.top + 'px';
   el.style.width = c.width + 'px';
   el.style.height = c.height + 'px';
+  // The class goes on after the coordinates are written: the browser gets to
+  // paint the menu where it belongs, and the CSS transition takes it from zero
+  // to one instead of dragging it across the screen.
+  el.classList.add('ready');
 }
 
 // The caption is taken from the dictionary on every paint rather than once at load:
@@ -331,7 +352,13 @@ function menuButtons() {
     `<button class="tbtn${i === 0 ? ' main' : ''}${on && i === T.idx ? ' focus' : ''}">${tr(m.k)}<kbd>${m.key}</kbd></button>`).join('')}</div>`;
 }
 
-const metaRow = () => `<div class="tmeta left">v${esc(S?.version || '—')} · localhost:5177</div>
+// The address is taken from the browser's own bar rather than written here. A
+// hardcoded `localhost:5177` was false on any other port, and worse than false
+// for a guest over the network: it read as the address of THEIR machine, where
+// no office is running. The neighbouring stand.js already knew the price of
+// this — two offices on different ports look exactly alike, and that has cost
+// time before.
+const metaRow = () => `<div class="tmeta left">v${esc(S?.version || '—')} · ${esc(location.host)}</div>
     <div class="tmeta center">${tr('title.walk')}</div>
     <div class="tmeta right">valey.dev</div>`;
 

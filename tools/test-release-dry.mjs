@@ -18,9 +18,17 @@ const ok = (name, cond, got) => {
 
 const r = spawnSync(process.execPath, [path.join(ROOT, 'tools/release.mjs'), 'patch', '--dry'],
   { cwd: os.tmpdir(), encoding: 'utf8' });
-ok('сухой прогон из чужой папки не падает', r.status === 0, r.stderr || r.stdout);
-ok('и печатает раздел changelog', /^## v\d+\.\d+\.\d+/m.test(r.stdout), r.stdout);
-ok('и ничего не записывает', /--dry: ничего не записано/.test(r.stdout), r.stdout);
+// Right after a release the range is empty, and the script says so and stops —
+// which is correct behaviour and used to fail this stand for a reason that has
+// nothing to do with its subject. Both answers prove the same thing: the script
+// looked at THIS repository and not at the temp directory it was called from.
+// Found on 5 September 2026, when v0.4.0 was cut and main went red on the spot.
+const spoke = /^## v\d+\.\d+\.\d+/m.test(r.stdout)
+  || /нет коммитов/.test(r.stderr + r.stdout);
+ok('сухой прогон из чужой папки не падает', r.status === 0 || /нет коммитов/.test(r.stderr), r.stderr || r.stdout);
+ok('и говорит о своём репозитории, а не о чужой папке', spoke, r.stdout + r.stderr);
+ok('и ничего не записывает',
+  /--dry: ничего не записано/.test(r.stdout) || /нет коммитов/.test(r.stderr + r.stdout), r.stdout);
 
 console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
 process.exit(bad ? 1 : 0);

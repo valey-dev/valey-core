@@ -6,12 +6,15 @@
 // The DOM is a stand-in, shared with the other stands: tools/lib/dom.mjs.
 import { node, proxy, installDom } from './lib/dom.mjs';
 
-function makeDialog({ withLink = true, files = 0 } = {}) {
+function makeDialog({ withLink = true, files = 0, ask = false } = {}) {
   const state = {
     say: node('say', { id: 'say' }),
     body: node('body'),
     link: withLink ? node('linky more', { id: 'readAll' }) : null,
     files: Array.from({ length: files }, () => node('file')),
+    // The guest's card has no files and no transcript link — the only thing in
+    // its body is the button asking the owner for access.
+    ask: ask ? node('askbtn', { id: 'askAccess' }) : null,
   };
   state.buttons = ['talk', 'work', 'task', 'close'].map((p) => {
     const b = node('btn-' + p);
@@ -31,7 +34,11 @@ function makeDialog({ withLink = true, files = 0 } = {}) {
     // The body of the card is asked for with one combined selector: the files on
     // "show the work" and the buttons on the notes in "give a task" — one place.
     querySelectorAll: (sel) => (sel === '.acts button' ? state.buttons
-      : sel.startsWith('.files li') ? state.files
+      // The selector is honoured, not merely recognised: the ask button comes
+      // back only if the walk actually asks for it. A stand-in that hands it
+      // over regardless would pass on the very code that forgot it.
+      : sel.startsWith('.files li')
+        ? state.files.concat(state.ask && sel.includes('#askAccess') ? [state.ask] : [])
       : []),
   };
   return state;
@@ -263,6 +270,22 @@ check('и фокус остаётся на блоке, а не уходит об
 UI.pressDialogFocus();
 check('Enter на ссылке транскрипта открывает её с первого раза',
   current.link.clicked === 1, `нажатий: ${current.link.clicked}`);
+
+// --- the guest's card: the arrows have to reach «попросить доступ» ---
+// Until 5 September 2026 they could not: the walk knew the bottom row and the
+// file list, and this button was in neither. A guest could press it with a
+// mouse and by no other means, in an office where everything else answers keys.
+current = makeDialog({ withLink: false, files: 0, ask: true });
+UI.closeDialog();
+UI.dialogUp();
+check('вверх встаёт на «попросить доступ»', current.ask.has('focus'), 'focus нет');
+check('и нижний ряд фокус отдал', !current.buttons.some((b) => b.has('focus')), 'кнопка подсвечена');
+UI.pressDialogFocus();
+check('Enter нажимает именно её', current.ask.clicked === 1, current.ask.clicked);
+check('вкладки при этом не нажаты', current.buttons.every((b) => b.clicked === 0), 'вкладка нажалась');
+UI.dialogDown();
+check('вниз возвращает фокус на вкладки',
+  !current.ask.has('focus') && current.buttons.some((b) => b.has('focus')), 'фокус потерялся');
 
 console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
 process.exit(failed ? 1 : 0);

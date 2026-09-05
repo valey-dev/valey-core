@@ -68,6 +68,19 @@ const a = newToken(), b = newToken();
 ok('токен длинный и разный', a.length >= 32 && a !== b, a.length);
 ok('токен без символов, ломающих адрес', /^[A-Za-z0-9_-]+$/.test(a), a);
 
+// The token is carried to another machine by hand, so the alphabet must not
+// contain a pair a human can read wrong. On 5 September 2026 a two-machine test
+// lost the same character twice — O read as 0 — and both times the office
+// answered that a token was needed, which reads as a broken office rather than
+// a misread letter.
+ok('в токене нет двойников: I, L, O, U', !/[ILOU]/.test(a), a);
+const TYPED = { external: true, token: 'PFVTSWJ6MPHN0MGH2G8VBPNX8RHYQ7E9' };
+const typedAs = (t) => check(req('1.2.3.4', { authorization: 'Bearer ' + t }), u(), TYPED).ok;
+ok('ноль, набранный буквой O, всё равно пускает', typedAs('PFVTSWJ6MPHNOMGH2G8VBPNX8RHYQ7E9'));
+ok('единица, набранная буквой l, всё равно пускает', typedAs('PFVTSWJ6MPHN0MGH2G8VBPNX8RHYQ7E9'.replace('1', 'l')));
+ok('строчный токен пускает', typedAs('pfvtswj6mphn0mgh2g8vbpnx8rhyq7e9'));
+ok('но чужой токен по-прежнему не пускает', !typedAs('PFVTSWJ6MPHN0MGH2G8VBPNX8RHYQ7EX'));
+
 // ------------------------------------------------------ the token does not leak
 
 // The key here is `network`, not `access`: in the core `access` is already taken

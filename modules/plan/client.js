@@ -1,15 +1,16 @@
-// План офиса — модуль. Клавиша K открывает схему всего здания: этажи как в
-// лифте, комнаты как на плане, люди точками по своим настоящим координатам и
-// синий крестик «вы здесь». Ответ на один вопрос: где кто, не выходя из своей
-// комнаты и не катаясь лифтом.
+// The office plan is a module. The K key opens a scheme of the whole building: the floors
+// as in the lift, the rooms as on a plan, people as dots at their real coordinates and a
+// blue cross for "you are here". An answer to one question: where is who, without leaving
+// your own room and without riding the lift.
 //
-// Нарисован как план эвакуации на стене: бумага, чёрные контуры, цветные
-// точки. Геометрия не выдумывается — это тот же layout, ужатый в четыре раза,
-// поэтому человек в коридоре стоит на плане ровно там, где стоит в офисе. Кадр
-// утверждён 4 сентября 2026 (всё здание, клавиша K, модулем).
+// It is drawn as a fire-escape plan on a wall: paper, black outlines, coloured dots. The
+// geometry is not invented — it is the same layout squeezed by four, so a person in the
+// corridor stands on the plan exactly where he stands in the office. The frame was approved
+// on 4 September 2026 (the whole building, the K key, as a module).
 //
-// Модуль, а не строка в ядре: панель, клавиша и словарь свои; от ядра нужны
-// только точки `key`, `esc`, `busy`, `tick`, `lang`, `help` — все общие.
+// A module rather than a line in the core: the panel, the key and the dictionary are its
+// own; from the core it needs only the points `key`, `esc`, `busy`, `tick`, `lang`,
+// `help` — all of them shared.
 import { t as tr } from '../../web/i18n.js';
 import { esc } from '../../web/esc.js';
 import { toast, clean, actText, roleText, ago } from '../../web/ui.js';
@@ -70,13 +71,14 @@ const DICT = {
   },
 };
 
-// Бумага и чернила плана. Не из палитры офиса нарочно: план — вещь на стене,
-// он не перекрашивается вместе с тоном офиса, как и плитка в комнатах.
+// The paper and the ink of the plan. Deliberately not from the office palette: a plan is a
+// thing on a wall, it is not repainted along with the tone of the office, no more than the
+// tiles in the rooms are.
 const PAPER = '#f1e2bc', INK = '#2b1d14', LINE = '#5a4632', DIM = '#b9a480';
 const ROOM = '#efe0b8', SERVICE = '#e3d3ab', GREEN = '#dfe6c2', HALL = '#e8d8b0', LANE = '#ecdcb4';
 const WALL_C = '#cbb58a', GLASS = '#bfd8dc', DESK = '#c9a97a', SHAFT = '#e2cf9f', CABIN = '#7d6448';
 const WORK = '#6cc27a', WAIT = '#f0b429', IDLE = '#8c7660', ME = '#3fa9f5', CAT = '#e08a3c', GUEST = '#7c6ab0';
-// Ужатие: четверть, пока здание влезает; выше — сколько влезет в панель.
+// The squeeze: a quarter while the building fits; above that, as much as fits into the panel.
 const SCALE = 0.25, MAP_W = 380, MAP_H = 340;
 
 const $ = (s) => document.querySelector(s);
@@ -92,17 +94,17 @@ const text = (ctx, s, x, y, c, size = 7, bold = false) => {
   ctx.fillText(s, x | 0, y | 0);
 };
 
-// Состояние офиса приезжает тиком; панель — свой элемент, дырки под неё в
-// разметке ядра нет.
+// The state of the office arrives on a tick; the panel is an element of its own, there is
+// no hole for it in the core's markup.
 let S = null;
 let el = null;
-let cells = [];        // комнаты на плане в порядке чтения: сверху вниз, слева направо
+let cells = [];        // the rooms on the plan in reading order: top to bottom, left to right
 let focus = 0;
-let builtSig = '';     // при какой планировке собраны клетки
+let builtSig = '';     // which plan the cells were assembled for
 let detailKey = '';
 let countKey = '';
 let lastPaint = -1;
-let geom = null;       // масштаб и размер холста в css-пикселях
+let geom = null;       // the scale and the size of the canvas in css pixels
 
 function ensurePanel() {
   if (el) return;
@@ -113,11 +115,11 @@ function ensurePanel() {
 }
 
 export function planOpen() { return !!el && !el.hidden; }
-// Ключ комнаты в фокусе — стенду, чтобы проверять ходьбу стрелками по данным,
-// а не по подставному DOM.
+// The key of the room in focus — for the stand, so that walking with the arrows is checked
+// against the data rather than against a stand-in DOM.
 export function planFocus() { return cells[focus] ? cells[focus].room.key : null; }
 
-// ------------------------------------------------------------------ данные
+// ------------------------------------------------------------------ the data
 const statusColor = (a) => (!a ? DIM : a.status === 'awaiting' ? WAIT : a.status === 'idle' ? IDLE : WORK);
 const inRect = (p, r) => p && p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h;
 
@@ -126,8 +128,8 @@ function floorOf(L, room) {
   return f ? f.n : null;
 }
 
-// Кто в комнате. У проектной — те, чьи столы в ней стоят: ушедший за кофе
-// всё равно её человек. У сервисной столов нет — считаются те, кто внутри.
+// Who is in a room. In a project room those whose desks stand in it: somebody gone for
+// coffee is still its person. A service room has no desks — those inside are counted.
 function peopleIn(room) {
   const byId = new Map((S.agents || []).map((a) => [a.id, a]));
   if (room.agents && room.agents.length && !room.service) {
@@ -141,8 +143,9 @@ function peopleIn(room) {
   return out;
 }
 
-// Кого подсветить стрелкой: ждущего, иначе работающего, иначе первого — тот же
-// выбор, что на стойке ресепшена, чтобы «вести туда» вело к тому же человеку.
+// Whom to highlight with the arrow: the one waiting, otherwise the one working, otherwise
+// the first — the same choice as at the reception desk, so that "lead me there" leads to the
+// same person.
 function leadOf(list) {
   return list.find((a) => a.status === 'awaiting') || list.find((a) => a.status === 'working') || list[0] || null;
 }
@@ -152,8 +155,8 @@ function scaleFor(L) {
   return { k, w: Math.ceil(L.w * k), h: Math.ceil(L.h * k) };
 }
 
-// Клетки плана: все комнаты, проектные и сервисные, в порядке чтения. По ним
-// ходит фокус и на них стоят кнопки для мыши.
+// The cells of the plan: every room, project and service, in reading order. The focus walks
+// over them and the buttons for the mouse stand on them.
 function buildCells(L) {
   const { k } = geom;
   const rooms = [...(L.rooms || [])].sort((a, b) => (a.y - b.y) || (a.x - b.x));
@@ -164,7 +167,7 @@ function buildCells(L) {
   }));
 }
 
-// ------------------------------------------------------------------ панель
+// ------------------------------------------------------------------ the panel
 function chrome() {
   return `<div class="rwrap planwrap">
     <div class="vhead"><span>${tr('plan.title')} <i id="plancount"></i></span><button id="planx">✕</button></div>
@@ -191,8 +194,8 @@ export function openPlan() {
   $('#planx').onclick = closePlan;
   builtSig = ''; detailKey = ''; countKey = ''; lastPaint = -1;
   rebuild();
-  // Смена языка пересобирает открытую панель тем же путём — и фокус при
-  // этом остаётся на той комнате, на которую смотрел.
+  // A change of language rebuilds an open panel the same way — and the focus stays on the
+  // room it was looking at.
   if (!was) focus = startFocus();
   refresh(true);
 }
@@ -202,9 +205,9 @@ export function closePlan() {
   el.hidden = true;
 }
 
-// Пересобрать клетки и кнопки под ними: при открытии и когда планировка
-// сменилась под открытой панелью. Фокус переживает пересборку по ключу
-// комнаты — комната, на которую смотрел, остаётся той же.
+// Rebuild the cells and the buttons under them: on opening, and when the plan changed under
+// an open panel. The focus survives the rebuild by the key of the room — the room it was
+// looking at stays the same.
 function rebuild() {
   const L = S.layout;
   const was = planFocus();
@@ -231,8 +234,8 @@ function rebuild() {
   });
 }
 
-// Первый фокус — комната, где стоишь; в коридоре — ближайшая дверь. От неё
-// стрелки читаются как «соседняя комната», а не «первая в списке».
+// The first focus is the room you are standing in; in a corridor, the nearest door. From it
+// the arrows read as "the neighbouring room" rather than "the first in the list".
 function startFocus() {
   const p = S.player || { x: 0, y: 0 };
   let best = 0, bestD = Infinity;
@@ -274,9 +277,9 @@ function paintCount() {
   if (n) n.textContent = s;
 }
 
-// Правая колонка: комната в фокусе и кто в ней. Перерисовывается только когда
-// её текст изменился — иначе панель мигала бы каждые две секунды на живых
-// данных, как когда-то обход.
+// The right column: the room in focus and who is in it. It is repainted only when its text
+// has changed — otherwise the panel would flicker every two seconds on live data, as the
+// round once did.
 function paintDetail(force) {
   const c = cells[focus];
   const d = $('#plandetail');
@@ -298,8 +301,8 @@ function paintDetail(force) {
       <div class="who"><b>${esc(a.name)}${roleText(a) ? ' · ' + esc(roleText(a)) : ''}</b>
       <i>${esc(line)}${a.idleFor != null ? ' · ' + esc(ago(a.idleFor)) : ''}</i></div></div>`;
   });
-  // Кто ещё внутри, кроме агентов: ты сам, гости, кот. Им стрелка не нужна,
-  // но «где кто» без них неполное.
+  // Who else is inside besides the agents: you yourself, the guests, the cat. They need no
+  // arrow, but "where is who" without them is incomplete.
   const extra = [];
   if (inRect(S.player, room)) extra.push(`<span class="plandot" style="background:${ME}"></span>${tr('plan.you')}`);
   for (const q of (S.people || new Map()).values()) if (inRect(q, room)) extra.push(`<span class="plandot" style="background:${GUEST}"></span>${esc(q.name || tr('plan.guest'))}`);
@@ -316,8 +319,8 @@ function paintDetail(force) {
   if (btn) btn.onclick = go;
 }
 
-// «Вести туда» — та же стрелка, что у обхода и стойки: ядро ведёт к агенту,
-// не к комнате, поэтому идём к тому, кого выбрал leadOf.
+// "Lead me there" is the same arrow as at the round and at the desk: the core leads to an
+// agent, not to a room, so we go to the one leadOf chose.
 function go() {
   const c = cells[focus];
   if (!c) return;
@@ -328,7 +331,7 @@ function go() {
   closePlan();
 }
 
-// ------------------------------------------------------------------ холст
+// ------------------------------------------------------------------ the canvas
 function paintMap() {
   const canvas = $('#plancanvas');
   if (!canvas || !geom) return;
@@ -338,7 +341,7 @@ function paintMap() {
   ctx.setTransform(2, 0, 0, 2, 0, 0);
   ctx.imageSmoothingEnabled = false;
 
-  // бумага
+  // the paper
   px(ctx, 0, 0, W, H, PAPER);
   for (let i = 0; i < W; i += 6) for (let j = 0; j < H; j += 6) if (((i + j) / 6) % 7 === 0) px(ctx, i, j, 1, 1, '#e6d5ae');
   text(ctx, tr('plan.paper'), 6, 8, LINE, 6.5, true);
@@ -346,13 +349,13 @@ function paintMap() {
 
   const lift = L.lift || { x: L.w, w: 0, floors: [], reception: [] };
   const bands = L.bands || [];
-  // коридоры и проходы между колоннами: по ним и ходят
+  // the corridors and the passages between the columns: that is where people walk
   for (const b of bands) px(ctx, (MARGIN / 2) * k, b.y * k, (lift.x + lift.w - MARGIN / 2) * k, b.h * k, HALL);
   if (bands.length) {
     const top = Math.min(...bands.map((b) => b.y)) * k, bot = Math.max(...bands.map((b) => b.y + b.h)) * k;
     for (const x of L.lanes || []) px(ctx, x * k - 1, top, 3, bot - top, LANE);
   }
-  // шахта лифта сверху донизу, кабина на своём этаже
+  // the lift shaft from top to bottom, the cabin on its own floor
   if (lift.w) {
     const y0 = (bands[0] ? bands[0].y : MARGIN) * k, y1 = (L.h - MARGIN / 2) * k;
     px(ctx, lift.x * k, y0, lift.w * k, y1 - y0, SHAFT);
@@ -366,14 +369,14 @@ function paintMap() {
     }
     for (const r of lift.reception || []) px(ctx, r.x * k, r.y * k, Math.max(3, r.w * k), Math.max(2, r.h * k), DESK);
   }
-  // номера этажей слева, как в лифте: коридор — это этаж
+  // the floor numbers on the left, as in the lift: a corridor is a floor
   for (const f of lift.floors || []) text(ctx, String(f.n), 3, f.y * k + 3, INK, 9, true);
 
-  // курилка: диван и стол — без стен, как и в офисе
+  // the smoking room: the sofa and the table — without walls, as in the office
   if (L.lounge) px(ctx, (L.lounge.x - 20) * k, (L.lounge.y - 6) * k, 40 * k, 14 * k, DESK);
   if (L.kicker) px(ctx, (L.kicker.x - 14) * k, (L.kicker.y - 6) * k, 28 * k, 12 * k, DESK);
 
-  // пустые места в сетке: пунктир там, куда встанет следующий проект
+  // the empty places in the grid: a dotted line where the next project will stand
   const pr = L.projectRooms || [];
   if (pr.length) {
     const cols = [...new Set(pr.map((r) => r.x))].sort((a, b) => a - b);
@@ -385,7 +388,7 @@ function paintMap() {
     }
   }
 
-  // комнаты
+  // the rooms
   const byId = new Map((S.agents || []).map((a) => [a.id, a]));
   const seated = new Set();
   for (const act of (S.actors || new Map()).values()) if (act.state === 'sit') seated.add(act.id);
@@ -397,24 +400,24 @@ function paintMap() {
     const wallH = Math.max(3, WALL * k);
     px(ctx, c.x + 1, c.y + 1, c.w - 2, wallH - 1, r.meeting ? GLASS : WALL_C);
     if (r.door) px(ctx, r.door.x * k, c.y, Math.max(3, r.door.w * k), wallH, PAPER);
-    // Название — на самой стене, правее двери, как табличка в офисе. Под
-    // стеной ему места нет: первый ряд столов начинается сразу за ней, и
-    // подпись ложилась на точки людей.
+    // The name is on the wall itself, to the right of the door, like a plaque in the office.
+    // There is no room for it under the wall: the first row of desks begins right behind it,
+    // and the caption lay over the dots of the people.
     const nameX = r.door ? Math.max(c.x + 3, (r.door.x + r.door.w) * k + 3) : c.x + 3;
     text(ctx, r.title.length > 13 ? r.title.slice(0, 12) + '…' : r.title, nameX, c.y + wallH - 1, INK, 7, true);
-    // столы: занятый — просто стол, человек дорисуется там, где он есть;
-    // пустой — контур, и это «стол пуст» из легенды
+    // the desks: a taken one is simply a desk, the person is drawn where he is; an empty one
+    // is an outline, and that is "the desk is empty" from the legend
     for (const d of r.desks || []) {
       px(ctx, d.x * k - 4, d.y * k, 8, 3, DESK);
       const a = byId.get(r.agents[d.i]);
       if (!a) box(ctx, d.x * k - 2, d.y * k - 6, 6, 6, DIM);
     }
   }
-  // фокус: двойная рамка янтарём, как контур клавиатурного фокуса в панелях
+  // the focus: a double frame in amber, like the outline of the keyboard focus in the panels
   const fc = cells[focus];
   if (fc) { box(ctx, fc.x - 2, fc.y - 2, fc.w + 4, fc.h + 4, WAIT); box(ctx, fc.x - 1, fc.y - 1, fc.w + 2, fc.h + 2, WAIT); }
 
-  // дорожка от тебя к двери комнаты в фокусе: по коридору, как ходят агенты
+  // the path from you to the door of the room in focus: along the corridor, as the agents walk
   const p = S.player;
   if (fc && p && fc.room.doorPoint) {
     const band = fc.room.bandY != null ? fc.room.bandY : fc.room.y - 30;
@@ -426,7 +429,7 @@ function paintMap() {
     }
   }
 
-  // люди: агенты по статусу, гости своим цветом, кот, потом ты — поверх всех
+  // the people: the agents by status, the guests in their own colour, the cat, then you — over everyone
   const dot = (x, y, c) => { px(ctx, x * k - 3, y * k - 3, 7, 7, INK); px(ctx, x * k - 2, y * k - 2, 5, 5, c); };
   for (const act of (S.actors || new Map()).values()) {
     const a = byId.get(act.id);
@@ -440,7 +443,7 @@ function paintMap() {
     const x = p.x * k, y = p.y * k;
     px(ctx, x - 4, y - 4, 8, 8, INK); px(ctx, x - 3, y - 3, 6, 6, ME);
     px(ctx, x - 1, y - 8, 2, 3, ME); px(ctx, x - 1, y + 5, 2, 3, ME); px(ctx, x - 8, y - 1, 3, 2, ME); px(ctx, x + 5, y - 1, 3, 2, ME);
-    // подпись уходит в ту сторону, где есть место: у лифта — влево
+    // the caption goes to whichever side has room: by the lift, to the left
     const label = tr('plan.here'), lw = label.length * 4.4 + 6;
     const lx = x + 8 + lw > W ? x - 10 - lw : x + 10;
     px(ctx, lx, y - 5, lw, 11, INK);
@@ -448,10 +451,10 @@ function paintMap() {
   }
 }
 
-// ------------------------------------------------------------------ клавиши
-// Стрелки ходят по плану геометрически: вправо — соседняя комната того же
-// ряда, вниз — ближайшая по вертикали в ряду ниже. Кольцо фокуса из ui.js
-// ходит по списку, а план — сетка; такая же своя ходьба у вещей в инвентаре.
+// ------------------------------------------------------------------ the keys
+// The arrows walk the plan geometrically: right is the neighbouring room of the same row,
+// down is the nearest by vertical in the row below. The focus ring from ui.js walks a list,
+// while a plan is a grid; the things in the bag have the same kind of walking of their own.
 function moveFocus(dx, dy) {
   const cur = cells[focus];
   if (!cur || cells.length < 2) return;
@@ -464,20 +467,20 @@ function moveFocus(dx, dy) {
       const d = Math.abs(o.c.cx - cur.cx);
       if (d < best) { best = d; pick = o; }
     }
-    if (!pick) for (const o of others) {          // край ряда — на другой его конец
+    if (!pick) for (const o of others) {          // the end of a row — to its other end
       if (!sameRow(o.c)) continue;
       const d = (o.c.cx - cur.cx) * dx;
       if (d < best) { best = d; pick = o; }
     }
   } else {
-    // Соседа по ряду вниз не считаем: комната с двумя рядами столов выше
-    // соседней, и её середина лежит «ниже» — стрелка вниз уходила вбок.
+    // We do not count the neighbour along the row as down: a room with two rows of desks is
+    // taller than its neighbour, and its middle lies "lower" — the down arrow went sideways.
     for (const o of others) {
       if (sameRow(o.c) || (o.c.cy - cur.cy) * dy <= 0) continue;
       const d = Math.abs(o.c.cy - cur.cy) + 0.3 * Math.abs(o.c.cx - cur.cx);
       if (d < best) { best = d; pick = o; }
     }
-    if (!pick) for (const o of others) {          // крыша или подвал — на другой край здания
+    if (!pick) for (const o of others) {          // the roof or the basement — to the other edge of the building
       const d = -Math.abs(o.c.cy - cur.cy) + 0.3 * Math.abs(o.c.cx - cur.cx);
       if (d < best) { best = d; pick = o; }
     }
@@ -485,7 +488,7 @@ function moveFocus(dx, dy) {
   if (pick) { focus = pick.i; refresh(true); }
 }
 
-// Escape не трогаем: его ловит closeAll() в main.js и отдаёт в точку `esc`.
+// We do not touch Escape: closeAll() in main.js catches it and gives it to the `esc` point.
 export function planKey(raw) {
   if (!planOpen()) return false;
   const key = String(raw).toLowerCase();
@@ -498,9 +501,10 @@ export function planKey(raw) {
 export function register(api) {
   api.i18n(DICT);
 
-  // K открывает и закрывает план; пока он открыт — стрелки его. На экране
-  // входа плана нет: там ещё нечему быть «здесь». Экран входа узнаётся по
-  // классу на body — так ядро прячет под ним HUD, и модулю хватает того же.
+  // K opens and closes the plan; while it is open the arrows are its. On the entrance screen
+  // there is no plan: there is nothing to be "here" yet. The entrance screen is recognised by
+  // a class on body — that is how the core hides the HUD under it, and the same is enough for
+  // the module.
   api.on('key', (raw) => {
     if (planKey(raw)) return true;
     const k = String(raw).toLowerCase();
@@ -514,7 +518,7 @@ export function register(api) {
   api.on('tick', (state) => {
     S = state;
     if (!planOpen()) return;
-    // люди ходят — план живой, но десяти кадров в секунду ему хватает
+    // people walk — the plan is alive, but ten frames a second are enough for it
     if (lastPaint >= 0 && state.t - lastPaint < 100) return;
     lastPaint = state.t;
     refresh(false);

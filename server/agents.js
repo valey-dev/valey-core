@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { createReadStream } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { getSettings, patchSettings } from './settings.js';
 import { projectInfo, repoRoot, repoRootCached } from './stack.js';
 
@@ -106,6 +108,38 @@ async function indexTranscripts() {
 // Incremental tail: each session is read once deep, then only the new bytes.
 const cache = new Map(); // sessionId -> { file, offset, pending, st }
 
+// Grades are counted over the whole transcript, not over the tail follow reads.
+// Measured on this machine's ~/.claude on 5 September 2026: a 63 MB file holds
+// 1096 tool calls and its last megabyte holds 13. A grade built on the tail
+// would show a percentage of the work — and not a fixed one, since what fits
+// depends on how long the closing replies are rather than on what was done.
+// The honest pass costs 350 ms on the largest file here, once per session.
+//
+// It does not block the tick: the snapshot goes out at once and the grades
+// arrive a second later. Otherwise the first look into the office would wait
+// for every session to be re-read.
+async function deepSkills(st, file, until) {
+  if (until <= 0) return;
+  const rl = createInterface({
+    input: createReadStream(file, { encoding: 'utf8', start: 0, end: until - 1 }),
+    crlfDelay: Infinity,
+  });
+  for await (const line of rl) {
+    // JSON.parse only where a call can be: on 63 MB that is the difference
+    // between 350 ms and parsing the whole file for nothing.
+    if (line.length < 40 || !line.includes('"tool_use"')) continue;
+    let r;
+    try { r = JSON.parse(line); } catch { continue; }
+    if (r.type !== 'assistant' || !r.message) continue;
+    for (const b of Array.isArray(r.message.content) ? r.message.content : []) {
+      if (b?.type !== 'tool_use') continue;
+      const d = describeTool(b.name, b.input);
+      const mood = (IMAGE_RE.test(b.input?.file_path || '') && /Write|Edit/.test(b.name)) ? 'design' : d.mood;
+      if (SKILL_OF[mood]) st.skills[SKILL_OF[mood]]++;
+    }
+  }
+}
+
 async function readRange(file, start, length) {
   if (length <= 0) return '';
   let fh;
@@ -121,7 +155,7 @@ async function readRange(file, start, length) {
   }
 }
 
-async function follow(sessionId, file, apply, fresh) {
+async function follow(sessionId, file, apply, fresh, deep) {
   let c = cache.get(sessionId);
   let size = 0;
   try { size = (await fsp.stat(file)).size; } catch { return c?.st; }
@@ -134,6 +168,13 @@ async function follow(sessionId, file, apply, fresh) {
     c = { file, offset: size, pending: lines.pop() ?? '', st: fresh() };
     for (const l of lines) apply(c.st, l);
     cache.set(sessionId, c);
+    // The head of the file, for the grades only, once per session. The line
+    // the boundary cuts is dropped by both passes — the tail throws away its
+    // first, the deep pass its last — and that is one line per session.
+    if (deep && start > 0 && !c.deep) {
+      c.deep = true;
+      deep(c.st, file, start).catch(() => { c.deep = false; });  // failed — try again on the next tick
+    }
     return c.st;
   }
 
@@ -249,6 +290,23 @@ const ROLE_WEIGHTS = {
   read:     { code: 0.3, research: 0.15 },
 };
 
+// Grades: the same table as the profession weights, read the other way. The
+// profession is a 12-minute window — what he is doing now; the grade is the
+// whole shift — what he can do at all. Hence a counter of its own: st.acts is
+// trimmed at sixty actions and no sum can be taken from it.
+//
+// Seven branches against six professions. The seventh is reading: in the
+// profession it deliberately weighs 0.3, or everyone who opens a file becomes
+// a developer. Over a whole shift that trick is not needed and does harm —
+// reading happens three times as often as editing — so reading gets a branch
+// instead of a quiet addition to code.
+const SKILL_OF = {
+  design: 'design', research: 'research', plan: 'plan', code: 'code',
+  test: 'qa', build: 'release', ship: 'release', read: 'archive',
+};
+const SKILL_BRANCHES = ['design', 'research', 'plan', 'code', 'qa', 'release', 'archive'];
+const newSkills = () => Object.fromEntries(SKILL_BRANCHES.map((b) => [b, 0]));
+
 function roleScores(acts, now) {
   const cut = now - ROLE_WINDOW_MS;
   const win = acts.filter((a) => a.ts >= cut);
@@ -299,6 +357,7 @@ function emptyState() {
     lastTs: 0, lastTool: null, lastToolInput: null, lastAssistantText: '',
     lastUserPrompt: '', awaitingUser: false, acts: [], role: '', files: new Map(),
     turns: 0, model: '', branch: '', slug: '', title: '', aiTitle: '',
+    skills: newSkills(),   // the grade counter: it grows and is never trimmed
     recent: [],   // rolling window of the actual conversation, read on demand
   };
 }
@@ -328,6 +387,8 @@ function applyLine(st, line) {
       const mood = (IMAGE_RE.test(b.input?.file_path || '') && /Write|Edit/.test(b.name)) ? 'design' : d.mood;
       st.acts.push({ mood, ts: st.lastTs || Date.now() });
       if (st.acts.length > 60) st.acts.splice(0, st.acts.length - 60);
+      // The grade counts the same mood — but before the trim and with no window.
+      if (SKILL_OF[mood]) st.skills[SKILL_OF[mood]]++;
       st.lastTool = b.name;
       st.lastToolInput = b.input;
       const fp = b.input?.file_path;
@@ -663,7 +724,7 @@ export async function snapshot() {
 
   for (const s of sessions) {
     const file = await transcriptFor(s.sessionId, s.cwd);
-    const t = (file ? await follow(s.sessionId, file, applyLine, emptyState) : null) || emptyState();
+    const t = (file ? await follow(s.sessionId, file, applyLine, emptyState, deepSkills) : null) || emptyState();
     const files = [...t.files.values()].sort((a, b) => b.ts - a.ts).slice(0, 16);
     const artifacts = files.filter((f) => f.made || f.image);
     const idleFor = t.lastTs ? Date.now() - t.lastTs : Infinity;
@@ -708,6 +769,9 @@ export async function snapshot() {
       idleFor: Number.isFinite(idleFor) ? Math.round(idleFor / 1000) : null,
       startedAt: s.startedAt,
       turns: t.turns,
+      // Raw per-branch counters. Whoever shows them turns them into grades:
+      // the ladder belongs to the filing cabinet, not to the core.
+      skills: { ...t.skills },
       files,
       artifacts,
       hasNews: t.awaitingUser && artifacts.length > 0,
@@ -737,4 +801,8 @@ export function fileAllowed(p, snap) {
   return fileOwners(p, snap).length > 0;
 }
 
-export { fs, inferRole, describeTool, ROLES, ROLE_WINDOW_MS, ROLE_STALE_MS };
+export {
+  fs, inferRole, describeTool, ROLES, ROLE_WINDOW_MS, ROLE_STALE_MS,
+  // exported for the stand alone: it runs the parser on real transcript lines
+  applyLine, emptyState, SKILL_OF, SKILL_BRANCHES,
+};
