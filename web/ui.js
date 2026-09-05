@@ -1512,6 +1512,7 @@ const wideHtml = () => {
   return `<div class="bbody tbody wide">
       ${treeHeadHtml()}
       ${dirsHtml()}
+      <div class="tscroll">
       <div class="wbody">
         <div class="wtree" id="wtree"><svg class="tedges"></svg>
           ${tierRow('floor')}
@@ -1524,6 +1525,7 @@ const wideHtml = () => {
         ${treeCard(sel)}
       </div>
       <p class="hint dim">${tr('tree.wide.keys')}</p>
+      </div>
     </div>`;
 };
 
@@ -1532,6 +1534,7 @@ const treeHtml = () => {
   const cols = TIERS.map(treeCount);
   return `<div class="bbody tbody">
       ${treeHeadHtml()}
+      <div class="tscroll">
       <div class="tcols">${cols.map((c) => `<div class="tcol${c.n === c.m ? ' own' : ''}">
         <b>${tr('tree.col.' + c.t, { n: c.n, m: c.m })}</b><span>${treeSub(c)}</span></div>`).join('')}</div>
       <div class="tree" id="tree"><svg class="tedges"></svg>
@@ -1542,6 +1545,7 @@ const treeHtml = () => {
       </div>
       ${treeCard(sel)}
       <p class="hint dim">${tr('tree.note')} ${tr('tree.keys')}</p>
+      </div>
     </div>`;
 };
 
@@ -1700,7 +1704,7 @@ export function renderBag(tab) {
   el.bag.hidden = false;
   // The detailed view is the only place in the inventory that is wider than 700.
   // That is the price of the mode, and it is paid only while the mode is on.
-  el.bag.innerHTML = `<div class="rwrap bagwrap${bagTab === 'tree' && treeWide ? ' wide' : ''}">
+  el.bag.innerHTML = `<div class="rwrap bagwrap${bagTab === 'tree' ? ' steady' : ''}${bagTab === 'tree' && treeWide ? ' wide' : ''}">
     <div class="vhead">${tr('bag.title')} · ${tr('bag.tab.' + bagTab)}<button id="bx">✕</button></div>
     <div class="btabs">
       ${tabs().map((t, i) => `<button class="btab${t === bagTab ? ' on' : ''}" data-tab="${t}">${tr('bag.tab.' + t)}<kbd>${i + 1}</kbd></button>`).join('')}
