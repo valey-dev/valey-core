@@ -58,6 +58,10 @@ const CORE = [
   { id: 'zoom.in', codes: ['Equal', 'NumpadAdd'], group: 'zoom', hint: 'hint.zoom' },
   { id: 'zoom.out', codes: ['Minus', 'NumpadSubtract'], group: 'zoom' },
   { id: 'zoom.reset', codes: ['Digit0', 'Numpad0'], group: 'zoom', hint: 'hint.zoom' },
+  // The keys panel sits on the key where QWERTY prints «?». Under ЙЦУКЕН that
+  // same key prints a full stop, which is the honest cost of a physical
+  // binding — the panel shows the engraving when the browser knows it.
+  { id: 'service.keys', codes: ['Slash'], group: 'service', hint: 'hint.keys' },
   { id: 'service.shot', codes: ['F9'], group: 'service', hint: 'hint.shot' },
 ];
 
@@ -148,7 +152,7 @@ export function isAction(ev, id) { return actionOf(ev) === id; }
 const SPECIAL = {
   Space: 'SPACE', Tab: 'TAB', Enter: 'ENTER', Escape: 'ESC',
   ShiftLeft: 'SHIFT', ShiftRight: 'SHIFT',
-  Equal: '+', Minus: '−', NumpadAdd: '+', NumpadSubtract: '−',
+  Equal: '+', Minus: '−', NumpadAdd: '+', NumpadSubtract: '−', Slash: '?',
   ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓',
 };
 

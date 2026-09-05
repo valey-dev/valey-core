@@ -15,6 +15,7 @@ import { drawBubble } from './badges.js';
 import { skateStep, rolling, drawSkateboard, ollieStep, canOllie, OLLIE_POP } from './skate.js';
 import { readPad, edges as padEdges } from './pad.js';
 import { actionOf, codeOf, codesOf, hints } from './keymap.js';
+import { renderKeys, closeKeys, keysOpen, readLayout } from './keys.js';
 // t переименован в tr: в main.js `t` — это время кадра у draw(t), и импорт
 // молча перекрывался числом внутри каждого колбэка отрисовки
 import { t as tr, lang, setLang, onLang } from './i18n.js';
@@ -660,6 +661,9 @@ function onKey(e) {
   if (act === 'zoom.out') { e.preventDefault(); return stepZoom(-1); }
   if (act === 'zoom.reset') { e.preventDefault(); return setZoom(0); }
 
+  // Не через toggle(): тот ищет узел по id, а панель заводит его сама при
+  // первом открытии — на пустом месте toggle упал бы первым же нажатием.
+  if (act === 'service.keys') return keysOpen() ? closeKeys() : renderKeys();
   if (act === 'panel.round') return toggle('roster', UI.renderRoster, UI.closeRoster);
   // N снаружи показывает все заметки; внутри разговора та же клавиша их пишет
   if (act === 'panel.notes') return toggle('notes', UI.renderNotes, UI.closeNotes);
@@ -795,9 +799,16 @@ function renderStatic() {
   //
   // Модулям точка `help` оставлена: ей пользуются те, кто ещё не объявил свои
   // клавиши через api.keys(), и им незачем ломаться из-за нашей уборки.
-  const cap = (c) => { const t = tr('keycap.' + c); return t === 'keycap.' + c ? c : t; };
-  const strip = hints().map((h) => `${h.caps.map(cap).join(' ')} — ${tr(h.hint)}`);
-  if (help) help.textContent = [...strip, ...collect('help'), tr('help.tail')].join(' · ');
+  // Строка сжата до одной подсказки: полный список живёт в панели «клавиши».
+  // Пока список был здесь, он занимал две строки, рос с каждым модулем и всё
+  // равно показывал только одну привязку из двух — клавиатура показывает то,
+  // чего предложение не может: что рядом с чем и что ещё свободно.
+  //
+  // `collect('help')` остаётся ради модулей, которые ещё не объявили клавиши
+  // через api.keys(): их строка — единственное, чем они о себе говорят.
+  const keysHint = hints().find((h) => h.hint === 'hint.keys');
+  const opener = keysHint ? `${keysHint.caps[0]} — ${tr('hint.keys')}` : '';
+  if (help) help.textContent = [opener, ...collect('help'), tr('help.tail')].filter(Boolean).join(' · ');
   document.title = tr('doc.title');
   document.documentElement.lang = lang();
   UI.relabel();
@@ -805,6 +816,9 @@ function renderStatic() {
 }
 onLang(renderStatic);
 renderStatic();
+// Что на клавишах написано на самом деле — спрашивается один раз и только у
+// браузера, который знает; остальные обходятся подписями QWERTY.
+readLayout().then(() => { if (keysOpen()) renderKeys(); });
 
 function nearest() {
   const p = state.player;
@@ -1253,6 +1267,7 @@ function closeAll() {
   if (state.lift.phase !== 'idle') return;
   if (!document.getElementById('lift').hidden) return UI.closeLift();
   if (state.cctv.on) return closeCams();
+  if (keysOpen()) return closeKeys();
   if (!document.getElementById('viewer').hidden) return UI.closeViewer();
   if (!document.getElementById('roster').hidden) return UI.closeRoster();
   if (!document.getElementById('bag').hidden) return UI.closeBag();
@@ -1285,6 +1300,7 @@ function panelsOpen() {
   // едущая кабина тоже держит человека на месте: створки закрыты, выходить некуда
   return titleOpen() || state.dialogOpen || state.cctv.on || UI.inviteOpen() || state.lift.phase !== 'idle'
     // Панель модуля тоже держит экран: своих id ядро не знает и знать не должно.
+    || keysOpen()
     || collect('busy').some(Boolean)
     || ['viewer', 'roster', 'bag', 'sky', 'lift', 'invite'].some((id) => !document.getElementById(id).hidden);
 }
