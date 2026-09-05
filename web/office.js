@@ -1,6 +1,6 @@
 // Drawing the building: corridors, rooms, desks, boards, props, light.
 import { hash, drawPerson } from './sprites.js';
-import { lang, other, t as tr } from './i18n.js';
+import { lang, t as tr } from './i18n.js';
 import { WALL, LIFT_DOOR_H } from './layout.js';
 import { drawSky, flash } from './weather.js';
 import { drawPainting, drawPoster, artOf } from './paintings.js';
@@ -190,16 +190,30 @@ const SWITCHER = {
   en: { skin: '#f4c9a0', hair: '#3a2a20', shirt: '#38302a', pants: '#3f4a63', boots: '#2a2118', style: 0, head: 'none', glasses: false, face: 'beard', tall: 0, hands: 'none', cig: true },
 };
 
+// Что написано на табличке. Приходит снаружи, как и живость кикера: пак имён
+// живёт в настройках, а рисовалка про них не знает и знать не должна.
+//
+// С 4 сентября 2026 табличка называет ВКЛЮЧЁННОЕ, а не то, куда переключит:
+// щелчка больше нет, есть панель, и обещать ею язык было бы враньём. «RU·EN» —
+// имена откреплены от языка: интерфейс русский, имена английские.
+export const switcherSign = { code: '' };
+
 export function drawSwitcher(ctx, p, t, facing = 0) {
   const look = SWITCHER[lang()] || SWITCHER.ru;
   drawPerson(ctx, p.x, p.y, look, { pose: 'stand', frame: (t / 260) | 0, dir: facing, ms: t });
-  // табличка висит выше обычного пузыря: на прежней высоте её закрывала строка
-  // подсказки — ровно в тот момент, когда человек подошёл нажать
-  const top = p.y - 22 - look.tall - 20;
-  px(ctx, p.x - 9, top, 18, 10, 'rgba(20,13,8,0.86)');
-  px(ctx, p.x - 9, top, 18, 1, '#8a6247');
+  // Табличка стоит НАД строкой подсказки, как на кадре, а не под ней. Пока она
+  // была шириной в два знака, порядок не имел значения; с «RU·EN» она
+  // расширилась до тридцати пикселей и въехала в плашку с именем игрока,
+  // который в этот момент стоит вплотную — «R» съедало насовсем. Видно это
+  // только на настоящем кадре ×4, макет тут ни при чём.
+  const top = p.y - 22 - look.tall - 34;
+  const code = switcherSign.code || lang().toUpperCase();
+  // Пять знаков в табличку на восемнадцать пикселей не влезают: она растёт
+  // ровно под «RU·EN» и ровно тогда, когда он там стоит.
+  const w = code.length > 2 ? 30 : 18;
+  px(ctx, p.x - w / 2, top, w, 10, 'rgba(20,13,8,0.86)');
+  px(ctx, p.x - w / 2, top, w, 1, '#8a6247');
   px(ctx, p.x - 1, top + 10, 2, 9, 'rgba(20,13,8,0.86)');
-  const code = other().toUpperCase();
   ctx.font = '7px "JetBrains Mono", "Courier New", monospace';
   pxText(ctx, code, p.x - ctx.measureText(code).width / 2, top + 7, '#ffd166');
 }

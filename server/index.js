@@ -28,6 +28,11 @@ const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf
 
 let last = { now: 0, agents: [], version: VERSION };
 
+// Опись словарей: сколько имён в паке и четыре образца. Не меняется никогда,
+// поэтому считается один раз и уезжает вместе с настройками — панель рисует
+// строку словаря сразу, не дожидаясь круга до сервера.
+const PACK_LIST = PACK_IDS.map((id) => ({ id, size: namePool(id).length, sample: nameSample(id) }));
+
 // Страховка от одной пропущенной ошибки. Обработчик ниже завёрнут в try, но
 // промис, брошенный без await, туда не попадает — а без этой строки Node
 // гасит процесс, и офис, к которому подключены вкладки, просто исчезает.
@@ -682,13 +687,13 @@ async function handle(req, res) {
         forgetWeather();
         moduleOnPatch(patch);
         last.weather = await realWeather({ force: true });
-        return send(res, 200, { ok: true, settings: publicSettings(saved), weather: last.weather });
+        return send(res, 200, { ok: true, settings: publicSettings(saved), weather: last.weather, packs: PACK_LIST });
       } catch (e) {
         if (e instanceof BodyError) throw e;
         return send(res, 400, { error: e.message });
       }
     }
-    return send(res, 200, { settings: publicSettings(await getSettings()), weather: last.weather });
+    return send(res, 200, { settings: publicSettings(await getSettings()), weather: last.weather, packs: PACK_LIST });
   }
 
   // City search, proxied so the page itself never talks to the outside.
@@ -742,17 +747,19 @@ async function handle(req, res) {
 
   // Что из модулей доехало до этой сборки. Клиент по этому списку строит
   // импорты, поэтому список — единственное, что ядро о модулях знает.
-  // Паки имён — для панели у человечка в коридоре. Отдаётся не только список,
-  // но и то, как офис будет называться на каждом паке: панель обязана показать
-  // цену нажатия ДО нажатия, а посчитать её на странице нечем — словари живут
-  // здесь. Считается только когда панель открыли, а не потоком: на этаже это
-  // сотня строк, которые никому не нужны, пока никто не спросил.
+  // Как офис будет называться на каждом паке. Панель обязана показать цену
+  // нажатия ДО нажатия, а посчитать её на странице нечем — словари живут здесь.
+  //
+  // Спрашивается только когда панель открыли. Сама по себе ручка стоит две
+  // миллисекунды, но сервер однопоточный, и запрос, попавший в момент обхода
+  // транскриптов, ждёт вместе со всеми — 4 секунды на этом стенде 4 сентября
+  // 2026. Поэтому опись словарей (размер и образец) сюда не входит: она
+  // статична и уезжает вместе с настройками, чтобы строка в панели стояла
+  // сразу, а ждала только цена.
   if (url.pathname === '/api/names') {
     const s = await getSettings();
     const packs = [];
-    for (const id of PACK_IDS) {
-      packs.push({ id, size: namePool(id).length, sample: nameSample(id), names: await previewPack(id) });
-    }
+    for (const id of PACK_IDS) packs.push({ id, names: await previewPack(id) });
     return send(res, 200, { choice: s.namePack || 'auto', pack: effectivePack(s), packs });
   }
 

@@ -33,6 +33,7 @@ let notes = null;
 let bag = null;
 let sky = null;
 let skin = null;
+let langPanel = null;
 
 function makeRoster(n) {
   const gos = Array.from({ length: n }, () => node('go'));
@@ -112,6 +113,30 @@ function makeRing(items) {
   };
 }
 
+// Панель языка и имён. Строки тут не украшение: ↑↓ ходят между ними, ←→ внутри
+// одной, и подставные строки обязаны уметь сказать, чья кнопка.
+function makeLang() {
+  const langBtns = [node('langbtn', { dataset: { lang: 'ru' } }), node('langbtn', { dataset: { lang: 'en' } })];
+  const packBtns = ['auto', 'ru', 'en'].map((id) => node('packbtn', { dataset: { pack: id } }));
+  const all = [...langBtns, ...packBtns];
+  const rows = [
+    { contains: (b) => langBtns.includes(b) },
+    { contains: (b) => packBtns.includes(b) },
+  ];
+  const warn = node('langwarn');
+  const status = node('langstatus');
+  return {
+    hidden: false, innerHTML: '', btns: all, langBtns, packBtns, warn, status,
+    querySelector: (sel) => (sel === '.langwarn' ? warn : sel === '.langstatus' ? status : null),
+    querySelectorAll: (sel) => (
+      sel === '.langbtn, .packbtn' ? all
+      : sel === '.langrow' ? rows
+      : sel === '.langbtn' ? langBtns
+      : sel === '.packbtn' ? packBtns
+      : []),
+  };
+}
+
 function makeNotes(n) {
   const btns = [];
   for (let i = 0; i < n; i++) { btns.push(node('ngo')); btns.push(node('ndel')); }
@@ -154,6 +179,7 @@ const bagProxy = proxy(() => bag);
 let viewer = null;
 const skyProxy = proxy(() => sky);
 const skinProxy = proxy(() => skin);
+const langProxy = proxy(() => langPanel);
 
 const rosterProxy = {
   get hidden() { return roster.hidden; },
@@ -181,6 +207,7 @@ globalThis.document = {
     : sel === '#bag' ? bagProxy
     : sel === '#sky' ? skyProxy
     : sel === '#skin' ? skinProxy
+    : sel === '#lang' ? langProxy
     : stub),
   querySelectorAll: () => [],
   addEventListener: () => {},
@@ -207,7 +234,20 @@ notes = makeNotes(0);
 bag = makeBagSelf(0);
 sky = makeRing([]);
 skin = makeRing([]);
-UI.initUI(state, { guideTo: () => {}, saveMe: () => {} });
+const PACKS = {
+  choice: 'auto', pack: 'ru',
+  packs: [
+    { id: 'ru', size: 170, sample: ['Гоша', 'Марта'], names: { a0: 'Гоша', a1: 'Марта' } },
+    { id: 'en', size: 170, sample: ['Pete', 'Sally'], names: { a0: 'Pete', a1: 'Sally' } },
+  ],
+};
+let savedPatch = null;
+UI.initUI(state, {
+  guideTo: () => {}, saveMe: () => {},
+  names: async () => JSON.parse(JSON.stringify(PACKS)),
+  saveSettings: async (patch) => { savedPatch = patch; return {}; },
+  setLang: () => {},
+});
 
 let failed = 0;
 const check = (name, ok, got) => {
@@ -357,6 +397,36 @@ check('вправо крутит ползунок, а не уводит', skin.b
 check('и дёргает его обработчик', hueSet === 1, hueSet);
 UI.skinKey('ArrowDown');
 check('вниз с ползунка всё-таки уводит', !skin.btns[1].has('focus'), 'застряли');
+
+// ------------------------------------------------------- язык и имена агентов
+// Панель из двух строк: интерфейс и имена. Плоский обход тут врал бы руке —
+// стрелка вниз обязана уводить во вторую строку, а не доводить до конца первую.
+state.agents = [{ id: 'a0', name: 'Гоша' }, { id: 'a1', name: 'Марта' }];
+langPanel = makeLang();
+await UI.openLang();
+const focused = () => langPanel.btns.findIndex((b) => b.has('focus'));
+check('язык: фокус встаёт на первую кнопку', focused() === 0, focused());
+check('стрелка вправо обработана', UI.langKey('ArrowRight') === true, 'нет');
+check('и ходит внутри строки интерфейса', focused() === 1, focused());
+UI.langKey('ArrowDown');
+check('вниз уводит во вторую строку, столбец сохраняя', focused() === 3, focused());
+check('и это «Русские», а не «как язык офиса»', langPanel.btns[3].dataset.pack === 'ru');
+
+// Строка цены: она обязана меняться вместе с фокусом, а не по нажатию.
+check('на паке, который ничего не сменит, цены нет', langPanel.warn.hidden === true, langPanel.warn.textContent);
+UI.langKey('ArrowRight');
+check('дошли до English', langPanel.btns[4].dataset.pack === 'en' && focused() === 4, focused());
+check('цена показана до нажатия', langPanel.warn.hidden === false, 'скрыта');
+check('и называет число и пример', /2/.test(langPanel.warn.textContent) && /Pete/.test(langPanel.warn.textContent),
+  langPanel.warn.textContent);
+UI.langKey('ArrowLeft');
+check('шаг назад цену убирает', langPanel.warn.hidden === true, langPanel.warn.textContent);
+
+UI.langKey('ArrowRight');
+UI.langKey('Enter');
+check('Enter жмёт то, на чём фокус', langPanel.btns[4].clicked === 1, langPanel.btns[4].clicked);
+UI.closeLang();
+check('закрытая панель языка стрелки не ест', UI.langKey('ArrowDown') === false, 'съела');
 
 console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
 process.exit(failed ? 1 : 0);

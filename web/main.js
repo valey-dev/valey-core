@@ -3,7 +3,7 @@ import { potState, water as waterPot, tally, CAN_FULL } from './garden.js';
 import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, WALL } from './layout.js';
 import { loadModules, collect, first } from './modules.js';
 import { initStand } from './stand.js';
-import { drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, pxText, kickerBusy } from './office.js';
+import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, pxText, kickerBusy } from './office.js';
 import { drawCamera, buildCameras } from './cctv.js';
 import { syncActors, tickActors } from './actors.js';
 import * as UI from './ui.js';
@@ -142,6 +142,7 @@ async function saveSettings(patch) {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }), body: JSON.stringify(patch),
   }).then((x) => x.json()).catch((e) => ({ error: e.message }));
   if (r.settings) state.settings = r.settings;
+  if (r.packs) state.packs = r.packs;
   if (r.weather) applyWeather(r.weather);
   UI.renderHud();
   return r;
@@ -160,6 +161,9 @@ UI.initUI(state, {
   guideTo: (id) => { state.waypoint = id; UI.toast(tr('toast.guide')); },
   // Инвентарь не повторяет панели языка, цвета и звука — он до них доводит.
   lang: () => switchLang(),
+  setLang: (code) => switchLang(code),
+  names: () => fetch('/api/names', { headers: owned() })
+    .then((r) => r.json()).catch((e) => ({ error: e.message, packs: [] })),
   sound: () => { state.soundOn = sound.toggle(); UI.renderHud(); return state.soundOn; },
   geocode: (q) => fetch('/api/geocode?q=' + encodeURIComponent(q)).then((r) => r.json()).catch((e) => ({ error: e.message })),
   saveSettings,
@@ -217,7 +221,8 @@ knock().then((entered) => {
 });
 
 fetch('/api/settings').then((r) => r.json()).then((r) => {
-  if (r.settings) { state.settings = r.settings; setLang(r.settings.lang); }
+  if (r.settings) { state.settings = r.settings; setLang(r.settings.lang); paintSign(); }
+  if (r.packs) state.packs = r.packs;
   if (r.weather) applyWeather(r.weather);
   UI.renderHud();
 }).catch(() => {});
@@ -487,6 +492,7 @@ const onSnapshot = (e) => {
     if (wornCode !== dressCode()) dressAll();
     // язык мог переключить кто-то в соседней вкладке — догоняем
     setLang(data.settings.lang);
+    paintSign();
     if (changed && !document.getElementById('sky').hidden) UI.renderSky();
   }
   if (data.delivery) state.delivery = data.delivery;
@@ -538,6 +544,7 @@ function onKey(e) {
   if (UI.bagKey(e.key)) { e.preventDefault(); return; }
   if (UI.skyKey(e.key)) { e.preventDefault(); return; }
   if (UI.skinKey(e.key)) { e.preventDefault(); return; }
+  if (UI.langKey(e.key)) { e.preventDefault(); return; }
   if (['tab', ' ', 'e', 'escape'].includes(k)) e.preventDefault();
   if (state.dialogOpen && (k.startsWith('arrow') || k === 'enter')) e.preventDefault();
   keys.add(k);
@@ -614,7 +621,7 @@ addEventListener('keydown', onKey);
 // Экран входа открыт и поверх него ничего нет — значит и клавиши, и ходьба
 // по коридору принадлежат ему.
 const titleFree = () => titleOpen()
-  && ['bag', 'sky', 'viewer', 'roster'].every((id) => document.getElementById(id).hidden);
+  && ['bag', 'sky', 'viewer', 'roster', 'lang'].every((id) => document.getElementById(id).hidden);
 const NO_KEYS = new Set();
 
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
@@ -695,6 +702,15 @@ async function saveShot(scale) {
 
 // Всё, что написано словами, перерисовывается при смене языка. Холст не в
 // счёт: он и так перерисовывается каждый кадр и берёт строки из t() на лету.
+// Табличка над человечком-переключателем. «RU» — интерфейс и имена русские,
+// «RU·EN» — имена откреплены от языка. Считается тут, а не в рисовалке:
+// настройки офиса ей не видны и видны быть не должны.
+function paintSign() {
+  const choice = (state.settings && state.settings.namePack) || 'auto';
+  const l = lang().toUpperCase();
+  switcherSign.code = (choice === 'auto' || choice === lang()) ? l : `${l}·${choice.toUpperCase()}`;
+}
+
 function renderStatic() {
   const help = document.getElementById('help');
   // Строка помощи перечисляет клавиши, а часть клавиш принадлежит модулям.
@@ -704,6 +720,7 @@ function renderStatic() {
   if (help) help.textContent = [tr('help'), ...collect('help')].join(' · ');
   document.title = tr('doc.title');
   document.documentElement.lang = lang();
+  paintSign();
   UI.relabel();
   if (titleOpen()) renderTitle();
 }
@@ -981,7 +998,7 @@ function interact() {
   } else if (n.kind === 'kicker') {
     startPlay();
   } else if (n.kind === 'lang') {
-    switchLang();
+    UI.openLang();
     } else if (n.kind === 'cams') {
     openCams();
     } else if (n.kind === 'reception') {
@@ -1105,6 +1122,7 @@ function closeAll() {
   if (!document.getElementById('bag').hidden) return UI.closeBag();
   if (!document.getElementById('sky').hidden) return UI.closeSky();
   if (!document.getElementById('skin').hidden) return UI.closeSkin();
+  if (!document.getElementById('lang').hidden) return UI.closeLang();
   if (!document.getElementById('notes').hidden) return UI.closeNotes();
   if (first('esc')) return;
   state.dialogOpen = false; state.focus = null; state.notice = ''; UI.closeDialog();
@@ -1126,7 +1144,7 @@ function panelsOpen() {
   return titleOpen() || state.dialogOpen || state.cctv.on || UI.inviteOpen() || state.lift.phase !== 'idle'
     // Панель модуля тоже держит экран: своих id ядро не знает и знать не должно.
     || collect('busy').some(Boolean)
-    || ['viewer', 'roster', 'bag', 'sky', 'lift', 'invite'].some((id) => !document.getElementById(id).hidden);
+    || ['viewer', 'roster', 'bag', 'sky', 'lift', 'invite', 'lang'].some((id) => !document.getElementById(id).hidden);
 }
 
 function update(dt, now) {
@@ -1713,8 +1731,8 @@ watchDpr();
 // Человечек-переключатель стоит и в коридоре офиса, и на экране входа, поэтому
 // само переключение живёт здесь одно на двоих. Язык уходит в настройки, а не в
 // localStorage: пусть переключится во всех вкладках сразу, как это делает погода.
-function switchLang() {
-  const next = lang() === 'ru' ? 'en' : 'ru';
+function switchLang(next = lang() === 'ru' ? 'en' : 'ru') {
+  if (next === lang()) return;
   saveSettings({ lang: next });
   setLang(next);
   UI.toast(tr('toast.lang'));
