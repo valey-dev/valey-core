@@ -215,10 +215,6 @@ const forbidden = (res) => send(res, 403, {
 const people = new Map();
 const PEOPLE_MS = 120;
 const PEOPLE_TTL = 8000;
-// The key `buildMeeting` gives the room in web/layout.js. The server needs it
-// for one thing only: signalling is allowed between people standing in that
-// room and nowhere else.
-const MEETING_ROOM = '__meeting';
 
 // A look arrives from somebody else's machine, so it is sieved here rather than
 // at drawing time. On 30 August 2026 a person with half the fields brought
@@ -260,6 +256,18 @@ function peopleTick() {
 // Whether there is anybody worth asking. A guest does not count: the pager does
 // not reach him, and holding a question for him means holding it for nobody.
 const audience = () => [...clients].some((res) => !res.valeyGuest);
+
+// One event to one person's open streams. Presence broadcasts to everybody and
+// needs nothing like this; a module that introduces two browsers to each other
+// does — an offer is addressed to one person, not to the floor. Returns how
+// many streams took it, and zero is an answer rather than an error: the other
+// tab may have closed half a second ago.
+function toPerson(id, event, data) {
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  let n = 0;
+  for (const res of clients) if (res.valeyPerson === id) { res.write(payload); n += 1; }
+  return n;
+}
 
 // The pager has to ring at once rather than on the snapshot tick: 2.5 seconds
 // is the difference between "I am being called" and "I was called". The event
@@ -659,47 +667,6 @@ async function handle(req, res) {
     return send(res, 200, { ok: true, people: people.size });
   }
 
-  // The hub for the voice, and the whole of the server's part in it. Browsers
-  // negotiate a direct connection by swapping SDP and ICE candidates, and those
-  // have to travel over something; here they travel up by this POST and back
-  // down through the SSE stream that is already open. Once the two agree, the
-  // audio goes between them and never comes here — that is the difference
-  // between this and a conference server, and it is the reason the meeting room
-  // can promise that nobody's voice passes through anyone else's machine.
-  //
-  // What travels is opaque to us on purpose: an offer, an answer, a candidate.
-  // The office does not read them and could not use them if it did.
-  if (url.pathname === '/api/signal' && req.method === 'POST') {
-    // SDP is a few kilobytes and a candidate is a line. 32 KiB is room enough
-    // for a fat offer and still far too small to be a file transfer.
-    const raw = await readBody(req, 32 * 1024);
-    let b;
-    try { b = JSON.parse(raw); } catch { return send(res, 400, { error: 'не разобрать' }); }
-    const from = String((b && b.from) || '').slice(0, 64);
-    const to = String((b && b.to) || '').slice(0, 64);
-    const kind = String((b && b.kind) || '');
-    if (!from || !to) return send(res, 400, { error: 'нужны from и to' });
-    if (!['offer', 'answer', 'ice', 'bye'].includes(kind))
-      return send(res, 400, { error: 'неизвестный вид сигнала' });
-
-    // Both ends have to be standing in the meeting room. Without this the office
-    // is a message bus that any tab can use to reach any other, which is not
-    // what was built here — the room is the permission, exactly as the mic is
-    // switched by the zone and not by a button.
-    const here = livePeople();
-    const inRoom = (id) => here.some((p) => p.id === id && p.room === MEETING_ROOM);
-    if (!inRoom(from) || !inRoom(to))
-      return send(res, 409, { error: 'сигналы ходят только между теми, кто в переговорке' });
-
-    const payload = `event: signal\ndata: ${JSON.stringify({ from, kind, data: b.data })}\n\n`;
-    let delivered = 0;
-    for (const c of clients) if (c.valeyPerson === to) { c.write(payload); delivered += 1; }
-    // Nobody listening is not an error: the other side may have closed the tab
-    // half a second ago. The caller retries or gives up, and the office does not
-    // pretend the message arrived.
-    return send(res, 200, { ok: true, delivered });
-  }
-
   // Left properly rather than by timeout: the tab closes, the spot is freed at
   // once, without eight seconds of a ghost in the corridor.
   if (url.pathname === '/api/gone' && req.method === 'POST') {
@@ -1004,7 +971,12 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   // 2026 the order was the other way round, and a module's section appeared in
   // the settings only after the first save — the radio client masked that with
   // `|| {}`.
-  const mods = await loadModules(ROOT);
+  // The context is the office's half of the seam: what a module cannot reach on
+  // its own and should not reimplement. Both pieces are about people — who is
+  // standing where, and how to say one thing to one of them — because that is
+  // what the floor tier is built out of. A module that wants neither simply
+  // does not export `setup`.
+  const mods = await loadModules(ROOT, { people: livePeople, toPerson });
   let boot = await getSettings();
   const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
   if (external && !(boot.network || {}).token) {
