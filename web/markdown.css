@@ -47,6 +47,14 @@
   background:var(--bg-deep); color:var(--muted); border:1px solid var(--frame-dim);
   font:9px/1 "JetBrains Mono", monospace}
 .md .mdcopy-in::before{content:"⧉"}
+/* The 3px gap between the fragment and the button was a hole in the hover: the
+   cursor travelling across it was over neither of them, the button hid, and it
+   could not be clicked without approaching from another side. The strip is
+   invisible and belongs to the button, so crossing it keeps the button hovered.
+   It bridges the gap rather than closing it — the gap is what keeps the icon
+   from touching the text. */
+.md .mdcopy-in::after{content:""; position:absolute; top:0; bottom:0;
+  left:-5px; width:5px}
 .md .mdcopyable:hover .mdcopy-in, .md .mdcopy-in:hover{display:block}
 .md .mdcopy-in:hover{color:var(--ink); border-color:var(--frame)}
 /* The answer is a flash on the fragment itself: its text is never swapped,
