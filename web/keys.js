@@ -95,8 +95,39 @@ export async function readLayout() {
   } catch { engraved = new Map(); }
 }
 
+// Расстояние между клавишами и отступ между доской и блоком стрелок — те же
+// числа, что в style.css. Держать их здесь приходится потому, что размер
+// колпачка считается арифметикой, а не подбирается: клавиатура обязана занять
+// всю ширину панели, иначе на большом экране она сидит островком посередине.
+const GAP = 6, BLOCK_GAP = 14, PAD = 14, ARROW_UNITS = 3;
+
+/**
+ * Ширина колпачка, при которой самый широкий ряд впритык влезает в панель.
+ * Считается по каждому ряду и берётся наименьшая: ряды разной длины и в
+ * клавишах, и в промежутках между ними.
+ */
+function capSize(available) {
+  const fits = ROWS.map((row) => {
+    const units = row.reduce((s, [, u]) => s + u, 0);
+    const gaps = (row.length - 1) * GAP + BLOCK_GAP + 2 * GAP;
+    return (available - gaps) / (units + ARROW_UNITS);
+  });
+  return Math.max(18, Math.min(...fits));
+}
+
 let el = null;
 export function keysOpen() { return !!el && !el.hidden; }
+
+// Пересчёт при открытии и при каждом изменении окна: панель на весь экран, и
+// её ширина меняется вместе с ним.
+function fit() {
+  if (!keysOpen()) return;
+  const body = el.querySelector('.keysbody');
+  if (!body) return;
+  const cap = capSize(body.clientWidth - PAD * 2);
+  body.style.setProperty('--cap', `${cap.toFixed(2)}px`);
+}
+addEventListener('resize', fit);
 
 function capHtml(code, units) {
   const id = actionOf({ code });
@@ -161,6 +192,7 @@ export function renderKeys() {
   </div>`;
   const x = document.getElementById('keysx');
   if (x) x.onclick = closeKeys;
+  fit();
 }
 
 export function closeKeys() { if (el) el.hidden = true; }
