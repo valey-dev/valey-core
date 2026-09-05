@@ -1,13 +1,16 @@
-// Два языка офиса. Словарь плоский: ключ → строка, по строке на язык.
+// The two languages of the office. The dictionary is flat: key → string, one
+// string per language.
 //
-// Язык живёт в .settings.json рядом с погодой, а не в localStorage: офис у
-// человека один, зато вкладок с ним бывает несколько, и переключение у
-// человечка в коридоре должно доезжать до всех сразу — тем же потоком событий,
-// которым уже ходит погода. main.js подхватывает settings.lang и зовёт setLang.
+// The language lives in .settings.json next to the weather rather than in
+// localStorage: a person has one office, but several tabs of it, and a switch by
+// the little figure in the corridor has to reach all of them at once — over the
+// same stream of events the weather already travels on. main.js picks up
+// settings.lang and calls setLang.
 //
-// Ключи именуются по месту, где строка видна: hud.*, hint.* — подписи на
-// холсте, toast.*, help — нижняя строка управления. Ищется по ключу, а не по
-// русскому тексту, чтобы правка формулировки не разъезжалась между языками.
+// The keys are named after the place a string is seen in: hud.*, hint.* are
+// captions on the canvas, toast.*, help is the bottom control line. The lookup is
+// by key rather than by the Russian text, so that an edit to a wording does not
+// drift apart between the languages.
 
 const listeners = new Set();
 let LANG = 'ru';
@@ -19,7 +22,7 @@ const DICT = {
     'lang.self': 'русский',
     'lang.other': 'English',
 
-    // --------------------------------------------------------------- шапка
+    // --------------------------------------------------------------- the header
     'hud.corridor': 'коридор',
     'hud.round': 'Tab — обход',
     'hud.zoomAuto': ' авто',
@@ -30,7 +33,7 @@ const DICT = {
     'hud.zoomTitleTight': ' · окно мало даже для ×6',
     'hud.zoomTitleClamped': ' · ×{n} — больше не влезает',
 
-    // -------------------------------------------------------------- погода
+    // -------------------------------------------------------------- the weather
     'sky.clear': 'ясно',
     'sky.clouds': 'облачно',
     'sky.rain': 'дождь',
@@ -40,7 +43,7 @@ const DICT = {
     'sky.made': 'выдумана',
     'sky.outside': 'За окном — {what}',
 
-    // ------------------------------------------------- подписи на холсте
+    // ------------------------------------------------- the captions on the canvas
     'hint.talk': '[ ПРОБЕЛ ] поговорить',
     'hint.sit': 'ПРОБЕЛ — сесть', 'hint.standUp': 'ПРОБЕЛ — встать',
     'hint.camsOn': '[ ПРОБЕЛ ] камеры работают',
@@ -64,7 +67,7 @@ const DICT = {
     'hint.liftIn': '[ ПРОБЕЛ ] войти в лифт',
     'hint.liftCall': '[ ПРОБЕЛ ] вызвать лифт',
     'hint.board': '[ ПРОБЕЛ ] посмотреть доску',
-    // у человечка-переключателя подписано, куда он переключит, а не что он такое
+    // the little switch figure is labelled with what it will switch to, not with what it is
     'hint.lang': '[ ПРОБЕЛ ] язык и имена',
     'hint.kicker': '[ ПРОБЕЛ ] сыграть',
     'label.me': 'ТЫ',
@@ -73,7 +76,7 @@ const DICT = {
     'label.limited': 'лимит кончился — дремлет',
     'label.searching': 'ищу агентов…',
 
-    // --------------------------------------------------------------- тосты
+    // --------------------------------------------------------------- the toasts
     'toast.canTaken': 'Лейка в руках. Поливов в ней {n}.',
     'toast.canTakenDry': 'Лейка в руках, и она пустая. Кран справа.',
     'toast.canBack': 'Лейка на крючке.',
@@ -103,9 +106,9 @@ const DICT = {
     'lang.hint': 'Пак идёт за языком офиса, пока его не выбрали руками. Смена пака переименует всех разом: имя выводится из id сессии, поэтому вернёшь пак — вернутся и имена.',
     'toast.namePack': 'Имена: {pack}. Переименованы все {n} — {from} теперь {to}.',
     'toast.namePackPlain': 'Имена: {pack}.',
-    // ------------------------------------------------------- запрос разрешения
-    // Пейджер зовёт, карточка спрашивает. Слова разные: на пейджере «Ответить»
-    // — это про звонок, в карточке «Разрешить» — про команду.
+    // ------------------------------------------------------- a permission request
+    // The pager calls, the card asks. The words differ: on the pager «Ответить»
+    // is about the call, in the card «Разрешить» is about the command.
     'pager.someone': 'агент',
     'pager.may': 'можно выполнить?',
     'pager.answer': 'Ответить',
@@ -157,8 +160,8 @@ const DICT = {
     'toast.shotFail': 'Кадр не сохранился: {why}',
     'board.title': 'Доска · {room}',
 
-    // ------------------------------------------------ нижняя строка помощи
-    // ------------------------------------------------ ошибки доставки заданий
+    // ------------------------------------------------ the bottom help line
+    // ------------------------------------------------ the task delivery errors
     'err.noCli': 'claude не найден в PATH',
     'err.installCli': 'Установи CLI: npm install -g @anthropic-ai/claude-code (или укажи путь в CLAUDE_BIN)',
     'err.loggedOut': 'CLI разлогинен — в терминале claude auth login',
@@ -217,9 +220,9 @@ const DICT = {
     'act.thinking': 'думает',
     'clean.code': '[код]',
 
-    // ------------------------------------------------------- ошибки Spotify
+    // ------------------------------------------------------- the Spotify errors
 
-    // ------------------------------------------------------- названия картин
+    // ------------------------------------------------------- the painting titles
     'art.food.0': 'Паста в три часа ночи',
     'art.food.1': 'Натюрморт с дедлайном',
     'art.food.2': 'Обед, который остыл',
@@ -265,15 +268,15 @@ const DICT = {
     'egg.ready.name': 'Ждун у кулера',
     'egg.ready.medium': 'ждёт ответа от агента',
 
-    // киноплакат в пультовой: не картина и не пасхалка — он один, и подпись
-    // у него постоянная, без выбора по хешу
+    // the film poster in the control room: neither a painting nor an easter egg —
+    // there is one of it, and its caption is constant, with no choice by hash
     'poster.name': 'Ночная смена',
     'poster.medium': 'кто смотрит за смотрящим',
     'medium.0': 'холст, пиксели',
     'medium.1': 'масло, 16 цветов',
     'medium.2': 'пиксель, дерево',
     'medium.3': 'акрил, растр',
-    // --------------------------------------------- пультовая, доска, тосты
+    // --------------------------------------------- the control room, the board, the toasts
     'cam.entrance': 'коридор · вход',
     'cam.corridor': 'коридор {n}',
     'cam.security': 'коридор · security',
@@ -291,7 +294,7 @@ const DICT = {
     'skin.oak': 'дуб', 'skin.cherry': 'вишня', 'skin.plum': 'слива',
     'skin.night': 'ночь', 'skin.moss': 'мох', 'skin.steel': 'сталь',
 
-    // -------------------------------------------------- роли и занятия агентов
+    // -------------------------------------------------- the roles and activities of agents
     'role.design': 'Дизайнер', 'role.research': 'Исследователь',
     'role.plan': 'Продакт', 'role.code': 'Разработчик',
     'role.qa': 'Тестировщик', 'role.release': 'Релиз-инженер',
@@ -307,13 +310,13 @@ const DICT = {
     'act.someCode': 'код', 'act.someFile': 'файл',
 
 
-    // ------------------------------------ лифт, ресепшен, цвет, разговор
+    // ------------------------------------ the lift, the reception, the colour, the talk
     'lift.title': 'Лифт',
     'lift.floor': 'этаж {n}',
     'lift.empty': 'пусто',
     'lift.hint': 'Кабина одна на этаж. Пока едет — створки закрыты, выйти нельзя.',
 
-    // ------------------------------------------------------------- ресепшен
+    // ------------------------------------------------------------- the reception
     'rec.title': 'Ресепшен · этаж {n}',
     'rec.emptyFloor': 'Здравствуйте. Этаж {n} пока пустует — все разошлись.',
     'rec.greet': 'Здравствуйте. Вы на этаже {n} — здесь {projects}, {waiting}.',
@@ -336,7 +339,7 @@ const DICT = {
     'chat.title': 'Разговор · {name}',
     'chat.you': 'ты',
     'chat.empty': 'В этой сессии ещё ничего не сказано.',
-    // ----------------------------------------------------------- экран входа
+    // ----------------------------------------------------------- the entrance screen
     'title.sub': 'офис агентов',
     'title.enter': 'Войти',
     'title.who': 'Кто внутри',
@@ -366,8 +369,8 @@ const DICT = {
     'title.room.one': 'комнате', 'title.room.few': 'комнатах', 'title.room.many': 'комнатах',
     'title.noRooms': 'Комнат пока нет — офис пустой.',
     'title.enterRoom': 'ENTER — войти сразу в эту комнату, минуя коридор.',
-    // Подсказки коридора перед дверью. Ключ тот же, что и в офисе: ПРОБЕЛ
-    // трогает то, у чего стоишь, ⏎ жмёт пункт меню.
+    // The corridor hints in front of the door. The key is the same as in the
+    // office: SPACE touches whatever you stand at, ⏎ presses a menu item.
     'title.hintDoor': '[ ПРОБЕЛ ] войти',
     'title.walk': '← → идти по коридору',
     'chat.reading': 'читаю…',
@@ -380,7 +383,7 @@ const DICT = {
     'chat.appendedToast': '{name} дописал ответ',
     'chat.keys': 'R — обновить · ↑↓ листать, с SHIFT — страницами · N — заметка · ESC — назад',
 
-    // ------------------------------------------------------------- заметки
+    // ------------------------------------------------------------- the notes
     'note.label': 'заметка · {when}',
     'note.edited': 'правлена',
     'note.edit': 'править',
@@ -399,7 +402,7 @@ const DICT = {
     'note.window': 'окно — последние 16 сообщений',
     'note.anchor': 'к реплике от {when}',
 
-    // ------------------------------------------------------- все заметки
+    // ------------------------------------------------------- all the notes
     'notes.title': 'Заметки',
     'notes.count': '{n} всего',
     'notes.search': 'искать по тексту заметок',
@@ -412,7 +415,7 @@ const DICT = {
     'notes.emptyWhy': 'Заметка заводится в разговоре: открой «дочитать» у любого агента и нажми N. Мысль привяжется к реплике, которую ты в этот момент читаешь, и попадёт сюда.',
     'dlg.readOnArrow': '↑ дочитать — здесь оборвано, дальше ещё {n} символов →',
 
-    // -------------------------------------------- обход, внешность, погода
+    // -------------------------------------------- the round, the look, the weather
     'round.title': 'Утренний обход · {done} из {n}',
     'round.untitled': '(без названия)',
     'round.lead': 'вести',
@@ -457,6 +460,18 @@ const DICT = {
     'tree.arrive.floor': 'подпиской, потому что это наши серверы — рандеву и ретранслятор, расход ежемесячный. «Этаж» включает «Офис» каждому участнику. Пока не построено: колонка стоит, чтобы было видно, куда растёт дерево.',
     'tree.note': 'Дерево — карта, а не касса: цены и покупка живут на valey.dev. Здесь видно, из чего офис собран и что из чего растёт.',
     'tree.keys': 'Стрелки — по дереву: ↑↓ по колонке, ←→ по ветке.',
+    'tree.view': 'вид', 'tree.view.flat': 'простое', 'tree.view.wide': 'подробное',
+    'tree.dir.count': '{n} из {m}', 'tree.dir.free': 'всё твоё', 'tree.dir.noTiers': 'без тарифов',
+    'tree.tier.office': 'ОФИС', 'tree.tier.floor': 'ЭТАЖ',
+    'tree.gate.office': '{n} из {m} · год обновлений',
+    'tree.gate.officeNone': 'модулей здесь нет',
+    'tree.gate.floor': '{n} из {m} · ещё не построено',
+    'tree.gate.floorNone': 'сетевых веток в этом направлении нет',
+    'tree.wide.noOffice': 'модулей «Офиса» здесь пока нет — приедут обновлениями',
+    'tree.wide.noSale': 'то, что про тебя, не продаётся: ярусов здесь нет вовсе',
+    'tree.wide.noFloor': '«Этаж» растёт из других направлений',
+    'tree.wide.room': 'КОМНАТА · у тебя',
+    'tree.wide.keys': '1–6 — направление · стрелки — по ветке · V — простой вид. Подробный шире: панель на это время 1000 вместо 700, и подписи внутри узлов появляются только там, где хватает ширины.',
     'dress.tie': 'галстук', 'dress.cut': 'крой галстука', 'dress.jacket': 'пиджак', 'dress.bottom': 'низ',
     'val.none': 'нет',
     'val.bottom.pants': 'брюки', 'val.bottom.skirt': 'юбка',
@@ -503,10 +518,10 @@ const DICT = {
     'sky.looking': 'Смотрю, что там у них…',
     'sky.nowAt': 'Окно теперь смотрит на {place}',
 
-    // ---------------------------------------------------- доска и просмотр
+    // ---------------------------------------------------- the board and the viewer
     'gal.pick': 'стрелки — выбрать · Enter — открыть',
 
-    // ------------------------------------------------------- дерево гита
+    // ------------------------------------------------------- the git tree
     'gal.empty': 'Доска пустая. Как только кто-то запишет файл или нарисует макет — он окажется здесь.',
     'gal.gone': 'Файла больше нет на диске.',
     'gal.notServed': 'не отдалось: ',
@@ -527,7 +542,7 @@ const DICT = {
     'doc.source': 'исходник',
     'doc.page': 'страница',
 
-    // ------------------------------------------------------------- диалог
+    // ------------------------------------------------------------- the dialog
     'status.working': 'за работой',
     'status.awaiting': 'ждёт тебя',
     'status.idle': 'отдыхает',
@@ -1021,6 +1036,18 @@ const DICT = {
     'tree.arrive.floor': 'by subscription, because these are our servers — the rendezvous and the relay, a monthly cost. Floor includes Office for every member. Not built yet: the column stands so you can see where the tree grows.',
     'tree.note': 'The tree is a map, not a checkout: prices and buying live on valey.dev. Here you see what the office is made of and what grows out of what.',
     'tree.keys': 'Arrows walk the tree: ↑↓ along a column, ←→ along a branch.',
+    'tree.view': 'view', 'tree.view.flat': 'flat', 'tree.view.wide': 'detailed',
+    'tree.dir.count': '{n} of {m}', 'tree.dir.free': 'all yours', 'tree.dir.noTiers': 'no tiers here',
+    'tree.tier.office': 'OFFICE', 'tree.tier.floor': 'FLOOR',
+    'tree.gate.office': '{n} of {m} · a year of updates',
+    'tree.gate.officeNone': 'no modules here',
+    'tree.gate.floor': '{n} of {m} · not built yet',
+    'tree.gate.floorNone': 'no network branches in this direction',
+    'tree.wide.noOffice': 'no Office modules here yet — they arrive with updates',
+    'tree.wide.noSale': 'what is about you is not for sale: no tiers here at all',
+    'tree.wide.noFloor': 'the Floor grows out of other directions',
+    'tree.wide.room': 'ROOM · yours',
+    'tree.wide.keys': '1–6 pick a direction · arrows walk the branch · V returns the flat view. The detailed one is wider: the panel takes 1000 instead of 700 while it is up, and the labels inside a node appear only where there is width for them.',
     'dress.tie': 'tie', 'dress.cut': 'tie cut', 'dress.jacket': 'jacket', 'dress.bottom': 'bottom',
     'val.none': 'none',
     'val.bottom.pants': 'trousers', 'val.bottom.skirt': 'skirt',
@@ -1157,11 +1184,12 @@ export function lang() { return LANG; }
 
 export function other() { return LANG === 'ru' ? 'en' : 'ru'; }
 
-// Русскому «2 экрана» нужны три формы, английскому «2 screens» — две. Формы
-// лежат в самой строке через | и подписаны именем категории, а выбирает между
-// ними Intl.PluralRules того же языка. Своя арифметика по n%10 и n%100 работала
-// бы ровно до третьего языка, а браузер эти правила уже знает — и знает, что у
-// русского 21 это «one», а 11 всё-таки «many».
+// Russian «2 экрана» needs three forms, English "2 screens" two. The forms lie
+// inside the string itself, separated by | and labelled with the name of a
+// category, and Intl.PluralRules of the same language chooses between them.
+// Arithmetic of our own over n%10 and n%100 would work exactly until the third
+// language, while the browser knows these rules already — and knows that in
+// Russian 21 is "one" and 11 is nevertheless "many".
 const RULES = new Map();
 function plural(s, n) {
   if (!s.includes('|')) return s;
@@ -1172,13 +1200,13 @@ function plural(s, n) {
   }
   let r = RULES.get(LANG);
   if (!r) RULES.set(LANG, r = new Intl.PluralRules(LANG));
-  // other и many — запасные: у языка может не быть категории, под которую
-  // написана строка, и тогда лучше форма не та, чем ключ вместо текста.
+  // other and many are the spares: a language may not have the category a string
+  // was written for, and then a wrong form is better than a key instead of text.
   return forms[r.select(n)] ?? forms.other ?? forms.many ?? s;
 }
 
-// Возвращает ключ, если перевода нет: пропущенная строка тогда видна глазом в
-// офисе, а не молча подставляется на другом языке.
+// Returns the key when there is no translation: a missing string is then visible
+// to the eye in the office rather than quietly substituted in the other language.
 export function t(key, vars) {
   let s = (DICT[LANG] && DICT[LANG][key]) ?? (DICT.ru && DICT.ru[key]) ?? key;
   if (!vars) return s;
@@ -1192,20 +1220,21 @@ export function setLang(l) {
   LANG = next;
   document.documentElement.lang = LANG;
   document.title = t('doc.title');
-  for (const fn of listeners) { try { fn(LANG); } catch { /* один слушатель не роняет остальных */ } }
+  for (const fn of listeners) { try { fn(LANG); } catch { /* one listener does not bring the others down */ } }
   return true;
 }
 
 export function onLang(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 
-// Полнота словаря проверяется здесь же, а не тестом: расхождение ключей между
-// языками — это дыра, которую в игре видно только на том экране, куда редко
-// заходят. В консоли она видна на первой же загрузке.
-// Спрашиваются только те формы числа, которые язык объявляет: у английского
-// нет «few», и `title.day.few` в его словаре не пропуск, а грамматика.
-// Предупреждение об этом печаталось при каждой загрузке и приучало не читать
-// строку, которая ловит настоящие дыры. «many» просят у всех: это запасная
-// форма резолвера, и в английском она стоит вместо «other».
+// The completeness of the dictionary is checked right here rather than by a
+// stand: a divergence of keys between the languages is a hole visible in the game
+// only on a screen people rarely walk into. In the console it is visible on the
+// very first load.
+// Only the number forms a language declares are asked for: English has no
+// "few", and `title.day.few` missing from its dictionary is grammar rather than
+// an omission. A warning about that was printed on every load and taught the
+// reader to skip the line that catches real holes. "many" is asked of everyone:
+// it is the resolver's spare form, and in English it stands in for "other".
 const FORMS = ['one', 'few', 'many', 'other'];
 const wanted = (l, k) => {
   const f = FORMS.find((s) => k.endsWith('.' + s));
@@ -1214,9 +1243,10 @@ const wanted = (l, k) => {
 const missing = LANGS.flatMap((l) => Object.keys(DICT.ru).filter((k) => DICT[l][k] == null && wanted(l, k)).map((k) => `${l}:${k}`));
 if (missing.length) console.warn('i18n: нет перевода —', missing.join(', '));
 
-// Словарь модуля вливается в общий: искать его будет тот же tr, поэтому модуль
-// не заводит своего перевода и не спорит с языком офиса. Ключи модуль именует
-// со своим id впереди — иначе два модуля однажды подерутся за одно имя.
+// A module's dictionary is poured into the common one: the same tr will look it
+// up, so a module does not start a translation of its own and does not argue with
+// the language of the office. A module names its keys with its own id in front —
+// otherwise two modules will one day fight over one name.
 export function addDict(fragment) {
   for (const [lng, keys] of Object.entries(fragment || {})) DICT[lng] = { ...(DICT[lng] || {}), ...keys };
 }

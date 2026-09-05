@@ -1,33 +1,38 @@
-// Табличка над дверью офиса — отдельным модулем, потому что её рисуют двое.
+// The plaque over the office door — a module of its own, because two things draw it.
 //
-// Экран входа вешает её на стену, а генератор обложки формы печатает из неё
-// картинку. Пока общего модуля не было, обложку нарисовали рядом «по мотивам»,
-// и она разошлась молча: дерево #6f4f2e вместо #6b472a, текст #fbdc8d вместо
-// #ffd166, и строки местами — мелкая сверху, VALEY снизу. Никто этого не
-// заметил, потому что сравнивать было не с чем: две картинки в разных окнах
-// выглядят одинаково похожими на правду.
+// The entrance screen hangs it on the wall, and the generator of the form's cover
+// prints a picture out of it. While there was no shared module, the cover was
+// drawn alongside "after the motifs", and it diverged silently: wood #6f4f2e
+// instead of #6b472a, text #fbdc8d instead of #ffd166, and the lines swapped —
+// the small one on top, VALEY underneath. Nobody noticed, because there was
+// nothing to compare against: two pictures in two windows look equally like the
+// truth.
 //
-// Зависит только от pixfont — ни DOM, ни i18n, — чтобы генератор мог позвать
-// её из node без браузера. По той же причине модуль уехал сюда из title.js
-// целиком: сайт живёт в своём репозитории и берёт табличку отсюда.
+// It depends on pixfont only — no DOM, no i18n — so that the generator can call
+// it from node without a browser. For the same reason the module moved here out
+// of title.js whole: the site lives in its own repository and takes the plaque
+// from here.
 import * as PF from './pixfont.js';
 
 const px = (ctx, x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); };
 
-// Геометрия в пикселях мира 400×225. Гвозди торчат на 4 px выше рамки, и это
-// часть картинки: обложка считает свою безопасную зону от них, а не от рамки.
+// The geometry is in the pixels of the 400×225 world. The nails stick out 4 px
+// above the frame, and that is part of the picture: the cover counts its safe
+// area from them, not from the frame.
 export const PLAQUE = { x: 148, y: 76, w: 104, h: 24 };
 export const NAIL_RISE = 4;
 
-// Обе строки набираются пикселями, а не fillText. Пятый кегль на холсте
-// 400×225 рисуется серыми полутонами, а офис раздувает каждый полутон в
-// квадрат: на кадре из офиса «офис агентов» не читалось ни одной буквой.
+// Both lines are set in pixels, not by fillText. Five-point type on a 400×225
+// canvas is drawn in grey half-tones, and the office blows every half-tone up
+// into a square: on a frame from the office «офис агентов» was unreadable, letter
+// by letter.
 //
-// Лицо выбирается по самой строке, а не по языку. Русской нужна широкая
-// гарнитура — кириллицы в 3×5 нет и не будет; английской хватает 3×5, где
-// латиница полная. Если строку не берёт ни одно лицо, зовётся fallback:
-// мыльная подпись лучше пропавшей. Передаёт его вызывающий — экран входа
-// умеет pxText, генератор обложки нет.
+// The face is chosen by the string itself, not by the language. A Russian one
+// needs the wide face — there is no Cyrillic in 3×5 and there will not be; an
+// English one is served by 3×5, where the Latin alphabet is complete. If no face
+// takes the string, the fallback is called: a soapy caption is better than a
+// missing one. The caller passes it in — the entrance screen can do pxText, the
+// cover generator cannot.
 export function drawPlaque(ctx, P, sub, fallback) {
   px(ctx, P.x, P.y, P.w, P.h, '#8a5f3a');
   px(ctx, P.x + 2, P.y + 2, P.w - 4, P.h - 4, '#6b472a');

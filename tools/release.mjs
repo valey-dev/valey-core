@@ -75,8 +75,13 @@ for (const c of commits) {
   else other.push(c);
 }
 
-const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля',
-  'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+// English, like the headings above and for the same reason: the date sits on
+// the same line as the tag, over a list of English subjects, and v0.2.0 — the
+// section this file already carried — reads «30 August 2026». The switch of
+// 2 September 2026 changed the headings and missed this line; found on 5
+// September while cutting v0.3.0, before the tag left the machine.
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+  'August', 'September', 'October', 'November', 'December'];
 const d = new Date(git('log', '-1', '--format=%cI'));
 const date = `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 

@@ -347,6 +347,57 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .tico{width:16px; height:16px; flex:none;
   background:conic-gradient(var(--c) 0 25%, color-mix(in srgb, var(--c) 55%, black) 25% 50%,
     var(--c) 50% 75%, color-mix(in srgb, var(--c) 55%, black) 75%)}
+/* The detailed view of the tree: six directions on top, one branch below.
+   The panel is the only one in the inventory that is wider than 700, and only
+   while this view is up — the price of the mode, paid where it is used.
+
+   Both thresholds are on the viewport rather than the panel, because the panel
+   is min(1000px, 94vw) and the two track each other: at 1070 the panel reaches
+   the 1000 the labels need, at 930 it drops under the 860 where a card can
+   still stand beside the tree. */
+.bagwrap.wide{width:min(1000px,94vw)}
+.vsw{display:flex; align-items:center; gap:6px; margin-left:auto; font-size:11px; color:var(--muted)}
+.vsw kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted-dim)}
+.vbtn{background:var(--field); color:var(--ink-dim); border:1px solid var(--frame-dim);
+  padding:2px 8px; cursor:pointer; font:11px "JetBrains Mono", "Courier New",monospace}
+.vbtn:hover{background:var(--wood); color:var(--ink)}
+.vbtn.on{background:var(--wood); color:var(--ink); border:2px solid var(--accent); padding:1px 7px}
+.tdirs{display:flex; gap:6px}
+.tdir{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; padding:6px 8px; cursor:pointer;
+  background:var(--bg-deep); border:1px solid var(--frame-dim); text-align:left;
+  font:10px "JetBrains Mono", "Courier New",monospace; color:var(--muted)}
+.tdir:hover{background:var(--wood)}
+.tdir.on{background:var(--wood); border:2px solid var(--accent); padding:5px 7px}
+.tdir b{font-size:10px; letter-spacing:.06em; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.tdir.on b{color:var(--ink)}
+.tdir span{font-size:10px}
+.tdir.free span{color:var(--accent)}
+.tdir em{font-style:normal; font-size:9px; color:var(--muted-dim)}
+.tbar{display:block; height:4px; background:var(--bg); border:1px solid var(--frame-dim)}
+.tbar u{display:block; height:100%; background:var(--accent)}
+.wbody{display:flex; gap:12px; align-items:flex-start}
+/* Tiers read bottom-up, the way the tree does: what you have is the ground, what
+   is paid grows above it. The markup is already in that order, so the column is
+   an ordinary one — pinned to the bottom, so a short branch does not float. */
+.wtree{position:relative; flex:1; min-width:0; display:flex; flex-direction:column;
+  justify-content:flex-end; gap:10px; padding:10px; min-height:330px;
+  background:var(--bg-deep); border:1px solid var(--frame-dim)}
+.wtree .tedges{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
+.wtier{display:flex; gap:14px; flex-wrap:wrap; justify-content:space-around;
+  align-items:flex-start; position:relative; z-index:1}
+.wkey{display:flex; gap:6px; align-items:flex-start; max-width:270px; min-width:0}
+.wkey .tnode{flex:0 1 auto}
+.wsubs{display:flex; flex-direction:column; gap:2px; padding-top:2px}
+.wsub{font-style:normal; font-size:9px; color:var(--muted); white-space:nowrap}
+.wgate{display:flex; align-items:center; gap:8px; padding:2px 0; color:var(--muted-dim);
+  border-top:1px dashed var(--frame-dim); font-size:9px; position:relative; z-index:1}
+.wgate b{font-size:9px; letter-spacing:.1em; color:var(--warn)}
+.wempty{margin:0; padding:6px 0; font-size:10px; color:var(--muted-dim); text-align:center}
+.wroom{margin:0; font:bold 9px "JetBrains Mono", monospace; letter-spacing:.1em; color:var(--accent)}
+.wbody .lcard{width:255px; flex:none}
+@media (max-width:1070px){ .wsubs{display:none} }
+@media (max-width:930px){ .wbody{flex-direction:column} .wbody .lcard{width:auto; align-self:stretch} }
+
 .lcard{background:var(--bg-deep); border:1px solid var(--frame-dim); padding:10px 12px;
   display:flex; flex-direction:column; gap:8px; font-size:11px; color:var(--ink)}
 .lcard p{margin:0; line-height:1.4}
@@ -585,9 +636,10 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 /* ---- экран входа ---- */
 /* Оверлей привязан к прямоугольнику холста (координаты ставит layoutTitle),
    поэтому меню стоит у двери на любом размере окна, а не уезжает по вьюпорту. */
-/* Проявляется из темноты, а не возникает: пока меню не встало по холсту, его
-   не видно вовсе, и на экране только сцена с фонарём. Опорная точка — класс
-   ready, его вешает layoutTitle, когда рамка холста наконец не нулевая. */
+/* It fades in out of the dark rather than appearing: until the menu stands on
+   the canvas it is not visible at all, and the screen holds only the scene with
+   its lamp. The hinge is the ready class, hung by layoutTitle once the canvas
+   box is finally not zero. */
 #title{position:fixed; z-index:26; pointer-events:none; opacity:0; transition:opacity .5s ease}
 #title.ready{opacity:1}
 #title[hidden]{display:none}

@@ -1,17 +1,19 @@
-// Демо-этаж лендинга: тот же офис, только агенты выдуманы.
+// The demo floor of the landing page: the same office, only the agents are invented.
 //
-// До 30 августа 2026 здесь жил второй движок — лендинг верстался отдельным
-// артефактом, импортировать было неоткуда, и офис был нарисован заново «по
-// мотивам»: мир 320×150 вместо 400×225, стол 26×10 вместо 48×14, таблички
-// системным Courier в 6 пикселей вместо пиксельного шрифта. Отличия копились
-// молча, а игрок вдобавок застревал в дверях: проём 18, коробка 8, окно
-// прохода 10, и столкновения по осям раздельно намертво клинили на диагонали.
+// Until 30 August 2026 a second engine lived here — the landing was laid out as a
+// separate artefact, there was nowhere to import from, and the office was drawn
+// anew "after the motifs": a world of 320×150 instead of 400×225, a desk of 26×10
+// instead of 48×14, plaques in system Courier at 6 pixels instead of the pixel
+// font. The differences piled up silently, and on top of that the player got stuck
+// in the doorways: an opening of 18, a box of 8, a passage window of 10, and
+// collisions resolved per axis separately jammed dead on a diagonal.
 //
-// Чинить это было нельзя — только снести. Рисование офиса от сервера не
-// зависит вовсе: buildLayout и blocked — чистые функции от списка агентов,
-// draw* из office.js берут готовый план, и ни один из этих модулей не ходит
-// в сеть. Значит демо-этаж собирается из выдуманного списка теми же функциями,
-// и любая правка настоящего офиса приезжает сюда сама.
+// Fixing that was not possible — only tearing it out. Drawing the office does not
+// depend on the server at all: buildLayout and blocked are pure functions of a
+// list of agents, the draw* from office.js take a ready plan, and none of these
+// modules goes to the network. So the demo floor is assembled out of an invented
+// list by the same functions, and any edit to the real office arrives here by
+// itself.
 import { buildLayout, blocked } from './layout.js';
 import {
   drawCorridor, drawRoom, drawRoomProps, drawSecurity, drawMeeting, drawLift, drawReception,
@@ -20,14 +22,16 @@ import {
 import { lookOf, drawPerson } from './sprites.js';
 import { drawBubble } from './badges.js';
 
-const VW = 400, VH = 225;                 // тот же вид, что в офисе
+const VW = 400, VH = 225;                 // the same look as in the office
 
-// Восемь выдуманных агентов в трёх проектах: 4 работают, 3 ждут ответа, 1 в
-// лимите. Поля названы как в офисе — status и limited, — потому что значок над
-// головой рисует общий drawBubble из badges.js, а он читает именно их. Числа не случайные — их называет заголовок раздела «зачем»
-// («Восемь сессий. Три ждут ответа»), и до 30 августа 2026 демка показывала
-// пятерых, то есть страница спорила сама с собой в двух экранах прокрутки.
-// Поля ровно те, которые читает рисование: id, name, project, state, mood.
+// Eight invented agents in three projects: 4 working, 3 waiting for an answer, 1
+// out of limit. The fields are named as in the office — status and limited —
+// because the badge above the head is drawn by the shared drawBubble from
+// badges.js, and it reads exactly those. The numbers are not random — the heading
+// of the "why" section names them ("Eight sessions. Three are waiting for an
+// answer"), and until 30 August 2026 the demo showed five, that is, the page
+// argued with itself two screens of scrolling apart.
+// The fields are exactly the ones the drawing reads: id, name, project, state, mood.
 export const AGENTS = [
   { id: 'a1', name: 'Пётр', project: 'valey',      status: 'working',  mood: 'code',
     en: { name: 'Pyotr', role: 'Developer', act: 'Edit · server/agents.js', when: 'spoke a minute ago',
@@ -71,9 +75,9 @@ export const AGENTS = [
           say: 'Разложила лендинг на семь блоков. Подтверди порядок — и я отдам его в вёрстку.' } },
 ];
 
-// Файлы на доске. Выдуманные, как и агенты, и панель говорит об этом вслух:
-// показываем механику — «готовое висит на стене» — а не чью-то работу.
-// path и image нужны отрисовке доски, остальное — просмотру.
+// The files on the board. Invented, like the agents, and the panel says so aloud:
+// we are showing the mechanics — "what is done hangs on the wall" — not somebody's
+// work. path and image are needed by the drawing of the board, the rest by the viewer.
 export const BOARD = {
   valey: [
     { path: 'paintings.md', who: 'Ася', body: '# Развеска картин\n\nСобрала два варианта для коридора: плотный по простенкам и разреженный.\n\n## Плотный\n\n- картина каждые 40 пикселей мира\n- в узких простенках рама налезает на окно\n- зато коридор не выглядит пустым\n\n## Разреженный\n\n- одна картина на простенок, остальное стена\n- пустее, но рамы нигде не спорят с окнами\n\nЖду решения, чтобы не вешать дважды.' },
@@ -100,10 +104,11 @@ export function createFloor(canvas, opts = {}) {
   const byId = new Map(AGENTS.map((a) => [a.id, a]));
   const looks = new Map(AGENTS.map((a) => [a.id, lookOf(a.id + a.name)]));
 
-  // Игрок ставится внутрь первой комнаты, у столов. Не в (0,0) — оттуда его
-  // вытолкнет первым же кадром, и первое впечатление будет «застрял», — и не
-  // в коридор под комнатой: камера тогда смотрит в пустой пол, а весь смысл
-  // кадра в том, что за столами кто-то сидит.
+  // The player is placed inside the first room, by the desks. Not at (0,0) — from
+  // there the very first frame would push him out, and the first impression would
+  // be "stuck" — and not into the corridor below the room: the camera would then
+  // look at an empty floor, while the whole point of the frame is that somebody is
+  // sitting at the desks.
   const first = L.rooms[0];
   const seat0 = first && first.desks[0];
   const me = {
@@ -123,8 +128,8 @@ export function createFloor(canvas, opts = {}) {
   };
   const seats = new Map(AGENTS.map((a) => [a.id, seatOf(a)]).filter(([, s]) => s));
 
-  // Доска висит на верхней стене комнаты. Подходить к ней надо изнутри, поэтому
-  // меряем до её нижнего края, а не до середины.
+  // The board hangs on the top wall of the room. It has to be approached from
+  // inside, so we measure to its bottom edge rather than to its middle.
   const nearestBoard = () => {
     let best = null, bd = 44;
     for (const r of L.rooms) {
@@ -140,7 +145,7 @@ export function createFloor(canvas, opts = {}) {
     let best = null, bd = 46;
     for (const a of AGENTS) {
       const s = seats.get(a.id); if (!s) continue;
-      // меряем до самого агента: он сидит в desk.y, а не на 16 пикселей ниже
+      // we measure to the agent himself: he sits at desk.y, not 16 pixels lower
       const d = Math.hypot(s.d.x - me.x, s.d.y - me.y);
       if (d < bd) { bd = d; best = a; }
     }
@@ -158,10 +163,10 @@ export function createFloor(canvas, opts = {}) {
     drawCorridor(ctx, L, t, night, { kind: 'clear', intensity: 0.4, wind: 0.2 });
     const visible = L.rooms.filter((r) => r.x < camX + VW + 40 && r.x + r.w > camX - 40
       && r.y - 20 < camY + VH && r.y + r.h > camY - 40);
-    // Служебные комнаты приехали в общий список и рисуются по r.draw — так же,
-    // как их рисует main.js. Раньше пультовая лежала отдельно в L.security;
-    // после слияния с main этой ветки уже нет, и повторять её здесь значило бы
-    // снова завести вторую версию офиса.
+    // The service rooms have arrived in the common list and are drawn by r.draw —
+    // the same way main.js draws them. The control room used to lie separately in
+    // L.security; after the merge with main that branch is gone, and repeating it
+    // here would mean starting a second version of the office again.
     for (const r of visible) {
       if (r.draw === 'security') { drawSecurity(ctx, r, t, { unlocked: false, camsOn: false }); continue; }
       if (r.draw === 'meeting') { drawMeeting(ctx, r, t); continue; }
@@ -172,17 +177,18 @@ export function createFloor(canvas, opts = {}) {
 
     const draws = [];
     for (const r of visible) {
-      if (r.service) continue;                 // у пультовой и переговорки нет ни доски, ни столов
+      if (r.service) continue;                 // the control room and the meeting room have neither a board nor desks
       draws.push({ y: r.y - 1, fn: () => drawBoard(ctx, r, BOARD[r.key] || [], t, false) });
       r.desks.forEach((d, i) => {
         const a = byId.get(r.agents[i]);
         draws.push({ y: d.y + 12, fn: () => drawDesk(ctx, d, a, t) });
       });
     }
-    // Сидящий агент стоит ровно в desk.x/desk.y и рисуется РАНЬШЕ стола — тогда
-    // столешница закрывает ноги, и человек выглядит сидящим. Так делает офис
-    // (actors.js сажает в spot.desk.x/y, main.js кладёт стол на y+12). У меня
-    // сначала было +16 и порядок наоборот: все восемь стояли за столами.
+    // A sitting agent stands exactly at desk.x/desk.y and is drawn BEFORE the desk
+    // — then the desktop covers the legs, and the person looks seated. That is what
+    // the office does (actors.js seats him at spot.desk.x/y, main.js puts the desk
+    // at y+12). Mine had +16 at first, and the order the other way round: all eight
+    // stood behind the desks.
     for (const a of AGENTS) {
       const s = seats.get(a.id); if (!s) continue;
       const frame = a.status === 'idle' ? Math.floor(t / 520) : Math.floor(t / 160);
@@ -203,8 +209,8 @@ export function createFloor(canvas, opts = {}) {
         const s = seats.get(a.id);
         pxText(ctx, hint, s.d.x - 12, s.d.y - 22, '#ffd166');
       } else {
-        // у доски подсказка тоже нужна: без неё карточки выглядят нажимаемыми
-        // и молчат — ровно то, что чинится этой правкой
+        // the board needs a hint too: without it the cards look pressable and say
+        // nothing — exactly what this change fixes
         const r = nearestBoard();
         if (r) pxText(ctx, hint, r.board.x + r.board.w / 2 - 12, r.board.y + r.board.h + 12, '#ffd166');
       }
@@ -230,7 +236,7 @@ export function createFloor(canvas, opts = {}) {
       if (me.moving) {
         const k = (dx && dy) ? 0.707 : 1;
         const nx = me.x + dx * fast * k * dt, ny = me.y + dy * fast * k * dt;
-        // те же столкновения, что в офисе: в дверях больше не клинит
+        // the same collisions as in the office: it no longer jams in the doorways
         if (!blocked(L, nx, me.y)) me.x = nx;
         if (!blocked(L, me.x, ny)) me.y = ny;
         if (dx) me.dir = dx > 0 ? 1 : -1;
@@ -254,7 +260,7 @@ export function createFloor(canvas, opts = {}) {
     key(k, down) { const s = k.toLowerCase(); if (down) keys.add(s); else keys.delete(s); },
     act() {
       if (talking) { talking = null; return null; }
-      // агент вперёд доски: у стола стоишь ближе, и разговор ожидаемее
+      // the agent in front of the board: at a desk you stand closer, and a conversation is likelier
       const a = nearest();
       if (a) { talking = a; return { kind: 'agent', agent: a }; }
       const r = nearestBoard();

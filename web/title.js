@@ -1,9 +1,10 @@
-// Экран входа: коридор перед дверью офиса.
+// The entrance screen: the corridor in front of the office door.
 //
-// Разделение то же, что и во всём проекте: мир рисуется на холсте, панели —
-// обычный DOM поверх него. Поэтому сцена (стена, окно, табличка, дверь, ты)
-// живёт здесь в пикселях 400×225, а меню и карточки — в разметке: текст в них
-// должен читаться, а не растягиваться вместе с холстом.
+// The split is the same as everywhere in the project: the world is drawn on the
+// canvas, the panels are ordinary DOM over it. So the scene (the wall, the window,
+// the plaque, the door, you) lives here in 400×225 pixels, while the menu and the
+// cards are in markup: the text in them has to be readable rather than stretched
+// along with the canvas.
 import { pxText, drawSwitcher } from './office.js';
 import { t as tr, lang } from './i18n.js';
 import { esc } from './esc.js';
@@ -13,18 +14,18 @@ import { PLAQUE, drawPlaque } from './plaque.js';
 const $ = (s) => document.querySelector(s);
 const px = (ctx, x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); };
 
-// Масштаб взят у движка, а не с макета: человек ростом 24 пикселя, поэтому
-// дверь — 44, а не 100, иначе рядом с ней он выглядит муравьём.
+// The scale is taken from the engine, not from the mock-up: a person is 24 pixels
+// tall, so the door is 44 and not 100 — otherwise next to it he looks like an ant.
 const FLOOR = 150;
 const DOOR = { x: 182, y: 106, w: 36, h: 44 };
 const WIN = { x: 40, y: 40, w: 64, h: 36 };
 
-// Коридор, по которому теперь ходят. Слева упираешься в панель меню — за ней
-// человека не видно вовсе, — справа в человечка-переключателя: в офисе он тоже
-// сплошной, сквозь него не пройти.
+// The corridor people now walk along. On the left you run into the menu panel —
+// behind it a person is not visible at all — on the right into the little switch
+// figure: in the office he is solid too, you cannot walk through him.
 const SPAWN = DOOR.x + DOOR.w / 2;
 const LANG_X = 300;
-const MENU_EDGE = 132;              // 7% + 26% холста: ответ на случай, если DOM ещё не мерился
+const MENU_EDGE = 132;              // 7% + 26% of the canvas: the answer for when the DOM has not been measured yet
 const WALK_MAX = LANG_X - 14;
 const REACH = { menu: 20, door: 22, lang: 22 };
 
@@ -37,7 +38,7 @@ export function initTitle(state, callbacks) {
   S = state; api = callbacks; el = $('#title');
 }
 
-// --------------------------------------------------------------- что за дверью
+// --------------------------------------------------------------- what is behind the door
 function tally() {
   const a = S.agents || [];
   return {
@@ -49,11 +50,11 @@ function tally() {
   };
 }
 
-// ------------------------------------------------------------ где ты стоишь
-// Правый край панели меню в координатах холста. Меряется по живому DOM, а не
-// берётся из процентов: у .tmenu есть min-width, и на узком окне она занимает
-// заметно больше четверти экрана — человек, дошедший до «своих» 148, оказался
-// бы за ней целиком.
+// ------------------------------------------------------------ where you stand
+// The right edge of the menu panel in canvas coordinates. It is measured off the
+// live DOM rather than taken from percentages: .tmenu has a min-width, and on a
+// narrow window it takes noticeably more than a quarter of the screen — a person
+// who walked to "his" 148 would end up behind it entirely.
 function menuEdge() {
   const m = el && el.querySelector && el.querySelector('.tmenu');
   const c = document.getElementById('game');
@@ -65,7 +66,7 @@ function menuEdge() {
 
 const walkMin = () => menuEdge() + 16;
 
-// У чего стоишь: у меню, у переключателя, у двери — или посреди коридора.
+// What you are standing at: the menu, the switch, the door — or the middle of the corridor.
 function zone() {
   if (T.x <= walkMin() + REACH.menu) return 'menu';
   if (Math.abs(T.x - LANG_X) <= REACH.lang) return 'lang';
@@ -73,8 +74,9 @@ function zone() {
   return null;
 }
 
-// Ходьба живёт здесь, а не в общем update(): офиса ещё нет, стен и мебели тоже,
-// и единственное, обо что тут можно споткнуться, — панель меню и человечек.
+// The walking lives here rather than in the common update(): there is no office
+// yet, no walls and no furniture, and the only things to stumble over here are the
+// menu panel and the little figure.
 export function tickTitle(dt, keys) {
   if (!T.open || T.page !== 'menu') { T.moving = false; return; }
   const ix = (keys.has('arrowright') || keys.has('d') || keys.has('в') ? 1 : 0)
@@ -88,7 +90,7 @@ export function tickTitle(dt, keys) {
   if (z !== T.zone) { T.zone = z; if (el && !el.hidden) paintFocus(); }
 }
 
-// та же плашка, что рисует label() в офисе: подсказка читается на любой стене
+// the same plate label() draws in the office: a hint reads on any wall
 function label(ctx, x, y, text, color = '#ffd166') {
   ctx.font = '7px "JetBrains Mono", "Courier New", monospace';
   const w = ctx.measureText(text).width;
@@ -96,39 +98,40 @@ function label(ctx, x, y, text, color = '#ffd166') {
   pxText(ctx, text, x - w / 2, y, color);
 }
 
-// ------------------------------------------------------------------ фонарь
-// Коридор освещён щелью под дверью и больше ничем, поэтому человечка у правой
-// стены не видно вовсе. Фонарь над ним — причина посмотреть направо, и он
-// нарочно плохой: ровный тёплый свет сделал бы из коридора холл гостиницы, а
-// нужна контора после закрытия.
-// Макет: https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=694-2
+// ------------------------------------------------------------------ the lamp
+// The corridor is lit by the crack under the door and by nothing else, so the
+// little figure by the right wall is not visible at all. The lamp above him is a
+// reason to look right, and it is deliberately bad: an even warm light would turn
+// the corridor into a hotel lobby, while what is needed is an office after closing.
+// The mock-up: https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=694-2
 //
-// Высота выбрана не на глаз и не по макету: сверху полосу держит карточка «за
-// дверью» (.tcard, right/top 4%), снизу — табличка переключателя на FLOOR-44.
-// Карточка живёт в DOM и с холстом НЕ масштабируется: на макете её низ лёг на
-// y 70, а на кадре при ×2 оказался на 75 — на 72 плита фонаря пряталась под
-// неё. Чем меньше зум, тем ниже карточка, поэтому 76 — не запас, а край.
+// The height was chosen neither by eye nor from the mock-up: from above the strip
+// is held by the "behind the door" card (.tcard, right/top 4%), from below by the
+// plaque of the switch at FLOOR-44. The card lives in the DOM and does NOT scale
+// with the canvas: in the mock-up its bottom lay at y 70, and on a frame at ×2 it
+// turned out to be at 75 — at 72 the plate of the lamp hid behind it. The smaller
+// the zoom, the lower the card, so 76 is not a margin but the edge.
 const LAMP_Y = 76;
 
-// Дрожь: 0.72 базовых, две синусоиды на мелкое дребезжание, раз в 2.6 секунды
-// просадка на 120 мс. Ниже 0.25 не опускается — погасший фонарь читается как
-// поломка сцены, а не как настроение.
+// The flicker: 0.72 of the base, two sine waves for a fine buzz, and once every
+// 2.6 seconds a 120 ms dip. It never goes below 0.25 — a lamp gone out reads as a
+// broken scene rather than as a mood.
 function lampGlow(t) {
   const jitter = Math.sin(t / 190) * 0.5 + Math.sin(t / 77) * 0.25;
   const dip = t % 2600 < 120 ? 0.3 : 1;
   return Math.max(0.25, (0.72 + jitter * 0.12) * dip);
 }
 
-// Свет кладётся до человечка и до его таблички: он закрывает их собой, как
-// закрыл бы настоящий. Корпус не мигает никогда — мигающий силуэт читается
-// как дрожь всей сцены, а не как больная лампа.
+// The light is laid down before the little figure and before his plaque: it covers
+// them, as a real one would. The body never blinks — a blinking silhouette reads as
+// a shudder of the whole scene rather than as a sick lamp.
 function drawLamp(ctx, t) {
   const k = lampGlow(t);
   const x = LANG_X;
-  const y = LAMP_Y + 19;                            // где кончается корпус
-  // Четыре ступени вместо трёх: на кадре три давали ровную полосу, похожую на
-  // столб, а не на свет. Прозрачности тоже подняты — макетные 0.16 на тёмной
-  // стене не читались вовсе.
+  const y = LAMP_Y + 19;                            // where the body ends
+  // Four steps instead of three: on a frame three gave an even strip that looked
+  // like a column rather than like light. The opacities were raised too — the
+  // mock-up's 0.16 was not readable at all on a dark wall.
   ctx.globalAlpha = 0.22 * k; px(ctx, x - 5, y, 10, 12, '#d8be86');
   ctx.globalAlpha = 0.14 * k; px(ctx, x - 9, y + 12, 18, 16, '#d8be86');
   ctx.globalAlpha = 0.09 * k; px(ctx, x - 14, y + 28, 28, 16, '#d8be86');
@@ -136,21 +139,22 @@ function drawLamp(ctx, t) {
   ctx.globalAlpha = 0.09 * k; px(ctx, x - 16, FLOOR, 32, 4, '#d8be86');
   ctx.globalAlpha = 0.05 * k; px(ctx, x - 22, FLOOR + 4, 44, 5, '#d8be86');
   ctx.globalAlpha = 1;
-  px(ctx, x - 4, LAMP_Y, 8, 3, '#4a423a');          // плита на стене
-  px(ctx, x - 1, LAMP_Y + 3, 2, 4, '#3a322c');      // штанга
-  px(ctx, x - 8, LAMP_Y + 7, 16, 3, '#5a4f45');     // верхний обод
-  px(ctx, x - 7, LAMP_Y + 10, 14, 7, '#6b5f4e');    // плафон
-  ctx.globalAlpha = 0.35 + 0.65 * k;                // светится только стекло
+  px(ctx, x - 4, LAMP_Y, 8, 3, '#4a423a');          // the plate on the wall
+  px(ctx, x - 1, LAMP_Y + 3, 2, 4, '#3a322c');      // the bar
+  px(ctx, x - 8, LAMP_Y + 7, 16, 3, '#5a4f45');     // the top rim
+  px(ctx, x - 7, LAMP_Y + 10, 14, 7, '#6b5f4e');    // the shade
+  ctx.globalAlpha = 0.35 + 0.65 * k;                // only the glass glows
   px(ctx, x - 5, LAMP_Y + 12, 10, 4, '#c9a95f');
   px(ctx, x - 3, LAMP_Y + 13, 6, 2, '#e8cf8a');
   ctx.globalAlpha = 1;
-  px(ctx, x - 7, LAMP_Y + 17, 14, 2, '#463d33');    // нижний обод
+  px(ctx, x - 7, LAMP_Y + 17, 14, 2, '#463d33');    // the bottom rim
 }
 
-// ------------------------------------------------------------------- окно
-// За стеклом — ночной город: коридор идёт вдоль внешней стены, ровно как в
-// самом офисе, где drawCorridor держит за окнами живую погоду. Здесь погоды
-// нет: экран входа не следит за твоим солнцем, у него всегда сумерки.
+// ------------------------------------------------------------------- the window
+// Behind the glass is a night city: the corridor runs along the outer wall, exactly
+// as in the office itself, where drawCorridor keeps live weather behind the windows.
+// Here there is no weather: the entrance screen does not follow your sun, it is
+// always dusk there.
 function drawNightCity(ctx, WIN) {
   px(ctx, WIN.x, WIN.y, WIN.w, WIN.h, '#2b3a5c');
   px(ctx, WIN.x + 8, WIN.y + 7, 9, 9, '#ffd166');
@@ -159,16 +163,16 @@ function drawNightCity(ctx, WIN) {
   for (const [dx, dy] of [[19, 21], [47, 23], [59, 29]]) px(ctx, WIN.x + dx, WIN.y + dy, 2, 2, '#ffd166');
 }
 
-// ------------------------------------------------------------------- сцена
-// opts открывает сцену наружу, и открывает ровно на три вещи, каждая из которых
-// нужна заглушке valey.dev — она рисует этот же экран в своём репозитории и
-// вторым офисом «по мотивам» быть не должна:
-//   sub      — нижняя строка таблички вместо «офиса агентов»;
-//   window   — своя картинка за стеклом: (ctx, WIN) => void;
-//   controls — false убирает переключатель языка и подсказки.
-// Последнее не украшение, а честность: по коридору заглушки не ходят, в дверь
-// не входят, и орган управления, который ничего не делает, обещает больше, чем
-// страница может.
+// ------------------------------------------------------------------- the scene
+// opts opens the scene outwards, and opens it for exactly three things, each of
+// which is needed by the valey.dev holding page — it draws this same screen in its
+// own repository and must not be a second office "after the motifs":
+//   sub      — the bottom line of the plaque instead of «офиса агентов»;
+//   window   — its own picture behind the glass: (ctx, WIN) => void;
+//   controls — false removes the language switch and the hints.
+// The last one is not decoration but honesty: nobody walks along the holding page's
+// corridor, nobody enters the door, and a control that does nothing promises more
+// than the page can deliver.
 export function drawTitle(ctx, VW, VH, t, opts = {}) {
   const lit = (S.agents || []).length > 0;
   const controls = opts.controls !== false;
@@ -180,24 +184,26 @@ export function drawTitle(ctx, VW, VH, t, opts = {}) {
   px(ctx, 0, FLOOR + 12, VW, 10, '#5e3230');
   for (let x = 6; x < VW; x += 34) px(ctx, x, FLOOR + 12, 18, 10, '#6b3a37');
 
-  // окно: рама
+  // the window: the frame
   px(ctx, WIN.x - 3, WIN.y - 3, WIN.w + 6, WIN.h + 6, '#8a6247');
-  // За стеклом рисует тот, кто позвал. Рама, переплёт и место остаются общими:
-  // окно — часть этой стены, а не картинка, которую можно подменить целиком.
+  // Behind the glass it is the caller who draws. The frame, the glazing bars and
+  // the place stay shared: the window is part of this wall, not a picture that can
+  // be swapped out whole.
   (opts.window || drawNightCity)(ctx, WIN);
   px(ctx, WIN.x + WIN.w / 2 - 1, WIN.y, 2, WIN.h, '#8a6247');
   px(ctx, WIN.x, WIN.y + WIN.h / 2 - 1, WIN.w, 2, '#8a6247');
 
-  // Табличка над дверью — логотип, но предметом в сцене. Рисует её plaque.js:
-  // ту же табличку печатает генератор обложки формы, и разъезжаться им нельзя.
+  // The plaque over the door is a logo, but as an object in the scene. plaque.js
+  // draws it: the generator of the form's cover prints the same plaque, and the two
+  // must not drift apart.
   //
-  // opts.sub меняет нижнюю строку, и только её. Так табличку берёт заглушка:
-  // «OPENING SOON» широкой гарнитурой в полном кегле — 142 px против 104 у
-  // самой таблички, не влезает, — а имя над ней остаётся именем офиса на
-  // двери, а не вторым логотипом страницы.
+  // opts.sub changes the bottom line, and only it. That is how the holding page
+  // takes the plaque: "OPENING SOON" in the wide face at full size — 142 px against
+  // the plaque's own 104, it does not fit — while the name above it stays the name
+  // of the office on the door rather than a second logo of the page.
   drawPlaque(ctx, PLAQUE, opts.sub || tr('title.sub'), pxText);
 
-  // дверь
+  // the door
   px(ctx, DOOR.x - 4, DOOR.y - 4, DOOR.w + 8, DOOR.h + 4, '#1d1510');
   px(ctx, DOOR.x, DOOR.y, DOOR.w, DOOR.h, '#4a3325');
   px(ctx, DOOR.x, DOOR.y, 2, DOOR.h, '#6b4a2e');
@@ -207,8 +213,9 @@ export function drawTitle(ctx, VW, VH, t, opts = {}) {
   px(ctx, DOOR.x + 5, DOOR.y + 24, 26, 16, '#3a2a1e');
   px(ctx, DOOR.x + DOOR.w - 7, DOOR.y + 22, 3, 3, '#c9a06a');
 
-  // свет из-под двери. Гаснет, когда в офисе никого: пустой офис должен быть
-  // виден с порога, а не открываться сюрпризом внутри
+  // the light from under the door. It goes out when there is nobody in the office:
+  // an empty office should be visible from the threshold rather than opening as a
+  // surprise inside
   if (lit) {
     ctx.globalAlpha = 0.5; px(ctx, DOOR.x, FLOOR - 2, DOOR.w, 2, '#ffd166');
     ctx.globalAlpha = 0.13; px(ctx, DOOR.x - 6, FLOOR, DOOR.w + 12, 5, '#ffd166');
@@ -221,52 +228,57 @@ export function drawTitle(ctx, VW, VH, t, opts = {}) {
 
   drawLamp(ctx, t);
 
-  // Человечек-переключатель у правой стены. Рисуется тем же кодом, что и в
-  // коридоре офиса: вторая копия разошлась бы с ним молча при первой же правке
-  // спрайта. Смотрит он на тебя, а на табличке — язык, на который переключит.
+  // The little switch figure by the right wall. He is drawn by the same code as in
+  // the office corridor: a second copy would diverge from it silently at the first
+  // edit to the sprite. He looks at you, and on his plaque is the language he will
+  // switch to.
   if (controls) drawSwitcher(ctx, { x: LANG_X, y: FLOOR }, t, T.x < LANG_X ? -1 : 1);
 
-  // ты в коридоре. Вида со спины в движке нет — тот же спрайт, что и в офисе
+  // you in the corridor. The engine has no back view — the same sprite as in the office
   drawPerson(ctx, T.x, FLOOR, S.me, {
     pose: T.moving ? 'walk' : 'stand',
     frame: Math.floor(t / 130), dir: T.dir,
     bob: T.moving ? 0 : Math.floor(t / 700) % 2,
   });
 
-  // подсказка у того, возле чего стоишь. hint.lang взят у офиса слово в слово:
-  // человечек один и тот же, и объясняться ему дважды незачем
-  // Над переключателем плашка висит там же, где в офисе, — вплотную над его
-  // табличкой. У двери она ниже: на офисной высоте её накрывала табличка
-  // VALEY, и «офис агентов» читалось наполовину. Нашлось первым же кадром.
+  // the hint at whatever you are standing next to. hint.lang is taken from the
+  // office word for word: it is one and the same figure, and there is no point
+  // explaining him twice
+  // Above the switch the plate hangs where it does in the office — right above his
+  // plaque. At the door it is lower: at the office height the VALEY plaque covered
+  // it, and «офис агентов» was half readable. Found by the very first frame.
   const z = controls ? zone() : null;
   if (z === 'door') label(ctx, SPAWN, FLOOR - 28, tr('title.hintDoor'));
   if (z === 'lang') label(ctx, LANG_X, FLOOR - 44, tr('hint.lang'));
 
-  // виньетка
+  // the vignette
   const g = ctx.createRadialGradient(VW / 2, VH / 2, VH / 3.2, VW / 2, VH / 2, VH * 1.05);
   g.addColorStop(0, 'rgba(0,0,0,0)');
   g.addColorStop(1, 'rgba(20,13,8,0.72)');
   ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
 }
 
-// ---------------------------------------------------------------- оверлей
-// Меню привязано к холсту, а не к окну: холст центрируется с полями, и
-// фиксированная по вьюпорту панель уезжала бы от двери на широком экране.
-// Меню не показывается, пока не встало на место. #title — position:fixed без
-// координат, их ставит эта функция из рамки холста; на первой отрисовке холст
-// ещё не измерен, и до 5 сентября 2026 меню успевало мигнуть посреди экрана и
-// прыгнуть в угол. Прятать его нельзя было раньше по той же причине, по которой
-// это чинится сейчас: пока оно невидимо, видно сцену с фонарём, и экран входа
-// собирается не рывком, а проявлением.
+// ---------------------------------------------------------------- the overlay
+// The menu is tied to the canvas rather than to the window: the canvas is centred
+// with margins, and a panel fixed to the viewport would drift away from the door on
+// a wide screen.
+//
+// It is not shown until it stands there. #title is position:fixed with no
+// coordinates of its own; this function sets them from the canvas box, and on the
+// first render the canvas has not been measured yet — until 5 September 2026 the
+// menu flashed in the middle of the screen and then jumped into its corner. While
+// it is invisible the scene with its lamp is what fills the screen, so the entrance
+// assembles by fading in rather than by snapping into place.
 export function layoutTitle() {
   if (!el || el.hidden) return;
   const c = document.getElementById('game').getBoundingClientRect();
-  // Нулевая рамка — холст ещё не разложен. Ставить по ней координаты значит
-  // назначить меню угол экрана; ждём следующего кадра, их тут шестьдесят в
-  // секунду.
+  // A zero box means the canvas has not been laid out yet. Setting coordinates
+  // from it would pin the menu to a corner of the screen; we wait for the next
+  // frame, and there are sixty of those a second.
   if (!(c.width > 0 && c.height > 0)) {
-    // Сам себя и позовёт: иначе экран, у которого холст померился не сразу,
-    // остался бы без меню навсегда — а это хуже мигания, которое чинится.
+    // It calls itself back: a screen whose canvas was measured late would
+    // otherwise lose its menu for good, which is worse than the flash being
+    // fixed here.
     requestAnimationFrame(layoutTitle);
     return;
   }
@@ -274,14 +286,15 @@ export function layoutTitle() {
   el.style.top = c.top + 'px';
   el.style.width = c.width + 'px';
   el.style.height = c.height + 'px';
-  // Класс вешается после того, как координаты записаны: браузер успевает
-  // отрисовать меню уже на месте, и переход в CSS ведёт его от нуля к единице,
-  // а не тащит через экран.
+  // The class goes on after the coordinates are written: the browser gets to
+  // paint the menu where it belongs, and the CSS transition takes it from zero
+  // to one instead of dragging it across the screen.
   el.classList.add('ready');
 }
 
-// Подпись берётся из словаря при каждой отрисовке, а не один раз при загрузке:
-// язык переключают у человечка в коридоре, и меню должно поехать вместе с ним.
+// The caption is taken from the dictionary on every paint rather than once at load:
+// the language is switched at the little figure in the corridor, and the menu has to
+// move along with him.
 const MENU = [
   { k: 'title.enter', key: '⏎', act: () => api.enter(null) },
   { k: 'title.who', key: 'TAB', act: () => { T.page = 'rooms'; T.roomIdx = 0; renderTitle(); } },
@@ -323,33 +336,37 @@ function paintFocus() {
 }
 
 
-// Меню и нижняя служебная строка рисуются одинаково во всех трёх карточках
-// входа — хозяйской, гостевой и отказной, — поэтому лежат здесь, а не тремя
-// копиями внутри menuHtml. 30 августа 2026 копий и стало три: гостевые
-// приехали другой веткой, с прежней разметкой «фокус сразу» и без строки про
-// стрелки. Фокус вытянул paintFocus(), он ходит по готовому DOM и знает про
-// away; а подсказка пропала совсем — гость видел погашенное меню и нигде не
-// читал, чем его зажечь.
+// The menu and the bottom service line are drawn identically in all three entrance
+// cards — the owner's, the guest's and the refusal — so they lie here rather than as
+// three copies inside menuHtml. On 30 August 2026 there did become three copies: the
+// guest ones arrived on another branch, with the old "focus at once" markup and
+// without the line about the arrows. The focus was pulled out by paintFocus(), which
+// walks the ready DOM and knows about away; the hint, though, disappeared entirely —
+// a guest saw a darkened menu and nowhere read what lights it up.
 function menuButtons() {
-  // Меню гаснет, пока ты не подошёл: у экрана входа есть свой коридор, и меню
-  // в нём — предмет на стене, а не панель, висящая поверх всего.
+  // The menu is dark until you walk up: the entrance screen has a corridor of its
+  // own, and the menu in it is an object on the wall rather than a panel hanging over
+  // everything.
   const on = zone() === 'menu';
   return `<div class="tmenu${on ? '' : ' away'}">${MENU.map((m, i) =>
     `<button class="tbtn${i === 0 ? ' main' : ''}${on && i === T.idx ? ' focus' : ''}">${tr(m.k)}<kbd>${m.key}</kbd></button>`).join('')}</div>`;
 }
 
-// Адрес берётся из строки браузера, а не пишется здесь. Зашитый `localhost:5177`
-// врал на любом другом порту, а гостю по сети — вдвойне: он читал адрес СВОЕЙ
-// машины, где офиса нет вовсе. Соседний stand.js про эту цену уже знал: «офис
-// на 5177 и офис на 5188 выглядят одинаково, и это уже стоило времени».
+// The address is taken from the browser's own bar rather than written here. A
+// hardcoded `localhost:5177` was false on any other port, and worse than false
+// for a guest over the network: it read as the address of THEIR machine, where
+// no office is running. The neighbouring stand.js already knew the price of
+// this — two offices on different ports look exactly alike, and that has cost
+// time before.
 const metaRow = () => `<div class="tmeta left">v${esc(S?.version || '—')} · ${esc(location.host)}</div>
     <div class="tmeta center">${tr('title.walk')}</div>
     <div class="tmeta right">valey.dev</div>`;
 
 function menuHtml(n) {
-  // Гостя встречает не «за дверью · 8 агентов», а кто его позвал и что можно.
-  // Карточка одна и та же по вёрстке — меняются только строки: решение
-  // утверждено кадрами 30 августа 2026, своего экрана для гостя не заводим.
+  // A guest is met not by "behind the door · 8 agents" but by who invited him and
+  // what is allowed. The card is one and the same in its layout — only the lines
+  // change: the decision was approved by frames on 30 August 2026, we start no
+  // separate screen for a guest.
   const entry = S && S.entry;
   if (entry && entry.refused) {
     return `${menuButtons()}
@@ -385,10 +402,10 @@ function menuHtml(n) {
          <b>${tr('title.nobody')}</b>
          <span class="thint">${tr('title.emptyWhy')}</span>
        </div>`;
-  // Пинок про релизный ролик. Виден только владельцу и только когда есть за
-  // что пинать — состояние приходит с сервера уже решённым, здесь его не
-  // пересчитывают. Кадр: WIP — Пинок про релизный ролик, утверждён 1 сентября
-  // 2026.
+  // The nudge about the release video. Visible to the owner only and only when there
+  // is something to nudge about — the state arrives from the server already decided,
+  // it is not recomputed here. The frame: WIP — «Пинок про релизный ролик», approved
+  // 1 September 2026.
   const rel = S && S.release;
   const relCard = !rel ? '' : `<div class="tcard release">
          <span class="tlabel">${tr('title.releaseLabel')}</span>
@@ -433,7 +450,7 @@ function roomsHtml(n) {
     </div>`;
 }
 
-// Формы числа выбирает язык: в английском их две, в русском три.
+// The number forms are chosen by the language: English has two, Russian three.
 function word(base, n) {
   if (lang() === 'en') return tr(base + (n === 1 ? '.one' : '.many'));
   const a = Math.abs(n) % 100, b = a % 10;
@@ -444,8 +461,8 @@ function word(base, n) {
 const agents = (n) => tr('title.count', { n, word: word('title.agent', n) });
 
 
-// ------------------------------------------------------------------ клавиши
-// true — клавишу забрал экран входа, офису её видеть не нужно
+// ------------------------------------------------------------------ the keys
+// true — the key was taken by the entrance screen, the office need not see it
 export function titleKey(raw) {
   if (!T.open) return false;
   const k = raw.toLowerCase();
@@ -468,15 +485,15 @@ export function titleKey(raw) {
 
   const z = zone();
   if (k === 'arrowup' || k === 'arrowdown') {
-    // вверх-вниз ходят по меню только у самого меню: иначе это единственные
-    // клавиши, которые действуют издалека, и подходить становится незачем
+    // up and down walk the menu only at the menu itself: otherwise these are the
+    // only keys that work from a distance, and walking up becomes pointless
     if (z !== 'menu') return true;
     const d = k === 'arrowdown' ? 1 : -1;
     T.idx = (T.idx + d + MENU.length) % MENU.length;
     paintFocus(); return true;
   }
-  // ПРОБЕЛ и ⏎ трогают то, у чего стоишь. Дверь отвечает сама, иначе первое
-  // нажатие на старте уходило бы в пустоту — а «Войти» остаётся и в меню.
+  // SPACE and ⏎ touch what you stand at. The door answers by itself, or the first
+  // press at the start would go into the void — and "Enter" stays in the menu as well.
   if (k === 'enter' || k === ' ') {
     if (z === 'menu') MENU[T.idx].act();
     else if (z === 'door') api.enter(null);
@@ -486,7 +503,7 @@ export function titleKey(raw) {
   if (k === 'tab') { T.page = 'rooms'; T.roomIdx = 0; renderTitle(); return true; }
   if (k === 'c' || k === 'с') { api.bag(); return true; }
   if (k === 'p' || k === 'з') { api.sky(); return true; }
-  if (k === 'escape') return true;   // из офиса выйти некуда, ESC тут ничего не значит
+  if (k === 'escape') return true;   // there is nowhere to leave the office to, ESC means nothing here
   return ['arrowleft', 'arrowright', 'a', 'd', 'ф', 'в'].includes(k);
 }
 

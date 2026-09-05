@@ -1,22 +1,22 @@
-// node modules/plan/test-keys.mjs — клавиши плана офиса.
+// node modules/plan/test-keys.mjs — the keys of the office plan.
 //
-// Проверяется не вёрстка, а фокус: на какой комнате он встаёт при открытии,
-// куда ходит стрелками по сетке и кого выбирает Enter. Планировка настоящая,
-// из buildLayout: ходьба по плану — это ходьба по её геометрии, и подставная
-// сетка проверяла бы стенд, а не модуль.
+// What is checked is not the layout but the focus: which room it lands on when the
+// panel opens, where it walks with the arrows over the grid and whom Enter chooses.
+// The plan is a real one, from buildLayout: walking the plan is walking its geometry,
+// and a stand-in grid would check the stand rather than the module.
 //
-// DOM общий, из tools/lib/dom.mjs. Своя машинка здесь была, и прожила ровно до
-// первого слияния с main: там шесть копий уже свели в одну, и седьмая, приехав
-// из ветки, вернула бы ту же беду — стенды расходятся не подписью узла, а тем,
-// что считают правдой. Местного тут осталось только то, чего общий шим не
-// знает и знать не должен: холст плана и полотно, на которое он кладёт кнопки
-// комнат.
+// The DOM is the shared one, from tools/lib/dom.mjs. There was a machine of its own
+// here, and it lived exactly until the first merge with main: six copies had already
+// been brought together into one there, and a seventh arriving from a branch would
+// bring back the same trouble — stands diverge not by the signature of a node but by
+// what they hold to be true. What is left local here is only what the shared shim does
+// not know and must not: the canvas of the plan and the sheet it lays the room buttons on.
 import { node, installDom } from '../../tools/lib/dom.mjs';
 
-// Полотно карты. Кнопки комнат живут поверх холста, и модуль их пересобирает
-// на каждую смену планировки — значит appendChild должен правда складывать, а
-// remove у сложенного правда убирать. Общий узел этого не умеет и не обязан:
-// это единственное место в офисе, где список детей имеет значение.
+// The sheet of the map. The room buttons live over the canvas, and the module rebuilds
+// them on every change of the plan — so appendChild really has to add and remove really
+// has to take away what was added. The shared node cannot do that and does not have to:
+// this is the only place in the office where the list of children matters.
 function makeMap() {
   const cells = [];
   return node('planmap', {
@@ -35,7 +35,7 @@ const map = makeMap();
 const canvas = node('', { id: 'plancanvas', tagName: 'CANVAS' });
 const detail = node('plandetail', { id: 'plandetail' });
 const count = node('', { id: 'plancount', tagName: 'I' });
-// Тосты ядра: toast() считает детей, поэтому список должен существовать.
+// The core toasts: toast() counts children, so the list has to exist.
 const toasts = node('', { id: 'toasts', children: [], appendChild() {} });
 
 installDom({
@@ -60,7 +60,7 @@ const check = (name, ok, got) => {
   else { failed++; console.log('ПЛОХО |', name, '→', got); }
 };
 
-// Шесть проектов — два ряда по три; в первом два агента, один из них ждёт.
+// Six projects — two rows of three; in the first there are two agents, one of them waiting.
 const agents = [
   { id: 'a0', project: 'p0', name: 'Броня', status: 'working', seat: 0 },
   { id: 'a1', project: 'p0', name: 'Тимур', status: 'awaiting', seat: 1 },
@@ -75,13 +75,13 @@ for (const a of agents) {
 const r0 = L.projectRooms[0];
 const state = {
   agents, layout: L, actors, people: new Map(), sig: 'one', t: 0,
-  player: { x: r0.doorPoint.x, y: r0.doorPoint.y - 30 },   // в коридоре у двери первой комнаты
+  player: { x: r0.doorPoint.x, y: r0.doorPoint.y - 30 },   // in the corridor by the door of the first room
   cat: { x: 0, y: 0 }, lift: { floor: 2 }, currentRoom: null, waypoint: null,
 };
 CORE.initUI(state, { guideTo: () => {} });
 hooks.tick(state, 16);
 
-// ------------------------------------------------------------ вход и выход
+// ------------------------------------------------------------ opening and closing
 check('строка подсказки называет клавишу', /K/.test(hooks.help()), hooks.help());
 check('закрытый план стрелки не ест', P.planKey('ArrowDown') === false, 'съел');
 check('K открывает план', hooks.key('k') === true && P.planOpen(), P.planOpen());
@@ -89,7 +89,7 @@ check('и он держит экран', hooks.busy() === true, hooks.busy());
 check('фокус встаёт на ближайшую дверь — первую комнату', P.planFocus() === r0.key, P.planFocus());
 check('на каждую комнату положена своя кнопка', map.cells.length === L.rooms.length, `${map.cells.length} на ${L.rooms.length}`);
 
-// ------------------------------------------------------------------ сетка
+// ------------------------------------------------------------------ the grid
 const row0 = L.projectRooms.filter((r) => r.y === r0.y).sort((a, b) => a.x - b.x);
 const row1 = L.projectRooms.filter((r) => r.y !== r0.y).sort((a, b) => a.x - b.x);
 check('в планировке два ряда по три', row0.length === 3 && row1.length === 3, [row0.length, row1.length]);
@@ -108,7 +108,7 @@ check('с крыши вниз — обратно в верхний ряд', row1
 P.planKey('ArrowDown'); P.planKey('ArrowDown');
 check('под нижним рядом — сервисный ярус', ['__security', '__meeting'].includes(P.planFocus()), P.planFocus());
 
-// ----------------------------------------------------------- вести туда
+// ----------------------------------------------------------- lead me there
 hooks.esc();
 check('ESC закрывает план', !P.planOpen(), P.planOpen());
 hooks.key('л');
@@ -118,7 +118,7 @@ P.planKey('Enter');
 check('Enter ведёт к тому, кто ждёт, а не к первому за столом', state.waypoint === 'a1', state.waypoint);
 check('и закрывает план', !P.planOpen(), P.planOpen());
 
-// Комната без людей: стрелке не к кому вести, план остаётся открытым.
+// A room with no people: the arrow has nobody to lead to, the plan stays open.
 state.waypoint = null;
 hooks.key('k');
 P.planKey('ArrowDown'); P.planKey('ArrowDown');
@@ -127,7 +127,7 @@ P.planKey('Enter');
 check('в пустую комнату не ведёт', state.waypoint === null && P.planOpen(), [empty, state.waypoint]);
 hooks.esc();
 
-// Экран входа: под ним плана нет, там ещё нечему быть «здесь».
+// The entrance screen: there is no plan under it, there is nothing to be "here" yet.
 document.body.classList.add('titling');
 check('на экране входа K не открывает план', hooks.key('k') === false && !P.planOpen(), P.planOpen());
 document.body.classList.remove('titling');
