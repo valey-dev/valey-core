@@ -116,6 +116,8 @@ function capHtml(code, units) {
     : IN_PANEL.has(code) ? tr('keys.inPanel')
     : freeLetter ? tr('keys.lgFree')
     : '';
+  // Под курсором — подпись целиком плюс подробность, если она у действия есть.
+  const full = caption + (action && action.more ? ` · ${tr(action.more)}` : '');
   const outline = group ? COLOUR[group] : '';
   const face = printed(code);
   // Вторая подпись — то, что на этой клавише написано на самом деле, если
@@ -125,7 +127,7 @@ function capHtml(code, units) {
   return `<div class="kcap${outline ? '' : ' free'}" style="--u:${units}${outline ? `;--edge:${outline}` : ''}"
     data-code="${esc(code)}"${id ? ` data-action="${esc(id)}"` : ''}>
     <span class="kface">${esc(face)}</span>${twin ? `<i class="ktwin">${esc(twin)}</i>` : ''}
-    ${caption ? `<span class="kwhat" title="${esc(caption)}">${esc(caption)}</span>` : ''}
+    ${caption ? `<span class="kwhat" title="${esc(full)}">${esc(caption)}</span>` : ''}
   </div>`;
 }
 

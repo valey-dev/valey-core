@@ -62,7 +62,10 @@ const CORE = [
   // same key prints a full stop, which is the honest cost of a physical
   // binding — the panel shows the engraving when the browser knows it.
   { id: 'service.keys', codes: ['Slash'], group: 'service', hint: 'hint.keys' },
-  { id: 'service.shot', codes: ['F9'], group: 'service', hint: 'hint.shot' },
+  // `more` — то, что не влезает на колпачок и живёт в подсказке под курсором.
+  // Колпачок в 52 пикселя держит около десяти символов, а «с SHIFT — ×4» это
+  // подробность, а не название действия.
+  { id: 'service.shot', codes: ['F9'], group: 'service', hint: 'hint.shot', more: 'hint.shotMore' },
 ];
 
 let actions = [];
