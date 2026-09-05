@@ -45,7 +45,7 @@ const CORE = [
   { id: 'move.left', codes: ['ArrowLeft'], group: 'move', hint: 'hint.walk' },
   { id: 'move.down', codes: ['ArrowDown'], group: 'move', hint: 'hint.walk' },
   { id: 'move.right', codes: ['ArrowRight'], group: 'move', hint: 'hint.walk' },
-  { id: 'move.run', codes: ['ShiftLeft', 'ShiftRight'], group: 'move', held: true, hint: 'hint.run' },
+  { id: 'move.run', codes: ['ShiftLeft', 'ShiftRight'], group: 'move', held: true, hint: 'hint.run', more: 'hint.runMore' },
   // Space alone. E was the second key here because a hand resting on WASD can
   // reach it without moving — which assumes a hand that rests on WASD, and this
   // office is used by people working with agents, not by people holding a
