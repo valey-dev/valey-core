@@ -51,6 +51,10 @@ const overlay = {
 };
 
 const canvas = { getBoundingClientRect: () => ({ left: 40, top: 30, width: 1200, height: 675 }) };
+// The entrance prints the office address straight from the browser, so the fake
+// page needs one. This stand builds its DOM by hand rather than through the
+// shared shim, which means it installs location itself.
+globalThis.location = { origin: 'http://localhost:5177', host: 'localhost:5177', hash: '', search: '' };
 globalThis.document = {
   querySelector: (s) => (s === '#title' ? overlay : null),
   getElementById: (id) => (id === 'game' ? canvas : null),

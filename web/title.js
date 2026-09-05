@@ -319,7 +319,11 @@ function menuButtons() {
     `<button class="tbtn${i === 0 ? ' main' : ''}${on && i === T.idx ? ' focus' : ''}">${tr(m.k)}<kbd>${m.key}</kbd></button>`).join('')}</div>`;
 }
 
-const metaRow = () => `<div class="tmeta left">v${esc(S?.version || '—')} · localhost:5177</div>
+// Адрес берётся из строки браузера, а не пишется здесь. Зашитый `localhost:5177`
+// врал на любом другом порту, а гостю по сети — вдвойне: он читал адрес СВОЕЙ
+// машины, где офиса нет вовсе. Соседний stand.js про эту цену уже знал: «офис
+// на 5177 и офис на 5188 выглядят одинаково, и это уже стоило времени».
+const metaRow = () => `<div class="tmeta left">v${esc(S?.version || '—')} · ${esc(location.host)}</div>
     <div class="tmeta center">${tr('title.walk')}</div>
     <div class="tmeta right">valey.dev</div>`;
 
