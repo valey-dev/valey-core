@@ -1926,6 +1926,10 @@ initTitle(state, {
   bag: () => UI.renderBag('self'),
   sky: () => UI.renderSky(),
   lang: () => switchLang(),
+  // The name typed on the entrance card is the same name the inventory edits and
+  // presence sends: one field, stored in one place, so a guest who named himself
+  // at the door is not «ГОСТЬ» a second later.
+  setName(name) { state.me.name = name; localStorage.setItem('valey-me', JSON.stringify(state.me)); },
 });
 document.body.classList.add('titling');
 renderTitle();
