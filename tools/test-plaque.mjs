@@ -1,16 +1,16 @@
-// node tools/test-plaque.mjs — табличка над дверью и три щели, открытые наружу.
+// node tools/test-plaque.mjs — the plaque over the door and the three slots opened outwards.
 //
-// Табличку рисуют двое: экран входа вешает её на стену, генератор обложки
-// печатает картинкой. Пока модуль был один на двоих только на словах, вторая
-// копия молча разошлась по цвету и порядку строк — сравнивать было не с чем.
-// Здесь есть с чем: обе стороны зовут drawPlaque, и стенд смотрит, что именно
-// она кладёт на холст.
+// The plaque is drawn by two: the entrance screen hangs it on the wall, the
+// cover generator prints it as a picture. While the module was shared only in
+// words, the second copy quietly diverged in colour and in the order of the
+// lines — there was nothing to compare against. Here there is: both sides call
+// drawPlaque, and the stand looks at what exactly it puts on the canvas.
 //
-// Второе — параметры drawTitle. Ими живёт заглушка valey.dev в отдельном
-// репозитории: своя строка на табличке, свой вид за стеклом и отключённые
-// органы управления. Пока сцена рисовалась одна на всех, менять её приходилось
-// бы копией, а копия экрана входа — это ровно тот второй движок, который уже
-// сносили с лендинга.
+// The second thing is the parameters of drawTitle. The valey.dev holding page in
+// a separate repository lives off them: its own line on the plaque, its own view
+// behind the glass and the controls switched off. While the scene was drawn one
+// for all, changing it would mean a copy — and a copy of the entrance screen is
+// exactly the second engine that has already been torn out of the landing.
 const fakeNode = (extra = {}) => ({
   dataset: {}, classList: { add() {}, remove() {}, contains: () => false, toggle() {} },
   querySelectorAll: () => [], querySelector: () => null, ...extra,
@@ -24,8 +24,9 @@ globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEv
 globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 globalThis.addEventListener = () => {};
 
-// Холст-регистратор: он не рисует, он записывает. Сравнивать пиксели незачем —
-// ломается здесь не цвет, а то, что вызов вообще не случился.
+// A recording canvas: it does not draw, it writes down. There is no point
+// comparing pixels — what breaks here is not the colour but the call not
+// happening at all.
 function recorder() {
   const calls = [];
   return {
@@ -50,7 +51,7 @@ const ok = (name, cond, got) => {
   else { bad++; console.log('УПАЛ  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
 };
 
-// ------------------------------------------------------- сама табличка
+// ------------------------------------------------------- the plaque itself
 {
   const ctx = recorder();
   drawPlaque(ctx, PLAQUE, 'OPENING SOON', null);
@@ -58,19 +59,20 @@ const ok = (name, cond, got) => {
   const board = boxes.find((c) => c.box[2] === PLAQUE.w && c.box[3] === PLAQUE.h);
   ok('доска на месте и своего размера', !!board && board.box[0] === PLAQUE.x && board.box[1] === PLAQUE.y, board);
   ok('рамка тёплого дерева, а не поля', board && board.color === '#8a5f3a', board && board.color);
-  // Гвозди торчат выше рамки, и это часть картинки: обложка формы считает свою
-  // безопасную зону от них. Уехали внутрь — обложку обрежет по живому.
+  // The nails stick out above the frame, and that is part of the picture: the
+  // cover of the form counts its safe area from them. Moved inside, and the
+  // cover gets cropped through the living.
   const nails = boxes.filter((c) => c.box[1] === PLAQUE.y - NAIL_RISE && c.box[2] === 3);
   ok('два гвоздя, и оба выше доски', nails.length === 2, nails);
-  // Буквы набраны пикселями: прямоугольниками, а не fillText. Пятый кегль на
-  // холсте 400×225 рисуется полутонами, а офис раздувает каждый полутон в
-  // квадрат — на настоящем кадре подпись не читалась ни одной буквой.
+  // The letters are set in pixels: rectangles, not fillText. Five-point type on
+  // a 400×225 canvas is drawn in half-tones, and the office blows every half-tone
+  // up into a square — on a real frame the caption was unreadable, letter by letter.
   ok('строки набраны пикселями, а не шрифтом', !ctx.calls.some((c) => c.kind === 'text'), ctx.calls.filter((c) => c.kind === 'text'));
   ok('нарисовано много мелких пятен — это и есть буквы', boxes.length > 60, boxes.length);
 }
 
-// Строка, которой нет ни в одном лице, уходит в fallback: мыльная подпись
-// лучше пропавшей. Иероглифов в пиксельном шрифте нет и не будет.
+// A line that is in no face at all falls back: a soapy caption is better than a
+// missing one. There are no hieroglyphs in the pixel font and there will not be.
 {
   const ctx = recorder();
   let asked = null;
@@ -82,7 +84,7 @@ const ok = (name, cond, got) => {
   ok('и без запасного не падает', (() => { try { drawPlaque(ctx, PLAQUE, '事務所', null); return true; } catch { return false; } })());
 }
 
-// ------------------------------------------------------- щели наружу
+// ------------------------------------------------------- the slots outwards
 const scene = (opts) => {
   initTitle({ agents: [{ id: 'a' }, { id: 'b' }], me: lookOf('valey-test') }, {});
   const ctx = recorder();
@@ -93,8 +95,8 @@ const scene = (opts) => {
 {
   const plain = scene(undefined);
   const quiet = scene({ controls: false });
-  // Переключатель языка — единственная вещь на экране входа, которую можно
-  // нажать. На странице, по которой не ходят, он обещает то, чего там нет.
+  // The language switch is the only thing on the entrance screen that can be
+  // pressed. On a page nobody walks through, it promises what is not there.
   ok('без controls сцена беднее', quiet.calls.length < plain.calls.length, [plain.calls.length, quiet.calls.length]);
   ok('и подсказок в ней нет', !quiet.calls.some((c) => c.kind === 'text' && /ПРОБЕЛ|SPACE/.test(c.text || '')),
     quiet.calls.filter((c) => c.kind === 'text').map((c) => c.text));
@@ -103,8 +105,9 @@ const scene = (opts) => {
 {
   const own = scene({ sub: 'OPENING SOON' });
   const dflt = scene({});
-  // Разница должна быть только в нижней строке таблички: имя над ней остаётся
-  // именем офиса на двери, а не превращается во второй логотип страницы.
+  // The difference must be in the bottom line of the plaque only: the name above
+  // it stays the name of the office on the door rather than turning into a second
+  // logo of the page.
   const nameRows = (ctx) => ctx.calls.filter((c) => c.kind === 'rect' && c.box[1] >= PLAQUE.y + 3 && c.box[1] < PLAQUE.y + 13).length;
   ok('имя на табличке не трогается', nameRows(own) === nameRows(dflt), [nameRows(own), nameRows(dflt)]);
   const subRows = (ctx) => ctx.calls.filter((c) => c.kind === 'rect' && c.box[1] >= PLAQUE.y + 15 && c.box[1] < PLAQUE.y + 22).length;
@@ -116,8 +119,8 @@ const scene = (opts) => {
   const s = scene({ window: (ctx, WIN) => { got = { ...WIN }; ctx.fillStyle = '#123456'; ctx.fillRect(WIN.x, WIN.y, WIN.w, WIN.h); } });
   ok('за стекло пускают чужого рисовальщика', !!got && got.w === 64 && got.h === 36, got);
   ok('и он рисует именно там, где окно', s.calls.some((c) => c.color === '#123456'), null);
-  // Рама и переплёт остаются общими: окно — часть этой стены, а не картинка,
-  // которую подменяют целиком.
+  // The frame and the glazing bars stay shared: the window is part of this wall,
+  // not a picture swapped out whole.
   ok('рама и переплёт остаются наши',
     s.calls.some((c) => c.kind === 'rect' && c.box[2] === 2 && c.box[3] === 36 && c.color === '#8a6247'), null);
 }

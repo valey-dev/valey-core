@@ -83,8 +83,9 @@ function makeRing(items) {
   };
 }
 
-// Панель языка и имён. Строки тут не украшение: ↑↓ ходят между ними, ←→ внутри
-// одной, и подставные строки обязаны уметь сказать, чья кнопка.
+// The language and names panel. The rows here are not decoration: ↑↓ walk
+// between them, ←→ inside one, and the stand-in rows have to be able to say
+// whose button it is.
 function makeLang() {
   const langBtns = [node('langbtn', { dataset: { lang: 'ru' } }), node('langbtn', { dataset: { lang: 'en' } })];
   const packBtns = ['auto', 'ru', 'en'].map((id) => node('packbtn', { dataset: { pack: id } }));
@@ -326,9 +327,10 @@ check('и дёргает его обработчик', hueSet === 1, hueSet);
 UI.skinKey('ArrowDown');
 check('вниз с ползунка всё-таки уводит', !skin.btns[1].has('focus'), 'застряли');
 
-// ------------------------------------------------------- язык и имена агентов
-// Панель из двух строк: интерфейс и имена. Плоский обход тут врал бы руке —
-// стрелка вниз обязана уводить во вторую строку, а не доводить до конца первую.
+// ------------------------------------------------- the language and the agents' names
+// A panel of two rows: the interface and the names. A flat round would lie to
+// the hand here — the down arrow has to lead into the second row rather than
+// walk the first one to its end.
 state.agents = [{ id: 'a0', name: 'Гоша' }, { id: 'a1', name: 'Марта' }];
 langPanel = makeLang();
 await UI.openLang();
@@ -340,7 +342,7 @@ UI.langKey('ArrowDown');
 check('вниз уводит во вторую строку, столбец сохраняя', focused() === 3, focused());
 check('и это «Русские», а не «как язык офиса»', langPanel.btns[3].dataset.pack === 'ru');
 
-// Строка цены: она обязана меняться вместе с фокусом, а не по нажатию.
+// The price row: it has to change along with the focus, not on a press.
 check('на паке, который ничего не сменит, цены нет', langPanel.warn.hidden === true, langPanel.warn.textContent);
 UI.langKey('ArrowRight');
 check('дошли до English', langPanel.btns[4].dataset.pack === 'en' && focused() === 4, focused());

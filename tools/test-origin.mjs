@@ -53,7 +53,7 @@ const req = (p, { method = 'GET', headers = {}, body } = {}) => new Promise((res
     res.on('data', (c) => chunks.push(c));
     res.on('end', () => {
       let j = null;
-      try { j = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { /* не JSON */ }
+      try { j = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { /* not JSON */ }
       resolve({ status: res.statusCode, j, h: res.headers });
     });
   });

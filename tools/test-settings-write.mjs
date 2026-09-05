@@ -50,7 +50,7 @@ try {
   `], { cwd: ROOT, env: { ...process.env, VALEY_SETTINGS: broken }, encoding: 'utf8' });
   ok('битый файл не роняет старт', r.status === 0, r.stderr || r.stdout);
   let out = null;
-  try { out = JSON.parse(r.stdout.trim().split('\n').pop()); } catch { /* ниже */ }
+  try { out = JSON.parse(r.stdout.trim().split('\n').pop()); } catch { /* below */ }
   ok('офис стартует с умолчаний, а не с половины файла', out && out.token === '' , out);
   ok('до первого сохранения файл не тронут', out && out.untouchedUntilSave === true, out);
   ok('и об этом сказано вслух, с путём копии', /отложен в .*broken\.json\.broken-/.test(r.stderr), r.stderr);

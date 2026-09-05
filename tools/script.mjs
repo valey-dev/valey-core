@@ -35,7 +35,7 @@ if (patch !== 0) console.warn(`внимание: ${tag} — патч, а рол�
 const known = git('tag', '-l', 'v[0-9]*').split('\n').filter(Boolean);
 const here = known.includes(tag) ? tag : 'HEAD';
 let from = '';
-try { from = gitQuiet('describe', '--tags', '--match', 'v[0-9]*', '--abbrev=0', `${here}^`); } catch { /* первый релиз */ }
+try { from = gitQuiet('describe', '--tags', '--match', 'v[0-9]*', '--abbrev=0', `${here}^`); } catch { /* the first release */ }
 const range = from ? `${from}..${here}` : here;
 
 const commits = git('log', range, '--no-merges', '--format=%h%x00%s')

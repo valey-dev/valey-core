@@ -359,11 +359,11 @@ function applyLine(st, line) {
 
 // The names. Gender is stored next to the name rather than guessed from the
 // last letter: on diminutives that heuristic is wrong more often than right —
-// Гоша, Кузя, Савва, Никита and a dozen more end in а/я and are all male. On
+// «Гоша, Кузя, Савва, Никита» and a dozen more end in «а/я» and are all male. On
 // 30 August 2026 the office wrote "Гоша освободилась" for fourteen names out of
 // fifty.
 //
-// Names that go either way — Саша, Женя, Слава, Валя, Шура — are pinned to one
+// Names that go either way — «Саша, Женя, Слава, Валя, Шура» — are pinned to one
 // gender by decision, not by truth: there is nowhere to learn a session's
 // gender from, and a coin flipped once is better than a coin flipped in every
 // sentence.
@@ -400,7 +400,7 @@ const RU_FEMALE = [
 // was meant to avoid.
 //
 // The either-way ones — Sam, Alex, Charlie, Pat, Quinn — are pinned to male by
-// the same decision and for the same reason as Женя and Слава in Russian.
+// the same decision and for the same reason as «Женя» and «Слава» in Russian.
 const EN_MALE = [
   'Pete', 'Gus', 'Sam', 'Max', 'Ed', 'Joe', 'Nick', 'Tom', 'Bill', 'Dave',
   'Frank', 'Charlie', 'Andy', 'Bob', 'Mike', 'Steve', 'Jack', 'Harry', 'Alfie', 'Ollie',

@@ -99,7 +99,7 @@ function openStream(query) {
         first();
       }
     }
-  }).catch(() => { /* закрыли — так и было задумано */ });
+  }).catch(() => { /* closed — that was the intent */ });
   return { events, ready, close: () => { ctl.abort(); return done; } };
 }
 

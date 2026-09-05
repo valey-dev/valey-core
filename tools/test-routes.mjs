@@ -50,7 +50,7 @@ const req = (p, { method = 'GET', headers = {}, body } = {}) => new Promise((res
     res.on('end', () => {
       const buf = Buffer.concat(chunks);
       let j = null;
-      try { j = JSON.parse(buf.toString('utf8')); } catch { /* не JSON */ }
+      try { j = JSON.parse(buf.toString('utf8')); } catch { /* not JSON */ }
       resolve({ status: res.statusCode, h: res.headers, j, text: buf.toString('utf8'), bytes: buf.length });
     });
   });

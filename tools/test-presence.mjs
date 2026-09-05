@@ -55,7 +55,7 @@ try {
     for (const b of blocks) {
       if (!b.startsWith('event: people')) continue;
       const line = b.split('\n').find((l) => l.startsWith('data: '));
-      if (line) { try { got = JSON.parse(line.slice(6)); } catch { /* половина кадра */ } }
+      if (line) { try { got = JSON.parse(line.slice(6)); } catch { /* half a frame */ } }
     }
     if (!got) await wait(50);
   }
