@@ -290,7 +290,16 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
    fitted, so the missing scroll was invisible; the second scale is what asked
    the question. The tabs and the tree's own header stay put while it moves. */
 .bagwrap{width:min(700px, calc(94vw / var(--ui, 1)))}
-.bagwrap .bbody{overflow-y:auto; min-height:0}
+/* Высота у инвентаря одна на все вкладки, а не по содержимому. Пять вкладок
+   одного экрана давали окно от 348 до 616 пикселей — «вещи» и «дерево» высокие,
+   «на себе» низкая, — и панель прыгала под руками на каждой цифре: кнопка, на
+   которую целишься, уезжает. То же решение, что у дерева гита (.gitwrap.tall) и
+   у транскрипта (.body с полом и потолком): рамку держит экран, а содержимое
+   прокручивается внутри. Потолок в vh — чтобы на низком окне панель не вылезла;
+   деление на --ui нужно потому, что vh внутри масштабированной панели считается
+   в её единицах. */
+.bagwrap{height:min(560px, calc(86vh / var(--ui, 1)))}
+.bagwrap .bbody, .bagwrap .dbody{flex:1 1 auto; overflow-y:auto; min-height:0}
 .bagwrap{display:flex; flex-direction:column}
 
 /* Вкладки инвентаря. Переключаются цифрой, а не стрелкой: стрелки внутри
