@@ -1,23 +1,25 @@
-// Дерево модулей: из чего собран офис и что из чего растёт.
+// The tree of modules: what the office is assembled from and what grows out of what.
 //
-// Лежит в ядре, а не в модулях, нарочно: бесплатная сборка обязана знать, чего
-// в ней нет, иначе дереву нечего рисовать. Узел — не модуль, а ветка: у
-// бесплатных веток нет папки, они и есть ядро; у платных `module` — id папки
-// в modules/, и по нему узел загорается, когда папка лежит.
+// It lies in the core rather than in the modules, on purpose: a free build has to
+// know what it does not have, or the tree has nothing to draw. A node is not a
+// module but a branch: free branches have no folder, they are the core itself;
+// for paid ones `module` is the id of a folder in modules/, and by it the node
+// lights up when the folder is there.
 //
-// Три яруса — три колонки в инвентаре: «Комната» (бесплатно, корень), «Офис»
-// (модули, разово), «Этаж» (сеть, подпиской, ещё не построен). Ребро идёт от
-// того, что расширяется, к тому, что расширяет: дерево гита и мольберт растут
-// из доски работ, картотека — из пультовой. `row` — строка в колонке, как на
-// макете; строки нижних веток корня совпадают со строками «Этажа», чтобы
-// ребро шло по прямой мимо «Офиса» — это сеть, а не модули.
+// Three tiers — three columns in the bag: «Комната» (free, the root), «Офис»
+// (modules, one-off), «Этаж» (the network, by subscription, not built yet). An
+// edge goes from what is extended to what extends it: the git tree and the easel
+// grow out of the work board, the card index out of the control room. `row` is a
+// row in a column, as in the mock-up; the rows of the root's lower branches
+// coincide with the rows of «Этаж», so that the edge runs straight past «Офис» —
+// that is the network, not the modules.
 //
-// Макет: Figma, Prod, секция «18 · Дерево модулей в инвентаре», кадры 932:2
-// (бесплатная сборка) и 934:2 (сборка «Офис»). Принято 4 сентября 2026.
+// The mock-up: Figma, Prod, section «18 · Дерево модулей в инвентаре», frames
+// 932:2 (a free build) and 934:2 (an «Офис» build). Approved 4 September 2026.
 export const TIERS = ['room', 'office', 'floor'];
 
 export const LIBRARY = [
-  // ---- Комната: ядро, бесплатно и целиком
+  // ---- «Комната»: the core, free and whole
   { id: 'floor1', tier: 'room', row: 0,
     name: { ru: 'Этаж и комнаты', en: 'Floor and rooms' },
     gives: { ru: 'Комнаты по проектам, таблички на дверях, планировка, лифт между этажами. Столько агентов, сколько запущено, — лимита нет и не будет.',
@@ -69,16 +71,17 @@ export const LIBRARY = [
              en: 'The title screen, Russian and English, the office sound.' },
     where: { ru: 'Язык переключается у таблички в коридоре.', en: 'The language switches at the sign in the corridor.' } },
 
-  // ---- Офис: модули, растут из веток корня
+  // ---- «Офис»: the modules, growing out of the branches of the root
   { id: 'bible', tier: 'office', row: 0, parent: 'floor1', module: 'bible',
     name: { ru: 'Офисная библия', en: 'The office bible' },
     gives: { ru: 'Книга метода в читальне на этаже 0: как давать задание, работать в параллель, писать отчёт, которому верят.',
              en: 'The book of method in the reading room on floor 0: how to give a task, work in parallel, write a report people trust.' },
     without: { ru: 'Этажа 0 нет вовсе: ни комнаты, ни остановки лифта.', en: 'There is no floor 0 at all: no room, no lift stop.' } },
-  // Мольберт растёт из доски работ, а не из картин на стене: 4 сентября 2026
-  // решено, что это рабочий инструмент, притом профессиональный — без Figma
-  // он не нужен вовсе, — и среди кота со скейтом стоял по внешности, а не по
-  // делу. У доски из-за этого два потомка, и ребро к мольберту идёт коленом.
+  // The easel grows out of the work board rather than out of the paintings on the
+  // wall: on 4 September 2026 it was decided that it is a working tool, and a
+  // professional one at that — without Figma it is not needed at all — and among
+  // the cat and the skateboard it stood by its looks rather than by its business.
+  // The board therefore has two children, and the edge to the easel goes by an elbow.
   { id: 'easel', tier: 'office', row: 1, parent: 'board', module: 'easel',
     name: { ru: 'Мольберт с макетами', en: 'The easel' },
     gives: { ru: 'Страница WIP твоего файла Figma на стене комнаты: секции, кадры и кружок состояния. Видно, что утверждено и что ещё рисуется.',
@@ -105,7 +108,7 @@ export const LIBRARY = [
     gives: { ru: '«Офис» — год обновлений: модули приезжают вместе с ними и появляются в офисе сами. Списка нет нарочно: обещать число нельзя, обещать «приедет само» — можно.',
              en: '“Office” is a year of updates: modules arrive with them and appear in the office by themselves. There is no list on purpose: a number cannot be promised, “it arrives on its own” can.' } },
 
-  // ---- Этаж: сеть, растёт из нижних веток корня мимо «Офиса»
+  // ---- «Этаж»: the network, growing out of the lower branches of the root past «Офис»
   { id: 'floor', tier: 'floor', row: 7, parent: 'agents',
     name: { ru: 'Общий этаж: тиммейты', en: 'Floor with teammates' },
     gives: { ru: 'Агенты и люди нескольких участников на одном этаже — чужие сессии видны проекцией с их машины, а не копией файлов. Прочитать, чем занят чужой агент, — да; открыть его транскрипт — только с согласия хозяина.',
@@ -125,5 +128,5 @@ export const LIBRARY = [
 
 export const byId = (id) => LIBRARY.find((n) => n.id === id);
 export const children = (id) => LIBRARY.filter((n) => n.parent === id);
-// Колонка узла: «то, что выйдет за год» стоит в колонке «Офиса».
+// The column of a node: "what will come out over the year" stands in the «Офис» column.
 export const colOf = (n) => (n.tier === 'more' ? 1 : TIERS.indexOf(n.tier));

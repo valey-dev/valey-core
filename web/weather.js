@@ -38,8 +38,8 @@ export function fromWeatherCode(code, wind = 0) {
   return { kind: k, intensity: 0.6, wind: Math.max(-1, Math.min(1, wind / 30)), source: 'настоящая' };
 }
 
-// Названия погоды переехали в словарь (sky.*): здесь они были вторым списком,
-// который при переводе разошёлся бы с первым.
+// The names of the weather moved into the dictionary (sky.*): here they were a
+// second list, which on translation would diverge from the first.
 
 // 0..1 — how much the room lights up from lightning right now
 export function flash(t, w) {

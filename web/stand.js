@@ -1,12 +1,13 @@
-// Табличка тестового стенда.
+// The plaque of a test stand.
 //
-// Офис на 5177 и офис на 5188 выглядят одинаково, и это уже стоило времени:
-// кадр из чужой ветки читался как «фича не работает», а пустой этаж в режиме
-// shared — как поломка сборки. Табличка отвечает на три вопроса сразу: это
-// стенд, чей он и что на нём проверяют.
+// An office on 5177 and an office on 5188 look the same, and that has cost time
+// already: a frame from another branch read as "the feature does not work", and
+// an empty floor in shared mode as a broken build. The plaque answers three
+// questions at once: this is a stand, whose it is and what is being checked on it.
 //
-// Показывается только когда сервер запущен с VALEY_STAND — в обычном офисе
-// её нет вовсе, и снимать её перед показом не нужно.
+// It is shown only when the server was started with VALEY_STAND — in an ordinary
+// office it is not there at all, and there is no need to take it down before a
+// showing.
 import { moduleFailures } from './modules.js';
 
 export async function initStand() {
@@ -16,7 +17,7 @@ export async function initStand() {
   } catch {
     return null;
   }
-  // Ответ может прийти отказом, а не объектом с текстом: гейт отдаёт {error}.
+  // The answer can come as a refusal rather than an object with text: the gate gives out {error}.
   if (!s || typeof s !== 'object' || !s.text) return null;
 
   const box = document.createElement('div');
@@ -31,17 +32,18 @@ export async function initStand() {
   line('stand-what', s.text);
   const where = [s.branch && `ветка ${s.branch}`, s.port && `порт ${s.port}`].filter(Boolean).join(' · ');
   if (where) line('stand-where', where);
-  // Список модулей — переключателями. Клик гасит модуль на сервере и
-  // перезагружает страницу: половина работы модуля живёт в клиенте, и без
-  // перезагрузки офис остался бы с уже нарисованными предметами.
+  // The list of modules, as switches. A click puts a module out on the server and
+  // reloads the page: half of a module's work lives in the client, and without the
+  // reload the office would be left with the things it has already drawn.
   const all = s.all || [];
   if (!all.length) {
     line('stand-where', 'модулей нет — бесплатная сборка');
   } else {
-    // Состояние словом, а не галочкой. Первая версия показывала ☑/☐, кнопки
-    // стояли вплотную, и уже на второй проверке выключенным оказался не тот
-    // модуль, о котором думали: разница между двумя значками в мелком шрифте
-    // не читается, а цена ошибки — «фича не работает» на пустом месте.
+    // The state in a word, not a tick. The first version showed ☑/☐, the buttons
+    // stood shoulder to shoulder, and by the second check the module switched off
+    // was not the one that had been meant: the difference between two glyphs in a
+    // small font cannot be read, and the price of the mistake is "the feature does
+    // not work" over nothing.
     const rows = document.createElement('div');
     rows.className = 'stand-mods';
     for (const m of all) {
@@ -57,7 +59,7 @@ export async function initStand() {
       b.onclick = async () => {
         if (b.disabled) return;
         b.disabled = true;
-        state.textContent = '…';        // клик, который не дошёл, должен быть виден
+        state.textContent = '…';        // a click that did not arrive has to be visible
         try {
           await fetch('/api/stand/toggle', {
             method: 'POST',
@@ -71,12 +73,11 @@ export async function initStand() {
       rows.appendChild(b);
     }
     box.appendChild(rows);
-    // То же самое ещё раз словами: состояние, названное дважды, не читается
-    // задом наперёд.
+    // The same thing once more in words: a state named twice cannot be read backwards.
     const dead = all.filter((m) => m.off).map((m) => m.id);
     line('stand-where', dead.length ? `выключены: ${dead.join(', ')}` : 'все модули включены');
-    // Без этой строки панель врёт: выключенный здесь модуль остался на диске,
-    // и это проверка поведения офиса, а не бесплатной сборки.
+    // Without this line the panel lies: a module switched off here is still on
+    // disk, and this is a check of how the office behaves, not of a build without it.
     line('stand-fine', 'выключение — имитация: файлы на диске остаются');
   }
   document.body.appendChild(box);
