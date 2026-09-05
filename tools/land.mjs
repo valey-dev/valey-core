@@ -78,20 +78,27 @@ const tmpBranch = `land/${Date.now()}`;
 const base = dry ? `origin/${info.headRefName}` : 'origin/main';
 console.log(`\nрелиз во временном дереве ${dir} (с ${base}):`);
 git('worktree', 'add', '--quiet', '-b', tmpBranch, dir, base);
-try {
-  const args = [path.join(dir, 'tools/release.mjs')];
-  if (kind) args.push(kind);
-  if (dry) args.push('--dry'); else args.push('--ship');
-  const r = spawnSync(process.execPath, args, { cwd: dir, stdio: 'inherit' });
-  if (r.status !== 0) {
-    die(dry ? 'сухой прогон релиза не прошёл' :
-      `PR слит, но релиз не нарезан. Дерево ${dir} осталось — доделать там же:\n  node tools/release.mjs --ship`);
-  }
-} finally {
-  // The tree goes; a release that failed says so above and keeps its own.
-  try { git('worktree', 'remove', '--force', dir); } catch { /* already gone, or held by something */ }
+// The tidying is called by hand rather than left to `finally`: die() ends the
+// process with process.exit, and that skips finally entirely. The first failing
+// dry run on 6 September 2026 left its worktree and branch behind for exactly
+// that reason, and a temporary tree nobody removes is one more thing holding a
+// branch nobody expected.
+const sweep = () => {
+  try { git('worktree', 'remove', '--force', dir); } catch { /* already gone, or held */ }
   try { git('branch', '-D', tmpBranch); } catch { /* the branch may not be there */ }
+};
+
+const args = [path.join(dir, 'tools/release.mjs')];
+if (kind) args.push(kind);
+if (dry) args.push('--dry'); else args.push('--ship');
+const r = spawnSync(process.execPath, args, { cwd: dir, stdio: 'inherit' });
+if (r.status !== 0) {
+  if (dry) { sweep(); die('сухой прогон релиза не прошёл'); }
+  // A real run that got as far as failing keeps its tree: the merge has already
+  // happened, the release has not, and finishing it needs somewhere to stand.
+  die(`PR слит, но релиз не нарезан. Дерево ${dir} осталось — доделать там же:\n  node tools/release.mjs --ship`);
 }
+sweep();
 console.log(dry
   ? '\n--dry: ничего не слито и не выпущено. Выше — раздел, который уехал бы, и стенды, которые за него отвечают.'
   : '\nготово: PR слит, версия нарезана и опубликована.');
