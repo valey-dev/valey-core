@@ -10,17 +10,10 @@
 // Здесь же — то, от чего офис падал: битый JSON в открытую до входа ручку,
 // тело без конца, массив вместо объекта. Каждая проверка заканчивается
 // вопросом «жив ли сервер», потому что ответ 400 на мёртвом офисе не бывает.
-import { spawn } from 'node:child_process';
 import http from 'node:http';
-import fsp from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { fileOwners } from '../server/agents.js';
+import { startOffice } from './lib/office.mjs';
 
-const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const PORT = Number(process.env.ORIGIN_PORT || 5395);
-const base = `http://127.0.0.1:${PORT}`;
 const OWNER = 'origin-owner-0001';
 
 let bad = 0;
@@ -28,7 +21,6 @@ const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
   else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
 };
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ------------------------------------------------ чьи файлы: без сервера
 {
@@ -42,21 +34,11 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('чужой путь ничей', fileOwners('/etc/hosts', snap).length === 0, fileOwners('/etc/hosts', snap));
 }
 
-const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-origin-'));
-const settingsFile = path.join(dir, 'settings.json');
-await fsp.writeFile(settingsFile, JSON.stringify({
-  // private — режим, в котором петля и есть хозяин; именно тут дыра и жила
-  access: { mode: 'private', token: OWNER, invites: [] },
-  weather: { enabled: false }, delivery: { mode: 'default' },
-}, null, 2));
-
-const srv = spawn(process.execPath, ['server/index.js'], {
-  cwd: ROOT,
-  env: { ...process.env, PORT: String(PORT), VALEY_SETTINGS: settingsFile, HOST: '127.0.0.1' },
-  stdio: 'ignore',
+// private — режим, в котором петля и есть хозяин; именно тут дыра и жила.
+const { base, port: PORT, stop } = await startOffice({
+  settings: { access: { mode: 'private', token: OWNER, invites: [] } },
+  claudeDir: '/nonexistent-claude-dir',
 });
-const stop = () => { try { srv.kill(); } catch { /* уже мёртв */ } };
-process.on('exit', stop);
 
 // Не fetch, а node:http: fetch в Node молча выбрасывает заголовок Host, и
 // первый прогон этого стенда 3 сентября 2026 слал своё имя вместо чужого —
@@ -83,12 +65,6 @@ const alive = async (name) => {
 };
 
 try {
-  let up = false;
-  for (let i = 0; i < 60 && !up; i++) {
-    try { await fetch(base + '/api/whoami'); up = true; } catch { await wait(150); }
-  }
-  if (!up) throw new Error(`сервер не поднялся на ${PORT} — занят?`);
-
   // -------------------------------------------------------------- rebinding
   const bound = await req('/', { headers: { host: 'evil.example' } });
   ok('чужое имя на петле — страницу не отдают, и отвечают как закрытый офис', bound.status === 404, bound.status);
@@ -146,6 +122,19 @@ try {
   ok('чужой метод в ручку входа — не 500', method.status !== 500, method.status);
   await alive('после чужого метода');
 
+  // ------------------------------------------------------------ модули
+  // Проверка привязана к тому, какие модули доехали до сборки, а не к радио:
+  // без папки modules/ (бесплатная сборка) спрашивать про spotify не у кого,
+  // и стенд, требующий его всегда, красный ровно там, где всё правильно.
+  const mods = (await req('/api/modules')).j || [];
+  if (mods.some((m) => m.id === 'radio')) {
+    const boot = await req('/api/settings');
+    ok('секция модуля есть в настройках с первого запроса, до любого сохранения',
+      boot.status === 200 && boot.j && boot.j.settings && 'spotify' in boot.j.settings, boot.j && Object.keys(boot.j.settings || {}));
+  } else {
+    ok('модулей в сборке нет — про их настройки и не спрашиваем', true, mods.length);
+  }
+
   // --------------------------------------------------------------- файлы
   const file = await req('/api/file?path=' + encodeURIComponent('/etc/hosts'));
   ok('файл не из транскрипта не отдают', file.status === 403, file.status);
@@ -153,8 +142,7 @@ try {
   bad += 1;
   console.log('УПАЛ  | стенд не доехал →', e.message);
 } finally {
-  stop();
-  await fsp.rm(dir, { recursive: true, force: true });
+  await stop();
 }
 
 console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');

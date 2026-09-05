@@ -1,6 +1,7 @@
 // A small Markdown renderer. Everything is escaped before any tag is built, so a
 // file from disk cannot inject markup of its own.
 import { highlight, normaliseLang } from './highlight.js';
+import { t as tr } from './i18n.js';
 
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ESC[c]);
@@ -51,8 +52,15 @@ export function renderMarkdown(src) {
     const code = body.replace(/\n$/, '');
     const kind = normaliseLang(lang);
     // highlight() escapes as it goes, so known languages skip escapeHtml here
-    fences.push(`<pre class="mdcode"${lang ? ` data-lang="${escapeHtml(lang)}"` : ''}>`
-      + `<code>${kind ? highlight(code, kind) : escapeHtml(code)}</code></pre>`);
+    // Макет: Figma, Prod, секция «20 · Кнопка копирования у блоков кода».
+    // Кнопка стоит СНАРУЖИ <pre>, в обёртке: у самого блока `overflow-x: auto`,
+    // и кнопка внутри него уезжала бы влево вместе с длинной строкой — ровно
+    // тогда, когда её и хотят нажать. Текст она берёт из `textContent` блока,
+    // поэтому копируется код, а не подсветка, и второй копии в разметке нет.
+    fences.push('<div class="mdblock">'
+      + `<pre class="mdcode"${lang ? ` data-lang="${escapeHtml(lang)}"` : ''}>`
+      + `<code>${kind ? highlight(code, kind) : escapeHtml(code)}</code></pre>`
+      + `<button class="mdcopy" type="button" data-copy>${tr('md.copy')}</button></div>`);
     return `${HOLD}f${fences.length - 1}${HOLD}`;
   });
 

@@ -12,6 +12,13 @@ const cases = [
     ['<pre class="mdcode" data-lang="js">', '<span class="t-keyword">const</span>', '&lt;'], ['<script']],
   ['блок кода без языка', '```\nпросто текст < тут\n```',
     ['<pre class="mdcode"><code>просто текст &lt; тут</code></pre>']],
+  // Кнопка копирования: живёт в обёртке рядом с <pre>, а не внутри него —
+  // внутри она уезжала бы вбок вместе с длинной строкой.
+  ['кнопка копирования у блока', '```bash\ngit push\n```',
+    ['<div class="mdblock">', '<button class="mdcopy" type="button" data-copy>', '</pre><button']],
+  ['текста кода в разметке ровно одна копия', '```\nsecret-command\n```',
+    ['secret-command'], ['secret-command</button>']],
+  ['у инлайн-кода кнопки нет', 'зови `npm start` так', ['<code>npm start</code>'], ['mdcopy']],
   ['маркированный список', '- раз\n- два', ['<ul><li>раз</li><li>два</li></ul>']],
   ['нумерованный список', '1. раз\n2. два', ['<ol><li>раз</li><li>два</li></ol>']],
   ['вложенный список', '- раз\n  - вложено', ['<li>раз<ul><li>вложено</li></ul></li>']],

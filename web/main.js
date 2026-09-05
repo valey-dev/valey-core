@@ -9,6 +9,7 @@ import { syncActors, tickActors } from './actors.js';
 import * as UI from './ui.js';
 import { proceduralWeather, fromWeatherCode, flash } from './weather.js';
 import { sound, tickSound } from './sound.js';
+import { initPager, seePermits, renderPager, pagerKey, recall, waitingCount, forgetPermit } from './pager.js';
 import { titleOf } from './paintings.js';
 import { drawBubble } from './badges.js';
 import { skateStep, rolling, drawSkateboard, ollieStep, canOllie, OLLIE_POP } from './skate.js';
@@ -29,13 +30,23 @@ const DEFAULT_ME = {
   style: 0, head: 'none', glasses: false, face: 'none', tall: 1, hands: 'none', name: tr('label.me'),
 };
 
+// Что лежит в localStorage, писали мы же — но не обязательно этой версией и
+// не обязательно целиком: одно битое значение на верхнем уровне модуля
+// роняло весь офис до первого кадра, без единой строки в консоли.
+const stored = (key, fallback) => {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+};
+
 const state = {
   agents: [], layout: null, sig: '', actors: new Map(), looks: new Map(),
   // vx/vy — накат скейта: скорость живёт между кадрами, у пешей ходьбы её нет
   player: { x: 120, y: 60, dir: 0, moving: false, skate: false, vx: 0, vy: 0, z: 0, vz: 0 }, spawned: false,
   cat: { x: 200, y: 60, tx: 200, ty: 60 },
-  me: normalizeLook({ ...DEFAULT_ME, ...JSON.parse(localStorage.getItem('valey-me') || '{}') }),
+  me: normalizeLook({ ...DEFAULT_ME, ...stored('valey-me', {}) }),
   visited: new Set(), waypoint: null, currentRoom: null,
+  // Где сидим: {x, y, dir, out} — координата сиденья и точка, откуда встают.
+  // Пока не null, игрок не ходит и рисуется в позе sit.
+  seat: null,
   focus: null, dialogOpen: false, page: 'talk', typed: 0, notice: '', t: 0,
   prevStatus: new Map(),
   weather: proceduralWeather(), weatherAt: Date.now(), realWeather: null, wasFlashing: false,
@@ -66,6 +77,9 @@ const state = {
   // и куда едут: между посылками присутствия человек «доезжает» сам, иначе на
   // 8 кадрах в секунду чужая ходьба выглядит телепортацией.
   people: new Map(),
+  // Запросы разрешения, которых ждут агенты. У гостя список всегда пуст —
+  // сервер его не присылает.
+  permits: [], pagerWaiting: 0,
   soundOn: sound.on,
   // физических пикселей на пиксель игры; заполняется первым же fit()
   zoom: { dev: 3, max: 3, auto: true, clamped: false },
@@ -148,6 +162,20 @@ async function saveSettings(patch) {
   return r;
 }
 
+// Один вход для обоих источников: событие и снимок. Счётчик отложенных живёт
+// в состоянии, потому что рисует его шапка, а не пейджер.
+function takePermits(list) {
+  seePermits(list);
+  const n = waitingCount();
+  if (n !== state.pagerWaiting) { state.pagerWaiting = n; UI.renderHud(); }
+}
+
+initPager(state, {
+  openPermit: (p) => { UI.openPermit(p.agentId); },
+  toast: (text, kind) => UI.toast(text, kind),
+  hudChanged: () => { state.pagerWaiting = waitingCount(); UI.renderHud(); },
+});
+
 UI.initUI(state, {
   close: closeAll,
   saveMe: () => {
@@ -177,9 +205,20 @@ UI.initUI(state, {
   }).then((r) => r.json()).then((r) => {
     // Забираем токен: офис только что стал общим, и без него эта же страница
     // на следующем запросе окажется гостем в собственном офисе.
-    if (r && r.owner) { OWNER = r.owner; localStorage.setItem('valey-owner', OWNER); }
+    if (r && r.owner) {
+      OWNER = r.owner; localStorage.setItem('valey-owner', OWNER);
+      // Поток помнит, кем открыт: сервер решает это один раз при подключении.
+      // Без переоткрытия старый поток после перехода в shared шёл гостевой
+      // проекцией — хозяин видел свой офис без реплик и файлов.
+      openStream();
+    }
     return r;
   }).catch((e) => ({ error: e.message })),
+  answerPermit: (id, decision, message) => fetch('/api/permit/answer', {
+    method: 'POST', headers: owned({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ id, decision, message }),
+  }).then((r) => r.json()).catch((e) => ({ error: e.message })),
+  forgetPermit: (id) => { forgetPermit(id); state.pagerWaiting = waitingCount(); UI.renderHud(); },
   askAccess: (agentId) => fetch('/api/access', {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({ agentId }),
@@ -218,6 +257,9 @@ knock().then((entered) => {
   UI.renderHud();
 }).catch(() => { /* не ответил — считаем гостем: молча дать больше прав хуже */
   state.owner = false;
+  // Поток открывается и здесь: до 4 сентября 2026 упавший whoami оставлял
+  // офис пустым навсегда, без объяснения, — снимки просто не приходили.
+  if (!es) openStream();
 });
 
 fetch('/api/settings').then((r) => r.json()).then((r) => {
@@ -409,15 +451,30 @@ function seePeople(list) {
 // Открытый раньше поток получал 403, и человек видел пустой офис до первой
 // перезагрузки. Найдено 30 августа 2026 первым же настоящим входом по ссылке.
 let es = null;
+// EventSource сам переподключается только после обрыва сети. Ответ 4xx/5xx —
+// офис перезапустился в другом режиме, пропуск отозван, сервер упал на
+// секунду — закрывает его насовсем, и страница молча замирает на последнем
+// снимке. Поэтому закрытый поток открывается заново, с растущей паузой.
+let streamRetry = 2000;
 function openStream() {
   if (es) es.close();
   const pass = OWNER ? 'owner=' + encodeURIComponent(OWNER)
     : GUEST ? 'guest=' + encodeURIComponent(GUEST) : '';
   es = new EventSource('/api/stream' + (pass ? '?' + pass : ''));
+  // Пейджер должен пищать сразу: в такте снимка это было бы «мне звонили».
+  es.addEventListener('permits', (e) => {
+    try { takePermits(JSON.parse(e.data)); } catch { /* мусор в кадре — пропускаем */ }
+  });
   es.addEventListener('people', (e) => {
     try { seePeople(JSON.parse(e.data)); } catch { /* мусор в кадре — пропускаем */ }
   });
-  es.onmessage = onSnapshot;
+  es.onmessage = (e) => { streamRetry = 2000; onSnapshot(e); };
+  es.onerror = () => {
+    if (es.readyState !== EventSource.CLOSED) return;   // сеть моргнула — браузер сам вернётся
+    const wait = streamRetry;
+    streamRetry = Math.min(streamRetry * 2, 30000);
+    setTimeout(() => { if (es.readyState === EventSource.CLOSED) openStream(); }, wait);
+  };
 }
 
 const onSnapshot = (e) => {
@@ -429,6 +486,7 @@ const onSnapshot = (e) => {
   // Доступ едет со снимком: у гостя это его собственный вид, у хозяина —
   // кто просит и кому открыто.
   state.access = data.access || null;
+  takePermits(data.permits || []);
   // Поток разбирается по полям, а не присваивается целиком, поэтому новое поле
   // надо переносить руками — иначе титульный экран показывает прочерк вместо
   // версии, и это видно только на кадре.
@@ -556,7 +614,14 @@ function onKey(e) {
     if (titleKey(e.key)) { e.preventDefault(); return; }
   }
 
-  if (k === 'escape') return closeAll();
+  // Пейджер держит свои две клавиши, пока карточки нет: Enter отвечает, Esc
+  // откладывает. Открытая карточка забирает их себе — она поверх, и в ней уже
+  // есть и «разрешить», и «закрыть».
+  if (!state.dialogOpen && pagerKey(e.key)) { e.preventDefault(); return; }
+
+  // Esc на «отказать с запиской» — шаг назад к кнопкам, а не закрытие карточки:
+  // человек нажал отказ и ещё ничего не отправил.
+  if (k === 'escape') { if (UI.permitEscape()) return; return closeAll(); }
 
   // the character sheet is keyboard-driven too: arrows walk its bottom row
   if (state.dialogOpen) {
@@ -588,19 +653,24 @@ function onKey(e) {
   if (k === 'tab') return toggle('roster', UI.renderRoster, UI.closeRoster);
   // N снаружи показывает все заметки; внутри разговора та же клавиша их пишет
   if (k === 'n' || k === 'т') return toggle('notes', UI.renderNotes, UI.closeNotes);
-  // C открывает инвентарь на «на себе» — там, где эта клавиша была всегда;
-  // I открывает его же на той вкладке, где ты был в прошлый раз.
+  // C открывает инвентарь на «на себе» — там, где эта клавиша была всегда.
   if (k === 'c' || k === 'с') return toggle('bag', () => UI.renderBag('self'), UI.closeBag);
-  if (k === 'i' || k === 'ш') return toggle('bag', UI.renderBag, UI.closeBag);
   if (k === 'p' || k === 'з') return toggle('sky', UI.renderSky, UI.closeSky);
   if (k === 'u' || k === 'г') return toggle('skin', UI.renderSkin, UI.closeSkin);
   // I — пригласить. Кадры клавишу не задают, это выбор здесь: G занята
   // нарисованным «этажом команды», а из свободных букв I — единственная,
   // которая читается и по-русски (ш) как та же кнопка. Панель только у
-  // хозяина: гостю звать некого, офис не его.
-  if ((k === 'i' || k === 'ш') && state.owner !== false) {
-    return UI.inviteOpen() ? UI.closeInvite() : UI.openInvite();
+  // хозяина; гостю звать некого, и у него I открывает инвентарь на той
+  // вкладке, где он был. Две ветки претендовали на букву с 2 сентября 2026,
+  // инвентарь стоял выше и приглашение не открывалось ни у кого — а другого
+  // входа у панели нет.
+  if (k === 'i' || k === 'ш') {
+    if (state.owner !== false) return UI.inviteOpen() ? UI.closeInvite() : UI.openInvite();
+    return toggle('bag', UI.renderBag, UI.closeBag);
   }
+  // H — вернуть отложенный пейджер. Не E: она в офисе равна ПРОБЕЛу, и
+  // «перезвоню» с возвратом на одну клавишу были бы разговором с агентом.
+  if ((k === 'h' || k === 'р') && recall()) return;
   // B — скейт. Не S: та занята шагом вниз в WASD, и переназначить её нельзя,
   // не сломав ходьбу.
   if (k === 'b' || k === 'и') return toggleSkate();
@@ -753,8 +823,31 @@ function nearest() {
     if (d < bestD) { bestD = d; best = { kind: 'water', prop }; }
   }
 
+  // Скамейки: у коридорной сиденья считаются из её ширины (34 px, рисуется от
+  // центра), у оранжерейной лежат готовыми в раскладке. Подходят спереди —
+  // сзади у обеих спинка.
+  for (const prop of (state.layout.props || [])) {
+    if (prop.kind !== 'bench') continue;
+    for (const sx of [prop.x - 8, prop.x + 8]) {
+      const d = Math.hypot(sx - p.x, prop.y + 4 - p.y);
+      if (d < bestD) {
+        bestD = d;
+        best = { kind: 'seat', seat: { x: sx, y: prop.y - 6 }, out: { x: sx, y: prop.y + 14 } };
+      }
+    }
+  }
+
   const gh = state.layout.greenhouse;
   if (gh) {
+    if (gh.bench) {
+      for (const st of gh.bench.seats) {
+        const d = Math.hypot(st.x - p.x, st.y - p.y);
+        if (d < bestD) {
+          bestD = d;
+          best = { kind: 'seat', seat: st, out: { x: st.x, y: gh.bench.y + 22 } };
+        }
+      }
+    }
     for (const pot of gh.pots) {
       const d = Math.hypot(pot.spot.x - p.x, pot.spot.y - p.y);
       if (d < bestD) { bestD = d; best = { kind: 'pot', room: gh, pot }; }
@@ -933,6 +1026,35 @@ function tickMicro(now) {
   if (m.phase === 'smell' && passed > MICRO_RUN + MICRO_SMELL) state.micro = null;
 }
 
+// ------------------------------------------------------------------ скамейка
+// Сесть и ничего не делать — это вся механика, и в ней важны две мелочи.
+//
+// Первая: сиденье лежит внутри мебели, а мебель занимает пол. Поэтому встают
+// не туда, где сидели, а на точку перед скамьёй: иначе человек оказывается
+// внутри блока и выходит из него бочком, как из шкафа.
+//
+// Вторая: любое движение поднимает. Клавиша «встать» отдельной кнопкой была бы
+// честной, но неудобной — сидящий жмёт вперёд и ждёт, что пойдёт, а не что
+// офис ответит «нет».
+function sitDown(n) {
+  const p = state.player;
+  state.seat = { x: n.seat.x, y: n.seat.y, out: n.out, dir: p.dir || 1 };
+  p.x = n.seat.x; p.y = n.seat.y;
+  p.moving = false; p.running = false; p.vx = 0; p.vy = 0;
+  if (p.skate) p.skate = false;              // с доской не сидят
+  state.stepDist = 22;
+}
+
+function standUp() {
+  const s = state.seat;
+  if (!s) return;
+  const p = state.player;
+  p.x = s.out.x; p.y = s.out.y;
+  p.moving = false;
+  state.seat = null;
+  sound.step(0.7, surfaceUnder(state.layout, p.x, p.y));
+}
+
 function tickDrink(now) {
   const d = state.drink;
   if (!d) return;
@@ -968,6 +1090,9 @@ function boardItems(room) {
 }
 
 function interact() {
+  // Сидя ПРОБЕЛ поднимает — и только это. Иначе он снова найдёт ту же скамью
+  // и человек останется сидеть, нажимая клавишу «встать».
+  if (state.seat) return standUp();
   const n = nearest();
   if (!n) return;
   // Модулю отдаём событие раньше ядра — но только про его собственные цели:
@@ -987,6 +1112,8 @@ function interact() {
     UI.toast(`«${tr('poster.name')}» · ${tr('poster.medium')}`);
   } else if (n.kind === 'water' || n.kind === 'coffee') {
     startDrink(n);
+  } else if (n.kind === 'seat') {
+    sitDown(n);
   } else if (n.kind === 'hook') {
     takeCan();
   } else if (n.kind === 'tap') {
@@ -1124,7 +1251,14 @@ function closeAll() {
   if (!document.getElementById('skin').hidden) return UI.closeSkin();
   if (!document.getElementById('lang').hidden) return UI.closeLang();
   if (!document.getElementById('notes').hidden) return UI.closeNotes();
+  // Приглашение стояло в panelsOpen() и не стояло здесь: панель держала офис,
+  // а Escape проваливался мимо неё в закрытие диалога и выглядел сломанным.
+  // Закрыть её можно было только крестиком — у него свой обработчик.
+  if (UI.inviteOpen()) return UI.closeInvite();
   if (first('esc')) return;
+  // Встать — тоже «назад»: сидение это состояние, из которого Escape обязан
+  // выводить, иначе он единственный в офисе ничего не делает.
+  if (state.seat) return standUp();
   state.dialogOpen = false; state.focus = null; state.notice = ''; UI.closeDialog();
 }
 
@@ -1184,6 +1318,8 @@ function update(dt, now) {
       - (keys.has('arrowleft') || keys.has('a') || keys.has('ф') ? 1 : 0);
     const iy = pad.y || (keys.has('arrowdown') || keys.has('s') || keys.has('ы') ? 1 : 0)
       - (keys.has('arrowup') || keys.has('w') || keys.has('ц') ? 1 : 0);
+    // Сидящего поднимает первое же движение — и в этом же кадре он уже идёт.
+    if (state.seat && (ix || iy)) standUp();
     let dx = 0, dy = 0;
     if (p.skate) {
       // на скейте клавиши задают не смещение, а толчок: скорость живёт между
@@ -1487,7 +1623,7 @@ function draw(t) {
     // доска и сжимает по высоте.
     drawPerson(ctx, p.x, p.y - p.z, myLook(), {
       // на скейте ноги стоят на деке, а не переступают
-      pose: p.skate ? 'stand' : (p.moving ? 'walk' : 'stand'),
+      pose: state.seat ? 'sit' : p.skate ? 'stand' : (p.moving ? 'walk' : 'stand'),
       frame: Math.floor(t / (p.running ? 80 : 130)), dir: p.dir,
       bob: p.skate
         ? 2 + (p.moving && Math.floor(t / 90) % 2 ? 1 : 0)
@@ -1553,6 +1689,13 @@ function draw(t) {
       : near.kind === 'tap' ? 'hint.tap'
       : !state.carry ? 'hint.potNoCan' : left > 0 ? 'hint.pot' : 'hint.potEmpty';
     draws.push({ y: 1e9, fn: () => label(spot.x, spot.y + 12, tr(key, { n: left }), state.carry ? '#9fd4e8' : '#9fe0a8') });
+  }
+  if (state.seat) {
+    const s = state.seat;
+    draws.push({ y: 1e9, fn: () => label(s.x, s.y + 26, tr('hint.standUp'), '#9fe0a8') });
+  } else if (near && near.kind === 'seat') {
+    const st = near.seat;
+    draws.push({ y: 1e9, fn: () => label(st.x, st.y + 26, tr('hint.sit'), '#9fe0a8') });
   }
   if (near && near.kind === 'micro') {
     const m = near.room.micro;

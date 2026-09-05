@@ -1,5 +1,6 @@
-// Чем отвечать, когда офис отдаёт файл: тип по расширению и заголовки, с
-// которыми написанное агентом можно показать, но нельзя исполнить.
+// What to answer with when the office serves a file: the type from the
+// extension, and the headers that let what an agent wrote be shown but not
+// run.
 import path from 'node:path';
 
 export const MIME = {
@@ -12,14 +13,14 @@ export const MIME = {
 
 export const fileType = (p) => MIME[path.extname(p).toLowerCase()] || 'text/plain; charset=utf-8';
 
-// Страница и SVG исполняют скрипты, если открыть их адресом. /api/file живёт на
-// том же origin, что и офис, а в localStorage офиса лежит токен хозяина — то
-// есть html, который агент написал (или которому его подсказали), запущенный
-// переходом по ссылке, читает токен. Просмотрщик в самой странице этого не
-// делает: он берёт текст через fetch и кладёт в srcdoc песочницы, а fetch на
-// attachment не смотрит. Заголовок отрезает только прямой переход по адресу
-// и ничего больше. nosniff — на всё: браузер не должен угадывать тип у файла,
-// расширение которого он не знает.
+// A page and an SVG run scripts if you open them by address. /api/file lives
+// on the same origin as the office, and the office keeps the owner token in
+// localStorage — so html an agent wrote (or was talked into writing), opened
+// by following a link, reads that token. The viewer inside the page does not
+// do this: it fetches the text and puts it into a sandboxed srcdoc, and fetch
+// ignores attachment. The header cuts off the direct navigation and nothing
+// else. nosniff goes on everything: the browser must not guess the type of a
+// file whose extension it does not know.
 const ACTIVE = new Set(['.html', '.htm', '.xhtml', '.svg']);
 
 export function fileHeaders(p) {

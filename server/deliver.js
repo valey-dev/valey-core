@@ -13,8 +13,9 @@ export const MODES = new Set(['default', 'acceptEdits', 'bypassPermissions']);
 const BLOCKED_RE = /(упер[а-яё]* в прав|требу[а-яё]* (?:тво[а-яё]* )?подтвержд|нужн[а-яё]* (?:тво[а-яё]* )?разрешени|не хватает прав|нет прав[а-яё]* на|permission (?:denied|required)|requires? (?:your )?approval|not allowed to)/i;
 
 let cli = { checked: false, path: null, error: null };
-// Аккаунт CLI меняется на ходу — человек перелогинился, и офис должен это заметить,
-// поэтому ответ живёт минуту, а не до перезапуска сервера.
+// The CLI account changes underfoot — somebody logs in as someone else, and
+// the office has to notice, so the answer lives a minute rather than until the
+// server restarts.
 let acc = { at: 0, value: null };
 const ACC_TTL = 60_000;
 const busy = new Set();
@@ -36,9 +37,9 @@ export async function findCli() {
   return cli;
 }
 
-// Каким аккаунтом CLI продолжает разговоры. Это отдельный вход от приложения:
-// сессию мог завести один аккаунт, а продолжит её тот, под которым живёт CLI, —
-// и упирается в лимит тоже он.
+// Which account the CLI continues conversations as. This is a separate login
+// from the app: one account may have started the session, and the one the CLI
+// runs under is the one that continues it — and the one that hits the limit.
 async function account(path) {
   if (acc.value !== null && Date.now() - acc.at < ACC_TTL) return acc.value;
   acc = { at: Date.now(), value: false };
@@ -46,7 +47,7 @@ async function account(path) {
   try {
     out = (await run(path, ['auth', 'status'], { timeout: 8000 })).stdout;
   } catch (e) {
-    // разлогиненный CLI отвечает тем же json, но выходит с кодом 1
+    // a logged-out CLI answers with the same json but exits with code 1
     out = (e && e.stdout) || '';
   }
   try {
@@ -56,17 +57,17 @@ async function account(path) {
       plan: d.subscriptionType || null,
       loggedIn: d.loggedIn !== false,
     };
-  } catch { /* старый CLI без auth status — обойдёмся без имени */ }
+  } catch { /* an older CLI without auth status — we manage without the name */ }
   return acc.value;
 }
 
-// Перелогинился — офис узнает об этом сразу, не дожидаясь конца минуты
+// Logged in as someone else — the office learns it at once, without waiting out the minute
 export function forgetAccount() { acc = { at: 0, value: null }; }
 
 export async function deliveryStatus() {
   const c = await findCli();
   const who = c.path ? await account(c.path) : null;
-  // разлогиненный CLI выглядит как установленный, но задание он не донесёт
+  // a logged-out CLI looks installed, but it will not carry the task through
   const out = who && who.loggedIn === false;
   return {
     available: !!c.path && !out,
@@ -74,7 +75,7 @@ export async function deliveryStatus() {
     account: who || null,
     error: c.error,
     errorKey: c.errorKey || null,
-    // ключ едет рядом с русским текстом: офис двуязычный, а сервер — нет
+    // the key travels next to the Russian text: the office is bilingual, the server is not
     hintKey: !c.path ? 'err.installCli' : out ? 'err.loggedOut' : null,
     hint: !c.path
       ? 'Установи CLI: npm install -g @anthropic-ai/claude-code (или укажи путь в CLAUDE_BIN)'

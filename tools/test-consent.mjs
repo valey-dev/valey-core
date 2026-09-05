@@ -4,17 +4,16 @@
 // не про кнопки — панель можно нарисовать какой угодно, а вопрос в том, что
 // уходит с машины по проводу.
 //
-// Офис свой, на своём порту и со своим файлом настроек: стенд переключает
-// режим и знает токен заранее, трогать рабочий офис нельзя.
-import { spawn } from 'node:child_process';
+// Офис свой, со своим портом, своими настройками и своим каталогом сессий:
+// стенд переключает режим, знает токен заранее и работает с выдуманным
+// агентом. До 4 сентября 2026 он ждал ЖИВОЙ сессии в ~/.claude и на чистой
+// машине падал через шестнадцать секунд — то есть проходил ровно там, где
+// кто-то уже работал, и нигде больше.
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fakeClaudeDir, startOffice, waitForAgent } from './lib/office.mjs';
 
-const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const PORT = Number(process.env.CONSENT_PORT || 5393);
-const base = `http://127.0.0.1:${PORT}`;
 const TOKEN = 'consent-owner-0001';
 
 let bad = 0;
@@ -22,22 +21,13 @@ const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
   else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
 };
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-consent-'));
-const settingsFile = path.join(dir, 'settings.json');
-await fsp.writeFile(settingsFile, JSON.stringify({
-  access: { mode: 'shared', token: TOKEN, invites: [] },
-  weather: { enabled: false }, delivery: { mode: 'default' },
-}, null, 2));
-
-const srv = spawn(process.execPath, ['server/index.js'], {
-  cwd: ROOT,
-  env: { ...process.env, PORT: String(PORT), VALEY_SETTINGS: settingsFile },
-  stdio: 'ignore',
+const fake = await fakeClaudeDir(dir);
+const { base, stop } = await startOffice({
+  settings: { access: { mode: 'shared', token: TOKEN, invites: [] } },
+  claudeDir: fake.dir,
 });
-const stop = () => { try { srv.kill(); } catch { /* уже мёртв */ } };
-process.on('exit', stop);
 
 let GUEST = '';
 const call = (p, { as = 'nobody', method = 'POST', body = {} } = {}) => {
@@ -54,26 +44,16 @@ const stateAs = (who) => call('/api/state', { as: who, method: 'GET' }).then((r)
 const SECRET = ['lastSaid', 'lastAsked', 'files', 'artifacts', 'branch', 'cwd', 'title', 'model', 'turns'];
 
 try {
-  let up = false;
-  for (let i = 0; i < 60 && !up; i++) {
-    try { await fetch(base + '/api/whoami'); up = true; } catch { await wait(150); }
-  }
-  if (!up) throw new Error(`сервер не поднялся на ${PORT} — занят?`);
-
   const made = await call('/api/invite', { as: 'owner', body: { name: 'Костя', from: 'Сергей' } });
   GUEST = (await call('/api/enter', { body: { code: made.j.invite.code } })).j.guest;
   ok('гость вошёл', !!GUEST, GUEST);
 
-  // Офис читает живые сессии и транскрипты — первый снимок собирается не в ту
-  // же миллисекунду, что стартует сервер. Ждём, пока в нём кто-нибудь появится.
-  let asOwner = null;
-  for (let i = 0; i < 40; i++) {
-    asOwner = await stateAs('owner');
-    if ((asOwner.agents || []).length) break;
-    await wait(400);
-  }
-  if (!(asOwner.agents || []).length) throw new Error('в офисе нет ни одного агента — стенду не с чем работать');
+  // Снимок собирается не в ту же миллисекунду, что стартует сервер.
+  const asOwner = await waitForAgent(() => stateAs('owner'));
   const agentId = asOwner.agents[0].id;
+  ok('в офисе выдуманный агент, а не чья-то живая сессия',
+    asOwner.agents[0].project === 'rocket-shop' && asOwner.agents[0].lastSaid === fake.said,
+    { project: asOwner.agents[0].project, said: asOwner.agents[0].lastSaid });
 
   // ------------------------------------------------------ умолчание
   const asGuest = await stateAs('guest');
@@ -144,7 +124,7 @@ try {
   bad += 1;
   console.log('УПАЛ  | стенд не доехал →', e.message);
 } finally {
-  stop();
+  await stop();
   await fsp.rm(dir, { recursive: true, force: true });
 }
 

@@ -7,7 +7,11 @@ import os from 'node:os';
 import { getSettings, patchSettings } from './settings.js';
 import { projectInfo, repoRoot, repoRootCached } from './stack.js';
 
-const CLAUDE_DIR = path.join(os.homedir(), '.claude');
+// Where the office reads sessions from. The variable is for the stands: until
+// 4 September 2026 the directory was pinned to the home one, and transcript
+// parsing could only be checked against this machine's live sessions. A stand
+// that needs a real agent is a stand that fails on a clean machine and in CI.
+const CLAUDE_DIR = process.env.VALEY_CLAUDE_DIR || path.join(os.homedir(), '.claude');
 const SESSIONS_DIR = path.join(CLAUDE_DIR, 'sessions');
 const PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
 const FIRST_READ_BYTES = 1024 * 1024;
@@ -18,16 +22,17 @@ function alive(pid) {
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
-// Каталог сессий ключуется по pid, а не по sessionId, поэтому одна сессия
-// иногда лежит в двух файлах: старый переживает свой процесс ровно до тех пор,
-// пока освободившийся pid не займёт кто-то другой, — и тогда alive() честно
-// говорит «жив» про обоих. 30 августа 2026 так удвоились Оля и Гриша: одно имя,
-// один стол по реестру, но два тела в разных местах офиса.
+// The sessions directory is keyed by pid rather than by sessionId, so one
+// session sometimes sits in two files: the old one outlives its process exactly
+// until somebody else takes the freed pid — and then alive() honestly says
+// "alive" about both. On 30 August 2026 Olya and Grisha doubled this way: one
+// name, one desk in the registry, but two bodies in different parts of the
+// office.
 //
-// Выбираем свежайшую по времени старта. Существенно не то, какая из записей
-// «правильнее» — существенно, чтобы выбор не менялся от тика к тику: иначе
-// человек прыгал бы между двумя столами. Поэтому при равном startedAt решает
-// pid, а не порядок чтения каталога.
+// We take the newest by start time. What matters is not which record is "more
+// correct" — it is that the choice does not change from tick to tick, or a
+// person would jump between two desks. So an equal startedAt is settled by pid,
+// not by the order the directory was read in.
 export function dedupeSessions(list) {
   const best = new Map();
   for (const s of list) {
@@ -146,10 +151,11 @@ async function follow(sessionId, file, apply, fresh) {
 
 const base = (p) => (typeof p === 'string' ? p.split('/').pop() : '');
 
-// Чем занят агент, теперь уезжает ключом, а не готовой фразой: офис говорит на
-// двух языках, и переводить строку, собранную на сервере, было бы нечем.
-// Русский текст сервер всё равно собирает — он уходит полем activity, чтобы
-// старый клиент и логи читались как раньше.
+// What an agent is busy with now travels as a key rather than a finished
+// phrase: the office speaks two languages, and there would be nothing to
+// translate a string assembled on the server with. The server still builds the
+// Russian text — it goes out in the activity field so an older client and the
+// logs read as before.
 function describeBash(cmd = '') {
   const c = cmd.toLowerCase();
   if (/\b(test|jest|vitest|pytest|spec)\b/.test(c)) return { key: 'test', mood: 'test' };
@@ -182,7 +188,7 @@ function describeTool(name, input = {}) {
   return { key: 'work', mood: 'code' };
 }
 
-// Русская фраза остаётся здесь, чтобы поле activity читалось как прежде.
+// The Russian phrase stays here so the activity field reads as it used to.
 const ACT_RU = {
   test: 'гоняет тесты', ship: 'коммитит', gitread: 'смотрит в git', build: 'собирает билд',
   deps: 'ставит зависимости', lint: 'ловит линтер', dig: 'копается в файлах',
@@ -196,8 +202,8 @@ const ACT_RU = {
 const ACT_FALLBACK_RU = { edit: 'код', read: 'файл' };
 const actRu = (a) => (ACT_RU[a.key] || ACT_RU.work).replace('{arg}', a.arg || ACT_FALLBACK_RU[a.key] || '');
 
-// Кадр: Prod → «Роли · шесть чипов», node 285:9 — там цвета чипов и то, по
-// какой работе включается каждая роль.
+// Frame: Prod → "Roles · six chips", node 285:9 — it holds the chip colours and
+// which work switches each role on.
 const ROLES = {
   design:   { role: 'Дизайнер',      short: 'design' },
   research: { role: 'Исследователь', short: 'research' },
@@ -205,12 +211,12 @@ const ROLES = {
   code:     { role: 'Разработчик',   short: 'code' },
   qa:       { role: 'Тестировщик',   short: 'qa' },
   release:  { role: 'Релиз-инженер', short: 'release' },
-  // роль тоже уезжает ключом (short) — офис переводит её у себя
+  // the role travels as a key (short) too — the office translates it at its end
 };
 
-// «You've hit your session limit · resets 12:10am (Asia/Yerevan)» и родня.
-// Это говорит подписка, а не агент, и в офисе такое должно выглядеть как объявление
-// на двери, а не как его реплика.
+// "You've hit your session limit · resets 12:10am (Asia/Yerevan)" and its kin.
+// That is the subscription talking, not the agent, and in the office it has to
+// look like a notice on the door rather than something he said.
 const LIMIT_RE = /(hit your (?:session|usage) limit|usage limit reached|out of (?:usage|credits)|лимит исчерпан)/i;
 
 function limitNotice(text) {
@@ -220,17 +226,18 @@ function limitNotice(text) {
   return { text: line, resets: at ? at[1].trim() : null };
 }
 
-// Профессия — это то, чем агент занят сейчас, а не за всю сессию. Счётчик за
-// всю историю давал всем «Разработчика»: любая работа рано или поздно доходит
-// до правки файла, и накопленный code перевешивал полчаса дизайна.
-// Поэтому считаем по скользящему окну последних действий.
-const ROLE_WINDOW_MS = 12 * 60 * 1000;  // дольше — и снова получаем историю
-const ROLE_STALE_MS = 60 * 60 * 1000;   // за этой чертой действие уже ни о чём не говорит
-const ROLE_TAIL = 6;                    // сколько последних действий берём, когда окно пустое
-const ROLE_SWITCH = 1.35;               // во сколько раз новый лидер должен обойти текущего
+// A trade is what an agent is doing now, not over the whole session. Counting
+// the whole history gave everyone "Developer": any work reaches a file edit
+// sooner or later, and the accumulated code outweighed half an hour of design.
+// So we count over a sliding window of the latest actions.
+const ROLE_WINDOW_MS = 12 * 60 * 1000;  // any longer and we are back to the whole history
+const ROLE_STALE_MS = 60 * 60 * 1000;   // past this line an action says nothing any more
+const ROLE_TAIL = 6;                    // how many latest actions to take when the window is empty
+const ROLE_SWITCH = 1.35;               // how far a new leader must beat the current one
 
-// Вклад одного действия в профессию. Чтение отдельной профессии не даёт и весит
-// мало: читают все и всегда, и с полным весом оно снова делало бы всех кодерами.
+// One action's contribution to the trade. Reading gives no trade of its own and
+// weighs little: everyone reads all the time, and at full weight it would make
+// everyone a coder again.
 const ROLE_WEIGHTS = {
   design:   { design: 1 },
   research: { research: 1 },
@@ -245,9 +252,10 @@ const ROLE_WEIGHTS = {
 function roleScores(acts, now) {
   const cut = now - ROLE_WINDOW_MS;
   const win = acts.filter((a) => a.ts >= cut);
-  // Если в окне пусто — берём хвост последних действий, но только не протухших.
-  // Добирать хвостом до фиксированной длины нельзя: именно так в счёт снова
-  // попадает вся история, и час старого кода перебивает три свежих макета.
+  // If the window is empty, take the tail of the latest actions — but only the
+  // ones that have not gone stale. Padding the tail to a fixed length is not on:
+  // that is exactly how the whole history gets back into the count, and an hour
+  // of old code beats three fresh mock-ups.
   const use = win.length ? win : acts.filter((a) => a.ts >= now - ROLE_STALE_MS).slice(-ROLE_TAIL);
   const sc = { design: 0, research: 0, plan: 0, code: 0, qa: 0, release: 0 };
   for (const a of use) {
@@ -262,8 +270,8 @@ function inferRole(st) {
   const sc = roleScores(st.acts || [], Date.now());
   const top = Object.entries(sc).sort((a, b) => b[1] - a[1])[0];
   if (!top || top[1] <= 0) return ROLES[st.role] || ROLES.code;
-  // Гистерезис: без него агент мигает между профессиями на каждом тике, когда
-  // счёт идёт ноздря в ноздрю, и карточка перестаёт читаться.
+  // Hysteresis: without it an agent flickers between trades on every tick when
+  // the count is neck and neck, and the card stops being readable.
   const cur = st.role;
   if (cur && cur !== top[0] && sc[cur] > 0 && top[1] < sc[cur] * ROLE_SWITCH) return ROLES[cur];
   st.role = top[0];
@@ -349,18 +357,21 @@ function applyLine(st, line) {
 
 // ------------------------------------------------------------ presentation
 
-// Имена. Род хранится рядом с именем, а не угадывается по последней букве:
-// на уменьшительных эта эвристика врёт чаще, чем работает — Гоша, Кузя, Савва,
-// Никита и ещё десяток кончаются на а/я и все мужские. 30 августа 2026 офис на
-// четырнадцати именах из пятидесяти писал «Гоша освободилась».
+// The names. Gender is stored next to the name rather than guessed from the
+// last letter: on diminutives that heuristic is wrong more often than right —
+// Гоша, Кузя, Савва, Никита and a dozen more end in а/я and are all male. On
+// 30 August 2026 the office wrote "Гоша освободилась" for fourteen names out of
+// fifty.
 //
-// Двуродные имена — Саша, Женя, Слава, Валя, Шура — закреплены за одним родом
-// решением, а не истиной: пол сессии знать неоткуда, и монетка, брошенная один
-// раз, лучше монетки, которую бросают в каждой фразе.
+// Names that go either way — Саша, Женя, Слава, Валя, Шура — are pinned to one
+// gender by decision, not by truth: there is nowhere to learn a session's
+// gender from, and a coin flipped once is better than a coin flipped in every
+// sentence.
 //
-// Словарь с 4 сентября 2026 не один: паки выбираются в панели у человечка в
-// коридоре. Пак — это пара списков с родом, и всё остальное — раздача имён,
-// освобождение, номера на исчерпании — про пак не знает вовсе.
+// Since 4 September 2026 there is more than one dictionary: packs are chosen in
+// the panel at the switcher in the corridor. A pack is a pair of lists with
+// gender, and everything else — handing names out, freeing them, the numbers
+// when the pool runs dry — never learns which pack it is on.
 const RU_MALE = [
   'Гоша', 'Тимка', 'Борис', 'Федя', 'Рома', 'Клим', 'Сеня', 'Гриша', 'Лёва', 'Пётр',
   'Юра', 'Стёпа', 'Кузя', 'Матвей', 'Игнат', 'Савва', 'Захар', 'Митя', 'Прохор', 'Ося',
@@ -383,12 +394,13 @@ const RU_FEMALE = [
   'Феня', 'Циля', 'Клава', 'Броня', 'Веста', 'Дося', 'Ляля', 'Нюся', 'Рэя', 'Тина',
 ];
 
-// Английский пак. Регистр тот же, что у русского: не паспортные Robert и
-// Elizabeth, а то, как зовут за столом, — Bob и Betty. Иначе офис на двух
-// языках читается как два разных офиса.
+// The English pack. The same register as the Russian one: not passport Robert
+// and Elizabeth but what people are called at the desk — Bob and Betty. An
+// office that reads as two different offices in two languages is the thing this
+// was meant to avoid.
 //
-// Двуродные — Sam, Alex, Charlie, Pat, Quinn — закреплены за мужским тем же
-// решением и по той же причине, что Женя и Слава в русском.
+// The either-way ones — Sam, Alex, Charlie, Pat, Quinn — are pinned to male by
+// the same decision and for the same reason as Женя and Слава in Russian.
 const EN_MALE = [
   'Pete', 'Gus', 'Sam', 'Max', 'Ed', 'Joe', 'Nick', 'Tom', 'Bill', 'Dave',
   'Frank', 'Charlie', 'Andy', 'Bob', 'Mike', 'Steve', 'Jack', 'Harry', 'Alfie', 'Ollie',
@@ -411,9 +423,9 @@ const EN_FEMALE = [
   'Tilly', 'Wilma', 'Bess', 'Clara', 'Dixie', 'Etta', 'Nina', 'Vi', 'Fanny', 'Minnie',
 ];
 
-// Перемешаны, а не склеены подряд: иначе первые полсотни агентов на пустой
-// машине оказались бы сплошь мужчинами — имя выбирается от хеша, но соседи по
-// списку разбираются подряд, когда хеш попал в занятый кусок.
+// Interleaved rather than concatenated: otherwise the first fifty agents on a
+// fresh machine would all be men — a name is picked from a hash, but neighbours
+// in the list are taken in order once the hash lands in an occupied stretch.
 const weave = (male, female) => male
   .flatMap((m, i) => (female[i] ? [m, female[i]] : [m]))
   .concat(female.slice(male.length));
@@ -431,26 +443,27 @@ export const PACKS = {
 export const PACK_IDS = Object.keys(PACKS);
 const packOf = (id) => PACKS[id] || PACKS.ru;
 
-// Словарь наружу — тесту, чтобы он проверял выданное, а не свою копию списка.
+// The pool is exported for the stand, so it checks what was handed out rather than its own copy of the list.
 export const namePool = (id = 'ru') => packOf(id).pool.slice();
-// Образец для панели берётся из раздаточного порядка, а не из пула: пул
-// склеен мужскими и женскими подряд, и четыре первых имени в нём — четыре
-// мужика, что про словарь врёт.
+// The sample for the panel comes from the handing-out order, not from the pool:
+// the pool is male and female concatenated, so its first four names are four
+// men, which lies about the dictionary.
 export const nameSample = (id = 'ru', n = 4) => packOf(id).names.slice(0, n);
 
-// Какой пак работает на самом деле. «auto» — идти за языком офиса: свежий офис
-// по-английски получает английские имена, и учить этому никого не надо.
+// Which pack is actually in force. 'auto' follows the office language: a fresh
+// office in English gets English names, and nobody has to be taught that.
 export const effectivePack = ({ namePack = 'auto', lang = 'ru' } = {}) =>
   (PACKS[namePack] ? namePack : (PACKS[lang] ? lang : 'ru'));
 
-// «Ося 51» — то же имя, что «Ося»: номер приписан на исчерпании пула. Имена из
-// прежних версий словаря в карте не значатся, и для них остаётся старая догадка
-// по последней букве — врать она будет ровно там же, где врала всегда.
+// "Ося 51" is the same name as "Ося": the number was appended when the pool ran
+// out. Names from earlier versions of the pool are not in the map, and for them
+// the old guess by the last letter remains — it will be wrong in exactly the
+// places it was always wrong.
 //
-// Пак спрашивается первым, но не последним: на диске лежат имена, выданные
-// прежним паком, и «Пётр» обязан остаться мужчиной ровно до той секунды, пока
-// снимок не переименует офис. Иначе между сменой пака и следующим снимком
-// половина этажа меняет род.
+// The pack is asked first but not last: names issued by the previous pack sit
+// on disk until the next snapshot, and «Пётр» has to stay a man for those
+// seconds — otherwise half the floor changes gender between the keypress and
+// the redraw.
 export function genderOf(name = '', id = 'ru') {
   const base = String(name).replace(/\s+\d+$/, '');
   const here = packOf(id).gender.get(base);
@@ -471,20 +484,21 @@ export function hash(str) {
 // Names are handed out once and then remembered on disk: an agent you spoke to
 // yesterday is the same person today, whoever else came and went in between.
 //
-// Чистая часть распределителя: `saved` — что лежит на диске, `order` — сессии,
-// которым имя нужно, в порядке старта, `keep` — те, за кем имя остаётся. Всё
-// остальное живёт в nameRegistry, чтобы это можно было прогнать тестом.
+// The pure part of the allocator: `saved` is what lies on disk, `order` is the
+// sessions that need a name, in start order, and `keep` is those that keep
+// theirs. Everything else lives in nameRegistry so this can be run by a stand.
 export function assignNames(saved, order, keep, packId = 'ru') {
   const NAMES = packOf(packId).names;
   const names = {};
   for (const [sid, n] of Object.entries(saved)) if (keep.has(sid)) names[sid] = n;
   const taken = new Set(Object.values(names));
 
-  // «Клим 97» — не имя, а след исчерпанного пула: так звали всех, кто пришёл
-  // после пятидесятого. Как только в пуле снова есть чистое имя, такой агент
-  // получает его. Переименование посреди жизни здесь честнее молчания: номером
-  // его назвали не по чьему-то выбору, а от нехватки, и заметки, где имя уже
-  // записано, хранят свой снимок и не портятся.
+  // "Клим 97" is not a name but the mark of an exhausted pool: that is what
+  // everyone after the fiftieth was called. As soon as the pool has a clean name
+  // again, such an agent gets it. Renaming mid-life is more honest here than
+  // silence: he was given a number by shortage rather than by anyone's choice,
+  // and notes that already hold the name keep their own snapshot and do not
+  // spoil.
   for (const id of Object.keys(names).filter((k) => /\s\d+$/.test(names[k])).sort()) {
     const h = hash(id);
     for (let i = 0; i < NAMES.length; i++) {
@@ -517,19 +531,19 @@ const sameNames = (a, b) => {
   return ka.length === kb.length && ka.every((k) => a[k] === b[k]);
 };
 
-// Порядок, в котором офис переименовывается целиком. Сначала все, у кого имя
-// уже есть, по возрастанию id, потом безымянные живые — и только так, потому
-// что этот же порядок берёт предпросмотр в панели. Разойдись они, и панель
-// обещала бы «Пётр станет Gus», а стал бы Pete: соврала бы ровно та строка,
-// ради которой её и показывают.
+// The order in which the office is renamed wholesale: first everyone who
+// already has a name, by ascending id, then the live ones without one — and
+// only that way, because the preview in the panel walks the same order. Let the
+// two diverge and the panel promises «Пётр станет Gus» while Pete is what he
+// becomes: the one line it is shown for would be the line that lies.
 const renameOrder = (names, order, keep) => [
   ...Object.keys(names).filter((id) => keep.has(id)).sort(),
   ...order.filter((id) => !names[id]),
 ];
 
-// Как офис будет называться на этом паке. Считается по тому, что лежит на
-// диске, поэтому живые сессии без имени сюда не попадают — а спрашивают об
-// этой строке ровно про тех, кто уже стоит на этаже.
+// What the office would be called on this pack. Computed from what lies on
+// disk, so live sessions without a name yet do not appear — and this line is
+// asked about exactly those who already stand on the floor.
 export async function previewPack(packId) {
   const { names } = await getSettings();
   const keep = new Set(Object.keys(names));
@@ -541,36 +555,38 @@ async function nameRegistry(sessions) {
   const { names } = settings;
   const packId = effectivePack(settings);
 
-  // Имя держится за сессией, пока на диске жив её транскрипт: `claude --resume`
-  // возвращает тот же sessionId, и агент обязан вернуться собой, а не новым
-  // человеком. Когда транскрипта не стало — имя уходит обратно в пул.
+  // A name is held by a session for as long as its transcript lives on disk:
+  // `claude --resume` returns the same sessionId, and the agent has to come back
+  // as himself rather than as a new person. Once the transcript is gone, the
+  // name goes back into the pool.
   //
-  // Раньше не уходило никогда, и пул расходовался по сессиям за всё время жизни
-  // машины, а не по живым агентам: 30 августа 2026 в реестре было 152 записи и
-  // 102 из них с номером — «Ося 51», «Гриша 150». Пятьдесят имён кончились на
-  // пятьдесят первой сессии, две трети истории офиса агенты представлялись
-  // порядковым номером. Словарь при этом больше вчетверо — но одна лишь замена
-  // словаря просто отодвинула бы ту же стену.
+  // It never went back before, and the pool was spent per session over the whole
+  // life of the machine rather than per living agent: on 30 August 2026 the
+  // registry held 152 entries and 102 of them carried a number — "Ося 51",
+  // "Гриша 150". Fifty names ran out on the fifty-first session, and for two
+  // thirds of the office's history agents introduced themselves by an ordinal.
+  // The pool is four times larger now — but replacing the pool alone would only
+  // have pushed the same wall further away.
   const keep = new Set(transcriptIndex.keys());
   for (const s of sessions) keep.add(s.sessionId);
 
-  // Пустой индекс — это не «транскриптов не стало», это не прочитался каталог:
-  // в такую минуту освобождение стёрло бы разом все имена в офисе. Тогда лучше
-  // ничего не отпускать.
+  // An empty index is not "the transcripts are gone", it is "the directory did
+  // not read": in such a minute the release would wipe every name in the office
+  // at once. Better to release nothing then.
   if (!transcriptIndex.size) for (const id of Object.keys(names)) keep.add(id);
 
   const order = [...sessions]
     .sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0))
     .map((s) => s.sessionId);
 
-  // Пак сменили — офис переименовывается разом, с чистого листа: старые имена
-  // не переносятся, иначе половина этажа осталась бы в прежнем словаре, а это
-  // читается как поломка, а не как настройка. Обратно едет само — тот же
-  // sessionId по тому же паку даёт то же имя.
+  // The pack changed — the office is renamed at once, from a clean slate: old
+  // names are not carried over, or half the floor would stay in the previous
+  // dictionary, and that reads as a bug rather than as a setting. Going back is
+  // free: the same sessionId under the same pack yields the same name.
   //
-  // Отметка namesPack на диске отвечает на вопрос «каким паком выданы имена,
-  // которые тут лежат». Без неё сервер не отличит «пак не трогали» от «пак
-  // сменили, пока офис не работал».
+  // The namesPack mark on disk answers "which pack were the names sitting here
+  // issued with". Without it the server cannot tell "the pack was never
+  // touched" from "the pack changed while the office was down".
   const renaming = settings.namesPack !== packId;
   const next = renaming
     ? assignNames({}, renameOrder(names, order, keep), keep, packId)
@@ -581,13 +597,14 @@ async function nameRegistry(sessions) {
   return next;
 }
 
-// Стол закрепляется за сессией так же, как имя: пока агент жив, он сидит на
-// том же месте. Раньше место выдавалось по позиции в списке, а список
-// отсортирован по времени старта — новая сессия вставала в начало и сдвигала
-// всю комнату на один стол, так что при каждом старте и завершении соседи
-// вставали и шли пересаживаться.
-// Комната — по репозиторию, а не по каталогу сессии: иначе каждое рабочее
-// дерево одного проекта уезжает в собственную комнату на другом конце этажа.
+// A desk is held by a session the same way a name is: while the agent lives, he
+// sits in the same place. The seat used to be handed out by position in the
+// list, and the list is sorted by start time — a new session went to the front
+// and shifted the whole room by one desk, so on every start and every finish the
+// neighbours got up and moved.
+// The room comes from the repository, not from the session's directory:
+// otherwise every working tree of one project moves into a room of its own at
+// the other end of the floor.
 const projectOf = (s) => path.basename(repoRootCached(s.cwd) || s.cwd || '') || 'nowhere';
 
 function sameSeats(a, b) {
@@ -608,8 +625,8 @@ async function seatRegistry(sessions) {
     return true;
   };
 
-  // Сначала все, у кого место уже записано, — иначе новичок займёт чужой стол
-  // и хозяин уедет, ровно то, от чего уходим.
+  // Those with a recorded seat go first — otherwise a newcomer takes someone
+  // else's desk and its owner moves, which is the very thing we are avoiding.
   const live = [...sessions].sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0));
   for (const s of live) {
     const kept = seats[s.sessionId];
@@ -624,8 +641,8 @@ async function seatRegistry(sessions) {
     next[s.sessionId] = { project, i };
   }
 
-  // На диске остаются только живые: мёртвая сессия не вернётся, а её стол
-  // должен достаться следующему новичку.
+  // Only the living stay on disk: a dead session will not come back, and its
+  // desk should go to the next newcomer.
   if (!sameSeats(next, seats)) await patchSettings({ seats: next });
   return next;
 }
@@ -634,8 +651,9 @@ const IDLE_MS = 90_000;
 
 export async function snapshot() {
   const sessions = await liveSessions();
-  // Греем кэш корней до того, как считаются места: projectOf синхронная, а git
-  // асинхронный, и без прогрева первый снимок рассадил бы всех по каталогам.
+  // Warm the roots cache before the seats are computed: projectOf is
+  // synchronous while git is asynchronous, and without the warm-up the first
+  // snapshot would seat everyone by directory.
   await Promise.all(sessions.map((s) => repoRoot(s.cwd)));
   await indexTranscripts();
   const names = await nameRegistry(sessions);
@@ -652,9 +670,9 @@ export async function snapshot() {
     const busy = idleFor < IDLE_MS && !t.awaitingUser;
     const act = t.lastTool ? describeTool(t.lastTool, t.lastToolInput) : { key: 'thinking', mood: 'plan' };
     const roleInfo = inferRole(t);
-    // Версия и стек — свойство репозитория, а не сессии: у всех агентов одного
-    // проекта они одни и те же, и projectInfo держит результат в кэше, чтобы
-    // манифест не перечитывался на каждый тик каждым агентом.
+    // The version and the stack belong to the repository, not to the session:
+    // every agent of one project shares them, and projectInfo keeps the result
+    // in a cache so the manifest is not re-read on every tick by every agent.
     const repo = await projectInfo(s.cwd);
 
     agents.push({
@@ -662,8 +680,8 @@ export async function snapshot() {
       pid: s.pid,
       handle: s.name || s.sessionId.slice(0, 8),
       name: names[s.sessionId] || s.sessionId.slice(0, 6),
-      // род едет со снимком: на странице от имени остаётся одна строка, а
-      // «освободилась» и «повесила» ей нужны в двух местах
+      // gender travels with the snapshot: on the page the name is one line,
+      // while "освободилась" and "повесила" are needed in two places
       gender: genderOf(names[s.sessionId] || '', namesPack),
       project: projectOf(s),
       seat: seats[s.sessionId].i,
@@ -681,8 +699,9 @@ export async function snapshot() {
       activity: busy ? actRu(act) : (t.awaitingUser ? ACT_RU.awaiting : ACT_RU.idle),
       mood: act.mood,
       lastSaid: t.lastAssistantText.slice(0, 1500),
-      // Служебное сообщение про лимит — не реплика агента: пришло от подписки,
-      // а не от него, и показывать его как «что он сказал» сбивает с толку
+      // The limit notice is not something the agent said: it came from the
+      // subscription rather than from him, and showing it as "what he said"
+      // misleads
       limited: limitNotice(t.lastAssistantText),
       saidLen: t.lastAssistantText.length,
       lastAsked: t.lastUserPrompt,
@@ -705,8 +724,9 @@ export function conversation(sessionId) {
   return cache.get(sessionId)?.st?.recent || [];
 }
 
-// Чьи это файлы: id агентов, в чьём транскрипте путь появился. Файл принадлежит
-// разговору, и открывать его гостю можно ровно тогда, когда открыт разговор.
+// Whose files these are: the ids of the agents in whose transcript the path
+// appeared. A file belongs to a conversation, and it may be opened for a guest
+// exactly when the conversation is.
 export function fileOwners(p, snap) {
   return (snap.agents || [])
     .filter((a) => a.files.some((f) => f.path === p) || a.artifacts.some((f) => f.path === p))
