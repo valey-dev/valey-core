@@ -576,11 +576,11 @@ const DICT = {
     // она быть перестала 5 сентября 2026 — та врала про E, F9 и H, потому что
     // клавишу добавляли в коде, а строку правили отдельно и не всегда.
     'hint.walk': 'ходить', 'hint.run': 'бежать',
-    'hint.interact': 'заговорить, попить, сесть', 'hint.skate': 'скейт',
+    'hint.interact': 'действие', 'hint.skate': 'скейт',
     'hint.sound': 'звук', 'hint.round': 'обход', 'hint.notes': 'заметки',
     'hint.bag': 'одежда', 'hint.invite': 'пригласить',
     'hint.sky': 'окно в мир', 'hint.skin': 'цвет офиса',
-    'hint.pager': 'вернуть пейджер', 'hint.zoom': 'масштаб',
+    'hint.pager': 'пейджер', 'hint.zoom': 'масштаб',
     'hint.shot': 'кадр 1:1', 'hint.shotMore': 'с SHIFT — ×4', 'hint.keys': 'клавиши',
     'hint.cams': 'автообход камер',
     'keys.sameAs': 'то же, что {key}',
@@ -1143,11 +1143,11 @@ const DICT = {
     'task.noteSent': '✈ The note went to {name}’s chat. The answer lands right here.',
 
     'hint.walk': 'walk', 'hint.run': 'run',
-    'hint.interact': 'talk, drink, sit', 'hint.skate': 'skateboard',
+    'hint.interact': 'action', 'hint.skate': 'skateboard',
     'hint.sound': 'sound', 'hint.round': 'the round', 'hint.notes': 'notes',
     'hint.bag': 'clothes', 'hint.invite': 'invite',
     'hint.sky': 'window on the world', 'hint.skin': 'office colour',
-    'hint.pager': 'the pager back', 'hint.zoom': 'scale',
+    'hint.pager': 'the pager', 'hint.zoom': 'scale',
     'hint.shot': 'a 1:1 frame', 'hint.shotMore': 'SHIFT for ×4', 'hint.keys': 'the keys',
     'hint.cams': 'cycle the cameras',
     'keys.sameAs': 'same as {key}',
