@@ -74,6 +74,8 @@ const DICT = {
     // «ТЫ» is how the office addresses you, and it never travels outward: over
     // a stranger's head it states something untrue. These two are how a person
     // is seen by everyone else until they type a name of their own.
+    'title.yourName': 'как тебя зовут',
+    'title.nameLater': 'можно поменять потом — C',
     'label.guest': 'ГОСТЬ',
     'label.host': 'ХОЗЯИН',
     'label.gulp': 'буль',
@@ -692,6 +694,8 @@ const DICT = {
     'hint.lang': '[ SPACE ] language and names',
     'hint.kicker': '[ SPACE ] play a round',
     'label.me': 'YOU',
+    'title.yourName': 'what should we call you',
+    'title.nameLater': 'you can change it later — C',
     'label.guest': 'GUEST',
     'label.host': 'HOST',
     'label.gulp': 'glug',

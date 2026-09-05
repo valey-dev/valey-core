@@ -322,8 +322,29 @@ export function renderTitle() {
     });
     const back = $('#tback'); if (back) back.onclick = () => { T.page = 'menu'; renderTitle(); };
   }
+  bindName();
   paintFocus();
 }
+
+// The entrance redraws on every snapshot, and a name is typed one letter at a
+// time: without this the caret jumped out of the field every couple of seconds.
+// The value itself survives on its own — it is read back from S.me on each
+// render — so only the focus and the caret have to be put back.
+function bindName() {
+  const input = el.querySelector('#tname');
+  if (!input) { nameFocus = null; return; }
+  input.oninput = () => { api.setName(input.value.toUpperCase().slice(0, 14)); nameFocus = input.selectionStart; };
+  // Enter in the field is the door, not a newline: the hands are already there.
+  input.onkeydown = (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault(); e.stopPropagation();
+    api.enter(null);
+  };
+  if (nameFocus === null) return;
+  input.focus();
+  try { input.setSelectionRange(nameFocus, nameFocus); } catch { /* the field may be empty */ }
+}
+let nameFocus = null;
 
 function paintFocus() {
   if (T.page === 'menu') {
@@ -380,12 +401,20 @@ function menuHtml(n) {
       ${metaRow()}`;
   }
   if (entry) {
+    // The name is asked for here rather than left to the inventory: a guest who
+    // walks in unnamed stands over somebody else's floor as «ГОСТЬ», and the
+    // owner sees that somebody came without seeing who. Empty is allowed —
+    // demanding a name from a person you invited by link is a turnstile where an
+    // agreement already exists.
     return `${menuButtons()}
       <div class="tcard">
         <span class="tlabel">${tr('title.invitedBy')}</span>
         <b>${esc(entry.from || tr('title.someone'))}</b>
         <span class="twork">${tr('title.guestMay')}</span>
         <span class="tidle">${tr('title.guestMayNot')}</span>
+        <input id="tname" maxlength="14" autocomplete="off"
+          placeholder="${esc(tr('title.yourName'))}" value="${esc((S && S.me && S.me.name) || '')}">
+        <span class="tidle small">${tr('title.nameLater')}</span>
         <span class="tlabel">${tr('title.codeBurns')}</span>
       </div>
       ${metaRow()}`;

@@ -807,6 +807,16 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .tnote span{color:var(--ink-dim); font-size:11px; line-height:1.5}
 .tnote code{color:var(--accent)}
 
+/* The name field on the guest's entrance card. It borrows the look of the fields
+   inside the office — dark well, two-pixel frame — rather than inventing one, and
+   it is as wide as the card so it reads as a row of the card and not as a control
+   dropped on top of it. */
+.tcard input{width:100%; box-sizing:border-box; margin:6px 0 2px; padding:6px 8px;
+  background:var(--field); border:2px solid var(--frame); color:var(--ink);
+  font:inherit; font-size:15px}
+.tcard input:focus{outline:none; border-color:var(--warn)}
+.tcard input::placeholder{color:var(--muted-dim)}
+.tcard .small{font-size:11px}
 .tmeta{position:absolute; bottom:3%; color:var(--muted-dim); font-size:11px}
 .tmeta.left{left:3%} .tmeta.right{right:3%}
 .tmeta.center{left:50%; transform:translateX(-50%)}

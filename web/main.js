@@ -1,4 +1,4 @@
-import { lookOf, drawPerson, drawCat, normalizeLook, dressOf, dressMe } from './sprites.js';
+import { lookOf, drawPerson, drawCat, normalizeLook, isSelfLabel, dressOf, dressMe } from './sprites.js';
 import { potState, water as waterPot, tally, CAN_FULL } from './garden.js';
 import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, pickRoom, WALL } from './layout.js';
 import { loadModules, collect, first } from './modules.js';
@@ -1656,7 +1656,10 @@ function draw(t) {
       });
       // A name over somebody else is always there rather than on approach: otherwise
       // nameless figures stand in the corridor and it is unclear who is who.
-      label(q.x, q.y - 34, q.name || '?', '#8fc8ff');
+      // A page that has not been reloaded since 5 September 2026 still sends
+      // «ТЫ» as its name. Over somebody else it is a lie whoever sent it, so it
+      // is read here as what it means: a person who has not named himself.
+      label(q.x, q.y - 34, (isSelfLabel(q.name) ? tr('label.guest') : q.name) || '?', '#8fc8ff');
     } });
   }
 
@@ -1959,6 +1962,10 @@ initTitle(state, {
   bag: () => UI.renderBag('self'),
   sky: () => UI.renderSky(),
   lang: () => switchLang(),
+  // The name typed on the entrance card is the same name the inventory edits and
+  // presence sends: one field, stored in one place, so a guest who named himself
+  // at the door is not «ГОСТЬ» a second later.
+  setName(name) { state.me.name = name; localStorage.setItem('valey-me', JSON.stringify(state.me)); },
 });
 document.body.classList.add('titling');
 renderTitle();
