@@ -119,7 +119,12 @@ git('add', 'package.json', 'CHANGELOG.md');
 git('commit', '-m', `chore(release): ${tag}`);
 git('tag', '-a', tag, '-m', tag);
 console.log(`\nготово: ${tag} на ${git('rev-parse', '--short', 'HEAD')}`);
+// The push and the release page are two steps and both are named here. Until
+// 5 September 2026 only the first one was: the project had three tags and no
+// releases on GitHub, and everybody kept calling the tags releases. The notes
+// existed the whole time — they just never left the repository.
 console.log(`пуш — отдельно и по твоему решению:\n  git push origin main ${tag}`);
+console.log(`и следом страница релиза из этой же секции:\n  node tools/gh-release.mjs ${tag}`);
 
 // A minor with no video is a broken rule rather than a detail: that is how
 // v0.2.0 went out. So the draft script appears by itself, together with the tag.
