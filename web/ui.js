@@ -24,14 +24,15 @@ export function initUI(state, callbacks) {
   el.invite = $('#invite');
   el.notes = $('#notes');
   el.lang = $('#lang');
-  // Один обработчик на всю панель просмотра, поставленный на входе: разметка
-  // внутри неё перерисовывается постоянно, а он это переживает.
+  // One handler for the whole viewer panel, set at the entrance: the markup
+  // inside it is repainted constantly, and the handler outlives that.
   bindCopyButtons();
-  // Панели с полем ввода закрывают себя сами. onKey в main.js возвращается на
-  // любом INPUT — так недописанное задание переживает случайный Escape, — и до
-  // closeAll() нажатие не доходит: пока фокус в поле, панель заперта. У обхода
-  // и лифта полей нет, им хватает closeAll(); карточка агента не в списке
-  // намеренно, там поле задания и Escape ему не хозяин.
+  // Panels with an input field close themselves. onKey in main.js returns on any
+  // INPUT — that is how an unfinished task survives an accidental Escape — and the
+  // press never reaches closeAll(): while the focus is in a field, the panel is
+  // locked. The round and the lift have no fields, closeAll() is enough for them;
+  // the agent's card is deliberately not in the list, the task field is there and
+  // Escape is not its master.
   selfClosing(el.sky, closeSky);
   selfClosing(el.notes, closeNotes);
   selfClosing(el.invite, closeInvite);
@@ -39,8 +40,8 @@ export function initUI(state, callbacks) {
   selfClosing(el.skin, closeSkin);
 }
 
-// Обработчик вешается на саму панель, а не на поле: нутро панели переписывается
-// на каждый рендер, а она сама остаётся.
+// The handler is hung on the panel itself rather than on the field: the innards
+// of the panel are rewritten on every render, while the panel itself stays.
 function selfClosing(box, close) {
   if (!box) return;
   box.onkeydown = (e) => {
@@ -62,14 +63,14 @@ export function toast(text, kind = '') {
 }
 
 // ---------------------------------------------------------------------- hud
-// tr, а не t: в ui.js `t` уже занят локальными переменными в нескольких
-// функциях, и импорт там молча перекрывался
+// tr, not t: in ui.js `t` is already taken by local variables in several
+// functions, and the import there was silently shadowed
 import { t as tr, lang } from './i18n.js';
 import { cardClosed } from './pager.js';
 
 const WEATHER_ICON = { clear: '☀', clouds: '☁', rain: '☂', storm: '⚡', snow: '❄', fog: '≋' };
 
-// Свой плеер знает трек поимённо, встроенный — только волну, на которую настроен.
+// Our own player knows the track by name, the built-in one only the wave it is tuned to.
 
 export function renderHud() {
   const waiting = S.agents.filter((a) => a.status === 'awaiting').length;
@@ -95,13 +96,14 @@ export function renderHud() {
 
 // ------------------------------------------------------------------- dialog
 let dialogKey = '';
-// Отказ в два шага: сначала кнопка, потом поле для записки. Живёт здесь, а не
-// в состоянии офиса, — это не то, что должно пережить закрытие карточки.
+// A refusal in two steps: the button first, then the field for a note. It lives
+// here rather than in the state of the office — this is not something that should
+// outlive the closing of the card.
 let denying = false;
 
-// Сервер отдаёт и русский текст ошибки, и ключ, если ошибка его собственная.
-// Знаем ключ — переводим; не знаем — показываем как есть: то, что вернул claude,
-// в словаре не лежит и лежать не может.
+// The server gives out both the Russian text of an error and a key, if the error
+// is its own. Where we know the key we translate; where we do not, we show it as
+// it is: what claude returned is not in the dictionary and cannot be.
 const said = (o, field = 'error') => {
   if (!o) return '';
   const key = field === 'hint' ? o.hintKey : o.errorKey;
@@ -117,8 +119,8 @@ export const ago = (sec) => sec == null || !Number.isFinite(sec) ? ''
 const metaLine = (a) => `${esc(a.project)}${a.branch ? ' · ' + esc(a.branch) : ''} · ${statusWord(a)}`
   + (a.status !== 'working' && a.idleFor > 300 ? tr('meta.spoke', { ago: ago(a.idleFor) }) : '');
 const chatLine = (a) => (a.title ? `<span class="chatname">💬 ${esc(a.title)}</span>` : '');
-// Сервер присылает ключ занятия, а готовую русскую фразу оставляет для
-// совместимости: если ключа нет — показываем её как есть.
+// The server sends the key of an activity and leaves the ready Russian phrase for
+// compatibility: if there is no key, we show the phrase as it is.
 const FALLBACK_ARG = { edit: 'act.someCode', read: 'act.someFile' };
 export const actText = (a) => {
   if (!a || !a.act || !a.act.key) return (a && a.activity) || '';
@@ -126,9 +128,9 @@ export const actText = (a) => {
   return tr('act.' + a.act.key, { arg });
 };
 export const roleText = (a) => (a && a.roleKey ? tr('role.' + a.roleKey) : (a && a.role) || '');
-// actText и roleText — текст: их же кладут в textContent. В разметку они
-// входят только через esc, потому что arg занятия — имя файла или команда из
-// транскрипта, а неизвестный ключ tr возвращает как есть.
+// actText and roleText are text: they are also put into textContent. They enter
+// the markup only through esc, because the arg of an activity is a file name or a
+// command out of the transcript, and an unknown key is returned by tr as it is.
 const actLine = (a) => `${esc(actText(a))}${(a.outbox || []).length ? ` · 📋 ${a.outbox.length}` : ''}`;
 const readLabel = (a) => {
   const cut = (a.saidLen || 0) - (a.lastSaid || '').length;

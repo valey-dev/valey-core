@@ -1,14 +1,15 @@
-// Камеры пультовой: любой кусок этажа, вписанный в экран целиком — комната
-// проекта или коридор. Это тот же офис, что и снаружи, только снят сверху и через
-// дешёвый монитор: зерно, развёртка и зелёный отлив поверх обычной отрисовки.
+// The control-room cameras: any piece of the floor fitted into the screen whole
+// — a project room or a corridor. It is the same office as outside, only shot
+// from above and through a cheap monitor: grain, a scan line and a green cast
+// over the ordinary drawing.
 import { drawPerson, drawCat, hash } from './sprites.js';
 import { t as tr } from './i18n.js';
 import { drawRoom, drawRoomProps, drawBoard, drawDesk, drawCorridor, drawSecurity, pxText } from './office.js';
 
 const px = (ctx, x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); };
 
-// Что видит пультовая: по камере на каждую комнату и на каждый коридор, включая
-// подход к самой пультовой — он ни в одну «полосу» коридора не попадает.
+// What the control room sees: a camera per room and per corridor, including the
+// approach to the control room itself — it falls into no corridor "strip" at all.
 export function buildCameras(L) {
   if (!L) return [];
   const cams = L.projectRooms.map((r) => ({
@@ -27,8 +28,8 @@ export function buildCameras(L) {
   return cams;
 }
 
-// Сколько людей попало в кадр: для комнаты это её агенты, для коридора — все,
-// кто сейчас стоит внутри прямоугольника камеры.
+// How many people got into the frame: for a room those are its agents, for a
+// corridor everyone standing inside the camera's rectangle right now.
 function inFrame(cam, agents, actors) {
   if (cam.kind === 'room') return agents.filter((a) => cam.room.agents.includes(a.id));
   const r = cam.rect;
@@ -49,7 +50,7 @@ export function drawCamera(ctx, VW, VH, cam, view, t) {
     return;
   }
 
-  // кадр вписывается в экран целиком, с полями под верхнюю и нижнюю плашки
+  // the frame fits into the screen whole, with margins for the top and bottom plates
   const r = cam.rect;
   const padX = 12, padTop = 20, padBottom = 24;
   const scale = Math.min((VW - padX * 2) / r.w, (VH - padTop - padBottom) / r.h);
@@ -79,7 +80,7 @@ export function drawCamera(ctx, VW, VH, cam, view, t) {
   if (cam.kind === 'room') {
     addRoom(cam.room);
   } else {
-    // коридор снимают вместе с тем, что к нему выходит: стены комнат, двери, пультовая
+    // a corridor is shot together with what opens onto it: room walls, doors, the control room
     drawCorridor(ctx, layout, t, night, weather);
     for (const room of layout.projectRooms) if (overlaps(room)) addRoom(room);
     const s = layout.security;
@@ -101,7 +102,7 @@ export function drawCamera(ctx, VW, VH, cam, view, t) {
       frame, dir: act.dir, bob: 0,
     }) });
   }
-  // сам себя в кадре тоже видно — камера не делает исключений
+  // you can see yourself in the frame too — the camera makes no exceptions
   if (player && player.x > r.x && player.x < r.x + r.w && player.y > r.y && player.y < r.y + r.h) {
     draws.push({ y: player.y, fn: () => drawPerson(ctx, player.x, player.y, me, {
       pose: 'stand', frame: 0, dir: player.dir, bob: Math.floor(t / 800) % 2,
@@ -113,7 +114,7 @@ export function drawCamera(ctx, VW, VH, cam, view, t) {
   draws.sort((a, b) => a.y - b.y).forEach((d) => d.fn());
   ctx.restore();
 
-  // ---- то, что делает картинку камерой, а не окном
+  // ---- what makes the picture a camera rather than a window
   ctx.globalAlpha = 0.16;
   for (let y = 0; y < VH; y += 2) px(ctx, 0, y, VW, 1, '#000000');
   ctx.globalAlpha = 0.10;
@@ -126,7 +127,7 @@ export function drawCamera(ctx, VW, VH, cam, view, t) {
   }
   ctx.globalAlpha = 1;
 
-  // зелёный оттенок и виньетка дешёвой оптики
+  // the green cast and the vignette of cheap optics
   ctx.globalAlpha = 0.12;
   px(ctx, 0, 0, VW, VH, '#2fbf7a');
   ctx.globalAlpha = 1;
@@ -134,7 +135,7 @@ export function drawCamera(ctx, VW, VH, cam, view, t) {
   g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,10,6,0.75)');
   ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
 
-  // рамка интерфейса
+  // the frame of the interface
   px(ctx, 0, 0, VW, 13, 'rgba(6,12,9,0.85)');
   px(ctx, 0, VH - 15, VW, 15, 'rgba(6,12,9,0.85)');
   px(ctx, 0, 13, VW, 1, '#1f4a38');
@@ -143,7 +144,7 @@ export function drawCamera(ctx, VW, VH, cam, view, t) {
   px(ctx, 8, 4, 5, 5, rec ? '#ff5a4a' : '#5e2620');
   pxText(ctx, `REC  CAM ${index + 1}/${total}`, 18, 9, '#9fe0a8');
   if (auto) {
-    // полоска добегает до конца — и пульт сам уходит на следующую камеру
+    // the strip runs to its end — and the desk moves on to the next camera by itself
     pxText(ctx, tr('cam.auto'), 96, 9, Math.sin(t / 500) > -0.5 ? '#ffd166' : '#9a7a34');
     const left = Math.max(0, Math.min(1, (t - since) / dwell));
     px(ctx, 120, 5, 40, 4, '#173026');
@@ -153,7 +154,7 @@ export function drawCamera(ctx, VW, VH, cam, view, t) {
   const busy = here.filter((a) => a.status === 'working').length;
   pxText(ctx, cam.kind === 'room' ? tr('cam.inRoom', { n: here.length, busy })
     : here.length ? tr('cam.inFrame', { n: here.length }) : tr('cam.nobody'), VW - 118, 9, '#7fc79c');
-  // название точки живёт внизу: наверху его перекрывала бы шапка игры
+  // the name of the spot lives at the bottom: at the top the game header would cover it
   const title = cam.title.length > 24 ? cam.title.slice(0, 23) + '…' : cam.title;
   pxText(ctx, title.toUpperCase(), 8, VH - 5, '#dff5e6');
   pxText(ctx, tr('cam.keys', { state: auto ? tr('cam.on') : tr('cam.off') }),

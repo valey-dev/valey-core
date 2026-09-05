@@ -8,9 +8,9 @@ export const DESK_DY = 76;
 const PAD_X = 32, HEAD = 62, FOOT = 34;
 const COLS_IN_ROOM = 3;
 const GRID_COLS = 3;
-// MARGIN экспортируется: модуль ставит свой предмет в коридор и должен мерить
-// от того же края, что и ядро, — скопированная руками константа уже однажды
-// увела предмет в стену.
+// MARGIN is exported: a module puts a thing of its own into the corridor and has
+// to measure from the same edge as the core — a constant copied by hand has
+// already taken a thing into a wall once.
 const GAP_X = 44, CORRIDOR = 76;
 export const MARGIN = 44;
 
@@ -22,34 +22,37 @@ const ROOM_TONES = [
   { floor: ['#b2907c', '#ac8a76', '#b89682'], seam: '#977668', wall: '#5a4a5e', trim: '#7a6480' },
 ];
 
-// Подпись плана — поимённая, а не по числу людей в комнате. Считая головы,
-// нельзя отличить «один ушёл, другой пришёл» от «ничего не поменялось», и
-// новичок оставался без места, потому что план не пересобирали.
+// The signature of the plan is by name rather than by the number of people in a
+// room. Counting heads, one cannot tell "one left, another arrived" from "nothing
+// changed", and a newcomer was left without a place because the plan was not
+// rebuilt.
 export function planSignature(agents) {
-  // Версия и стек попадают в подпись, потому что живут на табличке: подняли
-  // версию в манифесте — план пересоберётся и табличка догонит. Пересборка
-  // ничего не двигает: слоты закреплены за проектами, а столы — за сессиями,
-  // и происходит она раз в релиз, а не раз в тик.
+  // The version and the stack get into the signature because they live on the
+  // plaque: raise the version in the manifest and the plan is rebuilt and the
+  // plaque catches up. A rebuild moves nothing: the slots are pinned to the
+  // projects and the desks to the sessions, and it happens once a release rather
+  // than once a tick.
   return agents.map((a) => `${a.project}:${a.id}@${a.seat}`).sort().join('|')
     + '#' + [...new Set(agents.map((a) => `${a.project}:${a.version || ''}:${a.stack || ''}`))].sort().join('|');
 }
 
-// Проект -> его место в сетке. Живёт между пересборками плана: план собирается
-// заново на каждое изменение состава агентов, а комнаты при этом стоять должны.
+// A project -> its place in the grid. It lives between rebuilds of the plan: the
+// plan is assembled anew on every change to the cast of agents, and the rooms have
+// to stand still while that happens.
 const SLOTS = new Map();
 
-// только у них: у остальных нечего на него вешать.
+// only for them: the others have nothing to hang on it.
 export function buildLayout(agents, opts = {}) {
   const groups = new Map();
   for (const a of agents) {
     if (!groups.has(a.project)) groups.set(a.project, []);
     groups.get(a.project).push(a);
   }
-  // Слот закрепляется за проектом на всё время, пока он жив. Раньше комнаты
-  // сортировались по числу агентов — и стоило кому-то закончить работу, как
-  // порядок менялся, комнаты менялись местами, а сидящие в них люди уезжали
-  // вместе с мебелью на другой конец этажа. Освободившийся слот занимает
-  // следующий новый проект; остальные остаются там, где стояли.
+  // A slot is pinned to a project for as long as it is alive. The rooms used to be
+  // sorted by the number of agents — and the moment somebody finished work the
+  // order changed, the rooms swapped places, and the people sitting in them rode
+  // off with the furniture to the other end of the floor. A slot that comes free is
+  // taken by the next new project; the rest stay where they stood.
   for (const key of [...SLOTS.keys()]) if (!groups.has(key)) SLOTS.delete(key);
   const taken = new Set(SLOTS.values());
   for (const key of [...groups.keys()].filter((k) => !SLOTS.has(k)).sort()) {
@@ -58,8 +61,8 @@ export function buildLayout(agents, opts = {}) {
   }
   const entries = [...groups.entries()].sort((a, b) => SLOTS.get(a[0]) - SLOTS.get(b[0]));
 
-  // Слот — это и есть клетка сетки, а не просто порядок в списке. Иначе ушедший
-  // проект «схлопывал» ряд и утаскивал за собой всех, кто стоял правее.
+  // A slot is the cell of the grid, not just a position in a list. Otherwise a
+  // project that left "collapsed" the row and dragged everyone to the right of it along.
   const byRow = new Map();
   for (const [project, list] of entries) {
     const slot = SLOTS.get(project);
@@ -69,32 +72,34 @@ export function buildLayout(agents, opts = {}) {
   }
 
   const rooms = [], bands = [];
-  // Ряды проектов начинаются НИЖЕ на высоту оранжереи и её площадки: крыша —
-  // это верхний ярус, зеркальный служебному снизу. Мир от этого вырос вверх
-  // на GREEN_H + CORRIDOR, и это единственное, чем оранжерея платит за небо.
+  // The rows of projects begin LOWER by the height of the conservatory and its
+  // landing: the roof is the top tier, mirroring the service one below. The world
+  // grew upwards by GREEN_H + CORRIDOR because of it, and that is the only thing the
+  // conservatory pays for its sky.
   let gridRow = [], rowY = MARGIN + CORRIDOR + GREEN_H + CORRIDOR, rowH = 0;
   const roofY = MARGIN + CORRIDOR;
 
   const flushRow = (row) => {
     for (const r of gridRow) { r.y = rowY; r.bandY = rowY - CORRIDOR / 2; }
-    // Полоса помнит свой ряд, а не своё место сверху: место меняется, стоит
-    // появиться ряду выше, а номер ряда закреплён за проектом слотом и живёт,
-    // пока живёт проект. Из него и берётся номер этажа.
+    // A strip remembers its row rather than its place from the top: the place
+    // changes the moment a row appears above it, while the number of a row is pinned
+    // to a project by its slot and lives as long as the project does. The floor
+    // number is taken from it.
     bands.push({ y: rowY - CORRIDOR, h: CORRIDOR, row });
     rowY += rowH + CORRIDOR;
     gridRow = []; rowH = 0;
   };
 
-  // Ряды кладутся с большего номера к меньшему, поэтому ряд 0 оказывается внизу,
-  // над сервисным ярусом, а новый ряд прирастает сверху — как этаж у дома.
-  // Раньше было наоборот, и это ломало обе вещи разом: нумеровать снизу вверх
-  // было нельзя (каждый третий агент переименовывал все этажи), а сервисный низ
-  // уезжал вниз от каждого нового ряда.
+  // The rows are laid from the larger number to the smaller, so row 0 ends up at the
+  // bottom, above the service tier, and a new row grows on top — like a storey on a
+  // house. It used to be the other way round, and that broke both things at once:
+  // numbering from the bottom up was impossible (every third agent renamed all the
+  // floors), and the service bottom rode down away from every new row.
   for (const row of [...byRow.keys()].sort((a, b) => b - a)) {
   for (const [project, list, col] of byRow.get(row)) {
-    // Место в комнате приходит с сервера и живёт на диске. Массив разреженный:
-    // дырка — это стол ушедшего, он стоит с потухшим монитором и ждёт новичка,
-    // вместо того чтобы утащить за собой всех, кто сидел дальше.
+    // A place in a room comes from the server and lives on disk. The array is
+    // sparse: a hole is the desk of somebody who left, it stands with a dark monitor
+    // and waits for a newcomer instead of dragging everyone who sat further along.
     const ids = [];
     list.forEach((a, idx) => { ids[Number.isInteger(a.seat) ? a.seat : idx] = a.id; });
     const deskRows = Math.max(1, Math.ceil(ids.length / COLS_IN_ROOM));
@@ -102,13 +107,13 @@ export function buildLayout(agents, opts = {}) {
     const h = HEAD + deskRows * DESK_DY + FOOT;
     const x = MARGIN + col * (w + GAP_X);
     const tone = ROOM_TONES[hash(project) % ROOM_TONES.length];
-    // Вторая строка таблички. Половинки независимы: нашлась версия без стека —
-    // будет только версия. Не нашлось ничего — строки нет, и табличка остаётся
-    // однострочной, как была.
+    // The second line of the plaque. The halves are independent: a version found
+    // without a stack means the version alone. Nothing found means there is no line,
+    // and the plaque stays one-line, as it was.
     const info = list.find((a) => a.version || a.stack) || {};
     const sub = [info.version, info.stack].filter(Boolean).join(' · ');
-    // Репозиторий — свойство проекта, а не сессии: хватает одного агента,
-    // который про него знает.
+    // The repository is a property of the project, not of a session: one agent who
+    // knows about it is enough.
     const repo = list.some((a) => a.repo);
 
     const room = {
@@ -132,10 +137,11 @@ export function buildLayout(agents, opts = {}) {
     r.back = backDoor(r);
     r.board.y += r.y;
     r.coffee.y = r.y + r.h - 44;
-    // Микроволновка — слева от кофемашины, в том же кухонном углу. Стоит у
-    // всех: греть рыбу можно в любой комнате, и в этом вся суть.
-    // На полке, а не на полу: человек ростом 24 закрывает собой всё, что
-    // стоит на его уровне, — а смотреть тут надо именно в окошко.
+    // The microwave is to the left of the coffee machine, in the same kitchen
+    // corner. Everyone has one: fish can be heated in any room, and that is the whole
+    // point.
+    // On a shelf rather than on the floor: a person 24 tall covers everything
+    // standing at his level — and what has to be looked at here is precisely the window.
     r.micro = { x: r.coffee.x - 44, y: r.coffee.y - 18 };
     for (let i = 0; i < r.agents.length; i++) {
       const cx = i % COLS_IN_ROOM, cy = Math.floor(i / COLS_IN_ROOM);
@@ -149,51 +155,54 @@ export function buildLayout(agents, opts = {}) {
     r.aisleY = r.y + r.h - FOOT + 6;
     r.doorPoint = { x: r.door.x + r.door.w / 2, y: r.y + WALL + 16 };
     r.art = hangPictures(r);
-    // Фикус растит модуль дерева гита — предмет принадлежит ему, а не офису:
-    // подойти к нему значит посмотреть историю проекта, и без модуля смотреть
-    // нечего. Ядро оставляет за собой только `r.repo` (есть ли репозиторий) и
-    // умение нарисовать кадку, если её кто-то поставил; комната без модуля
-    // остаётся с обычным цветком. Место — левый угол под окном: там нет ни
-    // столов, ни кофемашины, и мимо него никто не ходит к своему месту.
-    // Мольберт — у верхней стены правее двери: между стеной и первым рядом
-    // столов 52 пикселя пустого пола, и это единственная полоса в комнате, где
-    // он никому не перекрывает дорогу к своему месту. Кофемашина справа,
-    // фикус слева внизу — с ними он тоже не спорит.
+    // The ficus is grown by the git-tree module — the thing belongs to it, not to
+    // the office: walking up to it means looking at the history of the project, and
+    // without the module there is nothing to look at. The core keeps only `r.repo`
+    // (is there a repository) and the ability to draw a tub if somebody put one
+    // there; a room without the module is left with an ordinary flower. The place is
+    // the left corner under the window: there are no desks and no coffee machine
+    // there, and nobody passes it on the way to their seat.
+    // The easel is by the top wall to the right of the door: between the wall and the
+    // first row of desks there are 52 pixels of empty floor, and it is the only strip
+    // in the room where it blocks nobody's way to their seat. The coffee machine is on
+    // the right, the ficus bottom left — it does not argue with those either.
   }
 
   const w = MARGIN * 2 + GRID_COLS * (rooms[0]?.w || 320) + (GRID_COLS - 1) * GAP_X;
-  // отдельная комната внизу, вне сетки проектов: пультовая с камерами
+  // a separate room at the bottom, outside the grid of projects: the control room with the cameras
   const security = buildSecurity(w, rowY);
   const meeting = buildMeeting(w, rowY);
   const greenhouse = buildGreenhouse(w, roofY);
-  // Комнаты модулей. Спрашиваем здесь, а не после сборки: ниже считается высота
-  // мира и собирается лифт, и комната, добавленная позже, оказалась бы за
-  // границей этажа и без остановки. Точка `layout` для этого не годится — она
-  // зовётся по готовой планировке и умеет довешивать предметы, а не комнаты.
-  // Модуль получает якорь (нижнюю комнату яруса и ширину этажа) и возвращает
-  // готовую комнату — считать её геометрию ядру нечем, оно про неё не знает.
+  // The rooms of modules. We ask here rather than after the assembly: below, the
+  // height of the world is counted and the lift is put together, and a room added
+  // later would end up outside the floor and without a stop. The `layout` point will
+  // not do for this — it is called on a finished plan and can hang things on it, not
+  // rooms. A module gets an anchor (the bottom room of the tier and the width of the
+  // floor) and returns a finished room — the core has nothing to compute its geometry
+  // with, it does not know about it.
   const extra = (typeof opts.rooms === 'function'
     ? [].concat(opts.rooms({ w, security, meeting, rowY, below: security.y + security.h + CORRIDOR }) || [])
     : []).filter(Boolean);
   const h = Math.max(security.y + security.h, ...extra.map((r) => r.y + r.h)) + MARGIN;
-  // Вертикальные проходы между колоннами комнат и вдоль внешних стен. Комнаты во
-  // всех рядах стоят по одной сетке, поэтому такой проход свободен сверху донизу —
-  // по нему можно спуститься из любого коридора в любой другой.
+  // The vertical passages between the columns of rooms and along the outer walls.
+  // The rooms in every row stand on one grid, so such a passage is free from top to
+  // bottom — one can go down it from any corridor into any other.
   const roomW = rooms[0]?.w || 320;
   const lanes = [MARGIN / 2 + 4];
   for (let c = 0; c < GRID_COLS - 1; c++) lanes.push(MARGIN + c * (roomW + GAP_X) + roomW + GAP_X / 2);
   lanes.push(w - MARGIN / 2 - 4);
 
-  // Курилка — общая на весь офис, поэтому её место на сервисном ярусе, слева от
-  // пультовой: на кадре 401:2 под неё пунктиром отведено 360×138 при x = MARGIN,
-  // столько же, сколько занимают две другие комнаты яруса. Стен и двери у неё
-  // нет — пунктир говорит «здесь», а не «вот такая комната», и выдумывать её
-  // внутренность в коде нельзя.
+  // The smoking room is shared by the whole office, so its place is on the service
+  // tier, to the left of the control room: on frame 401:2 a dotted 360×138 at
+  // x = MARGIN is set aside for it, as much as the other two rooms of the tier take.
+  // It has no walls and no door — the dotted line says "here", not "a room like
+  // this", and inventing its innards in code is not allowed.
   //
-  // Раньше она стояла в нижнем коридоре, в единственной широкой полосе, которую
-  // ничто не занимало. Полосу занял ярус, и курилка оказалась бы у него на
-  // пороге. Ходить к ней стало дальше — агент с кончившимся лимитом спускается
-  // на первый этаж, — и это ровно то, чем курилка и была задумана.
+  // It used to stand in the bottom corridor, in the one wide strip that nothing
+  // occupied. The tier took that strip, and the smoking room would have ended up on
+  // its threshold. Walking to it became longer — an agent whose limit has run out
+  // goes down to the first floor — and that is exactly what the smoking room was
+  // meant to be.
   const loungeX = MARGIN + 154, loungeY = rowY + 84;
   const lounge = {
     x: loungeX, y: loungeY,
@@ -201,16 +210,16 @@ export function buildLayout(agents, opts = {}) {
       { x: loungeX - 16, y: loungeY - 1 },
       { x: loungeX + 1, y: loungeY - 1 },
       { x: loungeX + 18, y: loungeY - 1 },
-      // мест на диване три, остальные курят стоя рядом
+      // there are three places on the sofa, the rest smoke standing next to it
       { x: loungeX + 48, y: loungeY + 2 },
       { x: loungeX + 70, y: loungeY + 2 },
     ],
   };
 
-  // Настольный футбол — слева от дивана, в той же курилке. Он единственный
-  // предмет на этаже, к которому встают вдвоём: у него две стороны, и занять
-  // их могут двое агентов, агент с человеком или человек один — тогда играет
-  // сам с собой, как оно в жизни у стола и бывает.
+  // Table football is to the left of the sofa, in the same smoking room. It is the
+  // only thing on the floor people step up to in twos: it has two sides, and they can
+  // be taken by two agents, by an agent and a person, or by a person alone — then he
+  // plays against himself, which is how it goes at a real table.
   const kicker = {
     x: MARGIN + 72, y: loungeY + 4,
     sides: [
@@ -227,13 +236,13 @@ export function buildLayout(agents, opts = {}) {
   bands.forEach((b, i) => {
     const my = b.y + b.h / 2 + 8;
     props.push({ kind: 'plant', x: MARGIN - 18, y: my + 10 });
-    // правый конец коридора теперь лифтовый холл — кулер и скамейку уводим
-    // левее, иначе они встают ровно на стойку секретаря
+    // the right end of the corridor is now the lift hall — the water cooler and the
+    // bench are moved further left, or they stand exactly on the reception desk
     props.push({ kind: i === 0 ? 'cooler' : 'bench', x: MARGIN + 300, y: my + 8 });
     if (i === 0) {
       props.push({ kind: 'bench', x: MARGIN + 150, y: my + 12 });
-      // человечек-переключатель языка: у входа, на дорожке, чтобы попасться
-      // на глаза раньше, чем человек уйдёт вглубь этажа
+      // the little language-switch figure: at the entrance, on the walkway, so as to
+      // catch the eye before a person goes deeper into the floor
       props.push({ kind: 'lang', x: MARGIN + 118, y: my + 4 });
     }
   });
@@ -242,27 +251,30 @@ export function buildLayout(agents, opts = {}) {
   props.push({ kind: 'ashtray', x: lounge.x + 36, y: lounge.y + 6 });
   props.push({ kind: 'kicker', x: kicker.x, y: kicker.y });
 
-  // Площадка перед оранжереей — обычный коридор, только верхний, и класть его
-  // приходится руками: flushRow кладёт полосу над своим рядом, а над крышей
-  // ряда нет. После props — чтобы кулер, скамейка и фикус коридора сюда не
-  // приехали: на площадке из мебели только двери лифта.
-  // unshift, а не push: полоса кладётся ПЕРВОЙ, потому что этажи в лифте
-  // считаются по порядку полос, и крыша обязана оказаться сверху списка. При
-  // push она вставала предпоследней, между вторым этажом и первым.
+  // The landing in front of the conservatory is an ordinary corridor, only the top
+  // one, and it has to be laid by hand: flushRow lays a strip above its row, and
+  // above the roof there is no row. After props — so that the water cooler, the bench
+  // and the corridor ficus do not arrive here: the only furniture on the landing is
+  // the lift doors.
+  // unshift, not push: the strip is laid FIRST, because the floors in the lift are
+  // counted in the order of the strips, and the roof has to end up at the top of the
+  // list. With push it stood second to last, between the second floor and the first.
   const topRow = bands.reduce((m, b) => Math.max(m, b.row), 0) + 1;
   bands.unshift({ y: MARGIN, h: CORRIDOR, row: topRow, roof: true });
   const lift = buildLift(w, bands, [...rooms, greenhouse], security, meeting, extra);
-  // rooms лежат в порядке отрисовки — сверху вниз, как их клали. Наружу проектные
-  // комнаты отдаются в порядке слотов: первый слот — это левая комната нижнего
-  // ряда, то есть первое, что видит вошедший. На ней же стоит спавн по умолчанию,
-  // и после разворота рядов без этой сортировки он уехал бы под самую крышу.
+  // rooms lie in drawing order — top to bottom, as they were laid. Outwards the
+  // project rooms are given in the order of the slots: the first slot is the left room
+  // of the bottom row, that is, the first thing somebody entering sees. The default
+  // spawn stands on it too, and after the rows were turned around it would have ridden
+  // off under the very roof without this sorting.
   const bySlot = [...rooms].sort((a, b) => (SLOTS.get(a.key) ?? 0) - (SLOTS.get(b.key) ?? 0));
   const worldW = Math.max(w + LIFT_W, 640);
   return {
-    // Сервисные комнаты идут после проектных: порядок в массиве — это порядок
-    // отрисовки, а нижний ярус лежит ниже всех рядов и перекрывать его нечем.
-    // projectRooms — для всего, что считает проекты: таблички этажей, титульный
-    // экран, спавн, камеры. Отличать «комнату» от «проекта» приходится ровно там.
+    // The service rooms come after the project ones: the order in the array is the
+    // drawing order, and the bottom tier lies below every row with nothing to cover it.
+    // projectRooms is for everything that counts projects: the floor plaques, the title
+    // screen, the spawn, the cameras. Telling a "room" from a "project" is needed
+    // exactly there.
     rooms: [...rooms, security, meeting, greenhouse, ...extra], projectRooms: bySlot, security, meeting, greenhouse,
     byAgent, bands, props, lanes, lounge, kicker, lift,
     wallArt: hangCorridorPictures(worldW),
@@ -270,10 +282,11 @@ export function buildLayout(agents, opts = {}) {
   };
 }
 
-// ------------------------------------------------------------------- лифт
-// Шахта стоит в своей полосе справа, за последней колонкой комнат. В проход её
-// ставить нельзя: проходы — единственный способ агента спуститься из ряда в ряд,
-// и сплошной столб посреди одного из них запер бы половину этажа.
+// ------------------------------------------------------------------- the lift
+// The shaft stands in a strip of its own on the right, past the last column of rooms.
+// It must not be put into a passage: the passages are the only way an agent has to go
+// down from row to row, and a solid column in the middle of one would lock half the
+// floor in.
 const LIFT_W = 60;
 export const LIFT_DOOR_H = 34;
 
@@ -284,43 +297,47 @@ function buildLift(w, bands, rooms, security, meeting, extra = []) {
     if (!byRow.has(r.y)) byRow.set(r.y, []);
     byRow.get(r.y).push(r.title);
   }
-  // Этаж — это коридор: с него открываются двери комнат своего ряда. Номер
-  // считается от низа, как в доме, и берётся из ряда, а не из места в списке:
-  // место сдвигается, когда сверху прирастает новый ряд, а ряд свой номер
-  // держит. Иначе коридор, в котором ты стоишь, переименовывался бы под тобой.
+  // A floor is a corridor: the doors of the rooms of its row open onto it. The
+  // number is counted from the bottom, as in a house, and taken from the row rather
+  // than from a place in a list: a place shifts when a new row grows on top, while a
+  // row keeps its number. Otherwise the corridor you are standing in would be renamed
+  // under you.
   const floors = bands.map((b) => ({
     n: b.row + 2,
     y: b.y + b.h / 2 + 8,
     rooms: byRow.get(b.y + b.h) || [],
   }));
-  // пультовая лежит ниже последнего ряда и по духу — подвал
-  // Сервисный ярус — первый этаж, а не подвал. Подвалом он читался, пока внизу
-  // была одна пультовая по карточке: туда незачем ехать. С переговоркой, куда
-  // можно всем, это перестало быть правдой, и коридоры проектов съехали на
-  // единицу вверх — этаж 2 и дальше. Комнаты перечисляются слева направо, как
-  // они стоят.
+  // the control room lies below the last row and in spirit is a basement
+  // The service tier is the first floor, not a basement. It read as a basement while
+  // there was only the control room down there, entered by card: there is no reason to
+  // ride there. With the meeting room, which anyone can enter, that stopped being
+  // true, and the project corridors moved up by one — floor 2 and onwards. The rooms
+  // are listed left to right, as they stand.
   floors.push({
     n: 1, y: security.y - 30, tier: true,
     rooms: [security, meeting].filter(Boolean).sort((a, b) => a.x - b.x).map((r) => r.title),
   });
 
-  // Этаж комнаты модуля — ниже сервисного яруса и с номером 0, а не минус
-  // первым: подвалом он читался бы как место, куда незачем ходить. Ноль ещё и
-  // не сдвигает номера жилых этажей — они считаются от ряда комнат, а ярус
-  // пультовой прибит к единице отдельной строкой выше.
+  // The floor of a module's room is below the service tier and numbered 0 rather
+  // than minus one: as a basement it would read as a place there is no reason to go
+  // to. A zero also does not shift the numbers of the inhabited floors — they are
+  // counted from the row of rooms, while the control-room tier is nailed to one by a
+  // separate line above.
   for (const r of extra) {
     floors.push({ n: 0, y: r.y - 30, tier: true, rooms: [r.title] });
   }
 
-  // Стойка секретаря — на каждом жилом этаже, слева от шахты: вышел из кабины,
-  // она перед тобой. В подвале её нет: пультовая гостей не принимает.
-  // Стойка секретаря стоит там, где есть проекты: она считает их на табличке.
-  // На сервисном ярусе их нет, а место, куда её кладёт формула ниже, занято
-  // переговоркой — и на утверждённом кадре яруса (401:2) никакой стойки нет.
+  // The reception desk is on every inhabited floor, to the left of the shaft: step
+  // out of the cabin and it is in front of you. There is none in the basement: the
+  // control room receives no guests.
+  // The reception desk stands where there are projects: it counts them on its plaque.
+  // On the service tier there are none, and the place the formula below puts it in is
+  // taken by the meeting room — and on the approved frame of the tier (401:2) there is
+  // no desk at all.
   const reception = floors.filter((f) => !f.tier).map((f) => ({
     n: f.n, rooms: f.rooms,
     x: x - 100, y: f.y - 26, w: 60, h: 12,
-    // где стоит сам секретарь и откуда с ним говорят — по эту сторону стойки
+    // where the receptionist himself stands and where people talk to him from — on this side of the desk
     who: { x: x - 70, y: f.y - 28 },
     spot: { x: x - 70, y: f.y - 4 },
   }));
@@ -330,27 +347,29 @@ function buildLift(w, bands, rooms, security, meeting, extra = []) {
 export function blockedByLift(lift, x, y) {
   if (!lift) return false;
   if (x > lift.x - 4 && x < lift.x + lift.w + 4 && y > 24 && y < 1e5) return true;
-  // стойка — такая же мебель, сквозь неё не ходят
+  // the desk is furniture like any other, people do not walk through it
   for (const r of lift.reception || []) {
     if (x > r.x - 4 && x < r.x + r.w + 4 && y > r.y - 12 && y < r.y + r.h + 4) return true;
   }
   return false;
 }
 
-// --------------------------------------------------------------- переговорка
-// Вторая комната сервисного яруса. От пультовой отличается ровно тем, ради чего
-// затевалась: считывателя у двери нет — сюда можно всем. Стена к коридору
-// стеклянная, потому что вход и есть включение микрофона: решать, входить ли,
-// надо снаружи, а сквозь стекло видно, идёт ли разговор.
+// --------------------------------------------------------------- the meeting room
+// The second room of the service tier. It differs from the control room in exactly what
+// it was started for: there is no reader by the door — anyone can come here. The wall to
+// the corridor is glass, because entering is what switches the microphone on: whether to
+// enter has to be decided from outside, and through glass one can see whether a
+// conversation is going on.
 //
-// Числа сняты с утверждённого плана 400:2 (он нарисован ×3): комната 360×138,
-// стена 26 = WALL, дверь на x+34 шириной 36 — та же, что у проектных комнат,
-// стол 180×44 посередине, шесть стульев 20×14.
+// The numbers are taken off the approved plan 400:2 (it is drawn ×3): a room of 360×138,
+// a wall of 26 = WALL, a door at x+34 and 36 wide — the same as the project rooms have,
+// a table of 180×44 in the middle, six chairs of 20×14.
 const MEET_W = 360, MEET_H = 138;
 
 function buildMeeting(floorW, y) {
-  // Справа, у лифтовой полосы. По брифу гость появляется у лифта, и переговорка
-  // должна быть первым, что он видит, а не концом прохода через весь этаж.
+  // On the right, by the lift strip. By the brief a guest appears at the lift, and the
+  // meeting room has to be the first thing he sees rather than the end of a walk across
+  // the whole floor.
   const x = Math.round(floorW - MARGIN - MEET_W);
   const door = { x: x + 34, w: 36 };
   const room = {
@@ -358,27 +377,27 @@ function buildMeeting(floorW, y) {
     service: true, draw: 'meeting', lit: false,
     x, y, w: MEET_W, h: MEET_H, door,
     table: { x: x + 90, y: y + WALL + 34, w: 180, h: 44 },
-    // Стулья не перегораживают пол: между верхним рядом и столом два пикселя,
-    // и если считать мебелью и их, к столу не подойти вовсе. Стол — мебель,
-    // стул — рисунок.
+    // The chairs do not block the floor: between the top row and the table there are
+    // two pixels, and if they counted as furniture too, the table could not be
+    // approached at all. The table is furniture, a chair is a drawing.
     seats: [110, 170, 230].flatMap((dx) => [
       { x: x + dx, y: y + 44, back: 'top' },
       { x: x + dx, y: y + 106, back: 'bottom' },
     ]),
-    // Стеклянные секции: узкая слева от двери, дальше шесть по 41 через 6.
+    // The glass sections: a narrow one to the left of the door, then six of 41 every 6.
     glass: [{ x: x + 6, w: 22 }].concat([0, 1, 2, 3, 4, 5].map((i) => ({ x: x + 76 + i * 47, w: 41 }))),
     agents: [], desks: [], art: [], back: null, coffee: null,
   };
   room.blocks = [{ ...room.table }];
   room.doorPoint = { x: door.x + door.w / 2, y: y + WALL + 16 };
-  // Куда встают, чтобы говорить: середина комнаты у стола, ниже него.
+  // Where people stand to talk: the middle of the room by the table, below it.
   room.spot = { x: x + MEET_W / 2, y: y + MEET_H - 22 };
   return room;
 }
 
 // ------------------------------------------------------------------ security
-// Пультовая: одна на этаж, внизу, вход по карточке. Внутри — стойка с мониторами,
-// по которым видно любой офис целиком.
+// The control room: one per floor, at the bottom, entered by card. Inside is a desk with
+// monitors that show any office whole.
 const SEC_W = 300, SEC_H = 138;
 
 function buildSecurity(floorW, y) {
@@ -386,31 +405,32 @@ function buildSecurity(floorW, y) {
   const door = { x: x + Math.round(SEC_W / 2) - 18, w: 36 };
   const sec = {
     key: '__security', title: 'SECURITY', security: true,
-    // Сервисная комната: стоит на нижнем ярусе всегда, слота в сетке проектов не
-    // занимает и в списке «сколько проектов на этаже» не участвует. Всё
-    // остальное — стены, дверь, пол под ногами — общее с проектными комнатами,
-    // поэтому она лежит в rooms, а не отдельным полем рядом с ним.
+    // A service room: it always stands on the bottom tier, takes no slot in the grid
+    // of projects and does not take part in the "how many projects on this floor"
+    // count. Everything else — the walls, the door, the floor underfoot — is shared
+    // with the project rooms, which is why it lies in rooms rather than in a separate
+    // field next to it.
     service: true, draw: 'security', lit: false,
     x, y, w: SEC_W, h: SEC_H, door,
-    // считыватель справа от двери, на самой стене
+    // the reader to the right of the door, on the wall itself
     reader: { x: door.x + door.w + 9, y: y + 6 },
-    // стойка с мониторами у дальней стены, к ней и подходят
+    // the desk with the monitors by the far wall, and that is what people walk up to
     console: { x: x + SEC_W / 2, y: y + WALL + 44, w: 132, h: 22 },
-    // киноплакат — слева от двери, на самой стене: единственный кусок стены,
-    // который не занят ни считывателем, ни вывеской
+    // the film poster — to the left of the door, on the wall itself: the only piece of
+    // wall taken by neither the reader nor the sign
     poster: { x: x + 61, y: y + 3, w: 14, h: 20 },
-    // пустые поля общих проходов: столов, кофемашины и второй двери здесь нет
+    // the empty fields of the shared passages: there are no desks, no coffee machine and no second door here
     agents: [], desks: [], art: [], back: null, coffee: null,
   };
-  // Стойка перегораживает пол так же, как стол в проектной комнате. Раньше это
-  // знала отдельная blockedBySecurity; теперь это прямоугольник в данных, и
-  // следующая сервисная комната опишет свою мебель тем же списком.
-  // Запас в 4 пикселя по бокам добавляет сама blocked(), поэтому здесь голая
-  // стойка: с ним прямоугольник разъехался бы с прежним на 8 пикселей, и мимо
-  // стойки стало бы чуть теснее ходить, чем вчера.
-  // Мебель пультовой списком: здесь только стойка. Предметы модулей
-  // дописываются в этот же список из точки layout — прямоугольником в данных,
-  // а не особым случаем в движке.
+  // The desk blocks the floor the same way a table does in a project room. A separate
+  // blockedBySecurity used to know that; now it is a rectangle in the data, and the next
+  // service room will describe its furniture with the same list.
+  // The margin of 4 pixels on the sides is added by blocked() itself, so here it is the
+  // bare desk: with the margin the rectangle would diverge from the old one by 8 pixels,
+  // and walking past the desk would become slightly tighter than it was yesterday.
+  // The furniture of the control room as a list: here it is only the desk. The things of
+  // modules are appended to this same list from the layout point — as a rectangle in the
+  // data, not as a special case in the engine.
   sec.blocks = [
     {
       x: sec.console.x - sec.console.w / 2, y: sec.console.y - 16,
@@ -423,17 +443,18 @@ function buildSecurity(floorW, y) {
 }
 
 
-// ---------------------------------------------------------------- оранжерея
-// Третья комната без проекта — и единственная, которая стоит НАВЕРХУ. Причина
-// одна и она же весь смысл: у оранжереи стеклянная стена, а за стеклом то же
-// настоящее небо, что в окнах коридора, — drawSky с погодой и временем суток.
-// Снизу это не работает: там над комнатой ещё три этажа. Служебный ярус к тому
-// же занят целиком — курилка, пультовая и переговорка стоят вплотную.
+// ---------------------------------------------------------------- the conservatory
+// The third room without a project — and the only one that stands ON TOP. There is one
+// reason and it is the whole point: the conservatory has a glass wall, and behind the
+// glass is the same real sky as in the corridor windows — drawSky with the weather and
+// the time of day. From below that does not work: there are three more floors above the
+// room there. The service tier is taken up entirely as well — the smoking room, the
+// control room and the meeting room stand shoulder to shoulder.
 //
-// Числа сняты с утверждённого кадра 734:2 (нарисован ×3): комната 420×150,
-// стена 26 = WALL, дверь по центру шириной 44, стеллаж на y+60, кран справа,
-// скамейка и кадки на полу. Мебель у нижней стены поднята: последние 10 px
-// комнаты — стена, и кадка там оказалась бы внутри неё.
+// The numbers are taken off the approved frame 734:2 (drawn ×3): a room of 420×150, a
+// wall of 26 = WALL, a door in the centre 44 wide, shelving at y+60, the tap on the
+// right, the bench and the tubs on the floor. The furniture by the bottom wall is
+// raised: the last 10 px of the room are wall, and a tub there would end up inside it.
 const GREEN_W = 420, GREEN_H = 150;
 
 function buildGreenhouse(floorW, y) {
@@ -445,9 +466,9 @@ function buildGreenhouse(floorW, y) {
     x, y, w: GREEN_W, h: GREEN_H, door,
     agents: [], desks: [], art: [], back: null, coffee: null,
   };
-  // Семь горшков: четыре на стеллаже, три кадками на полу. Номер закреплён за
-  // местом, потому что он же ключ в настройках: пересчитай порядок — и политым
-  // окажется не тот, кого полили.
+  // Seven pots: four on the shelving, three as tubs on the floor. The number is pinned
+  // to the place, because it is also the key in the settings: recount the order, and the
+  // one watered will not be the one that was watered.
   room.pots = [
     { i: 0, kind: 'flower', x: x + 46, y: y + 60, shelf: true },
     { i: 1, kind: 'cactus', x: x + 78, y: y + 60, shelf: true },
@@ -457,8 +478,8 @@ function buildGreenhouse(floorW, y) {
     { i: 5, kind: 'ficus', x: x + 172, y: y + 136 },
     { i: 6, kind: 'ficus', x: x + 236, y: y + 112 },
   ];
-  // Подходят к горшку снизу — и к тому, что на стеллаже, тоже: поливают сверху
-  // вниз, стоя перед ним, а не сбоку.
+  // A pot is approached from below — including the one on the shelving: watering goes
+  // top down, standing in front of it rather than beside it.
   for (const p of room.pots) p.spot = { x: p.x, y: p.y + (p.shelf ? 30 : 16) };
   room.tap = { x: x + 376, y: y + 50, spot: { x: x + 372, y: y + 104 } };
   room.hook = { x: x + 332, y: y + 56, spot: { x: x + 332, y: y + 100 } };
@@ -466,8 +487,9 @@ function buildGreenhouse(floorW, y) {
     x: x + 268, y: y + 124, w: 46,
     seats: [{ x: x + 280, y: y + 128 }, { x: x + 302, y: y + 128 }],
   };
-  // Мебель занимает пол ровно там, где нарисована. Кадки — тоже мебель: сквозь
-  // фикус в комнате проекта уже не ходят, и здесь та же логика.
+  // Furniture takes up the floor exactly where it is drawn. The tubs are furniture too:
+  // people no longer walk through the ficus in a project room, and the logic here is the
+  // same.
   room.blocks = [
     { x: x + 28, y: y + 56, w: 172, h: 26 },
     { x: x + 36, y: y + 100, w: 62, h: 24 },
@@ -525,7 +547,7 @@ function hangCorridorPictures(worldW) {
     if (hash(`pier${i}`) % 3 !== 0) return;
     out.push(centred(span, 7, `hall-${i}`, { egg: true }));
   });
-  // на длинном этаже без единой пасхалки скучно — вешаем хотя бы одну
+  // a long floor without a single easter egg is dull — we hang at least one
   if (!out.length) {
     const span = widestGap(piers);
     if (span) out.push(centred(span, 7, 'hall-0', { egg: true }));
@@ -535,8 +557,8 @@ function hangCorridorPictures(worldW) {
 
 function hangPictures(r) {
   const span = widestGap([
-    [r.x + 12, r.door.x - 5],                      // ниша слева от двери
-    [r.door.x + r.door.w + 5, r.board.x - 6],      // простенок до доски
+    [r.x + 12, r.door.x - 5],                      // the niche to the left of the door
+    [r.door.x + r.door.w + 5, r.board.x - 6],      // the pier up to the board
   ]);
   if (!span) return [];
   return [centred(span, r.y + 4, r.key, { theme: r.title })];
@@ -576,25 +598,25 @@ const inBack = (r, x, y) => {
   return onItsWall && y > b.y + 3 && y < b.y + b.h - 3;
 };
 
-// ------------------------------------------------------- относительные места
-// Кто где стоит, в терминах плана, а не мировых пикселей. Нужно затем, что план
-// пересобирается на каждое изменение состава агентов, а ряды прирастают сверху:
-// стоит чужому проекту начаться, и весь этаж съезжает вниз на высоту ряда.
-// Абсолютные x/y после такого показывают в соседнюю комнату, хотя человек не
-// сделал ни шага, — а во время разговора в переговорке это пол, уходящий
-// из-под ног.
+// ------------------------------------------------------- relative places
+// Who stands where, in the terms of the plan rather than in world pixels. It is needed
+// because the plan is rebuilt on every change to the cast of agents, and the rows grow
+// from the top: let somebody else's project begin, and the whole floor slides down by
+// the height of a row. Absolute x/y after that point into the neighbouring room, though
+// the person has not taken a step — and during a conversation in the meeting room that
+// is the floor going out from under his feet.
 //
-// Якорь — ближайшая комната и смещение от её угла. Ближайшая, а не та, внутри
-// которой стоишь: в коридоре не стоишь ни в одной, но коридор едет вместе со
-// своим рядом, и держаться за соседнюю комнату там ровно то, что нужно.
+// The anchor is the nearest room and an offset from its corner. The nearest, not the one
+// you are standing inside: in a corridor you stand inside none, but the corridor rides
+// along with its row, and holding on to a neighbouring room there is exactly right.
 //
-// Комната считается вместе с коридором над ней: это её этаж, с него открывается
-// её дверь. Без этого человек в коридоре цеплялся за ряд НАПЕРЁД — по прямому
-// расстоянию комната сверху оказывается ближе на несколько пикселей, чем та,
-// к которой этот коридор ведёт. Пока ряды одной высоты, разницы не видно: при
-// врезке ряда всё съезжает на одинаковую величину. Она вылезает, когда в
-// проекте появляется четвёртый агент, ряд становится выше остальных, и нижние
-// ряды сдвигаются не на столько же.
+// A room is counted together with the corridor above it: that is its floor, its door
+// opens onto it. Without that a person in a corridor held on to the row AHEAD — by
+// straight distance the room above turns out to be a few pixels nearer than the one this
+// corridor leads to. While the rows are of one height the difference is invisible: when a
+// row is inserted everything slides by the same amount. It comes out when a fourth agent
+// appears in a project, the row becomes taller than the others, and the rows below shift
+// by a different amount.
 export function anchorOf(L, p) {
   if (!L || !p || !L.rooms) return null;
   let best = null, bestD = Infinity;
@@ -608,8 +630,9 @@ export function anchorOf(L, p) {
   return best ? { key: best.key, dx: p.x - best.x, dy: p.y - best.y } : null;
 }
 
-// Комната могла и исчезнуть — проект закончился, пока план пересобирался. Тогда
-// не трогаем ничего: остаться на старом месте лучше, чем уехать в угол этажа.
+// The room could also have disappeared — the project ended while the plan was being
+// rebuilt. Then we touch nothing: staying in the old place is better than riding off into
+// a corner of the floor.
 export function applyAnchor(L, p, a) {
   if (!L || !p || !a) return false;
   const r = L.rooms.find((x) => x.key === a.key);
@@ -622,9 +645,9 @@ export function blocked(L, x, y) {
   if (x < 14 || x > L.w - 14 || y < 24 || y > L.h - 14) return true;
   if (blockedByLift(L.lift, x, y)) return true;
   for (const p of L.props || []) {
-    // Предмет вправе назвать свои размеры сам — иначе модуль не может
-    // поставить в коридор ничего своего: таблица знает только те виды, что
-    // перечислены здесь, а про чужие ей взяться неоткуда.
+    // A thing has the right to name its own dimensions — otherwise a module cannot put
+    // anything of its own into the corridor: the table knows only the kinds listed here,
+    // and it has nowhere to learn about foreign ones.
     const w = p.w ?? ({ bench: 34, lounge: 54, ashtray: 10, lang: 14, kicker: 44 }[p.kind] || 16);
     const h = p.h ?? ({ plant: 14, lounge: 22, ashtray: 18, lang: 24, kicker: 22 }[p.kind] || 26);
     if (x > p.x - w / 2 - 4 && x < p.x + w / 2 + 4 && y > p.y - h && y < p.y + 4) return true;
@@ -639,7 +662,7 @@ export function blocked(L, x, y) {
     for (const d of r.desks) {
       if (x > d.x - 28 && x < d.x + 28 && y > d.y - 6 && y < d.y + 20) return true;
     }
-    // кадка занимает пол, крона висит выше головы и не мешает
+    // the tub takes up the floor, the crown hangs above head height and is in nobody's way
     if (r.ficus && x > r.ficus.x - 12 && x < r.ficus.x + 12 && y > r.ficus.y - 14 && y < r.ficus.y + 4) return true;
     if (r.coffee && x > r.coffee.x - 16 && x < r.coffee.x + 14 && y > r.coffee.y - 34 && y < r.coffee.y + 4) return true;
     if (r.micro && x > r.micro.x - 17 && x < r.micro.x + 17 && y > r.micro.y - 22 && y < r.micro.y + 4) return true;

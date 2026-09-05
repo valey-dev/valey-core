@@ -56,7 +56,7 @@ function scene(ctx, x, y, w, h, art) {
   const mid = x + Math.floor(w / 2);
 
   switch (art.kind) {
-    case 'food': {                                   // тарелка пасты
+    case 'food': {                                   // a plate of pasta
       px(ctx, x, y, w, h, '#e8d9c0');
       px(ctx, mid - 7, y + h - 8, 15, 6, '#f6efe2');
       px(ctx, mid - 6, y + h - 7, 13, 4, '#e0c88f');
@@ -65,7 +65,7 @@ function scene(ctx, x, y, w, h, art) {
       px(ctx, mid + 9, y + h - 9, 1, 7, '#8c8f9a');
       return;
     }
-    case 'money': {                                  // монеты и стрелка вверх
+    case 'money': {                                  // coins and an arrow up
       px(ctx, x, y, w, h, '#2f4a3f');
       for (let i = 0; i < 3; i++) px(ctx, x + 3, y + h - 3 - i * 2, 7, 2, '#d9a441');
       px(ctx, x + 4, y + h - 9, 5, 2, '#e8c46a');
@@ -73,7 +73,7 @@ function scene(ctx, x, y, w, h, art) {
       px(ctx, x + w - 4, y + 2, 3, 3, '#9fe0a8');
       return;
     }
-    case 'dog': {                                    // овчарка в профиль
+    case 'dog': {                                    // a shepherd dog in profile
       px(ctx, x, y, w, h, '#d8c8a8');
       const dx = mid - 4, dy = y + h - 10;
       px(ctx, dx, dy + 3, 9, 6, '#7a5a3e');
@@ -83,10 +83,10 @@ function scene(ctx, x, y, w, h, art) {
       px(ctx, dx + 10, dy + 3, 2, 2, '#2b2118');
       px(ctx, dx + 8, dy + 2, 1, 1, '#2b2118');
       px(ctx, dx - 2, dy + 1, 2, 4, '#7a5a3e');
-      px(ctx, dx + 6, dy + 5, 4, 2, '#c25a4b');       // ошейник
+      px(ctx, dx + 6, dy + 5, 4, 2, '#c25a4b');       // the collar
       return;
     }
-    case 'chart': {                                  // столбики вверх
+    case 'chart': {                                  // bars going up
       px(ctx, x, y, w, h, '#1f2a33');
       px(ctx, x + 2, y + h - 2, w - 4, 1, '#5c93b8');
       const bars = Math.max(3, Math.floor((w - 6) / 4));
@@ -96,7 +96,7 @@ function scene(ctx, x, y, w, h, art) {
       }
       return;
     }
-    case 'network': {                                // радар с точкой
+    case 'network': {                                // a radar with a dot
       px(ctx, x, y, w, h, '#12261f');
       for (let r = 2; r < Math.min(w, h); r += 3) {
         px(ctx, mid - r, y + h - 2 - r, r * 2, 1, '#2f6a4a');
@@ -106,7 +106,7 @@ function scene(ctx, x, y, w, h, art) {
       px(ctx, mid + 3, y + 3, 2, 2, '#9fe0a8');
       return;
     }
-    case 'muscle': {                                 // гантеля
+    case 'muscle': {                                 // a dumbbell
       px(ctx, x, y, w, h, '#3a3a46');
       const gy = y + Math.floor(h / 2) - 1;
       px(ctx, mid - 7, gy, 14, 2, '#c9ccd4');
@@ -116,7 +116,7 @@ function scene(ctx, x, y, w, h, art) {
       px(ctx, mid + 9, gy - 1, 2, 4, '#6b7280');
       return;
     }
-    case 'design': {                                 // палитра и кисть
+    case 'design': {                                 // a palette and a brush
       px(ctx, x, y, w, h, '#efe6d2');
       const cols = ['#c25a4b', '#d9a441', '#7aa85a', '#4a7fa8', '#8a6bb0'];
       for (let i = 0; i < cols.length; i++) px(ctx, x + 3 + i * 3, y + h - 6, 3, 4, cols[i]);
@@ -124,7 +124,7 @@ function scene(ctx, x, y, w, h, art) {
       px(ctx, x + w - 8, y + 9, 3, 3, '#c25a4b');
       return;
     }
-    case 'game': {                                   // джойстик
+    case 'game': {                                   // a joystick
       px(ctx, x, y, w, h, '#241a2e');
       px(ctx, mid - 8, y + h - 7, 16, 5, '#4a3a5e');
       px(ctx, mid - 6, y + h - 6, 3, 1, '#c9ccd4');
@@ -133,7 +133,7 @@ function scene(ctx, x, y, w, h, art) {
       px(ctx, mid + 1, y + h - 6, 2, 2, '#9fe0a8');
       return;
     }
-    case 'code': {                                   // терминал
+    case 'code': {                                   // a terminal
       px(ctx, x, y, w, h, '#1a1f2b');
       px(ctx, x, y, w, 3, '#2c3444');
       px(ctx, x + 2, y + 1, 1, 1, '#c25a4b');
@@ -147,7 +147,7 @@ function scene(ctx, x, y, w, h, art) {
       px(ctx, x + 2, y + h - 2, 2, 1, '#f6e3c0');
       return;
     }
-    case 'valley': {                                 // долина с офисом
+    case 'valley': {                                 // a valley with the office
       px(ctx, x, y, w, h, '#8fb8d8');
       px(ctx, x, y, w, Math.floor(h / 2), '#a8c8e0');
       px(ctx, x + w - 6, y + 2, 3, 3, '#ffe07a');
@@ -159,18 +159,18 @@ function scene(ctx, x, y, w, h, art) {
       return;
     }
 
-    // ---- пасхалки ----
+    // ---- the easter eggs ----
     case 'blacksquare': {
       px(ctx, x, y, w, h, '#efe6d2');
       const side = Math.min(w - 4, h - 4);
       px(ctx, mid - Math.floor(side / 2), y + Math.floor((h - side) / 2), side, side, '#0f0f11');
       return;
     }
-    case 'catlord': {                                // кот в жабо
+    case 'catlord': {                                // a cat in a ruff
       px(ctx, x, y, w, h, '#2a2038');
       const cy = y + h - 9;
       px(ctx, mid - 4, cy + 4, 9, 5, '#3a2a4a');
-      px(ctx, mid - 3, cy + 3, 7, 2, '#efe6d2');     // жабо
+      px(ctx, mid - 3, cy + 3, 7, 2, '#efe6d2');     // the ruff
       px(ctx, mid - 3, cy - 2, 7, 6, '#d99a5c');
       px(ctx, mid - 3, cy - 5, 2, 3, '#d99a5c');
       px(ctx, mid + 2, cy - 5, 2, 3, '#d99a5c');
@@ -179,7 +179,7 @@ function scene(ctx, x, y, w, h, art) {
       px(ctx, mid, cy + 1, 1, 1, '#b87a44');
       return;
     }
-    case 'deadline': {                               // горящий календарь
+    case 'deadline': {                               // a burning calendar
       px(ctx, x, y, w, h, '#2a1a14');
       px(ctx, mid - 5, y + h - 8, 11, 7, '#efe6d2');
       px(ctx, mid - 5, y + h - 8, 11, 2, '#c25a4b');
@@ -189,7 +189,7 @@ function scene(ctx, x, y, w, h, art) {
       }
       return;
     }
-    case 'prodfell': {                               // график вниз
+    case 'prodfell': {                               // a chart going down
       px(ctx, x, y, w, h, '#1f1418');
       px(ctx, x + 2, y + h - 2, w - 4, 1, '#6b4a4a');
       for (let i = 0; i < Math.floor((w - 6) / 2); i++) {
@@ -202,20 +202,20 @@ function scene(ctx, x, y, w, h, art) {
     case 'missing': {                                // «здесь была картина»
       px(ctx, x, y, w, h, '#6d5040');
       px(ctx, x + 1, y + 1, w - 2, h - 2, '#5c4335');
-      px(ctx, mid, y + 1, 1, 3, '#c9ccd4');           // гвоздь
+      px(ctx, mid, y + 1, 1, 3, '#c9ccd4');           // a nail
       px(ctx, mid - 4, y + Math.floor(h / 2) - 1, 9, 1, '#8a6247');
       return;
     }
-    case 'recursion': {                              // офис внутри офиса
+    case 'recursion': {                              // an office inside the office
       px(ctx, x, y, w, h, '#b98a5e');
       px(ctx, x, y, w, 4, '#6d5040');
-      px(ctx, x + 2, y + h - 5, 6, 3, '#9a6440');     // стол
-      px(ctx, x + 3, y + h - 8, 3, 3, '#3c3b46');     // монитор
-      px(ctx, x + w - 8, y + 1, 6, 4, '#8a6247');     // картина в картине
+      px(ctx, x + 2, y + h - 5, 6, 3, '#9a6440');     // a desk
+      px(ctx, x + 3, y + h - 8, 3, 3, '#3c3b46');     // a monitor
+      px(ctx, x + w - 8, y + 1, 6, 4, '#8a6247');     // a painting inside the painting
       px(ctx, x + w - 7, y + 2, 4, 2, '#4a7fa8');
       return;
     }
-    default: {                                       // 'ready' — ждун у кулера
+    default: {                                       // 'ready' — a waiter by the water cooler
       px(ctx, x, y, w, h, '#cfd6d8');
       px(ctx, mid - 4, y + h - 9, 9, 8, '#9aa8ac');
       px(ctx, mid - 3, y + h - 12, 7, 4, '#9aa8ac');
@@ -245,9 +245,10 @@ const EGG_KINDS = ['blacksquare', 'catlord', 'deadline', 'prodfell', 'missing', 
 const PER_KIND = 3;
 const MEDIUMS = 4;
 
-// Название и техника — ключи словаря, а не готовые строки: подпись под картиной
-// читается вслух в обоих языках. Выбор варианта по-прежнему детерминированный,
-// от того же хеша, поэтому между сессиями картина не переименовывается.
+// The title and the technique are dictionary keys rather than ready strings: the
+// caption under a painting is read aloud in both languages. The choice of a
+// variant is still deterministic, from the same hash, so a painting is not renamed
+// between sessions.
 export function titleOf(slot) {
   const art = artOf(slot);
   if (art.egg) {
@@ -259,25 +260,26 @@ export function titleOf(slot) {
   return { name: tr(`art.${kind}.${h % PER_KIND}`), medium: tr(`medium.${(h >>> 4) % MEDIUMS}`) };
 }
 
-// ------------------------------------------------------------------ киноплакат
-// Не картина: висит на скотче, без рамы, и он один на весь этаж — в пультовой,
-// слева от двери. Геометрия снята с кадра 319:2 (макет ×2, здесь всё вдвое
-// меньше), поэтому цифры тут не «на глаз», а из макета.
+// ------------------------------------------------------------------ the film poster
+// Not a painting: it hangs on tape, without a frame, and there is one for the
+// whole floor — in the control room, to the left of the door. The geometry is
+// taken off frame 319:2 (the mock-up is ×2, here everything is half that), so the
+// numbers here are not "by eye" but out of the mock-up.
 export function drawPoster(ctx, x, y, w = 14, h = 20) {
-  px(ctx, x, y, w, h, '#d8cdb4');                 // бумага
-  px(ctx, x + 1, y + 1, 12, 12, '#1e2a38');       // ночное небо
-  px(ctx, x + 10, y + 2, 2, 2, '#ffd166');        // луна
-  px(ctx, x + 1, y + 10, 12, 3, '#16202b');       // земля
-  px(ctx, x + 7, y + 9, 5, 4, '#0f1418');         // корпус офиса
+  px(ctx, x, y, w, h, '#d8cdb4');                 // the paper
+  px(ctx, x + 1, y + 1, 12, 12, '#1e2a38');       // the night sky
+  px(ctx, x + 10, y + 2, 2, 2, '#ffd166');        // the moon
+  px(ctx, x + 1, y + 10, 12, 3, '#16202b');       // the ground
+  px(ctx, x + 7, y + 9, 5, 4, '#0f1418');         // the office block
   px(ctx, x + 3, y + 6, 2, 2, '#0f1418');
-  px(ctx, x + 2, y + 8, 4, 5, '#0f1418');         // фигура спиной к зрителю
-  px(ctx, x + 1, y + 14, 12, 3, '#c24b3f');       // плашка с названием
-  px(ctx, x + 2, y + 15, 3, 1, '#f6e3c0');        // «НОЧНАЯ СМЕНА» — три слова,
-  px(ctx, x + 6, y + 15, 2, 1, '#f6e3c0');        // читаемых как ритм, а не текст:
-  px(ctx, x + 9, y + 15, 3, 1, '#f6e3c0');        // на 12 пикселях букв не бывает
-  px(ctx, x + 2, y + 18, 6, 1, '#8c7660');        // титры мелким шрифтом
+  px(ctx, x + 2, y + 8, 4, 5, '#0f1418');         // a figure with its back to the viewer
+  px(ctx, x + 1, y + 14, 12, 3, '#c24b3f');       // the title plate
+  px(ctx, x + 2, y + 15, 3, 1, '#f6e3c0');        // «НОЧНАЯ СМЕНА» — three words
+  px(ctx, x + 6, y + 15, 2, 1, '#f6e3c0');        // read as a rhythm, not as text:
+  px(ctx, x + 9, y + 15, 3, 1, '#f6e3c0');        // at 12 pixels there are no letters
+  px(ctx, x + 2, y + 18, 6, 1, '#8c7660');        // the credits in small type
   px(ctx, x + 9, y + 18, 3, 1, '#8c7660');
-  px(ctx, x - 1, y - 1, 4, 2, '#e8ddc8');         // скотч по верхним углам
+  px(ctx, x - 1, y - 1, 4, 2, '#e8ddc8');         // tape at the top corners
   px(ctx, x + 11, y - 1, 4, 2, '#e8ddc8');
   px(ctx, x, y + h, w, 1, 'rgba(0,0,0,0.35)');
 }

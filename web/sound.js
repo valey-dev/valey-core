@@ -38,8 +38,8 @@ export const sound = {
     return this.on;
   },
 
-  // Пока играет музыка, офис отходит на второй план: клавиши и дождь становятся
-  // тише. Зовёт это тот, кто её играет, — сейчас модуль радио.
+  // While the music plays the office steps back: the keys and the rain go
+  // quieter. It is called by whoever is playing it — for now, the radio module.
   duck(on) {
     if (on === this.ducked) return;
     this.ducked = on;
@@ -184,7 +184,8 @@ export const sound = {
   },
 
   // someone finished something
-  // лифт: створки — сухой шорох с лязгом, приезд — две ноты вниз, как в кабине
+  // the lift: the doors are a dry rustle with a clang, the arrival two notes
+  // down, as in the cabin
   lift(kind, vol = 1) {
     if (!this.ready || !this.on) return;
     const c = this.ctx, now = c.currentTime;
@@ -202,7 +203,7 @@ export const sound = {
       });
       return;
     }
-    // ход кабины и створки — узкополосный шум, у створок короче и выше
+    // the cabin moving and the doors — narrow-band noise, shorter and higher for the doors
     const long = kind === 'move';
     const dur = long ? 0.9 : 0.32;
     const len = Math.floor(c.sampleRate * dur);
@@ -235,10 +236,11 @@ export const sound = {
     });
   },
 
-  // Пейджер: два коротких писка квадратной волной. Не chime — тот мягкий и
-  // сообщает о хорошем, а этот должен подобрать голову от чужого окна. Звук
-  // включён по умолчанию, как и весь остальной офис: выключается на M, вместе
-  // со всем прочим, и это единственный переключатель.
+  // The pager: two short beeps on a square wave. Not a chime — that one is soft
+  // and reports something good, while this one has to lift a head away from
+  // somebody else's window. The sound is on by default, like the rest of the
+  // office: it goes off on M together with everything else, and that is the only
+  // switch.
   pager() {
     if (!this.ready || !this.on) return;
     const c = this.ctx, now = c.currentTime;

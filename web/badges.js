@@ -1,7 +1,8 @@
-// Значок над головой: чем человек занят прямо сейчас. Жил внутри main.js и был
-// не достижим ниоткуда — а лист состояний для дизайн-библиотеки обязан рисовать
-// ровно тот же значок, что и офис. Копия в макете разошлась бы с движком молча,
-// поэтому значок вынесен сюда и рисуется одной функцией в обоих местах.
+// The badge above the head: what the person is busy with right now. It lived
+// inside main.js and was reachable from nowhere — while the state sheet for the
+// design library has to draw exactly the same badge as the office. A copy in the
+// mock-up would diverge from the engine silently, so the badge moved out here and
+// is drawn by one function in both places.
 import { pxText } from './office.js';
 
 export function drawBubble(ctx, x, y, agent, t) {
@@ -13,7 +14,7 @@ export function drawBubble(ctx, x, y, agent, t) {
   ctx.fillRect(x - w / 2, y - h, w, 1); ctx.fillRect(x - w / 2, y - 1, w, 1);
   ctx.fillRect(x - w / 2, y - h, 1, h); ctx.fillRect(x + w / 2 - 1, y - h, 1, h);
   if (agent.limited) {
-    // песочные часы: работать нечем, ждём сброса лимита
+    // an hourglass: there is nothing to work with, waiting for the limit to reset
     const flip = Math.floor(t / 900) % 2;
     ctx.fillStyle = '#ffd166';
     ctx.fillRect(x - 3, y - 11, 6, 1); ctx.fillRect(x - 3, y - 3, 6, 1);
