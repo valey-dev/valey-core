@@ -75,6 +75,15 @@ const PRINTED = {
 
 const printed = (code) => (code in PRINTED ? PRINTED[code] : labelFor(code));
 
+// Имя клавиши словами, на языке офиса: ПРОБЕЛ, а не SPACE. Тот же словарь,
+// что у строки подсказки внизу, — иначе одна и та же клавиша называлась бы в
+// двух местах по-разному.
+const named = (code) => {
+  const l = printed(code) || labelFor(code);
+  const t = tr('keycap.' + l);
+  return t === 'keycap.' + l ? l : t;
+};
+
 // The character this key really produces, when the browser will say. Chromium
 // answers; the rest do not, and then the cap simply shows nothing extra rather
 // than a hard-coded ЙЦУКЕН table that would be wrong on every other layout.
@@ -93,8 +102,19 @@ function capHtml(code, units) {
   const id = actionOf({ code });
   const group = id ? groupOf(id) : (IN_PANEL.has(code) ? 'inpanel' : null);
   const action = id ? all().find((a) => a.id === id) : null;
-  const caption = action && action.hint ? tr(action.hint)
+  // Свободная буква так и подписана — «свободна», как на кадре. Модификаторы,
+  // скобки и функциональные клавиши подписи не получают: они не свободны, их
+  // забирает браузер и система, и это в легенде отдельной строкой.
+  const freeLetter = !id && !IN_PANEL.has(code) && /^Key/.test(code);
+  // Вторая клавиша действия подписывается «то же, что ПРОБЕЛ», а не повторяет
+  // подпись целиком: так сделано на кадре, и на узкий колпачок длинная фраза
+  // всё равно не влезает. Ходьба — исключение: у неё стрелки не «вторые», а
+  // равноправные, и на кадре они подписаны своими словами.
+  const secondary = action && action.codes[0] !== code && action.group !== 'move';
+  const caption = secondary ? tr('keys.sameAs', { key: named(action.codes[0]) })
+    : action && action.hint ? tr(action.hint)
     : IN_PANEL.has(code) ? tr('keys.inPanel')
+    : freeLetter ? tr('keys.lgFree')
     : '';
   const outline = group ? COLOUR[group] : '';
   const face = printed(code);

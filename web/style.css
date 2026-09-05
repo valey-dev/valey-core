@@ -788,14 +788,18 @@ body.titling #hud, body.titling #help{visibility:hidden}
 .kboard,.karrows{display:flex; flex-direction:column; gap:6px}
 .karrows{justify-content:flex-end; align-self:stretch}
 .krow{display:flex; gap:6px}
-/* Клавиша: ширина в долях колпачка, как на настоящей клавиатуре. */
+/* Клавиша: ширина в долях колпачка, как на настоящей клавиатуре. Подсветка —
+   полоса по нижнему краю, а не контур по периметру: так нарисовано на кадре
+   «Раскладка · офис», и это читается как передний торец колпачка. Числа сняты
+   с кадра и пересчитаны: там клавиша 80×84 с полосой 4 и скруглением 6, здесь
+   52×58 — полоса 3, скругление 4. */
 .kcap{--u:1; flex:0 0 auto; width:calc(var(--u) * 52px); height:58px; position:relative;
-  background:var(--bg); border:1px solid var(--edge, transparent); border-radius:4px;
-  padding:4px 5px; overflow:hidden}
-.kcap.free{border-color:var(--wood-hi)}
-.kcap.gap{border-color:transparent; background:none}
+  background:var(--bg); border:0; border-bottom:3px solid var(--edge, transparent);
+  border-radius:4px; padding:4px 5px; overflow:hidden}
+.kcap.gap{background:none; border-bottom-color:transparent}
 .kface{display:block; font-size:11px; line-height:1; color:var(--ink)}
 .kcap.free .kface{color:var(--muted)}
+.kcap.free .kwhat{color:var(--muted-dim)}
 .ktwin{position:absolute; top:4px; right:5px; font-style:normal; font-size:9px; color:var(--muted-dim)}
 /* Подпись на колпачке обрезается двумя строками, а целиком висит в title.
    Узкая клавиша в 52 пикселя держит десять символов, и «заговорить, попить,
@@ -806,7 +810,9 @@ body.titling #hud, body.titling #help{visibility:hidden}
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical}
 .keyslegend{display:flex; gap:12px; flex-wrap:wrap; padding:6px 14px 10px; font-size:10.5px;
   color:var(--muted); border-top:2px solid var(--wood-hi)}
-.keyslegend s{text-decoration:none; display:inline-block; width:9px; height:9px; margin-right:5px;
-  vertical-align:-1px; border:1px solid var(--edge, var(--wood-hi)); border-radius:2px}
-.keyslegend s.free{border-color:var(--wood-hi)}
+/* Образец в легенде — та же клавиша в миниатюре, с той же полосой снизу. */
+.keyslegend s{text-decoration:none; display:inline-block; width:12px; height:9px; margin-right:5px;
+  vertical-align:-1px; background:var(--bg); border:0; border-bottom:3px solid var(--edge, transparent);
+  border-radius:2px}
+.keyslegend s.free{border-bottom-color:transparent}
 .keyslegend .k{margin-left:auto; color:var(--ink-dim)}

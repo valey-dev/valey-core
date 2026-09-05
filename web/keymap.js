@@ -54,7 +54,7 @@ const CORE = [
   // camera" is the same intent as "left", and a person who moves left onto
   // another key expects the cameras to follow. Only the cycling switch is the
   // control room's own.
-  { id: 'cams.auto', codes: ['KeyT'], group: 'panel' },
+  { id: 'cams.auto', codes: ['KeyT'], group: 'panel', hint: 'hint.cams' },
   { id: 'zoom.in', codes: ['Equal', 'NumpadAdd'], group: 'zoom', hint: 'hint.zoom' },
   { id: 'zoom.out', codes: ['Minus', 'NumpadSubtract'], group: 'zoom' },
   { id: 'zoom.reset', codes: ['Digit0', 'Numpad0'], group: 'zoom', hint: 'hint.zoom' },
