@@ -410,6 +410,13 @@ const DICT = {
     'notes.closed': 'разговор закрыт',
     'notes.noProject': 'без проекта',
     'notes.noCtx': 'контекст не сохранился · заметка старше правки',
+    // The kind of a note shows in the line under its text: for a conversation
+    // it is who and about what, for the others it is what it hangs on. The
+    // button is named by whoever can open it; "nothing to open it with" is an
+    // answer, not a breakage.
+    'notes.atCommit': 'коммит {hash} · {subject}',
+    'notes.atFile': 'файл {path} · в коммите {hash}',
+    'notes.noOpener': 'нечем открыть',
     'notes.nothingFound': 'Ничего не нашлось.',
     'notes.emptyHead': 'Здесь пока ничего',
     'notes.emptyWhy': 'Заметка заводится в разговоре: открой «дочитать» у любого агента и нажми N. Мысль привяжется к реплике, которую ты в этот момент читаешь, и попадёт сюда.',
@@ -986,6 +993,9 @@ const DICT = {
     'notes.closed': 'conversation closed',
     'notes.noProject': 'no project',
     'notes.noCtx': 'context was not kept · note predates the fix',
+    'notes.atCommit': 'commit {hash} · {subject}',
+    'notes.atFile': 'file {path} · in commit {hash}',
+    'notes.noOpener': 'nothing to open it with',
     'notes.nothingFound': 'Nothing found.',
     'notes.emptyHead': 'Nothing here yet',
     'notes.emptyWhy': 'Notes are made inside a conversation: open “read on” for any agent and press N. The thought attaches to the message you were reading and shows up here.',

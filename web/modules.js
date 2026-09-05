@@ -9,7 +9,12 @@
 //   first   — we give the event to the first one who took it (a key, SPACE, ESC).
 import { addDict } from './i18n.js';
 
-const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'esc', 'tick', 'hud', 'lang', 'help', 'busy'];
+// `note` — the ninth seam, from 5 September 2026. A note can now hang on a
+// commit or on a file in the git tree, and the list of notes lives in the core.
+// Opening one belongs to whoever owns the address: the core shows the address
+// to everyone and takes the first module that answers, so it still knows
+// nothing about the git tree. Nobody answered — the row says so out loud.
+const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'esc', 'tick', 'hud', 'lang', 'help', 'busy', 'note'];
 const hooks = Object.fromEntries(HOOKS.map(h => [h, []]));
 const dicts = [];
 let ids = [];

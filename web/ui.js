@@ -4,7 +4,7 @@ import { drawPerson, drawItem, dressMe, cycle, hash, SKIN, HAIR, SHIRT, PANTS, B
   SHIRT_WORK, BLOUSE, JACKET, TIE, CUTS, BOTTOMS } from './sprites.js';
 import { renderMarkdown } from './markdown.js';
 import { highlight, langOf } from './highlight.js';
-import { collect, moduleIds } from './modules.js';
+import { collect, first, moduleIds } from './modules.js';
 import { LIBRARY, TIERS, DIRS, SUBS, byId, children, colOf, inDir, dirTally } from './library.js';
 import { theme, applyTheme, resetTheme, PRESETS, ui, UI_STEPS, applyUiScale } from './theme.js';
 import { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } from './notes.js';
@@ -2802,17 +2802,43 @@ export function renderNotes() {
   const alive = new Set(S.agents.map((a) => a.id));
   const stamp = (ms) => new Date(ms).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
+  // A note on a commit or on a file is opened not by the core but by whoever
+  // owns the address. The core shows it to every module and takes the first
+  // that answers; the answer carries a label for the button and what to do on
+  // a press. Nobody answered — the row says so, as it does for a closed chat.
+  const claims = new Map();
+  for (const n of hit) {
+    if (!n.anchor || n.anchor.kind === 'agent') continue;
+    const claim = first('note', n.key, n.ctx || {});
+    if (claim && typeof claim.open === 'function') claims.set(n.id, claim);
+  }
+
   const rows = [...groups.entries()].map(([project, list]) => `
     <div class="ngroup"><h4>${project ? '▣ ' + esc(project) : tr('notes.noProject')}</h4>
       ${list.map((n) => {
-        const live = alive.has(n.agentId);
+        const a = n.anchor || { kind: 'agent' };
+        const git = a.kind === 'commit' || a.kind === 'file';
+        const live = !git && alive.has(n.agentId);
         const who = n.ctx && n.ctx.agent
           ? esc(n.ctx.agent) + (n.ctx.title ? ' · ' + esc(n.ctx.title) : '')
           : '';
-        const tail = live
-          ? `<button class="ngo" data-go="${n.agentId}" data-ts="${n.ts == null ? '' : n.ts}">${tr('notes.open')}</button>`
-          : `<span class="ndead">${tr('notes.closed')}</span>`;
-        const under = live ? who : (n.ctx && n.ctx.quote ? '«' + esc(n.ctx.quote) + '»' + (who ? ' · ' + who : '') : tr('notes.noCtx'));
+        const claim = claims.get(n.id);
+        const short = esc(String((n.ctx && n.ctx.hash) || a.hash || '').slice(0, 7));
+        const tail = git
+          ? (claim
+            ? `<button class="ngo" data-open="${n.id}">${esc(claim.label || tr('notes.open'))}</button>`
+            : `<span class="ndead">${tr('notes.noOpener')}</span>`)
+          : live
+            ? `<button class="ngo" data-go="${n.agentId}" data-ts="${n.ts == null ? '' : n.ts}">${tr('notes.open')}</button>`
+            : `<span class="ndead">${tr('notes.closed')}</span>`;
+        // Under the text goes what the note hangs on: the subject for a
+        // commit, the path for a file. Without them a short hash says nothing
+        // to somebody coming back to the note a week later.
+        const under = a.kind === 'commit'
+          ? tr('notes.atCommit', { hash: short, subject: esc(String((n.ctx && n.ctx.subject) || '')) })
+          : a.kind === 'file'
+            ? tr('notes.atFile', { path: esc(a.path || ''), hash: short })
+            : live ? who : (n.ctx && n.ctx.quote ? '«' + esc(n.ctx.quote) + '»' + (who ? ' · ' + who : '') : tr('notes.noCtx'));
         return `<div class="nrow" data-note="${n.id}" data-agent="${n.agentId}">
           <div class="nline"><span class="ntext">${esc(n.text)}</span><i>${stamp(n.at)}</i></div>
           <div class="nmeta"><span>${under}</span>${tail}
@@ -2841,6 +2867,12 @@ export function renderNotes() {
     input.blur();
     notesRing.at(0);
   };
+  el.notes.querySelectorAll('[data-open]').forEach((b) => b.onclick = () => {
+    const claim = claims.get(b.dataset.open);
+    if (!claim) { renderNotes(); return; }     // the module left while the panel was open
+    closeNotes();
+    claim.open();
+  });
   el.notes.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => {
     const agent = S.agents.find((a) => a.id === b.dataset.go);
     if (!agent) { renderNotes(); return; }      // успел закрыться, пока смотрел

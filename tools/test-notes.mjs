@@ -14,8 +14,8 @@ const ls = memoryStorage();
 globalThis.localStorage = ls;
 const store = ls.store;
 
-const { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } =
-  await import('../web/notes.js');
+const { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes,
+  commitAddr, fileAddr, parseAddr } = await import('../web/notes.js');
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -104,6 +104,48 @@ ok('в общий список попали все', list.length === 3, list.len
 ok('свежие сверху', list[0].text === 'третья', list.map((n) => n.text));
 ok('agentId идёт рядом', list.every((n) => n.agentId), list[0]);
 ok('заметки разных агентов не смешались', list.filter((n) => n.agentId === 'agent-1').length === 2);
+
+// ------------------------------------------------- addresses beyond a session
+//
+// A note can hang on a commit and on a file since 5 September 2026, and all of
+// them share this one store. Two things must hold: a key written before that
+// day still reads as a session, and a project or a path with a colon in it does
+// not turn parsing into a guess.
+reset();
+const cAddr = commitAddr('valey-core', '018e39d');
+const fAddr = fileAddr('valey-core', 'f185691', 'web/main.js');
+addNote(cAddr, null, 'ломает старый снимок', { project: 'valey-core', hash: '018e39d', subject: 'docs(agents)' });
+addNote(fAddr, null, 'перечитать', { project: 'valey-core', hash: 'f185691' });
+addNote('sess-77', 5, 'реплика', { project: 'valey-core' });
+const mixed = allNotes();
+ok('три вида лежат в одном списке', mixed.length === 3, mixed.length);
+ok('вид заметки читается из адреса',
+  mixed.map((n) => n.anchor.kind).sort().join(',') === 'agent,commit,file',
+  mixed.map((n) => n.anchor.kind));
+const c = mixed.find((n) => n.anchor.kind === 'commit');
+ok('у коммита разобраны проект и хэш', c.anchor.project === 'valey-core' && c.anchor.hash === '018e39d', c.anchor);
+const f = mixed.find((n) => n.anchor.kind === 'file');
+ok('у файла разобран и путь', f.anchor.path === 'web/main.js', f.anchor);
+const old = mixed.find((n) => n.anchor.kind === 'agent');
+ok('ключ без двоеточия — это сессия, и она осталась собой',
+  old.anchor.agent === 'sess-77' && old.agentId === 'sess-77', old.anchor);
+ok('заметки коммита достаются по его адресу', notesOf(cAddr).length === 1);
+ok('адрес коммита и адрес файла не путаются', notesOf(fAddr).length === 1 && notesOf(cAddr)[0].text === 'ломает старый снимок');
+
+// A colon inside a project or a path would break parsing if the parts were
+// merely joined, so each one is encoded and the key is still split on ':'.
+const weird = fileAddr('a:b', 'deadbee', 'src/x:y.js');
+addNote(weird, null, 'странный путь', { project: 'a:b' });
+const w = allNotes().find((n) => n.text === 'странный путь');
+ok('двоеточие внутри частей не сбивает разбор',
+  w.anchor.kind === 'file' && w.anchor.project === 'a:b' && w.anchor.path === 'src/x:y.js', w.anchor);
+
+// An unknown kind is not lost: a note written by a newer office shows up in an
+// older one's list — without the button, but with its text.
+const future = allNotes();
+addNote('poem:42:zzz', null, 'из будущего');
+const p2 = allNotes().find((n) => n.text === 'из будущего');
+ok('незнакомый адрес читается как сессия, а не пропадает', p2 && p2.anchor.kind === 'agent', p2 && p2.anchor);
 
 console.log(bad ? `\nупало проверок: ${bad}` : '\nвсё хорошо');
 process.exit(bad ? 1 : 0);
