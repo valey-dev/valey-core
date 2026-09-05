@@ -1,7 +1,8 @@
-import { lookOf, drawPerson, drawCat, normalizeLook, dressOf, dressMe } from './sprites.js';
+import { lookOf, drawPerson, drawCat, normalizeLook, isSelfLabel, dressOf, dressMe } from './sprites.js';
 import { potState, water as waterPot, tally, CAN_FULL } from './garden.js';
 import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, pickRoom, WALL } from './layout.js';
 import { loadModules, collect, first } from './modules.js';
+import { owned, setTokens } from './owned.js';
 import { initStand } from './stand.js';
 import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, pxText, kickerBusy } from './office.js';
 import { drawCamera, buildCameras } from './cctv.js';
@@ -14,6 +15,9 @@ import { titleOf } from './paintings.js';
 import { drawBubble } from './badges.js';
 import { skateStep, rolling, drawSkateboard, ollieStep, canOllie, OLLIE_POP } from './skate.js';
 import { readPad, edges as padEdges } from './pad.js';
+import { actionOf, codeOf, codesOf, hints } from './keymap.js';
+import { renderKeys, closeKeys, keysOpen, readLayout } from './keys.js';
+import { has as hasPlace } from './places.js';
 // t was renamed to tr: in main.js `t` is the frame time in draw(t), and the import
 // was silently shadowed by a number inside every drawing callback
 import { t as tr, lang, setLang, onLang } from './i18n.js';
@@ -27,7 +31,9 @@ ctx.imageSmoothingEnabled = false;
 
 const DEFAULT_ME = {
   skin: '#ffdcb8', hair: '#3a2a20', shirt: '#4fa89a', pants: '#3f4a63', boots: '#2a2118',
-  style: 0, head: 'none', glasses: false, face: 'none', tall: 1, hands: 'none', name: tr('label.me'),
+  // No name of one's own until somebody types one: «ТЫ» is how the office
+  // addresses you, not how it introduces you to anybody else.
+  style: 0, head: 'none', glasses: false, face: 'none', tall: 1, hands: 'none', name: '',
 };
 
 // What lies in localStorage was written by us — but not necessarily by this version
@@ -87,6 +93,9 @@ const state = {
 };
 
 const keys = new Set();
+// Whether the key of this action is held right now. The set is keyed by physical
+// codes, so remapping the walking will one day work by itself.
+const held = (id) => codesOf(id).some((c) => keys.has(c));
 // Handles for debugging from the console. __ui is also needed because the bridge of the
 // Claude in Chrome extension does not resolve a dynamic import() in the page: the call
 // hangs and takes the whole channel with it, so reaching the module is only possible
@@ -130,12 +139,7 @@ const CODE = (() => {
 
 // A header rather than a cookie: the office lives on one port with other tabs of the
 // same localhost, and they share a cookie.
-const owned = (extra = {}) => {
-  const h = { ...extra };
-  if (OWNER) h['x-valey-owner'] = OWNER;
-  if (GUEST) h['x-valey-guest'] = GUEST;
-  return h;
-};
+setTokens({ owner: OWNER, guest: GUEST });
 
 // The door. A code is exchanged for a token exactly once; after that the token lives,
 // and a reload of the page does not put the person back out on the street.
@@ -147,6 +151,7 @@ async function knock() {
   }).then((x) => x.json()).catch((e) => ({ error: e.message }));
   if (r && r.guest) {
     GUEST = r.guest;
+    setTokens({ guest: GUEST });
     localStorage.setItem('valey-guest', GUEST);
   }
   return r;
@@ -216,7 +221,7 @@ UI.initUI(state, {
     // We take the token: the office has just become shared, and without it this same page
     // will turn out to be a guest in its own office on the next request.
     if (r && r.owner) {
-      OWNER = r.owner; localStorage.setItem('valey-owner', OWNER);
+      OWNER = r.owner; setTokens({ owner: OWNER }); localStorage.setItem('valey-owner', OWNER);
       // The stream remembers who opened it: the server decides that once, at connection
       // time. Without a reopen an old stream went on as a guest projection after the switch
       // to shared — the owner saw his office with no lines and no files.
@@ -272,7 +277,7 @@ knock().then((entered) => {
   if (!es) openStream();
 });
 
-fetch('/api/settings').then((r) => r.json()).then((r) => {
+fetch('/api/settings', { headers: owned() }).then((r) => r.json()).then((r) => {
   if (r.settings) { state.settings = r.settings; setLang(r.settings.lang); paintSign(); }
   if (r.packs) state.packs = r.packs;
   if (r.weather) applyWeather(r.weather);
@@ -412,9 +417,14 @@ function tellWhereIAm(now) {
   const room = state.currentRoom;
   fetch('/api/here', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({
-      id: MY_ID, name: state.me.name || tr('label.me'), look: myLook(),
+      // Outward the office sends a third-person name. Until 5 September 2026 it
+      // sent «ТЫ», so everyone who had not renamed themselves stood in somebody
+      // else's office labelled YOU — the one word that cannot be true of another
+      // person. Named yourself and the name goes as it is.
+      id: MY_ID, name: state.me.name || tr(state.owner === false ? 'label.guest' : 'label.host'),
+      look: myLook(),
       x: p.x, y: p.y, dir: p.dir || 1, moving: !!p.moving,
       room: room ? room.key : null,
     }),
@@ -425,7 +435,11 @@ function tellWhereIAm(now) {
 // an ordinary fetch in pagehide is no longer something the browser has to deliver.
 addEventListener('pagehide', () => {
   try {
-    navigator.sendBeacon('/api/gone', new Blob([JSON.stringify({ id: MY_ID })], { type: 'application/json' }));
+    // sendBeacon cannot set headers, so the pass travels in the query string —
+    // the same road the stream takes, and for the same reason.
+    const pass = OWNER ? '?owner=' + encodeURIComponent(OWNER)
+      : GUEST ? '?guest=' + encodeURIComponent(GUEST) : '';
+    navigator.sendBeacon('/api/gone' + pass, new Blob([JSON.stringify({ id: MY_ID })], { type: 'application/json' }));
   } catch { /* not delivered — the TTL will remove him in eight seconds */ }
 });
 
@@ -499,6 +513,9 @@ const onSnapshot = (e) => {
   // Access rides with the snapshot: for a guest it is his own view, for the owner who is
   // asking and to whom it is open.
   state.access = data.access || null;
+  // An open invitation panel is a register, not a snapshot of one moment: a
+  // request that arrives while it is open has to show up in it.
+  UI.syncInvite();
   takePermits(data.permits || []);
   // The stream is taken apart field by field rather than assigned whole, so a new field
   // has to be carried over by hand — otherwise the title screen shows a dash instead of the
@@ -596,6 +613,11 @@ for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
 // names of keys, and the panels answer them without knowing where the press came from.
 function onKey(e) {
   const k = e.key.toLowerCase();
+  // The physical key and the action that hangs on it. No letters are compared
+  // below: `code` is the same under every layout, and what it means is decided by
+  // the registry in web/keymap.js.
+  const code = codeOf(e);
+  const act = actionOf(e);
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
   // A combination with Cmd, Ctrl or Alt belongs to the browser and to the system, not to
   // the office. Without this line Cmd+R reloaded the page and rolled the radio out into the
@@ -610,21 +632,28 @@ function onKey(e) {
   // walk the floors rather than the office.
   if (UI.liftKey(e.key)) { e.preventDefault(); return; }
   if (UI.rosterKey(e.key)) { e.preventDefault(); return; }
+  // The action first, the raw key second: a module that declared its keys through
+  // api.keys() answers an id rather than a letter. The old seam stays alive — the
+  // modules nobody rewrote are held up by it.
+  if (act && first('action', act, e)) { e.preventDefault(); return; }
   if (first('key', e.key, e.shiftKey)) { e.preventDefault(); return; }
   if (UI.notesKey(e.key)) { e.preventDefault(); return; }
   if (UI.bagKey(e.key)) { e.preventDefault(); return; }
   if (UI.skyKey(e.key)) { e.preventDefault(); return; }
   if (UI.skinKey(e.key)) { e.preventDefault(); return; }
   if (UI.langKey(e.key)) { e.preventDefault(); return; }
-  if (['tab', ' ', 'e', 'escape'].includes(k)) e.preventDefault();
+  // What we take from the browser: scrolling on space, moving focus on Tab. Counted by
+  // the physical key rather than by the character: under a Russian layout the space bar
+  // is still the space bar, while a check by character walked past Cyrillic in silence.
+  if (['Tab', 'Space', 'Escape'].includes(code)) e.preventDefault();
   if (state.dialogOpen && (k.startsWith('arrow') || k === 'enter')) e.preventDefault();
-  keys.add(k);
+  if (code) keys.add(code);
 
   // The entrance screen takes the keys for itself — but only while nothing is open over
   // it: "change clothes" and "the window on the world" are called straight from here and
   // have to answer the arrows and ESC themselves.
   if (titleFree()) {
-    if (titleKey(e.key)) { e.preventDefault(); return; }
+    if (titleKey(e)) { e.preventDefault(); return; }
   }
 
   // The pager holds its two keys while there is no card: Enter answers, Esc defers. An
@@ -649,50 +678,59 @@ function onKey(e) {
   // the office. While it stood lower, the camera branch returned earlier — and taking a
   // shot of a camera view was impossible at all, exactly the frame Prod illustrates the
   // control room with. Found on 30 August 2026 while reshooting the plates.
-  if (e.key === 'F9') { e.preventDefault(); saveShot(e.shiftKey ? 4 : 1); return; }
+  if (act === 'service.shot') { e.preventDefault(); saveShot(e.shiftKey ? 4 : 1); return; }
+  // The keys panel stands as high as F9 and for the same reason: it has to answer
+  // everywhere, and «everywhere» includes the screens that return before the
+  // dispatch below. The control room did exactly that — its branch ends in an
+  // unconditional return, so «/» never reached the panel, and the one place whose
+  // board says «этаж не слышен» was the one place you could not read it from.
+  //
+  // Not through toggle(): that one looks the node up by id, and this panel creates
+  // its own on first opening — on an empty office toggle would throw on the first press.
+  if (act === 'service.keys') { e.preventDefault(); return keysOpen() ? closeKeys() : renderKeys(currentPlace()); }
 
   if (state.cctv.on) {
-    if (k === 'arrowleft' || k === 'a' || k === 'ф') return switchCam(-1);
-    if (k === 'arrowright' || k === 'd' || k === 'в') return switchCam(1);
-    if (k === 't' || k === 'е') return toggleAutoCams();
-    if (k === ' ' || k === 'e' || k === 'у' || k === 'enter') return closeCams();
+    if (act === 'move.left') return switchCam(-1);
+    if (act === 'move.right') return switchCam(1);
+    if (act === 'cams.auto') return toggleAutoCams();
+    if (act === 'act.interact' || k === 'enter') return closeCams();
     return;
   }
   // the scale: works always, even over open panels
-  if (k === '+' || k === '=') { e.preventDefault(); return stepZoom(1); }
-  if (k === '-' || k === '_') { e.preventDefault(); return stepZoom(-1); }
-  if (k === '0') { e.preventDefault(); return setZoom(0); }
+  if (act === 'zoom.in') { e.preventDefault(); return stepZoom(1); }
+  if (act === 'zoom.out') { e.preventDefault(); return stepZoom(-1); }
+  if (act === 'zoom.reset') { e.preventDefault(); return setZoom(0); }
 
-  if (k === 'tab') return toggle('roster', UI.renderRoster, UI.closeRoster);
+  if (act === 'panel.round') return toggle('roster', UI.renderRoster, UI.closeRoster);
   // N from outside shows all the notes; inside a conversation the same key writes them
-  if (k === 'n' || k === 'т') return toggle('notes', UI.renderNotes, UI.closeNotes);
+  if (act === 'panel.notes') return toggle('notes', UI.renderNotes, UI.closeNotes);
   // C opens the bag on "worn" — where this key has always led.
-  if (k === 'c' || k === 'с') return toggle('bag', () => UI.renderBag('self'), UI.closeBag);
-  if (k === 'p' || k === 'з') return toggle('sky', UI.renderSky, UI.closeSky);
-  if (k === 'u' || k === 'г') return toggle('skin', UI.renderSkin, UI.closeSkin);
+  if (act === 'panel.bag') return toggle('bag', () => UI.renderBag('self'), UI.closeBag);
+  if (act === 'panel.sky') return toggle('sky', UI.renderSky, UI.closeSky);
+  if (act === 'panel.skin') return toggle('skin', UI.renderSkin, UI.closeSkin);
   // I — invite. The frames do not fix the key, it is a choice made here: G is taken by
-  // the drawn "team floor", and of the free letters I is the only one that reads as the
-  // same button in Russian too («ш»). The panel is the owner's only; a guest has nobody to
+  // the drawn "team floor", and of the free letters I was the only one that reads as the
+  // same button in Russian too. The panel is the owner's only; a guest has nobody to
   // invite, and for him I opens the bag on the tab he was on. Two branches laid claim to
   // the letter from 2 September 2026, the bag stood higher and the invitation opened for
   // nobody — and the panel has no other entrance.
-  if (k === 'i' || k === 'ш') {
+  if (act === 'panel.invite') {
     if (state.owner !== false) return UI.inviteOpen() ? UI.closeInvite() : UI.openInvite();
     return toggle('bag', UI.renderBag, UI.closeBag);
   }
-  // H — bring back a deferred pager. Not E: in the office that one is the same as SPACE,
-  // and "I will call back" with a return on one key would be a conversation with an agent.
-  if ((k === 'h' || k === 'р') && recall()) return;
-  // B — the skateboard. Not S: that one is taken by the step down in WASD, and it cannot
-  // be reassigned without breaking the walking.
-  if (k === 'b' || k === 'и') return toggleSkate();
-  if (k === 'm' || k === 'ь') {
+  // H — bring back a deferred pager.
+  if (act === 'panel.pager' && recall()) return;
+  // B — the skateboard. It was chosen because S held the step down in WASD; WASD was
+  // removed on 5 September 2026 and S is free again, but the key stays: fingers already
+  // remember it, and moving it would not add a free letter.
+  if (act === 'act.skate') return toggleSkate();
+  if (act === 'act.sound') {
     state.soundOn = sound.toggle();
     UI.renderHud();
     UI.toast(state.soundOn ? tr('toast.soundOn') : tr('toast.soundOff'));
     return;
   }
-  if ((k === ' ' || k === 'e' || k === 'у') && !state.dialogOpen) {
+  if (act === 'act.interact' && !state.dialogOpen) {
     // On the board SPACE jumps — but only where it had nothing to do before. Otherwise
     // talking to an agent without getting off the board would become impossible.
     if (canOllie(state.player) && !nearest()) state.player.vz = OLLIE_POP;
@@ -706,7 +744,11 @@ const titleFree = () => titleOpen()
   && ['bag', 'sky', 'viewer', 'roster', 'lang'].every((id) => document.getElementById(id).hidden);
 const NO_KEYS = new Set();
 
-addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+// A release is counted by the same physical key as the press. While the set was
+// keyed by character, switching layout with a key held dropped rubbish into it
+// forever: pressed under Latin, released under Cyrillic, the entry was never
+// removed and the office kept walking by itself.
+addEventListener('keyup', (e) => { const c = codeOf(e); if (c) keys.delete(c); });
 addEventListener('blur', () => keys.clear());
 
 // The gamepad is polled once a frame: the Gamepad API has no events for buttons, only a
@@ -732,7 +774,7 @@ function tickPad() {
     if (typing() && key.startsWith('Arrow')) continue;
     onKey({ key, shiftKey: next.down.has('Shift'), target: { tagName: 'GAMEPAD' }, preventDefault() {} });
   }
-  for (const key of released) keys.delete(key.toLowerCase());
+  for (const key of released) { const c = codeOf({ key }); if (c) keys.delete(c); }
   pad.x = next.x; pad.y = next.y; pad.down = next.down;
 }
 
@@ -795,10 +837,16 @@ function paintSign() {
 
 function renderStatic() {
   const help = document.getElementById('help');
-  // The help line lists the keys, and some of the keys belong to modules. While "R — the
-  // radio" stood in the line itself, a free build promised a key it does not have: the hint
-  // lied exactly where it is read — when you do not know what to press.
-  if (help) help.textContent = [tr('help'), ...collect('help')].join(' · ');
+  // The strip is squeezed down to one hint: the full list lives in the keys panel. While
+  // the list stood here it took two lines, grew with every module, and still showed only
+  // one binding out of two — a keyboard shows what a sentence cannot: what is next to
+  // what, and what is still free.
+  //
+  // `collect('help')` stays for modules that have not declared their keys through
+  // api.keys() yet: their line is the only thing they say about themselves.
+  const keysHint = hints().find((h) => h.hint === 'hint.keys');
+  const opener = keysHint ? `${keysHint.caps[0]} — ${tr('hint.keys')}` : '';
+  if (help) help.textContent = [opener, ...collect('help'), tr('help.tail')].filter(Boolean).join(' · ');
   document.title = tr('doc.title');
   document.documentElement.lang = lang();
   paintSign();
@@ -807,6 +855,9 @@ function renderStatic() {
 }
 onLang(renderStatic);
 renderStatic();
+// What the keys are really engraved with is asked once, and only of a browser
+// that knows; the rest make do with the QWERTY labels.
+readLayout().then(() => { if (keysOpen()) renderKeys(); });
 
 function nearest() {
   const p = state.player;
@@ -1255,6 +1306,7 @@ function closeAll() {
   if (state.lift.phase !== 'idle') return;
   if (!document.getElementById('lift').hidden) return UI.closeLift();
   if (state.cctv.on) return closeCams();
+  if (keysOpen()) return closeKeys();
   if (!document.getElementById('viewer').hidden) return UI.closeViewer();
   if (!document.getElementById('roster').hidden) return UI.closeRoster();
   if (!document.getElementById('bag').hidden) return UI.closeBag();
@@ -1288,8 +1340,47 @@ function panelsOpen() {
   // a moving cabin holds the person in place too: the doors are closed, there is nowhere to go out to
   return titleOpen() || state.dialogOpen || state.cctv.on || UI.inviteOpen() || state.lift.phase !== 'idle'
     // A module panel holds the screen too: the core does not know its ids and must not.
+    || keysOpen()
     || collect('busy').some(Boolean)
     || ['viewer', 'roster', 'bag', 'sky', 'lift', 'invite', 'lang'].some((id) => !document.getElementById(id).hidden);
+}
+
+// Where the office is standing, for the keys panel to draw the right board.
+//
+// The order is the order onKey resolves a press in, and it has to be: whoever
+// eats the key first is the place you are in. Read the other way round the panel
+// would describe a screen lying underneath another one — the control room while
+// the lift is open over it, say.
+//
+// This lives here and not in keys.js on purpose. Only the entry point knows what
+// is on top of what; the panel is given an answer and draws it.
+function currentPlace() {
+  if (state.cctv.on) return 'cctv';
+  // The viewer is two places. A wall of thumbnails is walked like any panel; one
+  // open file has its own keys, and ESC out of it goes back to the wall.
+  const viewer = UI.viewerOpen();
+  if (viewer) return viewer === 'single' ? 'viewer' : 'panel';
+  if (UI.liftOpen() || state.lift.phase !== 'idle') return 'lift';
+  if (UI.rosterOpen()) return 'round';
+  // One panel, two places: on «поговорить» the cursor is in the field, so the
+  // letters type instead of opening anything. That is the state this whole
+  // feature was asked for.
+  if (state.dialogOpen) return UI.cardPage() === 'talk' ? 'talk' : 'card';
+  // A module that owns the screen names its own place; the core does not know
+  // module ids and must not learn them.
+  const mine = first('place');
+  if (mine && hasPlace(mine)) return mine;
+  // A panel with no board of its own is still a panel: the floor is not listening.
+  if (['bag', 'sky', 'skin', 'notes', 'invite', 'lang'].some((id) => {
+    const n = document.getElementById(id);
+    return n && !n.hidden;
+  })) return 'panel';
+  if (collect('busy').some(Boolean)) return 'panel';
+  // Standing at something on the floor: the floor still answers, and only the
+  // thing under your hand renames SPACE.
+  const near = nearest();
+  if (near && near.kind === 'water') return 'cooler';
+  return 'floor';
 }
 
 function update(dt, now) {
@@ -1322,13 +1413,11 @@ function update(dt, now) {
   }
 
   if (!panelsOpen() && !state.drink && !state.play) {
-    const running = keys.has('shift');
+    const running = held('move.run');
     // The stick takes precedence over the keys: it also puts arrows into keys when tilted
     // past the threshold, and adding them to the analogue would mean losing the analogue.
-    const ix = pad.x || (keys.has('arrowright') || keys.has('d') || keys.has('в') ? 1 : 0)
-      - (keys.has('arrowleft') || keys.has('a') || keys.has('ф') ? 1 : 0);
-    const iy = pad.y || (keys.has('arrowdown') || keys.has('s') || keys.has('ы') ? 1 : 0)
-      - (keys.has('arrowup') || keys.has('w') || keys.has('ц') ? 1 : 0);
+    const ix = pad.x || (held('move.right') ? 1 : 0) - (held('move.left') ? 1 : 0);
+    const iy = pad.y || (held('move.down') ? 1 : 0) - (held('move.up') ? 1 : 0);
     // Somebody sitting is lifted by the very first movement — and in the same frame he is already walking.
     if (state.seat && (ix || iy)) standUp();
     let dx = 0, dy = 0;
@@ -1618,7 +1707,10 @@ function draw(t) {
       });
       // A name over somebody else is always there rather than on approach: otherwise
       // nameless figures stand in the corridor and it is unclear who is who.
-      label(q.x, q.y - 34, q.name || '?', '#8fc8ff');
+      // A page that has not been reloaded since 5 September 2026 still sends
+      // «ТЫ» as its name. Over somebody else it is a lie whoever sent it, so it
+      // is read here as what it means: a person who has not named himself.
+      label(q.x, q.y - 34, (isSelfLabel(q.name) ? tr('label.guest') : q.name) || '?', '#8fc8ff');
     } });
   }
 
@@ -1921,6 +2013,10 @@ initTitle(state, {
   bag: () => UI.renderBag('self'),
   sky: () => UI.renderSky(),
   lang: () => switchLang(),
+  // The name typed on the entrance card is the same name the inventory edits and
+  // presence sends: one field, stored in one place, so a guest who named himself
+  // at the door is not «ГОСТЬ» a second later.
+  setName(name) { state.me.name = name; localStorage.setItem('valey-me', JSON.stringify(state.me)); },
 });
 document.body.classList.add('titling');
 renderTitle();

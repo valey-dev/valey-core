@@ -42,7 +42,7 @@ VALEY_EXTERNAL=1 npm start
 
 **There is no install step.** Not a missing instruction — the project has no dependencies, so there is no `npm install` to run and no `node_modules` to appear. The only foreign thing the office itself carries is the JetBrains Mono font in `web/fonts/`, shipped as files under the OFL, because the office works without internet.
 
-One file in here is not the office: `web/landing.html` is the project's public page, and it does reach out — Google Fonts for its typefaces, and a form. The office does not, and that difference is the point of the section below.
+Everything in here is the office. The public page used to sit next to it — `web/landing.html`, which reached out to Google Fonts and to a form — and it moved to the site's own repository on 5 September 2026, along with the holding page for the domain. The office reaches out to nothing, and that is the point of the section below; the exception that blurred it is gone.
 
 ### If you do not have Node
 
@@ -113,7 +113,7 @@ The repository is called `valey-core` because that is what it is. The office is 
 
 ## Keys
 
-`WASD` walk · `SHIFT` run · `SPACE` talk, drink at the cooler, sit on a bench · `TAB` the round · `N` notes · `C` change your look · `P` window on the world · `U` office colour · `M` sound · `R` radio · `H` the pager you put off · `+` `0` scale · `ESC` back. The security room is below the floor and has the cameras.
+Arrow keys walk · `SHIFT` runs · `SPACE` is the action — talk, drink at the cooler, sit on a bench · `TAB` the round · `N` notes · `C` clothes · `P` window on the world · `U` office colour · `M` sound · `R` radio · `K` the office plan · `H` the pager you put off · `F9` a 1:1 frame · `+` `0` scale · `ESC` back. The security room is below the floor and has the cameras. Press `?` in the office for the whole keyboard, which is generated from the same list the office answers to and cannot drift from this one.
 
 A gamepad works too, and the keyboard stays free for typing: the left stick or d-pad walks (the stick is analogue — a light tilt is a slow walk), `A` talks, `B` goes back, `X` takes the skateboard, `Y` opens the round, the triggers run and the bumpers scale. Any controller the browser sees as a standard one will do — an Xbox pad paired over Bluetooth on macOS, say. The browser only notices it after the first button press, and Chrome only offers it on `localhost` or over https.
 

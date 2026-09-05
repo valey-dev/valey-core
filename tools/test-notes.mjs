@@ -14,8 +14,8 @@ const ls = memoryStorage();
 globalThis.localStorage = ls;
 const store = ls.store;
 
-const { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } =
-  await import('../web/notes.js');
+const { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes,
+  addr, parseAddr } = await import('../web/notes.js');
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -104,6 +104,51 @@ ok('в общий список попали все', list.length === 3, list.len
 ok('свежие сверху', list[0].text === 'третья', list.map((n) => n.text));
 ok('agentId идёт рядом', list.every((n) => n.agentId), list[0]);
 ok('заметки разных агентов не смешались', list.filter((n) => n.agentId === 'agent-1').length === 2);
+
+// ------------------------------------------------- addresses beyond a session
+//
+// Since 5 September 2026 a note hangs on an address, and the core reads only
+// its first segment: a key with no colon is a session, anything else belongs to
+// whoever built it. What is checked here is exactly that border — the core must
+// not start understanding somebody else's address, and must not lose a note
+// whose owner is not installed.
+reset();
+const A = addr('commit', 'valey-core', '018e39d');
+const B = addr('file', 'valey-core', 'f185691', 'web/main.js');
+addNote(A, null, 'первая', { project: 'valey-core', line: 'коммит 018e39d · тема' });
+addNote(B, null, 'вторая', { project: 'valey-core', line: 'файл web/main.js' });
+addNote('sess-77', 5, 'третья', { project: 'valey-core' });
+const mixed = allNotes();
+ok('чужие адреса и сессия лежат в одном списке', mixed.length === 3, mixed.length);
+ok('вид берётся из первого сегмента, а дальше ядро не читает',
+  mixed.map((n) => n.anchor.kind).sort().join(',') === 'agent,commit,file',
+  mixed.map((n) => n.anchor.kind));
+const foreign = mixed.find((n) => n.anchor.kind === 'commit');
+ok('части отданы как есть, без имён полей',
+  Array.isArray(foreign.anchor.parts) && foreign.anchor.parts.join('|') === 'valey-core|018e39d', foreign.anchor);
+ok('ядро не выдумывает полей вроде hash или path',
+  foreign.anchor.hash === undefined && foreign.anchor.path === undefined, foreign.anchor);
+const sess = mixed.find((n) => n.anchor.kind === 'agent');
+ok('ключ без двоеточия — это сессия, и она осталась собой',
+  sess.anchor.agent === 'sess-77' && sess.agentId === 'sess-77', sess.anchor);
+ok('заметки достаются по своему адресу',
+  notesOf(A).length === 1 && notesOf(B).length === 1 && notesOf(A)[0].text === 'первая');
+
+// The line of context is written by the owner of the address; the core only
+// keeps it and shows it. Without it a note on a foreign address would be
+// unreadable in a build where that module is not installed at all.
+ok('строка контекста сохранена как есть', foreign.ctx.line === 'коммит 018e39d · тема', foreign.ctx);
+ok('ничего кроме неё из чужого снимка не осталось',
+  foreign.ctx.hash === undefined && foreign.ctx.subject === undefined && foreign.ctx.path === undefined, foreign.ctx);
+
+// A colon inside a part would break parsing if the parts were merely joined.
+const weird = addr('poem', 'a:b', 'src/x:y.js');
+addNote(weird, null, 'странный адрес');
+const w = allNotes().find((n) => n.text === 'странный адрес');
+ok('двоеточие внутри частей не сбивает разбор',
+  w.anchor.kind === 'poem' && w.anchor.parts.join('|') === 'a:b|src/x:y.js', w.anchor);
+ok('незнакомый вид не теряется и не притворяется сессией',
+  w.anchor.kind === 'poem' && notesOf(weird).length === 1, w.anchor);
 
 console.log(bad ? `\nупало проверок: ${bad}` : '\nвсё хорошо');
 process.exit(bad ? 1 : 0);

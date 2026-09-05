@@ -267,6 +267,39 @@ function limitNotice(text) {
   return { text: line, resets: at ? at[1].trim() : null };
 }
 
+// The report tail: the three lines AGENTS.md requires at the end of every
+// answer. The session name in the head names a branch of conversation, not the
+// work — it is given once and lives a week, while the task changes with every
+// answer and is the question the card gets opened for. This needs no new data
+// path: the last answer already sits right here, for "what did he say".
+const TAIL_MAX = 1600;           // the tail is at the end — we do not dig deeper
+const TAIL_VALUE = 300;          // clipping happens in the head; this is only a ceiling
+const NOTHING = /^(ничего|нет|nothing|none|—|-)[.!]?$/i;
+
+// The label of a line may arrive bold, italic or bare, and the separator is a
+// dash of any kind or a colon. Anything else counts as not a report.
+function tailField(tail, label) {
+  const re = new RegExp('(?:^|\\n)[ \\t>*_]*(?:' + label + ')[ \\t*_]*[—–:-]+[ \\t]*(.+)', 'gi');
+  let m, last = null;
+  while ((m = re.exec(tail))) last = m;
+  if (!last) return '';
+  return last[1].replace(/[*_`]/g, '').trim().slice(0, TAIL_VALUE);
+}
+
+export function reportTail(text) {
+  const tail = String(text || '').slice(-TAIL_MAX);
+  const what = tailField(tail, 'Текущая (?:фича\\/задача|задача|фича)');
+  if (!what) return null;
+  const need = tailField(tail, 'Что нужно от меня');
+  return {
+    what,
+    status: tailField(tail, 'Статус'),
+    // "Ничего" is a full answer, and it has no business in the head: the ⚑ plate
+    // must mean "you are needed", not "the line was filled in".
+    need: NOTHING.test(need) ? '' : need,
+  };
+}
+
 // A trade is what an agent is doing now, not over the whole session. Counting
 // the whole history gave everyone "Developer": any work reaches a file edit
 // sooner or later, and the accumulated code outweighed half an hour of design.
@@ -356,7 +389,7 @@ function emptyState() {
   return {
     lastTs: 0, lastTool: null, lastToolInput: null, lastAssistantText: '',
     lastUserPrompt: '', awaitingUser: false, acts: [], role: '', files: new Map(),
-    turns: 0, model: '', branch: '', slug: '', title: '', aiTitle: '',
+    turns: 0, model: '', branch: '', slug: '', title: '', aiTitle: '', task: null,
     skills: newSkills(),   // the grade counter: it grows and is never trimmed
     recent: [],   // rolling window of the actual conversation, read on demand
   };
@@ -379,7 +412,16 @@ function applyLine(st, line) {
     st.model = r.message.model || st.model;
     const content = r.message.content || [];
     const txt = textOf(content);
-    if (txt) { st.lastAssistantText = txt; st.turns++; remember(st, 'assistant', txt, r.timestamp); }
+    if (txt) {
+      st.lastAssistantText = txt; st.turns++; remember(st, 'assistant', txt, r.timestamp);
+      // The task is held until the next one is named, rather than taken from
+      // the last message. While an agent answers it says a dozen replies with no
+      // tail — going by the last one, the line went out exactly during the
+      // minutes the work is happening, which is when it is wanted. Found on a
+      // live stand on 5 September 2026.
+      const said = reportTail(txt);
+      if (said) st.task = said;
+    }
     st.awaitingUser = r.message.stop_reason === 'end_turn';
     for (const b of Array.isArray(content) ? content : []) {
       if (b?.type !== 'tool_use') continue;
@@ -764,6 +806,7 @@ export async function snapshot() {
       // subscription rather than from him, and showing it as "what he said"
       // misleads
       limited: limitNotice(t.lastAssistantText),
+      task: t.task,
       saidLen: t.lastAssistantText.length,
       lastAsked: t.lastUserPrompt,
       idleFor: Number.isFinite(idleFor) ? Math.round(idleFor / 1000) : null,

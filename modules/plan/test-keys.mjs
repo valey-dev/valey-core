@@ -48,11 +48,27 @@ installDom({
 
 const { buildLayout } = await import('../../web/layout.js');
 const { addDict } = await import('../../web/i18n.js');
+const { define: defineKeys, reset: resetKeys, actionOf, hints } = await import('../../web/keymap.js');
+const { define: definePlaces, reset: resetPlaces, get: placeOf, keyIn } = await import('../../web/places.js');
 const CORE = await import('../../web/ui.js');
 const P = await import('./client.js');
 
 const hooks = {};
-P.register({ id: 'plan', on: (n, f) => (hooks[n] = f), i18n: (d) => addDict(d) });
+// The stand-in api mirrors the real loader: the `keys` seam declares the module's
+// keys in the shared registry, putting its id in front.
+resetKeys();
+resetPlaces();
+P.register({
+  id: 'plan',
+  on: (n, f) => (hooks[n] = f),
+  i18n: (d) => addDict(d),
+  keys: (list) => defineKeys([].concat(list).map((a) => ({ ...a, id: `plan.${a.id}` }))),
+  places: (list) => {
+    const own = [].concat(list).map((pl) => ({ ...pl, id: `plan.${pl.id}` }));
+    definePlaces(own);
+    return own.map((pl) => pl.id);
+  },
+});
 
 let failed = 0;
 const check = (name, ok, got) => {
@@ -82,10 +98,32 @@ CORE.initUI(state, { guideTo: () => {} });
 hooks.tick(state, 16);
 
 // ------------------------------------------------------------ opening and closing
-check('строка подсказки называет клавишу', /K/.test(hooks.help()), hooks.help());
+// The module no longer writes the caption on its own cap: it declared the key, and the
+// caption appeared. It has no help line at all, and that is checked by the entry for it
+// being in the registry of hints.
+const mine = hints().find((h) => h.hint === 'plan.hint');
+check('клавиша попала в подсказку', !!mine && mine.caps.includes('K'), mine);
+check('и своей строки помощи модуль не держит', !hooks.help, 'держит');
+// The key is declared in the registry rather than wired into the handler: the module
+// compares no letters, and the Russian «Л» is the same physical KeyK, which is checked
+// in tools/test-keymap.mjs.
+check('модуль объявил свою клавишу в реестре', actionOf({ code: 'KeyK' }) === 'plan.toggle', actionOf({ code: 'KeyK' }));
 check('закрытый план стрелки не ест', P.planKey('ArrowDown') === false, 'съел');
-check('K открывает план', hooks.key('k') === true && P.planOpen(), P.planOpen());
+check('чужое действие модуль не берёт', hooks.action('radio.toggle') === false, 'взял');
+check('действие открывает план', hooks.action('plan.toggle') === true && P.planOpen(), P.planOpen());
 check('и он держит экран', hooks.busy() === true, hooks.busy());
+// Its own place on the keys board. The module names it; the core asks rather than
+// knowing, which is the whole point of the seam.
+check('модуль объявил своё место', !!placeOf('plan.map'), placeOf('plan.map'));
+check('и пока план открыт — оно и отвечает', hooks.place() === 'plan.map', hooks.place());
+check('стрелка на этом месте — комната, а не фокус',
+  keyIn('plan.map', 'ArrowLeft').caption === 'plan.place.room', keyIn('plan.map', 'ArrowLeft'));
+check('K здесь закрывает, а не открывает',
+  keyIn('plan.map', 'KeyK').caption === 'plan.place.close', keyIn('plan.map', 'KeyK'));
+// The floor is not listening while the plan is up, and the board has to say so.
+check('буква этажа на плане не горит', keyIn('plan.map', 'KeyC').lit === false, keyIn('plan.map', 'KeyC'));
+// Except the one that opens this board: it answers everywhere or it is useless.
+check('а «/» горит и здесь', keyIn('plan.map', 'Slash').lit === true, keyIn('plan.map', 'Slash'));
 check('фокус встаёт на ближайшую дверь — первую комнату', P.planFocus() === r0.key, P.planFocus());
 check('на каждую комнату положена своя кнопка', map.cells.length === L.rooms.length, `${map.cells.length} на ${L.rooms.length}`);
 
@@ -111,8 +149,9 @@ check('под нижним рядом — сервисный ярус', ['__secu
 // ----------------------------------------------------------- lead me there
 hooks.esc();
 check('ESC закрывает план', !P.planOpen(), P.planOpen());
-hooks.key('л');
-check('русская Л открывает так же', P.planOpen(), P.planOpen());
+check('и место снова не наше', hooks.place() === null, hooks.place());
+hooks.action('plan.toggle');
+check('и оно же открывает снова', P.planOpen(), P.planOpen());
 check('и фокус снова у своей двери', P.planFocus() === r0.key, P.planFocus());
 P.planKey('Enter');
 check('Enter ведёт к тому, кто ждёт, а не к первому за столом', state.waypoint === 'a1', state.waypoint);
@@ -120,7 +159,7 @@ check('и закрывает план', !P.planOpen(), P.planOpen());
 
 // A room with no people: the arrow has nobody to lead to, the plan stays open.
 state.waypoint = null;
-hooks.key('k');
+hooks.action('plan.toggle');
 P.planKey('ArrowDown'); P.planKey('ArrowDown');
 const empty = P.planFocus();
 P.planKey('Enter');
@@ -129,7 +168,7 @@ hooks.esc();
 
 // The entrance screen: there is no plan under it, there is nothing to be "here" yet.
 document.body.classList.add('titling');
-check('на экране входа K не открывает план', hooks.key('k') === false && !P.planOpen(), P.planOpen());
+check('на экране входа план не открывается', hooks.action('plan.toggle') === false && !P.planOpen(), P.planOpen());
 document.body.classList.remove('titling');
 
 console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');

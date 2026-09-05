@@ -116,7 +116,10 @@ UI.renderBag('tree');
 check('по умолчанию вид плоский', /class="tcols"/.test(bag.innerHTML), 'не плоский');
 check('V обработана', UI.bagKey('v') === true, 'не обработана');
 check('и открыла подробный вид', /class="tdirs"/.test(bag.innerHTML) && /id="wtree"/.test(bag.innerHTML), 'не открыла');
-check('панель на это время шире', /bagwrap wide/.test(bag.innerHTML), 'ширина прежняя');
+// The wrapper carries three classes now — rwrap bagwrap steady wide — so the
+// check asks for the one that matters instead of a pair in order.
+check('панель на это время шире', /class="[^"]*\bwide\b/.test(bag.innerHTML), 'ширина прежняя');
+check('и высота у дерева зафиксирована', /class="[^"]*\bsteady\b/.test(bag.innerHTML), 'не зафиксирована');
 // `class="tdir` matches the container too, so the count goes by the attribute.
 check('направлений ровно шесть', (bag.innerHTML.match(/data-dir="/g) || []).length === 6,
   (bag.innerHTML.match(/data-dir="/g) || []).length);
