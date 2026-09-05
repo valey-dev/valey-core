@@ -13,32 +13,6 @@
 
 const KEY = 'valey-chat-notes';
 
-// The address a note hangs on. It used to be the session id and nothing else;
-// since 5 September 2026 a note can also hang on a commit or on a file inside
-// its diff, and they all share one store, one search and one list.
-//
-// A key with no colon is a session — not a legacy rule but the address of an
-// agent, so nothing written before this change moves or is rewritten. Every
-// other part is percent-encoded before being joined: a project or a path is
-// allowed to contain a colon, and splitting must not become a guess.
-const enc = (v) => encodeURIComponent(String(v == null ? '' : v));
-export const agentAddr = (id) => String(id || '');
-export const commitAddr = (project, hash) => `commit:${enc(project)}:${enc(hash)}`;
-export const fileAddr = (project, hash, path) => `file:${enc(project)}:${enc(hash)}:${enc(path)}`;
-
-// An unknown kind is read as an agent rather than dropped: a note written by a
-// newer office must not disappear in an older one — it stays in the list, and
-// only the button that would open it is missing.
-export function parseAddr(key) {
-  const s = String(key || '');
-  if (!s.includes(':')) return { kind: 'agent', agent: s };
-  const [kind, ...rest] = s.split(':');
-  const [a, b, c] = rest.map((v) => { try { return decodeURIComponent(v); } catch { return v; } });
-  if (kind === 'commit' && a && b) return { kind, project: a, hash: b };
-  if (kind === 'file' && a && b && c) return { kind, project: a, hash: b, path: c };
-  return { kind: 'agent', agent: s };
-}
-
 // Date.now() does not tell two records apart inside one millisecond, and the
 // order in the common list becomes a matter of luck. We keep the mark strictly
 // increasing: it stays the time of creation, but there are no equal ones any more.
@@ -53,8 +27,33 @@ function writeAll(all) {
   try { localStorage.setItem(KEY, JSON.stringify(all)); return true; } catch { return false; }
 }
 
+// The address a note hangs on. It used to be the session id and nothing else;
+// since 5 September 2026 a note can hang on anything a module can name, and
+// they all share one store, one search and one list.
+//
+// The core does not read an address beyond its first segment. A key with no
+// colon is a session — that is the address of an agent, so nothing written
+// before this change moves or is rewritten. Everything else is somebody's:
+// what the parts mean is known to whoever built the address, and the core only
+// carries them. Every part is percent-encoded before being joined, because a
+// part may contain a colon and splitting must not become a guess.
+const enc = (v) => encodeURIComponent(String(v == null ? '' : v));
+export const agentAddr = (id) => String(id || '');
+export const addr = (kind, ...parts) => [String(kind), ...parts.map(enc)].join(':');
+
+// { kind: 'agent', agent } for a session, { kind, parts } for anybody else.
+// An address whose kind nobody claims is still a note: it stays in the list
+// with its own line of context, and only the button is missing.
+export function parseAddr(key) {
+  const s = String(key || '');
+  if (!s.includes(':')) return { kind: 'agent', agent: s };
+  const [kind, ...rest] = s.split(':');
+  if (!kind) return { kind: 'agent', agent: s };
+  return { kind, parts: rest.map((v) => { try { return decodeURIComponent(v); } catch { return v; } }) };
+}
+
 // Everything below takes an address: for a conversation it is the session id
-// (see agentAddr), for the git tree it is commitAddr or fileAddr.
+// (see agentAddr), for anybody else it is what `addr` built.
 //
 // The order is by creation time: a note on the same line lies under the previous
 // one rather than in front of it.
@@ -81,18 +80,19 @@ export function addNote(agentId, ts, text, ctx) {
   if (ctx) {
     // The fields are named one by one rather than "keep whatever was handed
     // over": the snapshot lives in localStorage, and that space is shared with
-    // the office's settings. The commit fields arrived on 5 September 2026 with
-    // notes on commits and files — without them such a note would be left with
-    // a short hash alone, which says nothing a week later.
+    // the office's settings.
+    //
+    // `line` is the one field the core does not interpret — it is the line of
+    // context written by whoever owns the address, in their own words. The core
+    // has no business knowing what they anchor a note to; it only has to be
+    // able to show the note when its owner is not installed at all.
     note.ctx = {
       agent: String(ctx.agent || '').slice(0, 60),
       project: String(ctx.project || '').slice(0, 80),
       title: String(ctx.title || '').slice(0, 120),
       quote: String(ctx.quote || '').replace(/\s+/g, ' ').trim().slice(0, 120),
     };
-    if (ctx.hash) note.ctx.hash = String(ctx.hash).slice(0, 12);
-    if (ctx.subject) note.ctx.subject = String(ctx.subject).replace(/\s+/g, ' ').trim().slice(0, 120);
-    if (ctx.path) note.ctx.path = String(ctx.path).slice(0, 200);
+    if (ctx.line) note.ctx.line = String(ctx.line).replace(/\s+/g, ' ').trim().slice(0, 160);
   }
   (all[agentId] = all[agentId] || []).push(note);
   return writeAll(all) ? note : null;

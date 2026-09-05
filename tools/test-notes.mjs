@@ -15,7 +15,7 @@ globalThis.localStorage = ls;
 const store = ls.store;
 
 const { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes,
-  commitAddr, fileAddr, parseAddr } = await import('../web/notes.js');
+  addr, parseAddr } = await import('../web/notes.js');
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -107,45 +107,48 @@ ok('заметки разных агентов не смешались', list.fi
 
 // ------------------------------------------------- addresses beyond a session
 //
-// A note can hang on a commit and on a file since 5 September 2026, and all of
-// them share this one store. Two things must hold: a key written before that
-// day still reads as a session, and a project or a path with a colon in it does
-// not turn parsing into a guess.
+// Since 5 September 2026 a note hangs on an address, and the core reads only
+// its first segment: a key with no colon is a session, anything else belongs to
+// whoever built it. What is checked here is exactly that border — the core must
+// not start understanding somebody else's address, and must not lose a note
+// whose owner is not installed.
 reset();
-const cAddr = commitAddr('valey-core', '018e39d');
-const fAddr = fileAddr('valey-core', 'f185691', 'web/main.js');
-addNote(cAddr, null, 'ломает старый снимок', { project: 'valey-core', hash: '018e39d', subject: 'docs(agents)' });
-addNote(fAddr, null, 'перечитать', { project: 'valey-core', hash: 'f185691' });
-addNote('sess-77', 5, 'реплика', { project: 'valey-core' });
+const A = addr('commit', 'valey-core', '018e39d');
+const B = addr('file', 'valey-core', 'f185691', 'web/main.js');
+addNote(A, null, 'первая', { project: 'valey-core', line: 'коммит 018e39d · тема' });
+addNote(B, null, 'вторая', { project: 'valey-core', line: 'файл web/main.js' });
+addNote('sess-77', 5, 'третья', { project: 'valey-core' });
 const mixed = allNotes();
-ok('три вида лежат в одном списке', mixed.length === 3, mixed.length);
-ok('вид заметки читается из адреса',
+ok('чужие адреса и сессия лежат в одном списке', mixed.length === 3, mixed.length);
+ok('вид берётся из первого сегмента, а дальше ядро не читает',
   mixed.map((n) => n.anchor.kind).sort().join(',') === 'agent,commit,file',
   mixed.map((n) => n.anchor.kind));
-const c = mixed.find((n) => n.anchor.kind === 'commit');
-ok('у коммита разобраны проект и хэш', c.anchor.project === 'valey-core' && c.anchor.hash === '018e39d', c.anchor);
-const f = mixed.find((n) => n.anchor.kind === 'file');
-ok('у файла разобран и путь', f.anchor.path === 'web/main.js', f.anchor);
-const old = mixed.find((n) => n.anchor.kind === 'agent');
+const foreign = mixed.find((n) => n.anchor.kind === 'commit');
+ok('части отданы как есть, без имён полей',
+  Array.isArray(foreign.anchor.parts) && foreign.anchor.parts.join('|') === 'valey-core|018e39d', foreign.anchor);
+ok('ядро не выдумывает полей вроде hash или path',
+  foreign.anchor.hash === undefined && foreign.anchor.path === undefined, foreign.anchor);
+const sess = mixed.find((n) => n.anchor.kind === 'agent');
 ok('ключ без двоеточия — это сессия, и она осталась собой',
-  old.anchor.agent === 'sess-77' && old.agentId === 'sess-77', old.anchor);
-ok('заметки коммита достаются по его адресу', notesOf(cAddr).length === 1);
-ok('адрес коммита и адрес файла не путаются', notesOf(fAddr).length === 1 && notesOf(cAddr)[0].text === 'ломает старый снимок');
+  sess.anchor.agent === 'sess-77' && sess.agentId === 'sess-77', sess.anchor);
+ok('заметки достаются по своему адресу',
+  notesOf(A).length === 1 && notesOf(B).length === 1 && notesOf(A)[0].text === 'первая');
 
-// A colon inside a project or a path would break parsing if the parts were
-// merely joined, so each one is encoded and the key is still split on ':'.
-const weird = fileAddr('a:b', 'deadbee', 'src/x:y.js');
-addNote(weird, null, 'странный путь', { project: 'a:b' });
-const w = allNotes().find((n) => n.text === 'странный путь');
+// The line of context is written by the owner of the address; the core only
+// keeps it and shows it. Without it a note on a foreign address would be
+// unreadable in a build where that module is not installed at all.
+ok('строка контекста сохранена как есть', foreign.ctx.line === 'коммит 018e39d · тема', foreign.ctx);
+ok('ничего кроме неё из чужого снимка не осталось',
+  foreign.ctx.hash === undefined && foreign.ctx.subject === undefined && foreign.ctx.path === undefined, foreign.ctx);
+
+// A colon inside a part would break parsing if the parts were merely joined.
+const weird = addr('poem', 'a:b', 'src/x:y.js');
+addNote(weird, null, 'странный адрес');
+const w = allNotes().find((n) => n.text === 'странный адрес');
 ok('двоеточие внутри частей не сбивает разбор',
-  w.anchor.kind === 'file' && w.anchor.project === 'a:b' && w.anchor.path === 'src/x:y.js', w.anchor);
-
-// An unknown kind is not lost: a note written by a newer office shows up in an
-// older one's list — without the button, but with its text.
-const future = allNotes();
-addNote('poem:42:zzz', null, 'из будущего');
-const p2 = allNotes().find((n) => n.text === 'из будущего');
-ok('незнакомый адрес читается как сессия, а не пропадает', p2 && p2.anchor.kind === 'agent', p2 && p2.anchor);
+  w.anchor.kind === 'poem' && w.anchor.parts.join('|') === 'a:b|src/x:y.js', w.anchor);
+ok('незнакомый вид не теряется и не притворяется сессией',
+  w.anchor.kind === 'poem' && notesOf(weird).length === 1, w.anchor);
 
 console.log(bad ? `\nупало проверок: ${bad}` : '\nвсё хорошо');
 process.exit(bad ? 1 : 0);

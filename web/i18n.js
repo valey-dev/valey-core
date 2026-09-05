@@ -410,12 +410,9 @@ const DICT = {
     'notes.closed': 'разговор закрыт',
     'notes.noProject': 'без проекта',
     'notes.noCtx': 'контекст не сохранился · заметка старше правки',
-    // The kind of a note shows in the line under its text: for a conversation
-    // it is who and about what, for the others it is what it hangs on. The
-    // button is named by whoever can open it; "nothing to open it with" is an
-    // answer, not a breakage.
-    'notes.atCommit': 'коммит {hash} · {subject}',
-    'notes.atFile': 'файл {path} · в коммите {hash}',
+    // A note whose address is not a session shows the line its owner wrote, and
+    // the button is named by whoever can open it. The core keeps no words about
+    // what such a note hangs on: it does not read those addresses.
     'notes.noOpener': 'нечем открыть',
     'notes.nothingFound': 'Ничего не нашлось.',
     'notes.emptyHead': 'Здесь пока ничего',
@@ -993,8 +990,6 @@ const DICT = {
     'notes.closed': 'conversation closed',
     'notes.noProject': 'no project',
     'notes.noCtx': 'context was not kept · note predates the fix',
-    'notes.atCommit': 'commit {hash} · {subject}',
-    'notes.atFile': 'file {path} · in commit {hash}',
     'notes.noOpener': 'nothing to open it with',
     'notes.nothingFound': 'Nothing found.',
     'notes.emptyHead': 'Nothing here yet',

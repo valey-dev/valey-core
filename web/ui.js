@@ -2806,10 +2806,11 @@ export function renderNotes() {
   const alive = new Set(S.agents.map((a) => a.id));
   const stamp = (ms) => new Date(ms).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
-  // A note on a commit or on a file is opened not by the core but by whoever
-  // owns the address. The core shows it to every module and takes the first
-  // that answers; the answer carries a label for the button and what to do on
-  // a press. Nobody answered — the row says so, as it does for a closed chat.
+  // A note whose address is not a session belongs to somebody else, and the
+  // core does not read it: it shows the address to every module and takes the
+  // first that answers. The answer carries a label for the button and what to
+  // do on a press. Nobody answered — the row says so, as it does for a closed
+  // chat, and the note still reads, because its line of context is stored.
   const claims = new Map();
   for (const n of hit) {
     if (!n.anchor || n.anchor.kind === 'agent') continue;
@@ -2821,28 +2822,26 @@ export function renderNotes() {
     <div class="ngroup"><h4>${project ? '▣ ' + esc(project) : tr('notes.noProject')}</h4>
       ${list.map((n) => {
         const a = n.anchor || { kind: 'agent' };
-        const git = a.kind === 'commit' || a.kind === 'file';
-        const live = !git && alive.has(n.agentId);
+        const foreign = a.kind !== 'agent';
+        const live = !foreign && alive.has(n.agentId);
         const who = n.ctx && n.ctx.agent
           ? esc(n.ctx.agent) + (n.ctx.title ? ' · ' + esc(n.ctx.title) : '')
           : '';
         const claim = claims.get(n.id);
-        const short = esc(String((n.ctx && n.ctx.hash) || a.hash || '').slice(0, 7));
-        const tail = git
+        const tail = foreign
           ? (claim
             ? `<button class="ngo" data-open="${n.id}">${esc(claim.label || tr('notes.open'))}</button>`
             : `<span class="ndead">${tr('notes.noOpener')}</span>`)
           : live
             ? `<button class="ngo" data-go="${n.agentId}" data-ts="${n.ts == null ? '' : n.ts}">${tr('notes.open')}</button>`
             : `<span class="ndead">${tr('notes.closed')}</span>`;
-        // Under the text goes what the note hangs on: the subject for a
-        // commit, the path for a file. Without them a short hash says nothing
-        // to somebody coming back to the note a week later.
-        const under = a.kind === 'commit'
-          ? tr('notes.atCommit', { hash: short, subject: esc(String((n.ctx && n.ctx.subject) || '')) })
-          : a.kind === 'file'
-            ? tr('notes.atFile', { path: esc(a.path || ''), hash: short })
-            : live ? who : (n.ctx && n.ctx.quote ? '«' + esc(n.ctx.quote) + '»' + (who ? ' · ' + who : '') : tr('notes.noCtx'));
+        // Under the text goes what the note hangs on. For a foreign address it
+        // is the line its owner wrote when the note was made — the core has no
+        // words of its own for something it does not interpret, and a made-up
+        // phrasing would be a second truth about somebody else's anchor.
+        const under = foreign
+          ? (n.ctx && n.ctx.line ? esc(n.ctx.line) : tr('notes.noCtx'))
+          : live ? who : (n.ctx && n.ctx.quote ? '«' + esc(n.ctx.quote) + '»' + (who ? ' · ' + who : '') : tr('notes.noCtx'));
         return `<div class="nrow" data-note="${n.id}" data-agent="${n.agentId}">
           <div class="nline"><span class="ntext">${esc(n.text)}</span><i>${stamp(n.at)}</i></div>
           <div class="nmeta"><span>${under}</span>${tail}
