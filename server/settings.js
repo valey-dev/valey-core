@@ -29,6 +29,14 @@ const CONFIG_DIR = process.env.VALEY_CONFIG_DIR
 // owner token is created on the very first start. Useful for a second office on
 // one machine, too.
 const FILE = process.env.VALEY_SETTINGS || path.join(CONFIG_DIR, 'settings.json');
+// Drafts of the release scripts. They belong to whoever cuts the release —
+// working papers, not code and not a module — so they live next to the settings
+// and outside every git tree. In the repository the draft was untracked and
+// unignored, which means the next release refused to start on a dirty tree
+// until somebody deleted it by hand; that happened while cutting v0.3.0 on
+// 5 September 2026. VALEY_SCRIPTS moves them aside for a stand.
+export const SCRIPTS_DIR = process.env.VALEY_SCRIPTS || path.join(CONFIG_DIR, 'scripts');
+
 // The file from the old place. It is NEVER deleted and never overwritten: for
 // anyone who updates it is the only copy of the names and the token, and the
 // cost of a mistake here is somebody else's data, not ours.

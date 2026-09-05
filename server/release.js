@@ -7,6 +7,7 @@ import { execFile } from 'node:child_process';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { SCRIPTS_DIR } from './settings.js';
 
 const run = promisify(execFile);
 const DAY = 86400000;
@@ -21,7 +22,9 @@ export function nudgeFrom(info, now = Date.now()) {
   return {
     tag: info.tag,
     days,
-    draft: `media/${info.tag}.md`,
+    // The path comes with the info: the draft lives next to the settings now,
+    // and this function is pure — it must not go looking for it.
+    draft: info.draftPath || null,
     // There may be no draft: the release is older than the generator, or the
     // file was deleted. Not a reason to stay quiet — the opposite, it is one
     // more step to the video.
@@ -56,11 +59,20 @@ export async function releaseNudge(root, now = Date.now()) {
     if (tag) {
       const { stdout: at } = await run('git', ['log', '-1', '--format=%cI', tag], { cwd: root });
       info = { tag, taggedAt: Date.parse(at.trim()) || null, draft: null };
-      const file = path.join(root, 'media', `${tag}.md`);
-      try {
-        const md = await fsp.readFile(file, 'utf8');
-        info.draft = { exists: true, ...parseChecklist(md) };
-      } catch { info.draft = { exists: false, open: null, done: null, total: 0 }; }
+      // Where the drafts live now, and where they lived until 5 September 2026:
+      // a draft written before the move still counts, or the office would nudge
+      // about a video whose checklist is closed on disk.
+      const places = [path.join(SCRIPTS_DIR, `${tag}.md`), path.join(root, 'media', `${tag}.md`)];
+      info.draft = { exists: false, open: null, done: null, total: 0 };
+      info.draftPath = places[0];
+      for (const file of places) {
+        try {
+          const md = await fsp.readFile(file, 'utf8');
+          info.draft = { exists: true, ...parseChecklist(md) };
+          info.draftPath = file;
+          break;
+        } catch { /* not here — try the old place */ }
+      }
     }
   } catch { /* not a repository, or git is unavailable — stay quiet, this is not the office failing */ }
   cache = { at: now, value: nudgeFrom(info, now) };
