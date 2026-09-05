@@ -109,6 +109,38 @@ check('вправо без потомка — ближайший по строк
 check('влево без родителя — ближайший по строке (радио)', (UI.bagKey('ArrowLeft'), UI.treeSelected()) === 'radio', UI.treeSelected());
 check('Enter обработан и ничего не ломает', UI.bagKey('Enter') === true && UI.treeSelected() === 'radio', UI.treeSelected());
 check('карточка показывает выбранное', /<b>Радио у входа<\/b>/.test(bag.innerHTML), 'нет');
+// --- the detailed view: six directions, one branch at a time ---
+// The flat columns stay the default; this one is entered on purpose with V, and
+// while it is up the digits belong to it rather than to the inventory tabs.
+UI.renderBag('tree');
+check('по умолчанию вид плоский', /class="tcols"/.test(bag.innerHTML), 'не плоский');
+check('V обработана', UI.bagKey('v') === true, 'не обработана');
+check('и открыла подробный вид', /class="tdirs"/.test(bag.innerHTML) && /id="wtree"/.test(bag.innerHTML), 'не открыла');
+check('панель на это время шире', /bagwrap wide/.test(bag.innerHTML), 'ширина прежняя');
+// `class="tdir` matches the container too, so the count goes by the attribute.
+check('направлений ровно шесть', (bag.innerHTML.match(/data-dir="/g) || []).length === 6,
+  (bag.innerHTML.match(/data-dir="/g) || []).length);
+check('вкладка «дерево» осталась выбранной', /btab on" data-tab="tree"/.test(bag.innerHTML) || /data-tab="tree"/.test(bag.innerHTML), 'нет');
+
+check('цифра выбирает направление, а не вкладку', UI.bagKey('5') === true, 'не обработана');
+check('и это ДЕКОР', /tdir on free" data-dir="decor"/.test(bag.innerHTML), 'не он');
+check('дерево осталось на экране', /id="wtree"/.test(bag.innerHTML), 'вкладка сменилась');
+// A direction with nothing paid in it does not count — it says so in words:
+// mood is not for sale.
+check('у ДЕКОРА нет счёта, есть «всё твоё»', /всё твоё/.test(bag.innerHTML) && /без тарифов/.test(bag.innerHTML), 'считает');
+check('и карточка переехала в эту же ветку', ['art', 'radio'].includes(UI.treeSelected()), UI.treeSelected());
+
+UI.bagKey('3');
+check('третье направление — работа', /tdir on" data-dir="work"/.test(bag.innerHTML), 'не оно');
+const wasWork = UI.treeSelected();
+UI.bagKey('ArrowDown');
+check('стрелка ходит по ветке', UI.treeSelected() !== wasWork, 'стоит на месте');
+check('и не уходит из направления', ['board', 'task', 'easel', 'gittree', 'feed'].includes(UI.treeSelected()), UI.treeSelected());
+
+check('V возвращает плоский вид', (UI.bagKey('v'), /class="tcols"/.test(bag.innerHTML)), 'не вернула');
+check('и цифры снова про вкладки', (UI.bagKey('2'), /class="bcat"/.test(bag.innerHTML) || !/class="tcols"/.test(bag.innerHTML)), 'вкладка не сменилась');
+
+UI.renderBag('tree');
 UI.bagKey('1');
 check('цифра уводит на другую вкладку', !/class="tnode/.test(bag.innerHTML), 'дерево осталось');
 UI.closeBag();
