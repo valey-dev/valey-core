@@ -935,7 +935,7 @@ const cellTitle = (f, v) => (f.key === 'tie' || f.key === 'jacket'
 const writeSlot = (f, v) => { if (f.set) f.set(v); else S.me[f.key] = v; };
 
 const FIELDS = [...COLORS, ...BODY];
-const TABS = ['self', 'things', 'office'];
+const TABS = ['self', 'things', 'keys', 'office'];
 let bagTab = 'self';
 
 // Дресс-код читается отсюда же, из настроек офиса: он общий, а не браузерный.
@@ -982,6 +982,173 @@ const thingsHtml = () => `<div class="bbody">
       <p class="hint">${tr('bag.thingsNote')}</p>
     </div>`;
 
+// ------------------------------------------------------------ вкладка «ключи»
+// Полка подключений наружу. Карточку рисует тот, кто ключом пользуется: ядро —
+// свои (CLI и погода), модули — свои, через точку 'keys'. Иначе бесплатная
+// сборка показывала бы карточку Figma от имени мольберта, которого в ней нет.
+//
+// Карточка отдаёт: { id, name, state, word, icon(ctx), body(), bind(root) }.
+// state — 'on' | 'off' | 'bad': работает, не подключён, сломан. Три слова, а
+// не два, потому что «не подключён» чинится вставкой ключа, а «не авторизован»
+// — походом в терминал, и путать их значит отправить человека не туда.
+//
+// Макет: секция «🔵 WIP — Дресс-код и инвентарь · Ready for Dev», кадры
+// 564:2 (Figma), 565:74 (Claude CLI), 571:2 (Spotify).
+
+// Иконка Claude CLI — окно терминала с тремя строками, как на кадре.
+function cliIcon(c) {
+  c.fillStyle = '#1c130d'; c.fillRect(0, 0, 48, 36);
+  c.fillStyle = '#8c7660';
+  c.fillRect(8, 12, 22, 3); c.fillRect(8, 19, 32, 3); c.fillRect(8, 26, 16, 3);
+}
+// Погода — солнце за облаком: то же, что рисует окно в мир. Солнце сдвинуто
+// вправо и вверх, чтобы выглядывать: спрятанное целиком, оно превращало иконку
+// в серое пятно — видно это только на настоящем кадре, не в разметке.
+function skyIcon(c) {
+  c.fillStyle = '#1c130d'; c.fillRect(0, 0, 48, 36);
+  c.fillStyle = '#ffd166'; c.fillRect(28, 6, 11, 11);
+  c.fillStyle = '#c9b391';
+  c.fillRect(9, 20, 22, 7); c.fillRect(13, 16, 13, 5); c.fillRect(7, 23, 28, 4);
+}
+
+const cliState = () => {
+  const d = S.delivery || {};
+  if (d.available) return 'on';
+  return d.account && d.account.loggedIn === false ? 'bad' : 'off';
+};
+
+const coreKeys = () => [
+  {
+    id: 'cli',
+    name: 'Claude CLI',
+    state: cliState(),
+    word: () => tr('key.cli.' + cliState()),
+    icon: cliIcon,
+    body: () => {
+      const d = S.delivery || {};
+      const who = d.account && d.account.email ? `<p class="keynote">${tr('key.cli.who', { email: esc(d.account.email) })}</p>` : '';
+      return `<p class="keygives">${tr('key.cli.gives')}</p>
+        <div class="keycmd"><code>claude</code><span>${tr('key.cli.then')}</span><code>/login</code>
+          <span class="dim">${tr('key.cli.or')}</span><code>claude setup-token</code>
+          <button class="obtn" data-copy="claude">${tr('key.copy')}</button></div>
+        <p class="hint">${tr('key.cli.note')}</p>
+        ${who}
+        <div class="keyfoot"><span class="dim">${tr('key.cli.rechecks')}</span>
+          <button class="obtn" data-act="recheck">${tr('key.cli.check')}</button></div>`;
+    },
+    bind: (root) => {
+      const b = root.querySelector('[data-act="recheck"]');
+      if (b) b.onclick = async () => { await api.recheckCli(); renderBag(); };
+    },
+  },
+  {
+    id: 'sky',
+    name: tr('key.sky.name'),
+    state: (S.settings && S.settings.weather && S.settings.weather.enabled) ? 'on' : 'off',
+    word: () => tr('key.sky.' + ((S.settings && S.settings.weather && S.settings.weather.enabled) ? 'on' : 'off')),
+    icon: skyIcon,
+    // Погода — единственное подключение без ключа: наружу уходит пара
+    // координат, а не секрет. Поэтому здесь нет поля, а есть дорога к окну.
+    body: () => `<p class="keygives">${tr('key.sky.gives')}</p>
+      <p class="hint">${tr('key.sky.note')}</p>
+      <div class="keyfoot"><span class="dim">P</span>
+        <button class="obtn" data-act="sky">${tr('key.sky.open')}</button></div>`,
+    bind: (root) => {
+      const b = root.querySelector('[data-act="sky"]');
+      if (b) b.onclick = () => { closeBag(); renderSky(); };
+    },
+  },
+];
+
+// Порядок на полке: сначала ядро, потом модули в порядке загрузки. Полка
+// короткая, сортировать её по состоянию нельзя — карточка должна лежать там
+// же, где лежала вчера.
+const keyCards = () => [...coreKeys(), ...collect('keys')];
+let keyIdx = 0;
+
+const keysHtml = () => {
+  const cards = keyCards();
+  if (!cards.length) return `<div class="bbody"><p class="empty">${tr('key.none')}</p></div>`;
+  keyIdx = Math.max(0, Math.min(cards.length - 1, keyIdx));
+  const card = cards[keyIdx];
+  return `<div class="bbody keysbody">
+      <div class="keyshelf">
+        ${cards.map((k, i) => `<button class="keycard${i === keyIdx ? ' on' : ''}${k.state === 'on' ? '' : ' dimmed'}" data-i="${i}">
+          <canvas width="48" height="36"></canvas>
+          <span class="kname">${esc(k.name)}</span>
+          <span class="kword ${k.state}">${esc(k.word())}</span>
+        </button>`).join('')}
+        <span class="bhint">${tr('key.shelf')}</span>
+      </div>
+      <div class="keydetail">
+        <div class="keyhead"><b>${esc(card.name)}</b><span class="kword ${card.state}">${esc(card.word())}</span></div>
+        ${card.body()}
+      </div>
+    </div>`;
+};
+
+function bindKeys() {
+  const cards = keyCards();
+  el.bag.querySelectorAll('.keycard canvas').forEach((cv, i) => {
+    const c = cv.getContext('2d');
+    c.imageSmoothingEnabled = false;
+    if (cards[i] && cards[i].icon) cards[i].icon(c);
+  });
+  el.bag.querySelectorAll('.keycard').forEach((b) => b.onclick = () => {
+    keyIdx = Number(b.dataset.i);
+    renderBag();
+  });
+  const detail = el.bag.querySelector('.keydetail');
+  if (!detail) return;
+  // Копирование — общее на все карточки: команда, путь, Redirect URI. Без
+  // https буфера в браузере нет, и это должно быть видно на кнопке, а не в
+  // консоли.
+  detail.querySelectorAll('[data-copy]').forEach((b) => b.onclick = async () => {
+    const ok = await copyText(b.dataset.copy);
+    toast(tr(ok ? 'key.copied' : 'key.copyFailed'), ok ? '' : 'wait');
+  });
+  const card = cards[keyIdx];
+  if (card && card.bind) card.bind(detail);
+  paintBagFocus();
+}
+
+// navigator.clipboard живёт только на https и на localhost. Офис открывают и
+// по адресу в сети — там остаётся старый путь через textarea, а если и он не
+// сработал, кнопка обязана сказать об этом.
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; }
+  } catch { /* пробуем старым способом */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch { return false; }
+}
+
+// Стрелки ходят по полке, ⏎ уводит фокус в карточку — там дальше обычный Tab.
+function keysKey(key) {
+  const cards = keyCards();
+  if (!cards.length) return false;
+  const step = { arrowleft: -1, arrowright: 1, arrowup: -1, arrowdown: 1 }[key];
+  if (step !== undefined) {
+    keyIdx = (keyIdx + step + cards.length) % cards.length;
+    renderBag();
+    return true;
+  }
+  if (key === 'enter') {
+    const first = el.bag.querySelector('.keydetail input, .keydetail .obtn');
+    if (first) first.focus();
+    return true;
+  }
+  return false;
+}
+
 // Вкладка «офис». Дресс-код живёт здесь, потому что у него нет предмета в
 // офисе: погоду настраивают у окна, язык — у таблички, а «всем надеть
 // галстуки» не висит нигде.
@@ -1014,13 +1181,14 @@ export function renderBag(tab) {
       ${TABS.map((t, i) => `<button class="btab${t === bagTab ? ' on' : ''}" data-tab="${t}">${tr('bag.tab.' + t)}<kbd>${i + 1}</kbd></button>`).join('')}
       <span class="bhint">${tr('bag.tabHint')}</span>
     </div>
-    ${bagTab === 'self' ? selfHtml() : bagTab === 'things' ? thingsHtml() : officeHtml()}
+    ${bagTab === 'self' ? selfHtml() : bagTab === 'things' ? thingsHtml() : bagTab === 'keys' ? keysHtml() : officeHtml()}
   </div>`;
 
   $('#bx').onclick = closeBag;
   el.bag.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => openTab(b.dataset.tab));
   if (bagTab === 'self') bindSelf();
   else if (bagTab === 'things') bindThings();
+  else if (bagTab === 'keys') bindKeys();
   else bindOffice();
 }
 
@@ -1131,6 +1299,9 @@ const catCells = (cat) => (cat ? [...cat.querySelectorAll('.bcell')] : []);
 
 function paintBagFocus() {
   if (bagTab === 'office') { officeRing.paint(); return; }
+  // У полки ключей подсветка своя — класс on на выбранной карточке, он же
+  // рисует рамку. Ходить сюда рингу незачем.
+  if (bagTab === 'keys') return;
   if (bagTab === 'things') {
     const cats = bagCats();
     if (!cats.length) return;
@@ -1164,6 +1335,7 @@ export function bagKey(raw) {
     return true;
   }
   if (bagTab === 'office') return officeRing.key(key, true);
+  if (bagTab === 'keys') return keysKey(key);
   return bagTab === 'things' ? thingsKey(key) : selfKey(key);
 }
 

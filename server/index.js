@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { snapshot, fileOwners, conversation } from './agents.js';
 import { realWeather, forgetWeather, geocode } from './weather.js';
 import { getSettings, patchSettings, publicSettings, ownerToken } from './settings.js';
-import { deliver, deliveryStatus, isBusy, MODES } from './deliver.js';
+import { deliver, deliveryStatus, forgetCli, isBusy, MODES } from './deliver.js';
 import { releaseNudge } from './release.js';
 import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff } from './modules.js';
 import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
@@ -668,7 +668,13 @@ async function handle(req, res) {
     }
   }
 
-  if (url.pathname === '/api/delivery') return send(res, 200, await deliveryStatus());
+  // fresh=1 — забыть кешированный ответ CLI и спросить заново. Кеш живёт
+  // минуту, и это правильно для фона; но человек, который только что сходил в
+  // терминал и нажал «проверить сейчас», ждать её не должен.
+  if (url.pathname === '/api/delivery') {
+    if (url.searchParams.get('fresh') === '1') forgetCli();
+    return send(res, 200, await deliveryStatus());
+  }
 
   // Where the office looks out of the window, and whether it looks at all.
   if (url.pathname === '/api/settings') {

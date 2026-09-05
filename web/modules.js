@@ -9,7 +9,10 @@
 //   first   — отдаём событие первому, кто взялся (клавиша, ПРОБЕЛ, ESC).
 import { addDict } from './i18n.js';
 
-const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'esc', 'tick', 'hud', 'lang', 'help', 'busy'];
+// 'keys' — карточка на полке ключей в инвентаре. Модуль отдаёт свою: ключ
+// принадлежит тому, кто им пользуется, и в бесплатной сборке карточка Figma
+// не должна висеть на полке от имени мольберта, которого в ней нет.
+const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'esc', 'tick', 'hud', 'lang', 'help', 'busy', 'keys'];
 const hooks = Object.fromEntries(HOOKS.map(h => [h, []]));
 const dicts = [];
 let ids = [];

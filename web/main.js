@@ -169,6 +169,12 @@ UI.initUI(state, {
   lang: () => switchLang(),
   sound: () => { state.soundOn = sound.toggle(); UI.renderHud(); return state.soundOn; },
   geocode: (q) => fetch('/api/geocode?q=' + encodeURIComponent(q)).then((r) => r.json()).catch((e) => ({ error: e.message })),
+  // Карточка ключа спрашивает CLI заново: человек ушёл в терминал, залогинился
+  // и вернулся, а ответ сервера живёт минуту — ждать её, глядя на «не
+  // авторизован», незачем.
+  recheckCli: () => fetch('/api/delivery?fresh=1', { headers: owned() })
+    .then((r) => r.json()).then((d) => { state.delivery = d; return d; })
+    .catch((e) => ({ error: e.message })),
   saveSettings,
   invites: () => fetch('/api/invites', { headers: owned() })
     .then((r) => r.json()).catch((e) => ({ error: e.message, invites: [] })),

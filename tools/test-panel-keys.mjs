@@ -71,6 +71,26 @@ function makeBagOffice(n) {
   };
 }
 
+// Вкладка «ключи» — полка карточек и подробная карточка под ней. Стрелки ходят
+// по полке, ⏎ уводит фокус внутрь: проверяется именно это, а не вёрстка.
+function makeBagKeys(n) {
+  const cards = Array.from({ length: n }, () => node('keycard'));
+  const btn = node('obtn');
+  const detail = node('keydetail');
+  detail.querySelector = (sel) => (sel === '.keydetail input, .keydetail .obtn' ? btn : null);
+  detail.querySelectorAll = () => [];
+  // Настоящий DOM отвечает и на составной селектор — панель спрашивает им
+  // первое, чему можно отдать фокус. Подставной обязан отвечать так же, иначе
+  // стенд проверяет не то, что делает браузер.
+  return {
+    hidden: false, innerHTML: '', cards, btn,
+    querySelector: (sel) => (sel === '.keydetail' ? detail
+      : sel === '.keydetail input, .keydetail .obtn' ? btn : null),
+    querySelectorAll: (sel) => (sel === '.keycard' ? cards
+      : sel === '.keydetail input, .keydetail .obtn' ? [btn] : []),
+  };
+}
+
 // Плоское кольцо: окно в мир и цвет офиса устроены одинаково.
 function makeRing(items) {
   const btns = items.map((it) => node('', it));
@@ -242,12 +262,25 @@ bag = makeBagSelf(3);
 UI.bagKey('1');
 check('цифра 1 вернула на «на себе»', focusRow() === 0, focusRow());
 check('несуществующая вкладка не ловится', UI.bagKey('9') === false, 'поймана');
+check('и пятой вкладки нет', UI.bagKey('5') === false, 'поймана');
+
+// Вкладка «ключи»: полка. Стрелки ходят по ней и наружу не выпускают, ⏎
+// отдаёт фокус первой кнопке карточки — оттуда дальше обычный Tab.
+bag = makeBagKeys(3);
+check('ключи: цифра 3 открыла вкладку', UI.bagKey('3') === true, 'не обработана');
+check('стрелка по полке обработана', UI.bagKey('ArrowRight') === true, 'не обработана');
+check('и вверх-вниз тоже: полка одна, а стрелок четыре', UI.bagKey('ArrowDown') === true, 'не обработана');
+UI.bagKey('Enter');
+check('Enter отдаёт фокус карточке, а не жмёт её', bag.btn.focused === 1 && bag.btn.clicked === 0,
+  `${bag.btn.focused} / ${bag.btn.clicked}`);
+check('чужая клавиша с полки уходит в офис', UI.bagKey('q') === false, 'съедена');
 
 // Вкладка «офис»: ряд кнопок, и стрелка вниз должна по ним ходить. До
 // 31 августа 2026 она не делала ничего — обработчик знал только две вкладки из
-// трёх, и клавиша уезжала в офис из-под открытой панели.
+// трёх, и клавиша уезжала в офис из-под открытой панели. С появлением ключей
+// вкладка уехала с цифры 3 на 4 — стенд поймал это первым.
 bag = makeBagOffice(5);
-check('офис: цифра 3 открыла вкладку', UI.bagKey('3') === true, 'не обработана');
+check('офис: цифра 4 открыла вкладку', UI.bagKey('4') === true, 'не обработана');
 check('вниз обработана', UI.bagKey('ArrowDown') === true, 'не обработана');
 check('и переводит на вторую кнопку', bag.btns[1].has('focus'), 'фокус не там');
 check('подсвечена ровно одна', bag.btns.filter((b) => b.has('focus')).length === 1,

@@ -62,6 +62,11 @@ async function account(path) {
 
 // Перелогинился — офис узнает об этом сразу, не дожидаясь конца минуты
 export function forgetAccount() { acc = { at: 0, value: null }; }
+// Полная перепроверка по кнопке в карточке ключа: и бинарь, и аккаунт.
+// findCli кеширует навсегда, и это верно для горячего пути — но человек мог
+// поставить CLI минуту назад, и «не найден» после установки читается как
+// поломка офиса.
+export function forgetCli() { cli = { checked: false, path: null, error: null }; forgetAccount(); }
 
 export async function deliveryStatus() {
   const c = await findCli();
