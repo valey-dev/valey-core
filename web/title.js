@@ -8,7 +8,7 @@ import { pxText, drawSwitcher } from './office.js';
 import { t as tr, lang } from './i18n.js';
 import { esc } from './esc.js';
 import { drawPerson } from './sprites.js';
-import * as PF from './pixfont.js';
+import { PLAQUE, drawPlaque } from './plaque.js';
 
 const $ = (s) => document.querySelector(s);
 const px = (ctx, x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); };
@@ -17,7 +17,6 @@ const px = (ctx, x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 
 // дверь — 44, а не 100, иначе рядом с ней он выглядит муравьём.
 const FLOOR = 150;
 const DOOR = { x: 182, y: 106, w: 36, h: 44 };
-const PLAQUE = { x: 148, y: 76, w: 104, h: 24 };
 const WIN = { x: 40, y: 40, w: 64, h: 36 };
 
 // Коридор, по которому теперь ходят. Слева упираешься в панель меню — за ней
@@ -148,9 +147,31 @@ function drawLamp(ctx, t) {
   px(ctx, x - 7, LAMP_Y + 17, 14, 2, '#463d33');    // нижний обод
 }
 
+// ------------------------------------------------------------------- окно
+// За стеклом — ночной город: коридор идёт вдоль внешней стены, ровно как в
+// самом офисе, где drawCorridor держит за окнами живую погоду. Здесь погоды
+// нет: экран входа не следит за твоим солнцем, у него всегда сумерки.
+function drawNightCity(ctx, WIN) {
+  px(ctx, WIN.x, WIN.y, WIN.w, WIN.h, '#2b3a5c');
+  px(ctx, WIN.x + 8, WIN.y + 7, 9, 9, '#ffd166');
+  for (const [dx, dy, w, h] of [[2, 22, 12, 14], [16, 16, 9, 20], [28, 24, 13, 12], [44, 18, 10, 18], [56, 26, 8, 10]])
+    px(ctx, WIN.x + dx, WIN.y + dy, w, h, '#16203a');
+  for (const [dx, dy] of [[19, 21], [47, 23], [59, 29]]) px(ctx, WIN.x + dx, WIN.y + dy, 2, 2, '#ffd166');
+}
+
 // ------------------------------------------------------------------- сцена
-export function drawTitle(ctx, VW, VH, t) {
+// opts открывает сцену наружу, и открывает ровно на три вещи, каждая из которых
+// нужна заглушке valey.dev — она рисует этот же экран в своём репозитории и
+// вторым офисом «по мотивам» быть не должна:
+//   sub      — нижняя строка таблички вместо «офиса агентов»;
+//   window   — своя картинка за стеклом: (ctx, WIN) => void;
+//   controls — false убирает переключатель языка и подсказки.
+// Последнее не украшение, а честность: по коридору заглушки не ходят, в дверь
+// не входят, и орган управления, который ничего не делает, обещает больше, чем
+// страница может.
+export function drawTitle(ctx, VW, VH, t, opts = {}) {
   const lit = (S.agents || []).length > 0;
+  const controls = opts.controls !== false;
 
   px(ctx, 0, 0, VW, FLOOR, '#2f2b28');
   for (let x = 0; x < VW; x += 25) px(ctx, x, 0, 1, FLOOR, '#282422');
@@ -159,35 +180,22 @@ export function drawTitle(ctx, VW, VH, t) {
   px(ctx, 0, FLOOR + 12, VW, 10, '#5e3230');
   for (let x = 6; x < VW; x += 34) px(ctx, x, FLOOR + 12, 18, 10, '#6b3a37');
 
-  // окно: за ним всегда сумерки — экран входа не следит за твоим солнцем
+  // окно: рама
   px(ctx, WIN.x - 3, WIN.y - 3, WIN.w + 6, WIN.h + 6, '#8a6247');
-  px(ctx, WIN.x, WIN.y, WIN.w, WIN.h, '#2b3a5c');
-  px(ctx, WIN.x + 8, WIN.y + 7, 9, 9, '#ffd166');
-  for (const [dx, dy, w, h] of [[2, 22, 12, 14], [16, 16, 9, 20], [28, 24, 13, 12], [44, 18, 10, 18], [56, 26, 8, 10]])
-    px(ctx, WIN.x + dx, WIN.y + dy, w, h, '#16203a');
-  for (const [dx, dy] of [[19, 21], [47, 23], [59, 29]]) px(ctx, WIN.x + dx, WIN.y + dy, 2, 2, '#ffd166');
+  // За стеклом рисует тот, кто позвал. Рама, переплёт и место остаются общими:
+  // окно — часть этой стены, а не картинка, которую можно подменить целиком.
+  (opts.window || drawNightCity)(ctx, WIN);
   px(ctx, WIN.x + WIN.w / 2 - 1, WIN.y, 2, WIN.h, '#8a6247');
   px(ctx, WIN.x, WIN.y + WIN.h / 2 - 1, WIN.w, 2, '#8a6247');
 
-  // табличка над дверью — логотип, но предметом в сцене
-  px(ctx, PLAQUE.x, PLAQUE.y, PLAQUE.w, PLAQUE.h, '#8a5f3a');
-  px(ctx, PLAQUE.x + 2, PLAQUE.y + 2, PLAQUE.w - 4, PLAQUE.h - 4, '#6b472a');
-  px(ctx, PLAQUE.x + 12, PLAQUE.y - 4, 3, 5, '#6d5040');
-  px(ctx, PLAQUE.x + PLAQUE.w - 15, PLAQUE.y - 4, 3, 5, '#6d5040');
-  // Обе строки набираются пикселями, а не fillText. Пятый кегль на холсте
-  // 400×225 рисуется серыми полутонами, а офис раздувает каждый полутон в
-  // квадрат: на кадре из офиса «офис агентов» не читалось ни одной буквой.
+  // Табличка над дверью — логотип, но предметом в сцене. Рисует её plaque.js:
+  // ту же табличку печатает генератор обложки формы, и разъезжаться им нельзя.
   //
-  // Лицо выбирается по самой строке, а не по языку. Русской нужна широкая
-  // гарнитура — кириллицы в 3×5 нет и не будет; английской хватает 3×5, где
-  // латиница полная. Если строку не берёт ни одно лицо, остаётся прежний
-  // fillText: мыльная подпись лучше пропавшей.
-  const mid = PLAQUE.x + PLAQUE.w / 2;
-  PF.drawText(ctx, 'VALEY', Math.round(mid - PF.textWidth('VALEY', PF.WIDE, 2) / 2), PLAQUE.y + 3, '#ffd166', PF.WIDE, 2);
-  const sub = tr('title.sub');
-  const face = PF.canDraw(sub, PF.WIDE) ? PF.WIDE : PF.canDraw(sub) ? PF.SMALL : null;
-  if (face) PF.drawText(ctx, sub, Math.round(mid - PF.textWidth(sub, face) / 2), PLAQUE.y + 15, '#c9b391', face);
-  else pxText(ctx, sub, PLAQUE.x + 30, PLAQUE.y + 20, '#c9b391', 5);
+  // opts.sub меняет нижнюю строку, и только её. Так табличку берёт заглушка:
+  // «OPENING SOON» широкой гарнитурой в полном кегле — 142 px против 104 у
+  // самой таблички, не влезает, — а имя над ней остаётся именем офиса на
+  // двери, а не вторым логотипом страницы.
+  drawPlaque(ctx, PLAQUE, opts.sub || tr('title.sub'), pxText);
 
   // дверь
   px(ctx, DOOR.x - 4, DOOR.y - 4, DOOR.w + 8, DOOR.h + 4, '#1d1510');
@@ -216,7 +224,7 @@ export function drawTitle(ctx, VW, VH, t) {
   // Человечек-переключатель у правой стены. Рисуется тем же кодом, что и в
   // коридоре офиса: вторая копия разошлась бы с ним молча при первой же правке
   // спрайта. Смотрит он на тебя, а на табличке — язык, на который переключит.
-  drawSwitcher(ctx, { x: LANG_X, y: FLOOR }, t, T.x < LANG_X ? -1 : 1);
+  if (controls) drawSwitcher(ctx, { x: LANG_X, y: FLOOR }, t, T.x < LANG_X ? -1 : 1);
 
   // ты в коридоре. Вида со спины в движке нет — тот же спрайт, что и в офисе
   drawPerson(ctx, T.x, FLOOR, S.me, {
@@ -230,7 +238,7 @@ export function drawTitle(ctx, VW, VH, t) {
   // Над переключателем плашка висит там же, где в офисе, — вплотную над его
   // табличкой. У двери она ниже: на офисной высоте её накрывала табличка
   // VALEY, и «офис агентов» читалось наполовину. Нашлось первым же кадром.
-  const z = zone();
+  const z = controls ? zone() : null;
   if (z === 'door') label(ctx, SPAWN, FLOOR - 28, tr('title.hintDoor'));
   if (z === 'lang') label(ctx, LANG_X, FLOOR - 44, tr('hint.lang'));
 
