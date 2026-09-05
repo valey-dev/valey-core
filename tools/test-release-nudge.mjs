@@ -21,11 +21,17 @@ check('закрытый чек-лист молчит',
   nudgeFrom({ tag: 'v0.2.0', taggedAt: now - 3 * DAY, draft: draft(0, 5) }, now) === null, 'пинает зря');
 
 // --- 2. the nudge, when there is something ---
-const n = nudgeFrom({ tag: 'v0.3.0', taggedAt: now - 3 * DAY, draft: draft(4, 1) }, now);
+// The path arrives with the info and is only echoed: since 5 September 2026 the
+// drafts live next to the settings, and this function must not know where that
+// is — it decides whether to nudge, not where anything lies.
+const DRAFT = '/home/somebody/.config/valey/scripts/v0.3.0.md';
+const n = nudgeFrom({ tag: 'v0.3.0', taggedAt: now - 3 * DAY, draft: draft(4, 1), draftPath: DRAFT }, now);
 check('незакрытый чек-лист пинает', !!n, n);
 check('версия та самая', n.tag === 'v0.3.0', n.tag);
 check('дни считаются', n.days === 3, n.days);
-check('путь к черновику собран', n.draft === 'media/v0.3.0.md', n.draft);
+check('путь к черновику отдан как есть', n.draft === DRAFT, n.draft);
+check('без пути в карточке стоит пусто, а не выдуманный файл',
+  nudgeFrom({ tag: 'v0.3.0', taggedAt: now, draft: draft(1) }, now).draft === null);
 check('черновик найден', n.hasDraft === true, n.hasDraft);
 check('осталось пунктов', n.open === 4, n.open);
 

@@ -4,6 +4,70 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.8.0 — 5 September 2026
+
+### Added
+
+- **release:** the range picks the digit, and one command carries a release to GitHub (c61d998)
+
+### Fixed
+
+- **test:** the dry-run stand no longer argues with the digit rules it triggered (adfc36b)
+## v0.7.0 — 5 September 2026
+
+### Added
+
+- **tools:** an agent can sign what it drew and what it coded (0309d30)
+- **notes:** a note can hang on a commit or a file, and lands in the same list (011e7b9)
+- **script:** one take can cover several versions, not one each (7de3525)
+
+### Fixed
+
+- **office:** the tree keeps one height, whatever branch is open (f70c69d)
+
+### Other
+
+- refactor(landing): the public page leaves the office's repository (fd8df08)
+- refactor(notes): the core keeps an address, not a commit (8ba2445)
+- test(tokens): the names theme.js repaints must exist in :root (8924991)
+- test(tokens): a colour written past :root now fails the run (be29ed5)
+- refactor(office): the role and state accents got names in :root (2bb8e24)
+- refactor(office): the panel colours that already had a name now use it (63e046d)
+## v0.6.0 — 5 September 2026
+
+### Added
+
+- **dialog:** the card says what the agent works on, not what the chat is called (a16bddf)
+
+### Fixed
+
+- **release:** the video draft is the owner's paper, not a file in the repository (dd08722)
+## v0.5.0 — 5 September 2026
+
+### Added
+
+- **release:** a tag becomes a page people can open, not just a pointer for git (484a3e6)
+
+### Fixed
+
+- **office:** the tree survives 175%, and the switch leaves the row of tabs (ecccaee)
+## v0.4.1 — 5 September 2026
+
+### Fixed
+
+- **release:** the release script no longer blocks its own next run (20a0426)
+- **test:** the release dry run stand goes green right after a release, too (8e0d76e)
+- **office:** #room= reaches the service rooms, which is what it is for (9f116d6)
+- **title:** the entrance menu appears in place, not on its way there (745fad7)
+- **guest:** the arrows reach «попросить доступ», the one button that answered only a mouse (cf35a23)
+- **guest:** the ask-for-access button was the one unpainted control in the office (3571e26)
+- **network:** the token loses its lookalikes, and forgives the ones a hand adds (90db920)
+- **office:** a guest saw rooms and no people, because one field never reaches them (0b6c312)
+- **title:** the entrance prints the address it is actually served from (ef4c8a7)
+
+### Other
+
+- docs: the two-machine test was on 5 September, not the 4th (ada3310)
 ## v0.4.0 — 5 September 2026
 
 ### Added
