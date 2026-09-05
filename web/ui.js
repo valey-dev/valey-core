@@ -1451,6 +1451,21 @@ let treeDir = 'work';
 
 const dirSub = (t) => (t.free ? tr('tree.dir.free') : tr('tree.dir.count', { n: t.own, m: t.total }));
 
+// The view switch lives in the tree's own header, not in the row of tabs. That
+// row is shared by all four tabs and holds the key hint; a fifth thing that
+// belongs to one tab pushed the hint onto a second line at 700 CSS px — before
+// any scaling. Here the switch sits with what it switches.
+const treeHeadHtml = () => {
+  const dir = treeWide ? DIRS.find((d) => d.id === treeDir) : null;
+  return `<div class="thead2">
+      <b>${tr('tree.title')}${dir ? ' · ' + esc(L(dir.name)) : ''}</b>
+      <span class="vsw">${tr('tree.view')}
+        <button class="vbtn${treeWide ? '' : ' on'}" data-view="flat">${tr('tree.view.flat')}</button>
+        <button class="vbtn${treeWide ? ' on' : ''}" data-view="wide">${tr('tree.view.wide')}</button>
+        <kbd>V</kbd></span>
+    </div>`;
+};
+
 const dirsHtml = () => `<div class="tdirs">${DIRS.map((d, i) => {
   const t = dirTally(d.id, treeOwn);
   return `<button class="tdir${d.id === treeDir ? ' on' : ''}${t.free ? ' free' : ''}" data-dir="${d.id}">
@@ -1495,6 +1510,7 @@ const wideHtml = () => {
       list.length ? tr('tree.gate.' + tier, { n: own, m: list.length }) : tr('tree.gate.' + tier + 'None')}</span></div>`;
   };
   return `<div class="bbody tbody wide">
+      ${treeHeadHtml()}
       ${dirsHtml()}
       <div class="wbody">
         <div class="wtree" id="wtree"><svg class="tedges"></svg>
@@ -1515,6 +1531,7 @@ const treeHtml = () => {
   const sel = treeCur();
   const cols = TIERS.map(treeCount);
   return `<div class="bbody tbody">
+      ${treeHeadHtml()}
       <div class="tcols">${cols.map((c) => `<div class="tcol${c.n === c.m ? ' own' : ''}">
         <b>${tr('tree.col.' + c.t, { n: c.n, m: c.m })}</b><span>${treeSub(c)}</span></div>`).join('')}</div>
       <div class="tree" id="tree"><svg class="tedges"></svg>
@@ -1587,10 +1604,25 @@ function toggleWide(to) {
   renderBag();
 }
 
+// Thresholds are measured off the panel, not the window: inside `zoom` a media
+// query still asks the window, and at 175% it answers about a panel twice the
+// size of the real one. The panel's own width in CSS pixels is the rect divided
+// by the scale, and that is the number the frames were drawn against.
+const uiScale = () => Number(getComputedStyle(document.documentElement).getPropertyValue('--ui')) || 1;
+
+function sizeWide() {
+  const wrap = el.bag.querySelector('.bagwrap');
+  const body = el.bag.querySelector('.wbody');
+  if (!wrap || !body || !wrap.getBoundingClientRect) return;
+  const w = wrap.getBoundingClientRect().width / uiScale();
+  body.classList.toggle('stack', w < 860);
+  body.classList.toggle('nosubs', w < 1000);
+}
+
 function bindTreeView() {
   el.bag.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => toggleWide(b.dataset.view === 'wide'));
   el.bag.querySelectorAll('[data-dir]').forEach((b) => b.onclick = () => pickDir(b.dataset.dir));
-  if (treeWide) wideEdges();
+  if (treeWide) { sizeWide(); wideEdges(); }
 }
 
 // Choosing a direction moves the card too: the node you were reading may live in
@@ -1672,10 +1704,6 @@ export function renderBag(tab) {
     <div class="vhead">${tr('bag.title')} · ${tr('bag.tab.' + bagTab)}<button id="bx">✕</button></div>
     <div class="btabs">
       ${tabs().map((t, i) => `<button class="btab${t === bagTab ? ' on' : ''}" data-tab="${t}">${tr('bag.tab.' + t)}<kbd>${i + 1}</kbd></button>`).join('')}
-      ${bagTab === 'tree' ? `<span class="vsw">${tr('tree.view')}
-        <button class="vbtn${treeWide ? '' : ' on'}" data-view="flat">${tr('tree.view.flat')}</button>
-        <button class="vbtn${treeWide ? ' on' : ''}" data-view="wide">${tr('tree.view.wide')}</button>
-        <kbd>V</kbd></span>` : ''}
       <span class="bhint">${tr('bag.tabHint')}</span>
     </div>
     ${bagTab === 'self' ? selfHtml() : bagTab === 'things' ? thingsHtml() : bagTab === 'tree' ? (treeWide ? wideHtml() : treeHtml()) : officeHtml()}
