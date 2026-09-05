@@ -83,17 +83,13 @@ canvas{image-rendering:pixelated; display:block; border:3px solid var(--frame);
    «окно минус left», то есть половина окна, и шапка ломалась на две строки
    посреди пустого места. transform сдвигает уже после переноса и не помогает. */
 #hud{position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:5;
-  width:max-content; max-width:calc(100vw - 20px); background:rgba(26,18,12,.9);
+  width:max-content; max-width:calc((100vw - 20px) / var(--ui, 1)); background:rgba(26,18,12,.9);
   border:2px solid var(--frame); padding:4px 12px;
   letter-spacing:.06em; font-size:12px; text-align:center;}
 .chip{display:inline-block; white-space:nowrap}
 #hud b{color:var(--warn); letter-spacing:.14em}
 .chip{margin-left:10px; color:var(--ink-dim)}
 .chip.work{color:var(--accent)} .chip.wait{color:var(--warn)}
-/* left:50% отдавал подсказке только половину окна, и она ломалась на четыре
-   строки. Растягиваем на всю ширину и центрируем текстом. */
-#help{position:fixed; bottom:8px; left:0; right:0; text-align:center;
-  padding:0 16px; color:var(--muted); font-size:11px; letter-spacing:.05em}
 
 /* ---- dialog ---- */
 #dialog{position:fixed; left:50%; bottom:46px; transform:translateX(-50%); z-index:20;
@@ -837,7 +833,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
    Именно visibility, а не display:none — fit() меряет их высоту, чтобы
    отвести место под полосы. С display холст на входе раздувался бы, а при
    «Войти» прыгал обратно и налезал на шапку до ближайшего resize. */
-body.titling #hud, body.titling #help{visibility:hidden}
+body.titling #hud{visibility:hidden}
 
 /* ---- размер текста панелей ---- */
 /* zoom, а не font-size: панель растёт целиком — вместе с отступами, рамками и
@@ -847,7 +843,10 @@ body.titling #hud, body.titling #help{visibility:hidden}
    offsetHeight, а под zoom он возвращает неотмасштабированную высоту — холст
    полез бы на них, ровно как в баге с браузерным зумом. Оверлей входа вдобавок
    позиционируется в пикселях от рамки холста, и zoom увёл бы его от двери. */
-#dialog, #toasts, .vwrap, .rwrap{zoom:var(--ui, 1)}
+/* The HUD and the hint are interface too, not world: they grow with the panels.
+   Until 6 September 2026 they stayed 12 and 11 pixels at any office scale, so the
+   bigger the office got, the smaller the HUD read against it. */
+#dialog, #toasts, .vwrap, .rwrap, #hud{zoom:var(--ui, 1)}
 /* У всех пятерых ширина в vw поделена на --ui там, где она задаётся. Иначе
    ограничитель не ограничивает: vw внутри zoom меряется от окна и потом
    умножается на масштаб, и min(1000px, 94vw) при 175% даёт 1750 px в окне
