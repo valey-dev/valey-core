@@ -4,6 +4,25 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.11.1 — 6 September 2026
+
+### Fixed
+
+- **release:** land clears its temporary tree even when the release fails (cf73ac3)
+## v0.11.0 — 6 September 2026
+
+### Added
+
+- **release:** landing a pull request and cutting the version are one command (fac6084)
+
+### Fixed
+
+- **release:** the dry run of land cuts from the head and stops claiming it shipped (a5d9964)
+- **release:** a version can be cut from any tree, and a skipped release now refuses (6495bad)
+
+### Other
+
+- test(release): the newest tag and package.json have to say the same thing (99c536c)
 ## v0.10.0 — 5 September 2026
 
 ### Added

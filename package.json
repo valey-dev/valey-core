@@ -1,6 +1,6 @@
 {
   "name": "valey",
-  "version": "0.10.0",
+  "version": "0.11.1",
   "type": "module",
   "description": "A pixel-art office for the agents you already run",
   "homepage": "https://valey.dev",
@@ -16,7 +16,8 @@
     "coverage": "npx --yes c8@10 --reporter=text-summary --reporter=html --src=. --exclude=**/test-*.mjs --exclude=tools/run-tests.mjs --exclude=.claude/** --check-coverage --lines=70 --functions=55 node tools/run-tests.mjs",
     "figma:audit": "node \"$HOME/.claude/skills/agents-init/modules/design-first/scripts/figma-audit.mjs\"",
     "release": "node tools/release.mjs",
-    "ship": "node tools/release.mjs --ship"
+    "ship": "node tools/release.mjs --ship",
+    "land": "node tools/land.mjs"
   },
   "repository": {
     "type": "git",
