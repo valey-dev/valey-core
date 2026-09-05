@@ -14,7 +14,7 @@ import { titleOf } from './paintings.js';
 import { drawBubble } from './badges.js';
 import { skateStep, rolling, drawSkateboard, ollieStep, canOllie, OLLIE_POP } from './skate.js';
 import { readPad, edges as padEdges } from './pad.js';
-import { actionOf, codeOf, codesOf } from './keymap.js';
+import { actionOf, codeOf, codesOf, hints } from './keymap.js';
 // t переименован в tr: в main.js `t` — это время кадра у draw(t), и импорт
 // молча перекрывался числом внутри каждого колбэка отрисовки
 import { t as tr, lang, setLang, onLang } from './i18n.js';
@@ -788,11 +788,16 @@ async function saveShot(scale) {
 // счёт: он и так перерисовывается каждый кадр и берёт строки из t() на лету.
 function renderStatic() {
   const help = document.getElementById('help');
-  // Строка помощи перечисляет клавиши, а часть клавиш принадлежит модулям.
-  // Пока «R — радио» стояло в самой строке, бесплатная сборка обещала клавишу,
-  // которой в ней нет: подсказка врала ровно там, где её и читают — когда не
-  // знаешь, что нажать.
-  if (help) help.textContent = [tr('help'), ...collect('help')].join(' · ');
+  // Строка помощи собирается из реестра клавиш, а не пишется руками: подпись
+  // берётся у действия, клавиша — у его привязки. Пока строка была текстом в
+  // словаре, она отставала от кода — в ней не было ни E, ни F9, ни H, потому
+  // что клавишу добавляли в одном месте, а строку правили в другом.
+  //
+  // Модулям точка `help` оставлена: ей пользуются те, кто ещё не объявил свои
+  // клавиши через api.keys(), и им незачем ломаться из-за нашей уборки.
+  const cap = (c) => { const t = tr('keycap.' + c); return t === 'keycap.' + c ? c : t; };
+  const strip = hints().map((h) => `${h.caps.map(cap).join(' ')} — ${tr(h.hint)}`);
+  if (help) help.textContent = [...strip, ...collect('help'), tr('help.tail')].join(' · ');
   document.title = tr('doc.title');
   document.documentElement.lang = lang();
   UI.relabel();

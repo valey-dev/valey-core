@@ -17,7 +17,7 @@ import { WALL, LIFT_DOOR_H, MARGIN } from '../../web/layout.js';
 
 const DICT = {
   ru: {
-    'help.plan': 'K — план офиса',
+    'plan.hint': 'план офиса',
     'plan.title': 'ПЛАН ОФИСА',
     'plan.floors': 'one:{n} этаж|few:{n} этажа|many:{n} этажей',
     'plan.projects': 'one:{n} проект|few:{n} проекта|many:{n} проектов',
@@ -43,7 +43,7 @@ const DICT = {
     'plan.keys': '← ↑ → ↓ комната · ENTER идти · ESC',
   },
   en: {
-    'help.plan': 'K office plan',
+    'plan.hint': 'office plan',
     'plan.title': 'OFFICE PLAN',
     'plan.floors': 'one:{n} floor|other:{n} floors',
     'plan.projects': 'one:{n} project|other:{n} projects',
@@ -501,7 +501,7 @@ export function register(api) {
   // Клавиша объявляется, а не проверяется буквой: ядро держит реестр, и оно же
   // однажды даст её переназначить. `KeyK` — физическая клавиша, поэтому под
   // русской раскладкой это та же «Л», без второй ветки в коде.
-  api.keys([{ id: 'toggle', codes: ['KeyK'], group: 'panel' }]);
+  api.keys([{ id: 'toggle', codes: ['KeyK'], group: 'panel', hint: 'plan.hint' }]);
 
   // Пока панель открыта — стрелки её; это разбор внутри панели, он остаётся на
   // сырой клавише, как у всех остальных панелей офиса.
@@ -526,5 +526,4 @@ export function register(api) {
     refresh(false);
   });
   api.on('lang', () => { if (planOpen()) openPlan(); });
-  api.on('help', () => tr('help.plan'));
 }

@@ -39,7 +39,7 @@ const nowPlaying = () => (radio.sdk && player.track ? player.track.name : statio
 const DICT = {
   ru: {
     // своя строчка в подсказке внизу экрана: клавиша модуля — забота модуля
-    'help.radio': 'R — радио',
+    'radio.hint': 'радио',
     'hud.radioTitle': 'радио — R',
     'hint.radioOn': '[ ПРОБЕЛ ] радио играет',
     'hint.radio': '[ ПРОБЕЛ ] включить радио',
@@ -86,7 +86,7 @@ const DICT = {
     'radio.noteEmbed': 'Играет прямо в этой вкладке. Пока радио играет, офис звучит тише.',
   },
   en: {
-    'help.radio': 'R radio',
+    'radio.hint': 'radio',
     'hud.radioTitle': 'radio — R',
     'hint.radioOn': '[ SPACE ] radio is playing',
     'hint.radio': '[ SPACE ] switch the radio on',
@@ -456,7 +456,7 @@ export function register(api) {
   // Клавиша объявлена в общем реестре: `KeyR` — физическая, поэтому русская «К»
   // это она же, без второй ветки. Пока панель открыта, стрелки её — и это
   // остаётся на сырой клавише, как у всех панелей.
-  api.keys([{ id: 'toggle', codes: ['KeyR'], group: 'panel' }]);
+  api.keys([{ id: 'toggle', codes: ['KeyR'], group: 'panel', hint: 'radio.hint' }]);
   api.on('key', (raw) => radioKey(raw));
   api.on('action', (id) => {
     if (id !== 'radio.toggle') return false;
@@ -484,7 +484,6 @@ export function register(api) {
   });
 
   api.on('lang', () => relabelRadio());
-  api.on('help', () => tr('help.radio'));
 
   // Приёмник должен знать про приложение Spotify: без него он играет встроенным
   // проигрывателем, с ним — своим. Настройки приезжают тем же тиком.

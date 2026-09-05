@@ -48,7 +48,7 @@ installDom({
 
 const { buildLayout } = await import('../../web/layout.js');
 const { addDict } = await import('../../web/i18n.js');
-const { define: defineKeys, reset: resetKeys, actionOf } = await import('../../web/keymap.js');
+const { define: defineKeys, reset: resetKeys, actionOf, hints } = await import('../../web/keymap.js');
 const CORE = await import('../../web/ui.js');
 const P = await import('./client.js');
 
@@ -91,7 +91,12 @@ CORE.initUI(state, { guideTo: () => {} });
 hooks.tick(state, 16);
 
 // ------------------------------------------------------------ вход и выход
-check('строка подсказки называет клавишу', /K/.test(hooks.help()), hooks.help());
+// Подсказку внизу экрана модуль больше не пишет сам: объявил клавишу — она
+// там появилась. Своей строки помощи у него нет вовсе, и это проверяется тем,
+// что запись о нём есть в реестре подсказок.
+const mine = hints().find((h) => h.hint === 'plan.hint');
+check('клавиша попала в строку подсказки', !!mine && mine.caps.includes('K'), mine);
+check('и своей строки помощи модуль не держит', !hooks.help, 'держит');
 // Клавиша объявлена в реестре, а не зашита в обработчике: буквы модуль больше
 // не сравнивает, и русская «Л» — это та же физическая KeyK, что проверено в
 // tools/test-keymap.mjs.

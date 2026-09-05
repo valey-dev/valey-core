@@ -31,32 +31,34 @@ export const GROUPS = ['move', 'act', 'panel', 'zoom', 'service'];
 // Declaration order is display order: this is the order the help strip and the
 // keys panel will read.
 const CORE = [
-  { id: 'move.left', codes: ['KeyA', 'ArrowLeft'], group: 'move' },
-  { id: 'move.right', codes: ['KeyD', 'ArrowRight'], group: 'move' },
-  { id: 'move.up', codes: ['KeyW', 'ArrowUp'], group: 'move' },
-  { id: 'move.down', codes: ['KeyS', 'ArrowDown'], group: 'move' },
-  { id: 'move.run', codes: ['ShiftLeft', 'ShiftRight'], group: 'move', held: true },
+  // Declaration order is the order of the strip at the bottom, so walking is
+  // declared the way it is said aloud: W, A, S, D.
+  { id: 'move.up', codes: ['KeyW', 'ArrowUp'], group: 'move', hint: 'hint.walk' },
+  { id: 'move.left', codes: ['KeyA', 'ArrowLeft'], group: 'move', hint: 'hint.walk' },
+  { id: 'move.down', codes: ['KeyS', 'ArrowDown'], group: 'move', hint: 'hint.walk' },
+  { id: 'move.right', codes: ['KeyD', 'ArrowRight'], group: 'move', hint: 'hint.walk' },
+  { id: 'move.run', codes: ['ShiftLeft', 'ShiftRight'], group: 'move', held: true, hint: 'hint.run' },
   // Space and E are one action on purpose: E is the reach of a hand that is
   // already on WASD, Space the reach of a thumb.
-  { id: 'act.interact', codes: ['Space', 'KeyE'], group: 'act' },
-  { id: 'act.skate', codes: ['KeyB'], group: 'act' },
-  { id: 'act.sound', codes: ['KeyM'], group: 'act' },
-  { id: 'panel.round', codes: ['Tab'], group: 'panel' },
-  { id: 'panel.notes', codes: ['KeyN'], group: 'panel' },
-  { id: 'panel.bag', codes: ['KeyC'], group: 'panel' },
-  { id: 'panel.invite', codes: ['KeyI'], group: 'panel' },
-  { id: 'panel.sky', codes: ['KeyP'], group: 'panel' },
-  { id: 'panel.skin', codes: ['KeyU'], group: 'panel' },
-  { id: 'panel.pager', codes: ['KeyH'], group: 'panel' },
+  { id: 'act.interact', codes: ['Space', 'KeyE'], group: 'act', hint: 'hint.interact' },
+  { id: 'act.skate', codes: ['KeyB'], group: 'act', hint: 'hint.skate' },
+  { id: 'act.sound', codes: ['KeyM'], group: 'act', hint: 'hint.sound' },
+  { id: 'panel.round', codes: ['Tab'], group: 'panel', hint: 'hint.round' },
+  { id: 'panel.notes', codes: ['KeyN'], group: 'panel', hint: 'hint.notes' },
+  { id: 'panel.bag', codes: ['KeyC'], group: 'panel', hint: 'hint.bag' },
+  { id: 'panel.invite', codes: ['KeyI'], group: 'panel', hint: 'hint.invite' },
+  { id: 'panel.sky', codes: ['KeyP'], group: 'panel', hint: 'hint.sky' },
+  { id: 'panel.skin', codes: ['KeyU'], group: 'panel', hint: 'hint.skin' },
+  { id: 'panel.pager', codes: ['KeyH'], group: 'panel', hint: 'hint.pager' },
   // The cameras reuse left and right rather than binding their own: "previous
   // camera" is the same intent as "left", and a person who moves left onto
   // another key expects the cameras to follow. Only the cycling switch is the
   // control room's own.
   { id: 'cams.auto', codes: ['KeyT'], group: 'panel' },
-  { id: 'zoom.in', codes: ['Equal', 'NumpadAdd'], group: 'zoom' },
+  { id: 'zoom.in', codes: ['Equal', 'NumpadAdd'], group: 'zoom', hint: 'hint.zoom' },
   { id: 'zoom.out', codes: ['Minus', 'NumpadSubtract'], group: 'zoom' },
-  { id: 'zoom.reset', codes: ['Digit0', 'Numpad0'], group: 'zoom' },
-  { id: 'service.shot', codes: ['F9'], group: 'service' },
+  { id: 'zoom.reset', codes: ['Digit0', 'Numpad0'], group: 'zoom', hint: 'hint.zoom' },
+  { id: 'service.shot', codes: ['F9'], group: 'service', hint: 'hint.shot' },
 ];
 
 let actions = [];
@@ -161,6 +163,31 @@ export function labelFor(code) {
 
 /** The keys of one action, printed: `['A', '←']`. */
 export function labelsOf(id) { return codesOf(id).map(labelFor); }
+
+/**
+ * The bottom strip, as data: one entry per caption, with the keys that lead to
+ * it. Actions that share a `hint` merge into one entry — walking is four
+ * actions and one line. Only the first binding of each action is printed: the
+ * arrows are a second way to walk and the strip is not a reference, it is a
+ * reminder.
+ *
+ * The strip was a hand-written sentence in the dictionary until 5 September
+ * 2026, and it lied in both languages: it never learned about E, F9 or H, and
+ * every module had to remember to add its own line. Now a declared key is a
+ * printed key, and forgetting is not possible.
+ */
+export function hints() {
+  const out = [];
+  const seen = new Map();
+  for (const a of actions) {
+    if (!a.hint) continue;
+    const cap = labelFor(a.codes[0]);
+    const at = seen.get(a.hint);
+    if (at === undefined) { seen.set(a.hint, out.length); out.push({ hint: a.hint, caps: [cap], ids: [a.id] }); }
+    else { out[at].caps.push(cap); out[at].ids.push(a.id); }
+  }
+  return out;
+}
 
 // Stands build a fresh registry per case; the office never calls this.
 export function reset() { actions = []; failures = []; byCode = new Map(); define(CORE); }

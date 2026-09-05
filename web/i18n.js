@@ -571,7 +571,22 @@ const DICT = {
     'task.resent': '✈ Отправил заново, с полным доступом.',
     'task.noteSent': '✈ Записка ушла в чат {name}. Ответ придёт сюда же.',
 
-    'help': 'WASD — ходить · SHIFT — бежать · B — скейт · ПРОБЕЛ — заговорить, попить, сесть · TAB — обход · N — заметки · C — переодеться · P — окно в мир · U — цвет офиса · M — звук · + 0 — масштаб (×6…×8) · SECURITY внизу — камеры по этажу (T — автообход) · I — пригласить · ESC — назад',
+    // Строка подсказки внизу экрана собирается из реестра клавиш: подпись на
+    // действие, а клавиши к ней подставляет web/keymap.js. Рукописной строкой
+    // она быть перестала 5 сентября 2026 — та врала про E, F9 и H, потому что
+    // клавишу добавляли в коде, а строку правили отдельно и не всегда.
+    'hint.walk': 'ходить', 'hint.run': 'бежать',
+    'hint.interact': 'заговорить, попить, сесть', 'hint.skate': 'скейт',
+    'hint.sound': 'звук', 'hint.round': 'обход', 'hint.notes': 'заметки',
+    'hint.bag': 'переодеться', 'hint.invite': 'пригласить',
+    'hint.sky': 'окно в мир', 'hint.skin': 'цвет офиса',
+    'hint.pager': 'вернуть пейджер', 'hint.zoom': 'масштаб',
+    'hint.shot': 'кадр (с SHIFT — ×4)',
+    // Подпись на клавише, если она отличается от написанного на самой кнопке.
+    // Здесь только пробел: TAB и SHIFT так и читаются.
+    'keycap.SPACE': 'ПРОБЕЛ',
+    // Хвост строки — то, что клавишей не является и потому в реестр не попало.
+    'help.tail': 'SECURITY внизу — камеры по этажу (T — автообход) · ESC — назад',
     'doc.title': 'Valey — офис',
   },
 
@@ -1117,7 +1132,15 @@ const DICT = {
     'task.resent': '✈ Sent again, with full access.',
     'task.noteSent': '✈ The note went to {name}’s chat. The answer lands right here.',
 
-    'help': 'WASD to walk · SHIFT to run · B skateboard · SPACE to talk, drink and sit · TAB the round · N notes · C to change · P window on the world · U office colour · M sound · + 0 scale (×6…×8) · SECURITY below — floor cameras (T to cycle) · I invite · ESC back',
+    'hint.walk': 'walk', 'hint.run': 'run',
+    'hint.interact': 'talk, drink, sit', 'hint.skate': 'skateboard',
+    'hint.sound': 'sound', 'hint.round': 'the round', 'hint.notes': 'notes',
+    'hint.bag': 'change', 'hint.invite': 'invite',
+    'hint.sky': 'window on the world', 'hint.skin': 'office colour',
+    'hint.pager': 'the pager back', 'hint.zoom': 'scale',
+    'hint.shot': 'a frame (SHIFT for ×4)',
+    'keycap.SPACE': 'SPACE',
+    'help.tail': 'SECURITY below — floor cameras (T to cycle) · ESC back',
     'doc.title': 'Valey — the office',
   },
 };
