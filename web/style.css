@@ -162,6 +162,17 @@ kbd{color:var(--muted); font-size:10px}
 .vhead{flex:0 0 auto; display:flex; justify-content:space-between; align-items:center; padding:8px 12px;
   background:var(--wood-hi); color:var(--warn); letter-spacing:.06em}
 .vhead button{background:none;border:none;color:var(--ink);font-size:16px;cursor:pointer}
+/* The conversation header in two rows: who is talking, and under it, on what */
+.vhead2{flex-direction:column; align-items:stretch; gap:5px}
+.vrow{display:flex; align-items:center; justify-content:space-between}
+.vtask{gap:10px}
+.vtask .task{flex:1 1 auto; min-width:0}
+/* The room is split in the task's favour: the status here can be longer than it
+   is, and with no ceiling it took half the row, leaving three words of the task
+   and an ellipsis. */
+.vtask .tstat{display:block; flex:0 1 auto; min-width:0; max-width:42%; padding-left:0; letter-spacing:0;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.vtask:empty{display:none}
 .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; padding:14px; overflow:auto}
 .grid figure{margin:0; cursor:pointer; background:var(--field); border:2px solid var(--wood); padding:6px}
 .grid figure:hover{border-color:var(--warn)}
@@ -318,7 +329,19 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
    fitted, so the missing scroll was invisible; the second scale is what asked
    the question. The tabs and the tree's own header stay put while it moves. */
 .bagwrap{width:min(700px, calc(94vw / var(--ui, 1)))}
-.bagwrap .bbody{overflow-y:auto; min-height:0}
+.bagwrap .bbody{min-height:0}
+/* The tree keeps one height whatever branch is open. Its content varies a lot —
+   five nodes in one direction, one in another, a card of two lines or of six —
+   and a panel that resizes under every keypress reads as the office twitching.
+   So the height is set once, from the same ceiling the panel already has, and
+   what varies scrolls inside. Reported 5 September 2026: «высота окна прыгает,
+   если переключаюсь даже между направлениями».
+   The tabs, the tree's own header and the direction tiles stay put; everything
+   below them moves. */
+.bagwrap.steady{height:min(616px, calc(84vh / var(--ui, 1)))}
+.bagwrap.steady .bbody{flex:1 1 auto; overflow:hidden}
+.tscroll{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain;
+  display:flex; flex-direction:column; gap:10px; padding-right:2px}
 .bagwrap{display:flex; flex-direction:column}
 
 /* Вкладки инвентаря. Переключаются цифрой, а не стрелкой: стрелки внутри
@@ -508,6 +531,29 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .ntail.ok{color:var(--accent)} .ntail.bad{color:var(--bad-dim)}
 
 .chatname{display:block; color:var(--info); font-size:11px; margin-top:2px}
+
+/* ---- what the agent is doing right now ---- */
+/* The task is set as speech, not as a service caption: it is what the card gets
+   opened for. A long one is clipped to a line with an ellipsis — the report tail
+   has no length limit, and a head has to stay a head. */
+.taskrow{display:block; margin-top:4px}
+.taskrow p{margin:0}
+.task{color:var(--ink); font-size:13px; border-left:3px solid var(--warn); padding-left:8px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+/* Silent for hours — the task does not claim "now", it shows where he stopped */
+.task.cold{color:var(--muted); border-left-color:var(--frame)}
+/* The status comes second, so it gets one line: on live sessions it runs to
+   three sentences and grew into a paragraph, pushing the reply down. It is
+   readable in full anyway, in the answer right below the head. */
+.tstat{display:flex; gap:6px; align-items:baseline; color:var(--muted); font-size:11px; padding-left:11px}
+.tval{min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.tsess{flex:0 0 auto; white-space:nowrap; color:var(--muted)}
+/* The plate means "this is for you", so it is there only when the report really
+   asks. It is allowed two lines: this is the only place that says what is wanted
+   from you, and cutting an ask mid-word costs more here than a second line. */
+.need{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  color:var(--warn); font-size:11px; background:var(--wood);
+  padding:2px 8px; margin:3px 0 0 11px}
 .rwhat b{color:var(--ink); font-weight:normal}
 .rwhat i{display:block; color:var(--muted-dim); font-style:normal; font-size:10px}
 .rrow{align-items:flex-start}

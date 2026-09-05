@@ -119,6 +119,36 @@ export const ago = (sec) => sec == null || !Number.isFinite(sec) ? ''
 const metaLine = (a) => `${esc(a.project)}${a.branch ? ' · ' + esc(a.branch) : ''} · ${statusWord(a)}`
   + (a.status !== 'working' && a.idleFor > 300 ? tr('meta.spoke', { ago: ago(a.idleFor) }) : '');
 const chatLine = (a) => (a.title ? `<span class="chatname">💬 ${esc(a.title)}</span>` : '');
+// The report tail in the head. The task in the main colour, full width; the
+// status dim under it, with the session name riding along at its end — telling
+// two sessions of one project apart is all it was ever needed for. No tail and
+// the head looks as it did, because the report ends answers by this repository's
+// rule, not by Claude Code's.
+const COLD_TASK = 3600;   // seconds of silence after which the task is no longer "now"
+const taskRow = (a) => {
+  const t = a.task;
+  if (!t || !t.what) return chatLine(a);
+  const cold = a.status !== 'working' && (a.idleFor || 0) > COLD_TASK;
+  // The session name is not on its own blue line here, as it is without a task,
+  // but at the end of the status: it stops being the first thing read, and does
+  // not disappear. It sits in its own cell, because the status is clipped to fit
+  // and the name is not clippable — it is short, and it is the thing that
+  // identifies which of a project's two sessions this is.
+  const stat = t.status ? `<span class="tval">${tr('task.status', { s: esc(t.status) })}</span>` : '';
+  const sess = a.title ? `<span class="tsess">${stat ? '· ' : ''}💬 ${esc(a.title)}</span>` : '';
+  return `<p class="task${cold ? ' cold' : ''}">${esc(t.what)}</p>`
+    + (stat || sess ? `<p class="tstat">${stat}${sess}</p>` : '')
+    + (t.need ? `<p class="need">⚑ ${tr('task.need', { s: esc(t.need) })}</p>` : '');
+};
+
+// The same task in the conversation header: it on the left, the status on the
+// right. The session name is not repeated here — it is a row above, in its corner.
+const chatTask = (a) => {
+  const t = a && a.task;
+  if (!t || !t.what) return '';
+  return `<span class="task">${esc(t.what)}</span>`
+    + (t.status ? `<span class="tstat">${tr('task.status', { s: esc(t.status) })}</span>` : '');
+};
 // The server sends the key of an activity and leaves the ready Russian phrase for
 // compatibility: if there is no key, we show the phrase as it is.
 const FALLBACK_ARG = { edit: 'act.someCode', read: 'act.someFile' };
@@ -206,8 +236,10 @@ function patchDialog(a) {
   const set = (sel, html) => { const n = el.dialog.querySelector(sel); if (n && n.innerHTML !== html) n.innerHTML = html; };
   set('.meta', metaLine(a));
   set('.act', actLine(a));
-  const chat = el.dialog.querySelector('.chatname');
-  if (chat && a.title && chat.textContent !== `💬 ${a.title}`) chat.textContent = `💬 ${a.title}`;
+  // The task is rewritten by every answer, so its row moves as a whole rather
+  // than being patched piece by piece: between "you are needed" and its absence
+  // what changes is the set of rows, not the text.
+  set('.taskrow', taskRow(a));
 
   if (S.page === 'talk') {
     const said = clean(a.lastSaid) || tr('dlg.silent');
@@ -358,7 +390,7 @@ function buildDialog(a) {
     <div class="portrait"><canvas width="48" height="48" id="pf"></canvas></div>
     <div class="content">
       <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${esc(roleText(a))}</span>
-        <span class="meta">${metaLine(a)}</span>${chatLine(a)}</div>
+        <span class="meta">${metaLine(a)}</span><div class="taskrow">${taskRow(a)}</div></div>
       <div class="act">${actLine(a)}</div>
       <div class="body">${body}</div>
       <div class="acts">
@@ -1512,6 +1544,7 @@ const wideHtml = () => {
   return `<div class="bbody tbody wide">
       ${treeHeadHtml()}
       ${dirsHtml()}
+      <div class="tscroll">
       <div class="wbody">
         <div class="wtree" id="wtree"><svg class="tedges"></svg>
           ${tierRow('floor')}
@@ -1524,6 +1557,7 @@ const wideHtml = () => {
         ${treeCard(sel)}
       </div>
       <p class="hint dim">${tr('tree.wide.keys')}</p>
+      </div>
     </div>`;
 };
 
@@ -1532,6 +1566,7 @@ const treeHtml = () => {
   const cols = TIERS.map(treeCount);
   return `<div class="bbody tbody">
       ${treeHeadHtml()}
+      <div class="tscroll">
       <div class="tcols">${cols.map((c) => `<div class="tcol${c.n === c.m ? ' own' : ''}">
         <b>${tr('tree.col.' + c.t, { n: c.n, m: c.m })}</b><span>${treeSub(c)}</span></div>`).join('')}</div>
       <div class="tree" id="tree"><svg class="tedges"></svg>
@@ -1542,6 +1577,7 @@ const treeHtml = () => {
       </div>
       ${treeCard(sel)}
       <p class="hint dim">${tr('tree.note')} ${tr('tree.keys')}</p>
+      </div>
     </div>`;
 };
 
@@ -1700,7 +1736,7 @@ export function renderBag(tab) {
   el.bag.hidden = false;
   // The detailed view is the only place in the inventory that is wider than 700.
   // That is the price of the mode, and it is paid only while the mode is on.
-  el.bag.innerHTML = `<div class="rwrap bagwrap${bagTab === 'tree' && treeWide ? ' wide' : ''}">
+  el.bag.innerHTML = `<div class="rwrap bagwrap${bagTab === 'tree' ? ' steady' : ''}${bagTab === 'tree' && treeWide ? ' wide' : ''}">
     <div class="vhead">${tr('bag.title')} · ${tr('bag.tab.' + bagTab)}<button id="bx">✕</button></div>
     <div class="btabs">
       ${tabs().map((t, i) => `<button class="btab${t === bagTab ? ' on' : ''}" data-tab="${t}">${tr('bag.tab.' + t)}<kbd>${i + 1}</kbd></button>`).join('')}
@@ -2548,8 +2584,13 @@ export async function openTranscript(a, focusTs = null) {
   el.viewer.hidden = false;
   gallery = { items: [], title: '', sel: 0, mode: 'grid' };   // Esc отсюда закрывает, а не возвращает в чужую галерею
   chatView = { agent: a, msgs: [], token: 0, editing: null, pending: null, focusTs };
-  el.viewer.innerHTML = `<div class="vwrap"><div class="vhead">${tr('chat.title', { name: esc(a.name) })}
-      <span class="zhint" id="chatst">${esc(a.title || '')}</span><button id="vx">✕</button></div>
+  // The header in two rows: who is talking — what he is working on. The session
+  // name stays in the top right corner at the size it had, and service lines such
+  // as a postponed re-read appear in the same place.
+  el.viewer.innerHTML = `<div class="vwrap"><div class="vhead vhead2">
+      <span class="vrow">${tr('chat.title', { name: esc(a.name) })}
+        <span class="zhint" id="chatst">${esc(a.title || '')}</span><button id="vx">✕</button></span>
+      <span class="vrow vtask" id="chattask">${chatTask(a)}</span></div>
     <div class="single chatlog" id="chatlog"><p class="hint">${tr('chat.reading')}</p></div>
     <div class="vpath">${tr('chat.keys')}<span class="ncount" id="ncount"></span></div></div>`;
   $('#vx').onclick = closeViewer;
@@ -2615,6 +2656,15 @@ function paintChat(msgs, fresh = 0, force = false) {
         + (ed && !ed.id && ed.ts === m.ts ? noteEditor(m.ts, ed.text) : '')).join('')
     : loose + `<p class="empty">${tr('chat.empty')}</p>`;
   chatView.msgs = msgs;
+  // The conversation was opened with a snapshot of the agent, while the task is
+  // rewritten by every new answer: take the fresh one from the list, or the head
+  // freezes on whatever he was doing when the panel was opened.
+  const head = $('#chattask');
+  const live = (S.agents || []).find((x) => x.id === a.id) || a;
+  if (head) {
+    const html = chatTask(live);
+    if (head.innerHTML !== html) head.innerHTML = html;
+  }
   paintNoteCount();
   bindNoteControls();
   // Пришли из панели заметок — встаём на ту реплику, к которой она привязана,
