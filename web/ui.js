@@ -2297,7 +2297,43 @@ export function closeInvite() { if (el.invite) el.invite.hidden = true; }
 
 export async function openInvite() {
   el.invite.hidden = false;
+  inviteSig = accessSig();
   await renderInvite();
+}
+
+// What the panel is showing right now, as one string. The snapshot arrives every
+// couple of seconds; redrawing on each of them would be honest and unusable —
+// the caret would jump out of «кого зовём» mid-word.
+const accessSig = () => {
+  const a = S.access || {};
+  return JSON.stringify([
+    (a.requests || []).map((r) => [r.id, r.state, r.who, r.agentId]),
+    (a.open || []).map((o) => [o.guestId, o.agentId]),
+  ]);
+};
+let inviteSig = '';
+
+// A request that arrives while the panel is open used to be invisible: the panel
+// was drawn when it opened and after every button in it, and by nothing else. It
+// sat in the snapshot, the owner sat looking at the panel, and the two never met
+// — found on a live build on 5 September 2026. Nothing was lost: the request
+// waits on the server until it is answered. It simply could not be seen without
+// closing the panel and opening it again.
+export async function syncInvite() {
+  if (!el.invite || el.invite.hidden) return;
+  const sig = accessSig();
+  if (sig === inviteSig) return;
+  inviteSig = sig;
+  // Whatever is being typed survives the redraw, caret included: the name is
+  // usually half-written exactly when somebody knocks.
+  const input = $('#invWho');
+  const typed = input ? { value: input.value, at: input.selectionStart, focused: document.activeElement === input } : null;
+  await renderInvite();
+  if (!typed) return;
+  const back = $('#invWho');
+  if (!back) return;
+  back.value = typed.value;
+  if (typed.focused) { back.focus(); try { back.setSelectionRange(typed.at, typed.at); } catch { /* поле могло сменить тип */ } }
 }
 
 async function renderInvite() {
@@ -2332,7 +2368,7 @@ async function renderInvite() {
   // Ответ сервера несёт свежий список — берём его сразу, не дожидаясь снимка:
   // тот приходит раз в 2.5 секунды, и всё это время нажатая кнопка выглядела
   // бы ненажатой.
-  const took = async (r) => { if (r && r.access) S.access = r.access; await renderInvite(); };
+  const took = async (r) => { if (r && r.access) S.access = r.access; inviteSig = accessSig(); await renderInvite(); };
   el.invite.querySelectorAll('[data-yes]').forEach((b) => {
     b.onclick = async () => took(await api.answerAccess(b.dataset.yes, true));
   });

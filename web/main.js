@@ -490,6 +490,9 @@ const onSnapshot = (e) => {
   // Access rides with the snapshot: for a guest it is his own view, for the owner who is
   // asking and to whom it is open.
   state.access = data.access || null;
+  // An open invitation panel is a register, not a snapshot of one moment: a
+  // request that arrives while it is open has to show up in it.
+  UI.syncInvite();
   takePermits(data.permits || []);
   // The stream is taken apart field by field rather than assigned whole, so a new field
   // has to be carried over by hand — otherwise the title screen shows a dash instead of the

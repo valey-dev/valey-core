@@ -216,6 +216,17 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
    onto this button too, and a focus you cannot see is a focus you cannot use. */
 #askAccess.focus{outline:2px solid var(--ink); outline-offset:2px; color:#fff}
 
+/* The rows of the invitation panel — «открыть», «отказать», «выгнать», «погасить»
+   — and the buttons on the notes on a desk. Buttons in this sheet are painted by
+   their container, and this container had no rule at all, so every one of them
+   came out a grey system button. Seen on a live build on 5 September 2026, in
+   the same panel as the ask-for-access button and for exactly the same reason.
+   Smaller than a card's row: these sit inside an 11px line. */
+.notes button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:11px "JetBrains Mono", "Courier New", monospace; padding:2px 6px; cursor:pointer;
+  white-space:nowrap}
+.notes button:hover{background:var(--wood-lit); color:#fff}
+
 /* ---- пейджер ---- */
 /* Свой угол: тосты слева внизу, диалог по центру, пейджер справа — три вещи
    поверх холста и ни одна не перекрывает другую. Выезжает снизу: входящее
