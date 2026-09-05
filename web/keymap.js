@@ -38,9 +38,12 @@ const CORE = [
   { id: 'move.down', codes: ['KeyS', 'ArrowDown'], group: 'move', hint: 'hint.walk' },
   { id: 'move.right', codes: ['KeyD', 'ArrowRight'], group: 'move', hint: 'hint.walk' },
   { id: 'move.run', codes: ['ShiftLeft', 'ShiftRight'], group: 'move', held: true, hint: 'hint.run' },
-  // Space and E are one action on purpose: E is the reach of a hand that is
-  // already on WASD, Space the reach of a thumb.
-  { id: 'act.interact', codes: ['Space', 'KeyE'], group: 'act', hint: 'hint.interact' },
+  // Space alone. E was the second key here because a hand resting on WASD can
+  // reach it without moving — which assumes a hand that rests on WASD, and this
+  // office is used by people working with agents, not by people holding a
+  // gaming grip. The thumb finds the space bar without being told, and a letter
+  // spent on a duplicate is a letter a panel cannot have.
+  { id: 'act.interact', codes: ['Space'], group: 'act', hint: 'hint.interact' },
   { id: 'act.skate', codes: ['KeyB'], group: 'act', hint: 'hint.skate' },
   { id: 'act.sound', codes: ['KeyM'], group: 'act', hint: 'hint.sound' },
   { id: 'panel.round', codes: ['Tab'], group: 'panel', hint: 'hint.round' },
