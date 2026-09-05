@@ -1,4 +1,4 @@
-// uri волны -> уже скачанная обложка, чтобы не дёргать Spotify на каждый заход.
-// Отдельным файлом, потому что кеш переживает перезагрузку маршрута и не
-// должен пересоздаваться вместе с ним.
+// The uri of a wave -> the cover already downloaded, so as not to pull Spotify on
+// every visit. A file of its own, because the cache outlives a reload of the route
+// and must not be recreated along with it.
 export const covers = new Map();

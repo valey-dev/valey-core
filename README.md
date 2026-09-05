@@ -15,10 +15,7 @@ npm start
 Then open <http://localhost:5177>.
 
 The server binds `127.0.0.1`, so the office answers this machine and nothing
-else. That is worth saying out loud because it was not true until 30 August
-2026: `server.listen(PORT)` with no host is `0.0.0.0`, and with no checks of
-any kind anyone on the same Wi-Fi who knew the port read every session
-transcript through `/api/chat` and opened files through `/api/file`.
+else. 
 
 ### Reaching it from another device
 
@@ -67,11 +64,31 @@ npm comes with Node, so there is nothing else to fetch. If `node -v` works and `
 
 * **Who is in** — from `~/.claude/sessions/*.json`: pid, working directory, session name. Alive is checked with `process.kill(pid, 0)`.
 * **What they are doing** — the transcript is read incrementally: the last tool call, the last thing said, whether the turn ended and they are waiting on you, which files they touched, which git branch they are on.
-* **Their trade** — from the tools they reach for. Edits code, so: developer. Opens design files: designer. Searches the web: researcher.
+* **Their role** — from the tools they reach for. Edits code, so: developer. Opens design files: designer. Searches the web: researcher, etc. 
 * **Their face and name** — a deterministic hash of the session id, so the same session is the same person every time you look.
 * **The floor** — rebuilt whenever the cast changes, but a project keeps its slot, so somebody else starting work never shuffles your rooms.
 
 Finished work goes on the board in the room. `.md` renders, code is highlighted, images get a pixel loupe. You can leave notes on any line of a conversation, and put a task on someone's desk.
+
+## Answering a permission prompt from the office
+
+When Claude Code needs a yes — *Allow Claude to run …?* — it can ask you here instead of only in the terminal you are not looking at. A pager slides into the corner and beeps, `Enter` opens the request where you stand, `Esc` puts it off and leaves a counter in the top bar that `H` brings back. The card shows the command in full, the description the agent gave it, and the rule that "always allow" would write — the same rule the native button writes, into the same file.
+
+It is off until you install the hook, because it edits how your terminal behaves. In `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PermissionRequest": [
+      { "hooks": [{ "type": "command", "command": "node /path/to/valey-core/tools/permit.mjs" }] }
+    ]
+  }
+}
+```
+
+While the office holds a question, the terminal stays quiet — so the hook is built to get out of the way at the first sign of trouble. Office not running, nobody looking at it, nine minutes with no answer, the hook killed: every one of those hands the question straight back, and Claude Code asks you itself. `VALEY_URL` points it at an office on another port.
+
+Guests never see any of this: a command is paths and branches from your machine.
 
 ## Nothing leaves your machine
 
@@ -82,7 +99,7 @@ Two exceptions, both yours to switch on, both named out loud:
 * **The weather** outside the corridor window is invented until you turn on the real one — then a pair of coordinates goes to open-meteo, and nothing else.
 * **The radio** plays through your own Spotify app, with a client id you create yourself. It is a module; delete the folder and the radio is gone.
 
-There are no accounts, no telemetry and no analytics. The server is seven files and you can read every one of them before you run it — that is the point of the licence below.
+There are no accounts, no telemetry and no analytics. The server is twelve files and you can read every one of them before you run it — that is the point of the licence below.
 
 ## Modules
 
@@ -96,7 +113,7 @@ The repository is called `valey-core` because that is what it is. The office is 
 
 ## Keys
 
-`WASD` walk · `SHIFT` run · `SPACE` talk, and drink at the cooler · `TAB` the round · `N` notes · `C` change your look · `P` window on the world · `U` office colour · `M` sound · `R` radio · `+` `0` scale · `ESC` back. The security room is below the floor and has the cameras.
+`WASD` walk · `SHIFT` run · `SPACE` talk, drink at the cooler, sit on a bench · `TAB` the round · `N` notes · `C` change your look · `P` window on the world · `U` office colour · `M` sound · `R` radio · `H` the pager you put off · `+` `0` scale · `ESC` back. The security room is below the floor and has the cameras.
 
 A gamepad works too, and the keyboard stays free for typing: the left stick or d-pad walks (the stick is analogue — a light tilt is a slow walk), `A` talks, `B` goes back, `X` takes the skateboard, `Y` opens the round, the triggers run and the bumpers scale. Any controller the browser sees as a standard one will do — an Xbox pad paired over Bluetooth on macOS, say. The browser only notices it after the first button press, and Chrome only offers it on `localhost` or over https.
 

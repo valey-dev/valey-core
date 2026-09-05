@@ -1,16 +1,17 @@
-// node tools/test-tunnel.mjs — офис за посредником.
+// node tools/test-tunnel.mjs — the office behind a middleman.
 //
-// Туннель соединяется с офисом с петли, а сокращение «пришло с этой машины»
-// смотрит на адрес. Без проверки заголовков посредника гость из туннеля в
-// режиме private оказывался бы хозяином: адрес совпал бы. Это первая половина.
+// A tunnel connects to the office over loopback, while the shortcut "came from
+// this machine" looks at the address. Without checking the middleman's headers a
+// guest from a tunnel in private mode would come out as the owner: the address
+// matched. That is the first half.
 //
-// Вторая — с 3 сентября 2026: те же заголовки видит и сетевой гейт. До этого
-// он знал только адрес, и запрос из туннеля проходил порог как свой, без
-// токена, — при том что README обещает «наружу только вместе с токеном».
-// Открытый через туннель офис без VALEY_EXTERNAL и есть открытый порт без
-// токена. Поэтому посредник теперь — снаружи: закрытому офису он получает 404,
-// открытому — 401, пока не предъявит сетевой токен; хозяином его делает только
-// токен хозяина, как и раньше.
+// The second is from 3 September 2026: the network gate sees those headers too.
+// Before that it knew only the address, and a request from a tunnel crossed the
+// threshold as one of ours, without a token — while README promises "outside
+// only together with a token". An office opened through a tunnel without
+// VALEY_EXTERNAL is precisely an open port without a token. So a middleman is
+// now outside: a closed office answers it 404, an open one 401 until it presents
+// the network token; only the owner token makes it the owner, as before.
 import { startOffice } from './lib/office.mjs';
 
 const OWNER = 'tunnel-owner-0001';
@@ -24,10 +25,10 @@ const ok = (name, cond, got) => {
 
 const { base, stop } = await startOffice({
   settings: {
-    // именно private: это тот режим, в котором ловушка и живёт
+    // private on purpose: that is the mode the trap lives in
     access: { mode: 'private', token: OWNER, invites: [] },
-    // открыт наружу и с токеном — как README и велит; слушает при этом всё
-    // равно петлю, стенду незачем светить порт в Wi-Fi
+    // open to the outside and with a token — as README requires; it still
+    // listens on loopback, a stand has no business showing a port on the Wi-Fi
     network: { external: true, token: NET },
   },
   claudeDir: '/nonexistent-claude-dir',
@@ -42,7 +43,7 @@ try {
   const direct = await get('/api/whoami');
   ok('своя машина — хозяин, как и была', direct.j && direct.j.owner === true, direct);
 
-  // ------------------------------------------------ посредник — это снаружи
+  // ------------------------------------------------ a middleman is the outside
   for (const h of ['x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'forwarded']) {
     const via = await get('/api/whoami', { [h]: '203.0.113.7' });
     ok(`через посредника (${h}) без токена — порог закрыт`, via.status === 401 && via.j.errorKey === 'err.needToken', via);
@@ -55,7 +56,7 @@ try {
   ok('токен хозяина работает и через туннель — иначе хозяин не попадёт в свой офис снаружи',
     asOwner.j && asOwner.j.owner === true, asOwner);
 
-  // ------------------------------------------------------------- кука
+  // ------------------------------------------------------------- the cookie
   const query = await get('/api/whoami?token=' + NET, VIA);
   ok('токен строкой в адресе принимают один раз и запоминают кукой',
     query.status === 200 && /valey_net=/.test(query.cookie || ''), query);
@@ -66,8 +67,8 @@ try {
   const still = await get('/api/whoami');
   ok('и офис после неё жив', still.status === 200 && still.j.owner === true, still.status);
 
-  // -------------------------------------------------- закрытый офис — 404
-  // Хозяин с петли закрывает порт; гейт читает настройки на каждом запросе.
+  // -------------------------------------------------- a closed office — 404
+  // The owner closes the port from loopback; the gate reads the settings on every request.
   const shut = await fetch(base + '/api/settings', {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-valey-owner': OWNER },
     body: JSON.stringify({ network: { external: false } }),

@@ -1,9 +1,10 @@
 import { t as tr } from '../../web/i18n.js';
-// Полноценный плеер: авторизация PKCE и Web Playback SDK.
-// Отличие от встроенного плеера одно, но решающее: этот представляется токеном,
-// а не сторонними cookie, поэтому его не рушат ни защита Safari, ни сборки
-// Chromium без своей сессии Spotify. Секрета приложения тут нет и быть не может —
-// PKCE на то и придуман, чтобы публичный клиент обходился одним client id.
+// The full player: PKCE authorisation and the Web Playback SDK.
+// It differs from the built-in player in one thing, but a decisive one: this one
+// presents a token rather than third-party cookies, so neither Safari's protection
+// nor Chromium builds without a Spotify session of their own break it. There is no
+// application secret here and there cannot be — PKCE was invented precisely so that
+// a public client gets by with a client id alone.
 const TOKENS = 'valey-spotify-tokens';
 const VERIFIER = 'valey-spotify-verifier';
 const SCOPES = [
@@ -30,8 +31,8 @@ export const auth = {
   clientId: '',
   tokens: null,
 
-  // Spotify принимает как redirect только https или петлю по адресу 127.0.0.1 —
-  // на localhost он откажет, поэтому офис для музыки открывают по 127.0.0.1.
+  // Spotify accepts as a redirect only https or the loopback at 127.0.0.1 — on
+  // localhost it will refuse, so for music the office is opened at 127.0.0.1.
   redirectUri() { return `${location.origin}/callback`; },
   loopbackOk() { return location.hostname === '127.0.0.1' || location.protocol === 'https:'; },
 
@@ -69,7 +70,7 @@ export const auth = {
     location.href = 'https://accounts.spotify.com/authorize?' + q;
   },
 
-  // Возврат из Spotify: код в адресе меняем на токен и сразу убираем из строки.
+  // The return from Spotify: the code in the address is exchanged for a token and removed from the bar at once.
   async finish() {
     const q = new URLSearchParams(location.search);
     const code = q.get('code');
@@ -114,15 +115,15 @@ async function post(body) {
   return data;
 }
 
-// ------------------------------------------------------------------- плеер
+// ------------------------------------------------------------------- the player
 export const player = {
   sdk: null, deviceId: '', state: 'off', error: '',
   track: null, playing: false, volume: 0.6, onChange: null,
-  // где играли в момент последнего события и когда это было: между событиями
-  // положение считается временем, иначе полоска дёргалась бы раз в несколько секунд
+  // where it was playing at the moment of the last event and when that was: between
+  // events the position is counted by time, or the strip would jerk once every few seconds
   position: 0, duration: 0, at: 0,
-  // volume — ручка, damp — приглушение расстоянием. Их держат врозь: ручка
-  // сохраняется и остаётся тем, что выставил человек, а damp живёт по ходу игры
+  // volume is the knob, damp is the damping by distance. They are kept apart: the knob
+  // is saved and stays what the person set, while damp lives with the course of the game
   damp: 1, applied: -1,
 
   async start() {
@@ -153,7 +154,7 @@ export const player = {
       this.at = Date.now();
       this.tell();
     });
-    // Премиума нет — SDK честно об этом говорит, и гадать не приходится
+    // There is no premium — the SDK says so honestly, and there is no need to guess
     p.addListener('account_error', () => { this.fail(tr('sp.needPremium')); });
     p.addListener('authentication_error', () => { auth.forget(); this.fail(tr('sp.badToken')); });
     p.addListener('initialization_error', ({ message }) => this.fail(message));
@@ -198,8 +199,8 @@ export const player = {
     this.tell();
   },
 
-  // Приглушение расстоянием меняется каждый кадр, а до SDK доходит только заметный
-  // сдвиг: слать setVolume шестьдесят раз в секунду незачем.
+  // The damping by distance changes every frame, and only a noticeable shift reaches the
+  // SDK: there is no point sending setVolume sixty times a second.
   setDamp(d) {
     const next = Math.max(0, Math.min(1, d));
     if (Math.abs(next - this.damp) < 0.01) return;
@@ -215,14 +216,14 @@ export const player = {
     this.sdk.setVolume(v).catch(() => {});
   },
 
-  // Доля отыгранного, 0..1. Между событиями SDK досчитываем сами по часам.
+  // The fraction played, 0..1. Between SDK events we count it ourselves by the clock.
   progress() {
     if (!this.duration) return 0;
     const at = this.position + (this.playing ? Date.now() - this.at : 0);
     return Math.max(0, Math.min(1, at / this.duration));
   },
 
-  // самая маленькая обложка: её всё равно ужимать до тринадцати пикселей
+    // the smallest cover: it has to be squeezed down to thirteen pixels anyway
   coverUrl() {
     const imgs = (this.track && this.track.album && this.track.album.images) || [];
     if (!imgs.length) return '';

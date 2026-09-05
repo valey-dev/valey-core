@@ -1,6 +1,6 @@
-// node tools/test-release-nudge.mjs — когда офис пинает за релизный ролик.
-// Проверяется решение, а не вёрстка: git и файловая система тут не нужны,
-// вся логика сидит в чистой nudgeFrom.
+// node tools/test-release-nudge.mjs — when the office nudges about the release
+// video. The decision is what is checked, not the layout: git and a filesystem
+// are not needed here, all the logic sits in the pure nudgeFrom.
 
 import { nudgeFrom, parseChecklist } from '../server/release.js';
 
@@ -14,36 +14,42 @@ const DAY = 86400000;
 const now = Date.parse('2026-09-01T12:00:00Z');
 const draft = (open, done = 0) => ({ exists: true, open, done, total: open + done });
 
-// --- 1. молчание там, где пинать не за что ---
+// --- 1. silence where there is nothing to nudge about ---
 check('без тегов молчит', nudgeFrom(null, now) === null, nudgeFrom(null, now));
 check('без версии молчит', nudgeFrom({ tag: '' }, now) === null, 'что-то вернул');
 check('закрытый чек-лист молчит',
   nudgeFrom({ tag: 'v0.2.0', taggedAt: now - 3 * DAY, draft: draft(0, 5) }, now) === null, 'пинает зря');
 
-// --- 2. пинок, когда есть за что ---
-const n = nudgeFrom({ tag: 'v0.3.0', taggedAt: now - 3 * DAY, draft: draft(4, 1) }, now);
+// --- 2. the nudge, when there is something ---
+// The path arrives with the info and is only echoed: since 5 September 2026 the
+// drafts live next to the settings, and this function must not know where that
+// is — it decides whether to nudge, not where anything lies.
+const DRAFT = '/home/somebody/.config/valey/scripts/v0.3.0.md';
+const n = nudgeFrom({ tag: 'v0.3.0', taggedAt: now - 3 * DAY, draft: draft(4, 1), draftPath: DRAFT }, now);
 check('незакрытый чек-лист пинает', !!n, n);
 check('версия та самая', n.tag === 'v0.3.0', n.tag);
 check('дни считаются', n.days === 3, n.days);
-check('путь к черновику собран', n.draft === 'media/v0.3.0.md', n.draft);
+check('путь к черновику отдан как есть', n.draft === DRAFT, n.draft);
+check('без пути в карточке стоит пусто, а не выдуманный файл',
+  nudgeFrom({ tag: 'v0.3.0', taggedAt: now, draft: draft(1) }, now).draft === null);
 check('черновик найден', n.hasDraft === true, n.hasDraft);
 check('осталось пунктов', n.open === 4, n.open);
 
-// --- 3. черновика нет — пинать надо сильнее, а не молчать ---
-// Релиз мог выйти раньше генератора, или файл удалили. Шагов до ролика на один
-// больше, и молчание тут было бы худшим из ответов.
+// --- 3. no draft — nudge harder rather than stay quiet ---
+// The release may predate the generator, or the file was deleted. That is one
+// more step to the video, and silence here would be the worst of the answers.
 const nd = nudgeFrom({ tag: 'v0.4.0', taggedAt: now - DAY, draft: { exists: false, open: null, total: 0 } }, now);
 check('без черновика всё равно пинает', !!nd, nd);
 check('и говорит, что черновика нет', nd.hasDraft === false, nd.hasDraft);
 check('осталось пунктов неизвестно', nd.open === null, nd.open);
 
-// --- 4. день выхода ---
+// --- 4. the day it went out ---
 check('в день релиза ноль дней, а не минус', nudgeFrom({ tag: 'v0.5.0', taggedAt: now - 1000, draft: null }, now).days === 0, 'иначе');
 check('часы вперёд не дают отрицательных', nudgeFrom({ tag: 'v0.5.0', taggedAt: now + DAY, draft: null }, now).days === 0, 'отрицательные дни');
 check('без даты тега дни неизвестны', nudgeFrom({ tag: 'v0.6.0', taggedAt: null, draft: null }, now).days === null, 'что-то насчитал');
 
-// --- 5. разбор чек-листа ---
-// В сценарии полно квадратных скобок — считать надо пункты списка, а не любые.
+// --- 5. parsing the checklist ---
+// A script is full of square brackets — count the list items, not every bracket.
 const md = `# v0.3.0
 - [ ] проход снят
 - [x] сценарий дописан

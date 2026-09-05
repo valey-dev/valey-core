@@ -1,11 +1,11 @@
-// Что нужно каждому стенду, который поднимает настоящий офис: свободный порт,
-// свой файл настроек, свой каталог сессий с выдуманным агентом.
+// What every stand that raises a real office needs: a free port, a settings
+// file of its own, and a sessions directory of its own with an invented agent.
 //
-// Раньше это лежало в каждом стенде по-своему, и два из них зависели от
-// машины: test-presence стартовал на настоящих настройках пользователя (в
-// режиме shared — каскад 403, с погодой — поход в open-meteo), а test-consent
-// ждал живого агента в ~/.claude и на чистой машине падал через шестнадцать
-// секунд. Порты были фиксированные, и два worktree сталкивались.
+// This used to live in each stand in its own way, and two of them depended on
+// the machine: test-presence started on the user's real settings (in shared
+// mode, a cascade of 403s; with weather on, a trip to open-meteo), and
+// test-consent waited for a live agent in ~/.claude and gave up after sixteen
+// seconds on a clean machine. The ports were fixed, and two worktrees collided.
 import { spawn } from 'node:child_process';
 import net from 'node:net';
 import fsp from 'node:fs/promises';
@@ -15,17 +15,17 @@ import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.dirname(path.dirname(path.dirname(fileURLToPath(import.meta.url))));
 
-// Порт спрашивается у системы, а не назначается: фиксированный номер — это
-// столкновение двух worktree, о котором стенд сообщает как о своём провале.
+// The port is asked of the system rather than assigned: a fixed number is two
+// worktrees colliding, which the stand reports as its own failure.
 export const freePort = () => new Promise((resolve, reject) => {
   const s = net.createServer();
   s.on('error', reject);
   s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => resolve(port)); });
 });
 
-// Выдуманный агент: сессия с pid этого процесса (он жив по определению) и
-// транскрипт из нескольких строк. Данные придуманы с самого начала — по
-// правилу про всё, что может уехать в публичный репозиторий.
+// An invented agent: a session with this process's pid (alive by definition)
+// and a transcript of a few lines. The data is invented at the source — by the
+// rule about anything that can end up in a public repository.
 export async function fakeClaudeDir(dir, {
   sessionId = 'aaaaaaaa-0000-4000-8000-000000000001',
   cwd = '/Users/kolya/Projects/rocket-shop',
@@ -54,16 +54,17 @@ export async function fakeClaudeDir(dir, {
 }
 
 /**
- * Поднимает офис и ждёт, пока он ответит. Возвращает { base, port, stop, settingsFile }.
- * settings — что положить в файл настроек; claudeDir — каталог сессий, если
- * стенду нужен агент. Гасится по своему потомку, а не по имени и не по порту.
+ * Raises an office and waits until it answers. Returns { base, port, stop,
+ * settingsFile }. settings is what to put in the settings file; claudeDir is the
+ * sessions directory, if the stand needs an agent. It is killed by its own child
+ * process, not by name and not by port.
  */
 export async function startOffice({ settings = {}, claudeDir = null, env = {} } = {}) {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-stand-'));
   const settingsFile = path.join(dir, 'settings.json');
   await fsp.writeFile(settingsFile, JSON.stringify({
-    // Погода выключена всегда: стенд не ходит в интернет, и запуск без сети
-    // не должен становиться провалом.
+    // The weather is always off: a stand does not go to the internet, and a run
+    // without a network must not turn into a failure.
     weather: { enabled: false }, delivery: { mode: 'default' },
     ...settings,
   }, null, 2));
@@ -81,10 +82,10 @@ export async function startOffice({ settings = {}, claudeDir = null, env = {} } 
   const stop = async () => {
     if (stopped) return;
     stopped = true;
-    try { srv.kill(); } catch { /* уже мёртв */ }
+    try { srv.kill(); } catch { /* already dead */ }
     await fsp.rm(dir, { recursive: true, force: true });
   };
-  process.on('exit', () => { try { srv.kill(); } catch { /* уже мёртв */ } });
+  process.on('exit', () => { try { srv.kill(); } catch { /* already dead */ } });
   for (let i = 0; i < 80; i++) {
     try { await fetch(base + '/api/whoami'); return { base, port, stop, settingsFile, tmp: dir }; }
     catch { await new Promise((r) => setTimeout(r, 100)); }
@@ -93,8 +94,8 @@ export async function startOffice({ settings = {}, claudeDir = null, env = {} } 
   throw new Error(`офис не поднялся на ${port}`);
 }
 
-// Ждёт, пока в снимке появится агент: сервер собирает его не в ту же
-// миллисекунду, что стартует.
+// Waits for an agent to appear in the snapshot: the server does not assemble it
+// in the same millisecond it starts.
 export async function waitForAgent(get, tries = 40, pause = 150) {
   for (let i = 0; i < tries; i++) {
     const s = await get();

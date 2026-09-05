@@ -1,17 +1,25 @@
 #!/usr/bin/env node
-// Заготовка сценария выпуска из того, что влито в main. Смысл один: убрать
-// чистый лист. Сценарий пишется по фичам релиза, а фичи уже перечислены в
-// коммитах — значит черновик можно собрать, и править его куда легче, чем
-// начинать с пустого файла.
+// A draft of the release script out of what has landed in main. The point is
+// one: remove the blank page. A script is written from the release's features,
+// and the features are already listed in the commits — so a draft can be
+// assembled, and editing it is far easier than starting from an empty file.
 //
-//   node tools/script.mjs              # для версии из package.json
-//   node tools/script.mjs v0.3.0       # для конкретной
+//   node tools/script.mjs              # for the version in package.json
+//   node tools/script.mjs v0.3.0       # for a particular one
 //
-// Файл не перезаписывается: черновик, который ты уже правил, дороже свежего.
+// The file is never overwritten: a draft you have already edited is worth more
+// than a fresh one.
+//
+// It is written next to the settings — ~/.config/valey/scripts by default, and
+// VALEY_SCRIPTS moves it — not into the repository. The draft belongs to
+// whoever cuts the release and to no repository: while it sat in media/ it was
+// untracked and unignored, so the next release refused to start on a dirty
+// tree until it was deleted by hand.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SCRIPTS_DIR } from '../server/settings.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const git = (...a) => execFileSync('git', a, { encoding: 'utf8', cwd: ROOT }).trim();
@@ -23,22 +31,28 @@ const pkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const tag = process.argv[2] || 'v' + pkg.version;
 if (!/^v\d+\.\d+\.\d+$/.test(tag)) die(`не похоже на версию: ${tag}`);
 
-// Патчи не снимаются — правило из media/README.md, и напомнить о нём дешевле,
-// чем потом объяснять, почему ролика к v0.2.1 никто не ждал.
+// Patches get no video — the rule from media/README.md, and reminding of it is
+// cheaper than explaining later why nobody expected a video for v0.2.1.
 const patch = Number(tag.split('.')[2]);
 if (patch !== 0) console.warn(`внимание: ${tag} — патч, а ролики снимаются на миноры`);
 
-// Диапазон: от прошлой версии до этой. Ищем только теги вида v*, иначе
-// ближайшим окажется тег журнала и диапазон выйдет пустым.
+// The range: from the previous version to this one. Only v* tags are looked
+// for, or the nearest one turns out to be a journal tag and the range comes out
+// empty.
 const known = git('tag', '-l', 'v[0-9]*').split('\n').filter(Boolean);
 const here = known.includes(tag) ? tag : 'HEAD';
 let from = '';
-try { from = gitQuiet('describe', '--tags', '--match', 'v[0-9]*', '--abbrev=0', `${here}^`); } catch { /* первый релиз */ }
+try { from = gitQuiet('describe', '--tags', '--match', 'v[0-9]*', '--abbrev=0', `${here}^`); } catch { /* the first release */ }
 const range = from ? `${from}..${here}` : here;
 
+// The release commit itself is not part of the release: `release.mjs` makes it
+// after it has assembled the notes, so counting it here made the draft claim
+// one commit more than the changelog section it describes — 101 against 99 on
+// v0.3.0, and the two numbers are read side by side.
 const commits = git('log', range, '--no-merges', '--format=%h%x00%s')
   .split('\n').filter(Boolean)
-  .map((l) => { const [hash, subject] = l.split('\0'); return { hash, subject }; });
+  .map((l) => { const [hash, subject] = l.split('\0'); return { hash, subject }; })
+  .filter((c) => !/^chore\(release\): v\d+\.\d+\.\d+$/.test(c.subject));
 if (!commits.length) die(`в ${range} нет коммитов — нечего показывать`);
 
 const RE = /^(\w+)(?:\(([^)]*)\))?!?:\s*(.+)$/;
@@ -50,14 +64,20 @@ for (const c of commits) {
   else if (m[1] === 'fix') fixes.push({ ...c, scope: m[2] || '', text: m[3] });
 }
 
-const out = path.join(ROOT, 'media', `${tag}.md`);
-if (existsSync(out)) die(`${path.relative(ROOT, out)} уже есть — переписывать не буду`);
+// «101 коммитов» is not a typo but a missing set of forms. The language's own
+// rules are in Intl, and the office already declines by it (web/i18n.js). The
+// draft itself is Russian: it is read by whoever records the video.
+const RU = new Intl.PluralRules('ru');
+const plural = (n, one, few, many) => ({ one, few, many, other: many }[RU.select(n)] || many);
+
+const out = path.join(SCRIPTS_DIR, `${tag}.md`);
+if (existsSync(out)) die(`${out} уже есть — переписывать не буду`);
 
 const show = feats.slice(0, 3);
 const rest = feats.slice(3);
 const L = [];
 L.push(`# ${tag} — <одно слово для обложки>`, '');
-L.push(`Черновик, собран из ${commits.length} коммитов диапазона \`${range}\`.`);
+L.push(`Черновик, собран из ${commits.length} ${plural(commits.length, 'коммита', 'коммитов', 'коммитов')} диапазона \`${range}\`.`);
 L.push('Правь свободно: генератор знает, что влито, но не знает, что смешно.', '');
 
 L.push('## Что показываем', '');
@@ -103,5 +123,5 @@ L.push('');
 
 mkdirSync(path.dirname(out), { recursive: true });
 writeFileSync(out, L.join('\n'));
-console.log(`черновик: ${path.relative(ROOT, out)}`);
+console.log(`черновик: ${out}`);
 console.log(`фич ${feats.length}, из них в кадр ${show.length}; починок ${fixes.length}`);

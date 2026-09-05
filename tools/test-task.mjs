@@ -1,10 +1,11 @@
-// node tools/test-task.mjs — строка «над чем работает» в шапке.
+// node tools/test-task.mjs — the "what he is working on" line in the head.
 //
-// Разбирается хвост последнего ответа: три строки, которыми AGENTS.md велит
-// заканчивать каждое сообщение. Проверяется не «ловит ли регексп», а то, из-за
-// чего строку вообще завели и чем она может соврать: хвост берётся последний, а
-// не первый попавшийся; «Ничего» не превращается в просьбу к человеку; у агента
-// без соглашения об отчёте задачи нет вовсе, и шапка обязана остаться прежней.
+// What is parsed is the tail of the last answer: the three lines AGENTS.md
+// requires at the end of every message. This checks not "does the regexp match"
+// but the reasons the line exists and the ways it could lie: the tail taken is
+// the last one, not the first found; «Ничего» does not turn into an ask; an
+// agent whose repository has no report convention has no task at all, and the
+// head must stay exactly as it was.
 globalThis.document = { documentElement: {}, title: '' };
 import { reportTail, applyLine, emptyState } from '../server/agents.js';
 
@@ -17,7 +18,7 @@ const ok = (name, cond, got) => {
 const tail = (what, status, need) =>
   `Сделал, проверил, запушил.\n\n**Текущая фича/задача** — ${what}\n**Статус** — ${status}\n**Что нужно от меня** — ${need}\n`;
 
-// ------------------------------------------------------------- обычный ответ
+// ------------------------------------------------------------ ordinary answer
 
 const one = reportTail(tail('Вкладка «Ключи» в инвентаре', 'собрано, стенд на 5188', 'Ничего'));
 ok('задача берётся из хвоста', one && one.what === 'Вкладка «Ключи» в инвентаре', one);
@@ -27,25 +28,26 @@ ok('«Ничего» не становится просьбой', one && one.nee
 const asked = reportTail(tail('Прайсинг на лендинге', 'нарисовано, ждёт утверждения', 'выбрать версию — v4 или v5'));
 ok('просьба к человеку доезжает', asked && asked.need === 'выбрать версию — v4 или v5', asked);
 
-// ---------------------------------------------------- хвоста нет — задачи нет
+// -------------------------------------------------------- no tail, no task
 
 ok('без отчёта задачи нет', reportTail('Готово, всё работает.') === null);
 ok('пустой ответ не падает', reportTail('') === null);
 ok('undefined не падает', reportTail(undefined) === null);
 
-// Строка отчёта, названная в тексте, но не заполненная, — не задача.
+// A report line named in prose but not filled in is not a task.
 ok('одно упоминание правила задачей не считается',
    reportTail('Каждый ответ кончается строкой «Текущая фича/задача».') === null);
 
-// -------------------------------------------- последний хвост, а не первый
+// -------------------------------------------- the last tail, not the first
 //
-// Разговор целиком в снимок не едет, но один ответ может пересказывать прошлый —
-// например, объясняя, что было сделано раньше. Взять первое совпадение значит
-// показать в шапке позавчерашнюю работу и не заметить этого.
+// The whole conversation does not travel in the snapshot, but one answer can
+// retell an earlier one — explaining what was done before, say. Taking the first
+// match means showing the day-before-yesterday's work in the head and not
+// noticing.
 const twice = reportTail(tail('Старое дело', 'сдано', 'Ничего') + '\n' + tail('Новое дело', 'в работе', 'Ничего'));
 ok('берётся последний хвост, а не первый', twice && twice.what === 'Новое дело', twice);
 
-// ------------------------------------------------------------- как написано
+// --------------------------------------------------------- however it is written
 
 ok('без звёздочек тоже читается',
    (reportTail('Текущая фича/задача — Разряды агентов\nСтатус — рисуется') || {}).what === 'Разряды агентов');
@@ -56,29 +58,30 @@ ok('разметка из значения снимается',
 ok('строка в цитате читается',
    (reportTail('> **Текущая фича/задача** — Лифт') || {}).what === 'Лифт');
 
-// «Ничего» пишут по-разному, и точка в конце ничего не меняет.
+// «Ничего» gets written in several ways, and a full stop changes nothing.
 for (const n of ['Ничего', 'ничего.', 'Нет', 'Nothing', '—']) {
   const r = reportTail(tail('Задача', 'статус', n));
   ok(`«${n}» — это не просьба`, r && r.need === '', r);
 }
 
-// ------------------------------------------------------------------ границы
+// -------------------------------------------------------------------- limits
 
-// Значение режется, но не теряется: обрезка длинной строки — дело шапки.
+// The value is capped but not lost: clipping a long line is the head's job.
 const long = reportTail(tail('я'.repeat(500), 'ok', 'Ничего'));
 ok('длинная задача обрезана потолком', long && long.what.length === 300, long && long.what.length);
 
-// Хвост стоит в конце ответа: заглядывать в начало длинного сообщения незачем,
-// иначе задачей станет цитата из чужого отчёта, приведённая в тексте.
+// The tail sits at the end of an answer: there is no reason to look into the
+// beginning of a long message, or a quoted report from somewhere else becomes
+// the task.
 const far = reportTail(tail('Далёкое дело', 'сдано', 'Ничего') + 'x'.repeat(4000));
 ok('хвост ищется только в конце ответа', far === null);
 
-// ------------------------------------ задача не гаснет, пока агент отвечает
+// ----------------------------- the task does not go out while the agent answers
 //
-// Найдено на живом стенде 5 сентября 2026: строка бралась из последнего ответа,
-// а пока агент работает, он успевает сказать десяток реплик без хвоста — и
-// шапка пустела ровно в те минуты, ради которых её и завели. Задача держится до
-// следующей названной.
+// Found on a live stand on 5 September 2026: the line was taken from the last
+// answer, and while an agent works it says a dozen replies with no tail — so the
+// head emptied during exactly the minutes it was built for. The task is held
+// until the next one is named.
 const say = (text) => JSON.stringify({
   type: 'assistant', timestamp: new Date().toISOString(),
   message: { model: 'claude', content: [{ type: 'text', text }] },

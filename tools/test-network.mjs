@@ -1,9 +1,10 @@
-// node tools/test-network.mjs — кого пускать в офис.
+// node tools/test-network.mjs — who is let into the office.
 //
-// Проверяется не «сравниваются ли строки», а решения, каждое из которых
-// молча открывает наружу переписку всех сессий: петля всегда своя, закрытый
-// офис снаружи не виден вообще, токен из адреса переезжает в куку, а похожий
-// токен — это чужой токен.
+// What is checked is not "are strings compared" but the decisions, each of which
+// quietly opens every session's correspondence to the outside: loopback is
+// always our own, a closed office is not visible from outside at all, a token
+// from the address moves into a cookie, and a token that merely looks alike is
+// somebody else's token.
 import { check, isLocal, newToken } from '../server/network.js';
 import { publicSettings } from '../server/settings.js';
 
@@ -19,21 +20,21 @@ const u = (q = '') => new URL('http://localhost:5177/api/state' + q);
 const OPEN = { external: true, token: 'sekret-token-value' };
 const SHUT = { external: false, token: 'sekret-token-value' };
 
-// ------------------------------------------------------------------- петля
+// ------------------------------------------------------------------ loopback
 
 ok('127.0.0.1 — свой', isLocal(req('127.0.0.1')));
 ok('::1 — свой', isLocal(req('::1')));
 ok('v4 в v6-обёртке — свой', isLocal(req('::ffff:127.0.0.1')));
 ok('сосед по Wi-Fi — не свой', !isLocal(req('192.168.10.42')));
-// Адрес, начинающийся на 127 в тексте, но не петлевой: строковое сравнение
-// «начинается с 127.» пустило бы сюда чужую машину.
+// An address that starts with 127 as text but is not loopback: a string compare
+// of "starts with 127." would let another machine in here.
 ok('127.0.0.1.evil.com — не свой', !isLocal(req('127.0.0.1.evil.com')));
 
 ok('свой ходит без токена', check(req('::1'), u(), OPEN).ok);
 ok('свой ходит и в закрытый офис', check(req('::1'), u(), SHUT).ok);
 ok('свой ходит, когда токена нет вовсе', check(req('::1'), u(), { external: false, token: '' }).ok);
 
-// ------------------------------------------------------------ закрыто наружу
+// ------------------------------------------------------- closed to the outside
 
 const shut = check(req('192.168.10.42'), u(), SHUT);
 ok('закрытый офис снаружи не пускает', !shut.ok);
@@ -42,7 +43,7 @@ ok('и не признаётся, что он тут есть', shut.reason === 
 const noToken = check(req('192.168.10.42'), u(), { external: true, token: '' });
 ok('открытый без токена — тоже закрыт', !noToken.ok && noToken.reason === 'closed', noToken);
 
-// --------------------------------------------------------------- токен
+// ---------------------------------------------------------------- the token
 
 ok('снаружи без токена — 401', check(req('192.168.10.42'), u(), OPEN).reason === 'token');
 ok('Bearer пускает', check(
@@ -58,7 +59,7 @@ ok('и сразу переезжает в куку', /valey_net=sekret-token-val
 ok('кука HttpOnly и SameSite', /HttpOnly/.test(byQuery.setCookie) && /SameSite=Lax/.test(byQuery.setCookie));
 ok('и без Secure — иначе по http она не сохранится', !/Secure/.test(byQuery.setCookie));
 
-// Приставка и обрезок — это не токен. Сравнение по длине ловит оба.
+// A prefix and a truncation are not the token. Comparing by length catches both.
 ok('обрезанный токен не пускает', !check(req('1.2.3.4', { authorization: 'Bearer sekret-token' }), u(), OPEN).ok);
 ok('токен с хвостом не пускает', !check(req('1.2.3.4', { authorization: 'Bearer sekret-token-value-x' }), u(), OPEN).ok);
 ok('пустой токен не пускает', !check(req('1.2.3.4', { authorization: 'Bearer ' }), u(), OPEN).ok);
@@ -67,11 +68,24 @@ const a = newToken(), b = newToken();
 ok('токен длинный и разный', a.length >= 32 && a !== b, a.length);
 ok('токен без символов, ломающих адрес', /^[A-Za-z0-9_-]+$/.test(a), a);
 
-// ------------------------------------------------------- токен не утекает
+// The token is carried to another machine by hand, so the alphabet must not
+// contain a pair a human can read wrong. On 5 September 2026 a two-machine test
+// lost the same character twice — O read as 0 — and both times the office
+// answered that a token was needed, which reads as a broken office rather than
+// a misread letter.
+ok('в токене нет двойников: I, L, O, U', !/[ILOU]/.test(a), a);
+const TYPED = { external: true, token: 'PFVTSWJ6MPHN0MGH2G8VBPNX8RHYQ7E9' };
+const typedAs = (t) => check(req('1.2.3.4', { authorization: 'Bearer ' + t }), u(), TYPED).ok;
+ok('ноль, набранный буквой O, всё равно пускает', typedAs('PFVTSWJ6MPHNOMGH2G8VBPNX8RHYQ7E9'));
+ok('единица, набранная буквой l, всё равно пускает', typedAs('PFVTSWJ6MPHN0MGH2G8VBPNX8RHYQ7E9'.replace('1', 'l')));
+ok('строчный токен пускает', typedAs('pfvtswj6mphn0mgh2g8vbpnx8rhyq7e9'));
+ok('но чужой токен по-прежнему не пускает', !typedAs('PFVTSWJ6MPHN0MGH2G8VBPNX8RHYQ7EX'));
 
-// Ключ здесь `network`, а не `access`: в ядре `access` уже занят гостевой
-// системой и хранит токен ХОЗЯИНА. Сложить два секрета в одно поле — значит
-// однажды отдать наружу не тот.
+// ------------------------------------------------------ the token does not leak
+
+// The key here is `network`, not `access`: in the core `access` is already taken
+// by the guest system and holds the OWNER's token. Folding two secrets into one
+// field means handing out the wrong one some day.
 const pub = publicSettings({ figma: { token: 'f', files: {} }, network: OPEN });
 ok('сетевой токен не уходит на страницу', pub.network.token === undefined, pub.network);
 ok('но факт его наличия виден', pub.network.hasToken === true, pub.network);

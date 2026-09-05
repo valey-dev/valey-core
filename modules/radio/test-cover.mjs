@@ -1,10 +1,11 @@
-// node modules/radio/test-cover.mjs — прокси обложек ходит только за картинкой
-// и только туда, куда сказали.
+// node modules/radio/test-cover.mjs — the cover proxy goes only for a picture and
+// only where it was told to.
 //
-// Проверка хоста scdn.co стояла с первого дня, но обходилась: fetch следовал
-// за редиректом, и открытый редирект на CDN уводил сервер куда угодно, а тип
-// ответа уходил в браузер как есть. Сеть здесь подставная: fetch отвечает то,
-// что скажет стенд, и записывает, с чем его позвали.
+// The scdn.co host check had been there from day one, but it could be got around:
+// fetch followed a redirect, and an open redirect on the CDN took the server
+// anywhere, while the type of the answer went into the browser as it was. The
+// network here is a stand-in: fetch answers whatever the stand says and writes down
+// what it was called with.
 import { route } from './server.js';
 
 let bad = 0;
@@ -35,9 +36,9 @@ const ask = async (query) => {
   return { took, ...out };
 };
 let n = 0;
-const fresh = () => `https://i.scdn.co/image/${++n}`;   // свой адрес на каждый случай — кэш не должен мешать
+const fresh = () => `https://i.scdn.co/image/${++n}`;   // an address of its own for each case — the cache must not get in the way
 
-// ---------------------------------------------------------------- прямой адрес
+// ---------------------------------------------------------------- a direct address
 answer = response();
 let r = await ask('img=' + encodeURIComponent(fresh()));
 ok('картинка с CDN отдаётся', r.took && r.code === 200 && r.type === 'image/jpeg', r);
@@ -67,7 +68,7 @@ calls = [];
 r = await ask('img=' + encodeURIComponent('https://evil.example/x.jpg'));
 ok('чужой хост — отказ без единого запроса наружу', r.code === 502 && calls.length === 0, { r, calls: calls.length });
 
-// ------------------------------------------------------------------- по uri
+// ------------------------------------------------------------------- by uri
 calls = [];
 answer = (u) => (u.includes('/oembed') ? response({ type: 'application/json', json: { thumbnail_url: fresh() } }) : response());
 r = await ask('uri=spotify:playlist:abc123');

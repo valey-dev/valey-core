@@ -37,9 +37,10 @@ function pathTo(room, from, to) {
   return path;
 }
 
-// Маршрут в коридор и обратно. Комната — замкнутый угол с одной дверью наружу,
-// поэтому путь всегда собирается из трёх кусков: по комнате до двери, по коридору
-// своего ряда до вертикального прохода, и по нему — до нужного коридора.
+// The route into the corridor and back. A room is a closed corner with one door
+// out, so a path is always assembled from three pieces: across the room to the
+// door, along the corridor of its own row to the vertical passage, and along that
+// to the corridor needed.
 const nearestLane = (L, x) => (L.lanes || []).reduce((best, l) => (Math.abs(l - x) < Math.abs(best - x) ? l : best), (L.lanes || [0])[0]);
 
 function pathOut(L, room, from, to) {
@@ -69,10 +70,11 @@ function pathHome(L, room, from, to) {
   ];
 }
 
-// Место в курилке закрепляется за агентом, чтобы двое не сели друг на друга.
-// Сначала раздаются стороны настольного футбола, потом диван: вдвоём за столом
-// интереснее, чем втроём на диване, и это первое, что видно из коридора.
-// Мест у стола ровно два — третий садится курить, а не ждёт очереди.
+// A place in the smoking room is pinned to an agent so that two do not sit on top
+// of each other. The sides of the table football go out first, the sofa after:
+// two at the table is more interesting than three on the sofa, and it is the first
+// thing visible from the corridor. There are exactly two places at the table — a
+// third one sits down to smoke rather than waiting his turn.
 function loungeSpots(L) {
   return [...(L.kicker ? L.kicker.sides : []), ...L.lounge.seats];
 }
@@ -92,13 +94,21 @@ function loungeSeat(L, actors, act) {
   return spots[idx];
 }
 
-// Свободна ли ещё сторона у стола — чтобы не звать третьего играть в двоих.
+// Is a side of the table still free — so as not to call a third to play a game for two.
 function kickerFree(L, actors) {
   if (!L.kicker) return false;
   const taken = new Set();
   for (const a of actors.values()) if (a.seatIdx != null) taken.add(a.seatIdx);
   return L.kicker.sides.some((_, i) => !taken.has(i));
 }
+
+// How many works the agent has put up. A guest never receives the artifacts
+// field at all — it is not in SHOWN on the server, and that is a decision, not
+// an omission: another agent's board opens by consent. The client has to
+// survive its absence, or syncActors throws on a guest's first agent and the
+// office shows rooms with no people in them — the plan is built a line before
+// the actors are placed. Found on 5 September 2026 during a two-machine test.
+const artifactsOf = (a) => (a.artifacts || []).length;
 
 export function syncActors(actors, agents, L) {
   const live = new Set();
@@ -111,14 +121,15 @@ export function syncActors(actors, agents, L) {
       act = {
         id: a.id, room: spot.room, seat: spot.desk,
         x: spot.desk.x, y: spot.desk.y, state: 'sit', path: [], until: 0,
-        dir: 0, frame: 0, artifacts: a.artifacts.length, showcase: 0, nextIdea: performance.now() + rnd(8000, 60000),
+        dir: 0, frame: 0, artifacts: artifactsOf(a), showcase: 0, nextIdea: performance.now() + rnd(8000, 60000),
       };
       actors.set(a.id, act);
     } else if (act.room.key === spot.room.key && act.seat.i === spot.desk.i) {
-      // Тот же стол в той же комнате — просто пересобрали план. Сравнение по
-      // ссылке считало это переездом и отправляло человека пешком к «новому»
-      // столу: на каждую пересборку весь этаж вставал и куда-то шёл. Переносим
-      // его вместе с мебелью на ту же величину, что уехала комната.
+      // The same desk in the same room — the plan has simply been rebuilt. A
+      // comparison by reference counted this as a move and sent the person walking
+      // to the "new" desk: on every rebuild the whole floor stood up and went
+      // somewhere. We carry him along with the furniture by the same amount the
+      // room moved.
       const dx = spot.desk.x - act.seat.x, dy = spot.desk.y - act.seat.y;
       act.room = spot.room; act.seat = spot.desk;
       if (dx || dy) {
@@ -148,21 +159,23 @@ export function tickActors(actors, agents, L, dt, now, emit) {
     const room = act.room;
 
     // finished something new -> take it to the board
-    if (a.artifacts.length > act.artifacts) {
-      act.artifacts = a.artifacts.length;
+    if (artifactsOf(a) > act.artifacts) {
+      act.artifacts = artifactsOf(a);
       const b = room.board;
       act.path = pathTo(room, act, { x: b.x + b.w / 2, y: room.y + WALL + 20 });
       act.state = 'walk'; act.until = now + 22000; act.showcase = now + 22000;
       emit({ kind: 'news', agent: a, text: tr('news.pinned', { name: a.name, a: a.gender === 'f' ? 'а' : '' }) });
     }
 
-    // Лимит кончился — работать нечем, и агент уходит в курилку. Вернётся за стол
-    // сам, как только доступ появится: состояние ведёт снапшот, а не таймер.
-    // В курилку уходят по двум причинам: кончился лимит — работать нечем, — или
-    // просто позвали к столу. Вторая живёт флагом wantPlay, а часы партии
-    // заводятся не здесь, а по приходу: до курилки идти через весь этаж, и
-    // таймер, заведённый в комнате, успевал выйти раньше, чем агент доходил, —
-    // тот разворачивался у самого стола и уходил обратно, так и не сыграв.
+    // The limit has run out — there is nothing to work with, and the agent leaves
+    // for the smoking room. He will come back to the desk by himself as soon as the
+    // access appears: the state is led by the snapshot, not by a timer.
+    // There are two reasons for leaving: the limit ran out — there is nothing to
+    // work with — or he was simply called to the table. The second lives in the
+    // wantPlay flag, and the clock of the game is started not here but on arrival:
+    // the smoking room is across the whole floor, and a timer started in the room
+    // ran out before the agent got there — he would turn around at the very table
+    // and walk back, never having played.
     if (act.wantPlay && act.playUntil && now > act.playUntil) {
       act.wantPlay = false; act.playUntil = 0;
     }
@@ -192,20 +205,21 @@ export function tickActors(actors, agents, L, dt, now, emit) {
       }
       if (!act.path.length) {
         const home = Math.abs(act.x - act.seat.x) < 2 && Math.abs(act.y - act.seat.y) < 2;
-        // За столом стоят, а не сидят, и смотрят на него, а не в стену
+        // At the table people stand rather than sit, and look at it rather than at the wall
         if (act.lounge && act.kicking) {
           act.state = 'stand';
           act.dir = L.kicker.x > act.x ? 1 : -1;
         } else act.state = home || act.lounge ? 'sit' : 'stand';
-        // Пришёл играть — часы партии пошли отсюда. Ставятся и тому, кому
-        // стороны не хватило: иначе он остался бы курить на диване навсегда.
+        // Came to play — the clock of the game started here. It is set for the one
+        // who did not get a side as well: otherwise he would stay smoking on the
+        // sofa forever.
         if (act.lounge && act.wantPlay && !act.playUntil) act.playUntil = now + rnd(25000, 60000);
         if (!act.until && !act.lounge) act.until = now + rnd(3000, 9000);
       }
       continue;
     }
 
-    // на диване никуда не спешат: пока лимит не вернётся, сидит
+    // on the sofa nobody is in a hurry: until the limit comes back, he sits
     if (act.lounge) continue;
 
     // standing around -> head home when the timer runs out
@@ -221,9 +235,9 @@ export function tickActors(actors, agents, L, dt, now, emit) {
     if (Math.random() > (a.status === 'awaiting' ? 0.28 : 0.1)) continue;
     if (strollBudget(actors, room) <= 0) continue;
 
-    // Отдыхающий — тот, кому нечего делать прямо сейчас, — иногда идёт не к
-    // кофемашине, а вниз, в курилку, к столу. Уходит только если сторона у
-    // стола свободна: партия на двоих, а не очередь из четверых.
+    // Someone resting — the one with nothing to do right now — sometimes goes not
+    // to the coffee machine but down, to the smoking room, to the table. He leaves
+    // only if a side of the table is free: a game for two, not a queue of four.
     if (L.kicker && a.status === 'idle' && kickerFree(L, actors) && Math.random() < 0.45) {
       act.wantPlay = true; act.playUntil = 0;
       continue;

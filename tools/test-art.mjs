@@ -1,4 +1,4 @@
-// node tools/test-art.mjs — развеска картин: геометрия и темы, без браузера
+// node tools/test-art.mjs — hanging the paintings: geometry and motifs, without a browser
 import { buildLayout, WALL, WINDOW_START, WINDOW_STEP, WINDOW_W } from '../web/layout.js';
 import { artOf, titleOf, motifOf } from '../web/paintings.js';
 
@@ -15,7 +15,7 @@ let failed = 0;
 const bad = (msg) => { failed++; console.log('ПЛОХО |', msg); };
 const overlaps = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x;
 
-// ---- по одной картине на комнату, и она по теме проекта
+// ---- one painting per room, and it follows the project
 for (const r of L.rooms) {
   const art = r.art || [];
   if (art.length > 1) bad(`${r.title}: картин ${art.length}, а должна быть одна`);
@@ -31,7 +31,7 @@ for (const r of L.rooms) {
   console.log(`ok    | ${r.title}: ${art.length} шт · ${kind} · «${t}»`);
 }
 
-// ---- темы угадываются по названию проекта
+// ---- motifs are guessed from the project name
 const themes = [
   ['carbonara-restaurant', 'food'], ['budget-app', 'money'], ['shebis', 'dog'],
   ['activity-dashboard', 'chart'], ['pingator', 'network'], ['iron-grip', 'muscle'],
@@ -43,7 +43,7 @@ for (const [name, want] of themes) {
   else console.log(`ok    | тема «${name}» → ${got}`);
 }
 
-// ---- в коридоре редко, и только пасхалки
+// ---- rare in the corridor, and easter eggs only
 const halls = L.wallArt || [];
 const windows = [];
 for (let wx = WINDOW_START; wx < L.w - 80; wx += WINDOW_STEP) windows.push({ x: wx - 4, w: WINDOW_W });
@@ -60,7 +60,7 @@ for (const a of halls) {
 console.log(`ok    | коридор: ${halls.length} картин на ${piersTotal} простенков`);
 for (const a of halls) console.log(`      | пасхалка: ${artOf(a).kind} · «${titleOf(a).name}»`);
 
-// ---- одинаковый сид даёт одну и ту же картину
+// ---- the same seed gives the same painting
 const one = L.rooms[0].art[0];
 if (one && artOf(one).kind !== artOf(one).kind) bad('картина нестабильна между вызовами');
 else console.log('ok    | картина стабильна между вызовами');

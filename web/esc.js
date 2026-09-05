@@ -1,12 +1,13 @@
-// Одно экранирование на всё, что кладётся в innerHTML.
+// One escaping for everything that goes into innerHTML.
 //
-// До 3 сентября 2026 копий было три — ui.js, title.js, радио — и все три
-// заменяли только `<` и `&`. Для текста между тегами этого хватает, для
-// атрибута нет: имя файла с кавычкой закрывало `title="…"` и дописывало свой
-// `onerror`. А имена файлов приходят из tool-call агента, названия проектов —
-// из его cwd, метки места — из геокодера: всё это чужой текст, и панели клали
-// его в разметку как есть. Пять символов закрывают и текст, и атрибут в любых
-// кавычках; выбирать, куда строка попадёт, больше не нужно.
+// Until 3 September 2026 there were three copies — ui.js, title.js, the radio —
+// and all three replaced only `<` and `&`. For text between tags that is
+// enough, for an attribute it is not: a file name with a quote in it closed
+// `title="…"` and appended an `onerror` of its own. And file names come from an
+// agent's tool call, project names from its cwd, place labels from the geocoder:
+// all of it is somebody else's text, and the panels put it into the markup as it
+// was. Five characters close both text and an attribute in quotes of any kind;
+// choosing where a string will end up is no longer needed.
 const MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
 export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => MAP[c]);

@@ -1,16 +1,20 @@
-// node tools/test-dialog-keys.mjs — стрелки в карточке агента, без браузера.
-// DOM здесь подставной: проверяется не вёрстка, а состояние фокуса — куда
-// уходит стрелка вверх, что нажимает Enter и когда фокус со ссылки слетает.
+// node tools/test-dialog-keys.mjs — the arrows in an agent's card, without a browser.
+// The DOM here is a stand-in: what is checked is not the layout but the focus
+// state — where the up arrow goes, what Enter presses and when the focus falls
+// off the link.
 
-// DOM подставной и общий с остальными стендами: tools/lib/dom.mjs.
+// The DOM is a stand-in, shared with the other stands: tools/lib/dom.mjs.
 import { node, proxy, installDom } from './lib/dom.mjs';
 
-function makeDialog({ withLink = true, files = 0 } = {}) {
+function makeDialog({ withLink = true, files = 0, ask = false } = {}) {
   const state = {
     say: node('say', { id: 'say' }),
     body: node('body'),
     link: withLink ? node('linky more', { id: 'readAll' }) : null,
     files: Array.from({ length: files }, () => node('file')),
+    // The guest's card has no files and no transcript link — the only thing in
+    // its body is the button asking the owner for access.
+    ask: ask ? node('askbtn', { id: 'askAccess' }) : null,
   };
   state.buttons = ['talk', 'work', 'task', 'close'].map((p) => {
     const b = node('btn-' + p);
@@ -27,10 +31,14 @@ function makeDialog({ withLink = true, files = 0 } = {}) {
       : sel === '#readAll' ? state.link
       : sel === '#pf' ? pf
       : null),
-    // Тело карточки спрашивают одним объединённым селектором: файлы на
-    // «Показать работу» и кнопки на записках в «Дать задание» — одно место.
+    // The body of the card is asked for with one combined selector: the files on
+    // "show the work" and the buttons on the notes in "give a task" — one place.
     querySelectorAll: (sel) => (sel === '.acts button' ? state.buttons
-      : sel.startsWith('.files li') ? state.files
+      // The selector is honoured, not merely recognised: the ask button comes
+      // back only if the walk actually asks for it. A stand-in that hands it
+      // over regardless would pass on the very code that forgot it.
+      : sel.startsWith('.files li')
+        ? state.files.concat(state.ask && sel.includes('#askAccess') ? [state.ask] : [])
       : []),
   };
   return state;
@@ -38,12 +46,12 @@ function makeDialog({ withLink = true, files = 0 } = {}) {
 
 let current = makeDialog();
 
-// initUI запоминает узел карточки один раз, поэтому подсовываем ему постоянную
-// обёртку, а свежий DOM подставляем уже за ней
+// initUI remembers the card's node once, so we slip it a permanent wrapper and
+// put the fresh DOM behind it
 const dialogProxy = Object.assign(proxy(() => current.dialog), { firstChild: {} });
 
-// Карточка ищет свои узлы и через document ($('#pf'), $('#readAll')), поэтому
-// поиск сначала заглядывает в неё, а уже потом отдаёт пустышку.
+// The card looks for its nodes through document as well ($('#pf'), $('#readAll')),
+// so the lookup peeks into it first and only then hands out the stub.
 installDom({
   byId: { dialog: dialogProxy },
   find: (sel) => (sel === '#dialog' ? dialogProxy : current.dialog.querySelector(sel)),
@@ -64,7 +72,7 @@ const check = (name, ok, got) => {
   else { failed++; console.log('ПЛОХО |', name, '→', got); }
 };
 
-// --- 1. свежая карточка с оборванным ответом: вверх ведёт на ссылку ---
+// --- 1. a fresh card with a reply still coming in: up leads to the link ---
 current = makeDialog();
 UI.closeDialog();
 UI.dialogUp();
@@ -72,17 +80,17 @@ check('вверх на свежей карточке ставит фокус н�
 check('текст при этом не мотается', current.body.scrollTop === 0, current.body.scrollTop);
 check('кнопки внизу фокус теряют', !current.buttons.some((b) => b.has('focus')), 'кнопка подсвечена');
 
-// --- 2. Enter нажимает ссылку, а не кнопку ---
+// --- 2. Enter presses the link, not the button ---
 UI.pressDialogFocus();
 check('Enter нажимает ссылку', current.link.clicked === 1, current.link.clicked);
 check('кнопки не нажаты', current.buttons.every((b) => b.clicked === 0), 'кнопка нажалась');
 
-// --- 3. вниз возвращает к тексту ---
+// --- 3. down returns to the text ---
 UI.dialogDown();
 check('вниз снимает фокус со ссылки', !current.link.has('focus'), 'focus остался');
 check('и мотает текст вниз', current.body.scrollTop > 0, current.body.scrollTop);
 
-// --- 4. текст промотан: вверх сначала мотает, и только с верха уходит на ссылку ---
+// --- 4. the text is scrolled: up scrolls first, and only from the top leaves for the link ---
 current = makeDialog();
 UI.closeDialog();
 current.body.scrollTop = 200;
@@ -92,19 +100,19 @@ current.body.scrollTop = 0;
 UI.dialogUp();
 check('домотал до верха — следующий вверх уводит на ссылку', current.link.has('focus'), 'focus нет');
 
-// --- 5. короткий ответ: ссылки нет, вверх просто мотает ---
+// --- 5. a short reply: there is no link, up just scrolls ---
 current = makeDialog({ withLink: false });
 UI.closeDialog();
 current.body.scrollTop = 200;
 UI.dialogUp();
-// Раньше здесь стояло scrollTop < 0. В браузере прокрутка прижата к нулю, и
-// проверка проходила только потому, что подставной узел это позволял: она
-// закрепляла состояние, которого не бывает. Мотаем с промотанного места.
+// There used to be scrollTop < 0 here. In a browser the scroll is pinned at
+// zero, and the check passed only because the stand-in node allowed it: it was
+// pinning a state that cannot occur. We scroll from a scrolled position.
 check('без ссылки вверх просто мотает', current.body.scrollTop < 200, current.body.scrollTop);
 UI.pressDialogFocus();
 check('Enter без ссылки нажимает кнопку', current.buttons[0].clicked === 1, current.buttons.map((b) => b.clicked).join(','));
 
-// --- 6. влево-вправо забирают фокус у ссылки ---
+// --- 6. left and right take the focus away from the link ---
 current = makeDialog();
 UI.closeDialog();
 UI.dialogUp();
@@ -112,16 +120,17 @@ UI.moveDialogFocus(1);
 check('вправо снимает фокус со ссылки', !current.link.has('focus'), 'focus остался');
 check('и подсвечивает кнопку', current.buttons.some((b) => b.has('focus')), 'ни одна не подсвечена');
 
-// --- 7. закрытие карточки сбрасывает фокус ---
+// --- 7. closing the card resets the focus ---
 UI.dialogUp();
 UI.closeDialog();
 current = makeDialog();
 UI.pressDialogFocus();
 check('после закрытия Enter не жмёт ссылку', current.link.clicked === 0, current.link.clicked);
 
-// --- 8. обновление карточки не сбивает подсветку со ссылки ---
-// именно этим ломалось: ответ дописывается, узел переписывается, класс уходит —
-// и фокус после этого не вернуть, потому что в памяти он всё ещё «на ссылке»
+// --- 8. an update to the card does not knock the highlight off the link ---
+// this is exactly what used to break: the reply grows, the node is rewritten, the
+// class goes — and after that the focus cannot be brought back, because in memory
+// it is still "on the link"
 const agent = {
   id: 'a1', name: 'Савва', role: 'Разработчик', roleKey: 'code', project: 'AI valey',
   status: 'awaiting', activity: 'ждёт', lastSaid: 'начало ответа', saidLen: 4000,
@@ -131,11 +140,11 @@ current = makeDialog();
 UI.closeDialog();
 state.focus = agent;
 state.page = 'talk';
-UI.renderDialog();                       // первая отрисовка карточки
+UI.renderDialog();                       // the first paint of the card
 UI.dialogUp();
 check('фокус встал на ссылку в настоящей карточке', current.link.has('focus'), 'focus нет');
 
-current.link = node('linky more', { id: 'readAll' });   // ответ дописали, узел переписан
+current.link = node('linky more', { id: 'readAll' });   // the reply finished, the node rewritten
 agent.lastSaid = 'начало ответа и продолжение';
 UI.renderDialog();
 check('после дописывания ответа подсветка на месте', current.link.has('focus'), 'focus слетел');
@@ -144,9 +153,9 @@ check('и текст не перенабирается заново', state.type
 UI.pressDialogFocus();
 check('Enter после обновления всё ещё жмёт ссылку', current.link.clicked === 1, current.link.clicked);
 
-// --- 9. на вкладке без ссылки фокус возвращается на кнопки ---
+// --- 9. on a tab with no link the focus returns to the buttons ---
 UI.dialogUp();
-current.link = null;                     // «Показать работу» — ссылки на вкладке нет
+current.link = null;                     // "show the work" — there is no link on the tab
 UI.renderDialog();
 check('без ссылки подсветка возвращается на кнопку', current.buttons.some((b) => b.has('focus')), 'ни одна не подсвечена');
 current.buttons.forEach((b) => { b.clicked = 0; });
@@ -156,9 +165,9 @@ check('и Enter нажимает кнопку, а не пустоту', current.
 clearInterval(state.tw);
 
 
-// --- 9. «Показать работу»: вверх заходит в список файлов ---
-// Список был кликабельным и только кликабельным: без мыши работу агента было
-// не открыть вообще, хотя все остальные ходы в карточке клавиатурные.
+// --- 9. "show the work": up enters the list of files ---
+// The list was clickable and only clickable: without a mouse an agent's work
+// could not be opened at all, though every other move in the card is by keyboard.
 current = makeDialog({ withLink: false, files: 3 });
 UI.closeDialog();
 UI.dialogUp();
@@ -166,17 +175,17 @@ check('вверх заходит в список с последнего фай�
 check('кнопки внизу фокус отдают', !current.buttons.some((b) => b.has('focus')), 'кнопка подсвечена');
 check('и текст при этом не мотается', current.body.scrollTop === 0, current.body.scrollTop);
 
-// --- 10. дальше вверх — по списку вверх ---
+// --- 10. further up — up the list ---
 UI.dialogUp();
 check('следующий вверх поднимает на строку выше', current.files[1].has('focus'), 'не там');
 check('и снимает подсветку с прежней', !current.files[2].has('focus'), 'подсвечены две');
 
-// --- 11. Enter открывает файл, а не кнопку ---
+// --- 11. Enter opens the file, not the button ---
 UI.pressDialogFocus();
 check('Enter нажимает строку файла', current.files[1].clicked === 1, current.files[1].clicked);
 check('кнопки при этом не нажаты', current.buttons.every((b) => b.clicked === 0), 'кнопка нажалась');
 
-// --- 12. с верхней строки вверх мотает, а не выкидывает из списка ---
+// --- 12. from the top row up scrolls rather than throwing you out of the list ---
 UI.dialogUp();
 check('с первой строки фокус остаётся в списке', current.files[0].has('focus'), 'вылетел');
 current.body.scrollTop = 200;
@@ -184,15 +193,15 @@ UI.dialogUp();
 check('выше первой строки — мотаем текст, а фокус остаётся на строке',
   current.files[0].has('focus') && current.body.scrollTop < 200, current.body.scrollTop);
 
-// --- 13. вниз с последней строки возвращает на кнопки ---
+// --- 13. down from the last row returns to the buttons ---
 current = makeDialog({ withLink: false, files: 2 });
 UI.closeDialog();
-UI.dialogUp();                       // на последней строке
-UI.dialogDown();                     // тупик внизу списка читается как «клавиатура сломалась»
+UI.dialogUp();                       // on the last row
+UI.dialogDown();                     // a dead end at the bottom of the list reads as "the keyboard is broken"
 check('вниз с последней строки возвращает на кнопки', current.buttons.some((b) => b.has('focus')), 'ни одна не подсвечена');
 check('и в списке никто не подсвечен', !current.files.some((f) => f.has('focus')), 'строка осталась подсвеченной');
 
-// --- 14. влево-вправо выводят из списка ---
+// --- 14. left and right lead out of the list ---
 current = makeDialog({ withLink: false, files: 2 });
 UI.closeDialog();
 UI.dialogUp();
@@ -200,20 +209,21 @@ UI.moveDialogFocus(1);
 check('вправо выводит из списка', !current.files.some((f) => f.has('focus')), 'строка подсвечена');
 check('и подсвечивает кнопку', current.buttons.some((b) => b.has('focus')), 'ни одна не подсвечена');
 
-// --- 15. файл под фокусом исчез с живого потока ---
-// files приходят из снимка и меняются на ходу; строка под курсором может уехать,
-// и фокус тогда обязан вернуться на кнопки, а не висеть на пустоте
+// --- 15. the focused file disappeared from the live stream ---
+// files come from the snapshot and change on the fly; the row under the cursor
+// can leave, and the focus then has to return to the buttons rather than hang
+// over nothing
 current = makeDialog({ withLink: false, files: 3 });
 UI.closeDialog();
-UI.dialogUp();                       // на третьей строке
+UI.dialogUp();                       // on the third row
 current.files = current.files.slice(0, 1);
 UI.pressDialogFocus();
 check('исчезнувший файл не жмётся', current.files[0].clicked === 0, current.files[0].clicked);
 check('и Enter уходит на кнопку', current.buttons.some((b) => b.clicked === 1), current.buttons.map((b) => b.clicked).join(','));
 
-// --- 16. цифра переключает вкладку карточки ---
-// Та же клавиша, что и в инвентаре: 1 «чем занят», 2 «показать работу»,
-// 3 «дать задание». «Закрыть» номера не получает — у неё есть Esc.
+// --- 16. a digit switches the tab of the card ---
+// The same key as in the bag: 1 "doing now", 2 "show the work", 3 "give a task".
+// "Close" gets no number — it has Esc.
 current = makeDialog();
 state.dialogOpen = true;
 check('цифра 2 обработана карточкой', UI.dialogNumber('2') === true, 'не обработана');
@@ -225,9 +235,9 @@ check('и кнопка закрытия цела', current.buttons[3].clicked ==
 state.dialogOpen = false;
 check('при закрытой карточке цифра уходит в офис', UI.dialogNumber('1') === false, 'осталась');
 
-// --- 16. пока реплика печатается, Enter дописывает её, а не жмёт кнопку ---
-// мышью это был клик по самому тексту; клавиши не было, и машинку приходилось
-// пережидать молча
+// --- 16. while a line is being typed out, Enter finishes it rather than pressing a button ---
+// with a mouse this was a click on the text itself; there was no key, and the
+// typewriter had to be waited out in silence
 current = makeDialog({ withLink: false });
 UI.closeDialog();
 state.page = 'talk';
@@ -237,15 +247,15 @@ UI.pressDialogFocus();
 check('Enter на печатающейся реплике дописывает её', state.typed === state.sayText.length, `${state.typed} из ${state.sayText.length}`);
 check('и не нажимает кнопку под фокусом', current.buttons.every((b) => b.clicked === 0), current.buttons.map((b) => b.clicked).join(','));
 
-// --- 17. дописанная реплика больше клавишу не перехватывает ---
+// --- 17. a finished line no longer intercepts the key ---
 UI.pressDialogFocus();
 check('следующий Enter уже нажимает кнопку', current.buttons.some((b) => b.clicked === 1), current.buttons.map((b) => b.clicked).join(','));
 
-// --- 18. машинка не отбирает Enter у того, кто ушёл вверх ---
-// Путь, который сломался 3 сентября 2026: открыл диалог, стрелкой вверх встал
-// на ссылку транскрипта, нажал Enter — и вместо транскрипта дописывалась
-// реплика. Читать агентов в полноэкранном транскрипте стоило двух нажатий,
-// причём первое выглядело как «не сработало».
+// --- 18. the typewriter does not take Enter from someone who has gone up ---
+// The path that broke on 3 September 2026: open the dialog, move up onto the
+// transcript link with the arrow, press Enter — and instead of the transcript the
+// line finished typing. Reading agents in the full-screen transcript cost two
+// presses, the first of which looked like "it did nothing".
 current = makeDialog({ withLink: true });
 UI.closeDialog();
 state.page = 'talk';
@@ -260,6 +270,22 @@ check('и фокус остаётся на блоке, а не уходит об
 UI.pressDialogFocus();
 check('Enter на ссылке транскрипта открывает её с первого раза',
   current.link.clicked === 1, `нажатий: ${current.link.clicked}`);
+
+// --- the guest's card: the arrows have to reach «попросить доступ» ---
+// Until 5 September 2026 they could not: the walk knew the bottom row and the
+// file list, and this button was in neither. A guest could press it with a
+// mouse and by no other means, in an office where everything else answers keys.
+current = makeDialog({ withLink: false, files: 0, ask: true });
+UI.closeDialog();
+UI.dialogUp();
+check('вверх встаёт на «попросить доступ»', current.ask.has('focus'), 'focus нет');
+check('и нижний ряд фокус отдал', !current.buttons.some((b) => b.has('focus')), 'кнопка подсвечена');
+UI.pressDialogFocus();
+check('Enter нажимает именно её', current.ask.clicked === 1, current.ask.clicked);
+check('вкладки при этом не нажаты', current.buttons.every((b) => b.clicked === 0), 'вкладка нажалась');
+UI.dialogDown();
+check('вниз возвращает фокус на вкладки',
+  !current.ask.has('focus') && current.buttons.some((b) => b.has('focus')), 'фокус потерялся');
 
 console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
 process.exit(failed ? 1 : 0);
