@@ -42,6 +42,7 @@ const DICT = {
 
     // ------------------------------------------------- подписи на холсте
     'hint.talk': '[ ПРОБЕЛ ] поговорить',
+    'hint.sit': 'ПРОБЕЛ — сесть', 'hint.standUp': 'ПРОБЕЛ — встать',
     'hint.camsOn': '[ ПРОБЕЛ ] камеры работают',
     'hint.cams': '[ ПРОБЕЛ ] включить камеры',
     'hint.art': '[ ПРОБЕЛ ] рассмотреть',
@@ -540,7 +541,7 @@ const DICT = {
     'task.resent': '✈ Отправил заново, с полным доступом.',
     'task.noteSent': '✈ Записка ушла в чат {name}. Ответ придёт сюда же.',
 
-    'help': 'WASD — ходить · SHIFT — бежать · B — скейт · ПРОБЕЛ — заговорить и попить · TAB — обход · N — заметки · C — переодеться · P — окно в мир · U — цвет офиса · M — звук · + 0 — масштаб (×6…×8) · SECURITY внизу — камеры по этажу (T — автообход) · I — пригласить · ESC — назад',
+    'help': 'WASD — ходить · SHIFT — бежать · B — скейт · ПРОБЕЛ — заговорить, попить, сесть · TAB — обход · N — заметки · C — переодеться · P — окно в мир · U — цвет офиса · M — звук · + 0 — масштаб (×6…×8) · SECURITY внизу — камеры по этажу (T — автообход) · I — пригласить · ESC — назад',
     'doc.title': 'Valey — офис',
   },
 
@@ -568,6 +569,7 @@ const DICT = {
     'sky.outside': 'Outside — {what}',
 
     'hint.talk': '[ SPACE ] talk',
+    'hint.sit': 'SPACE to sit', 'hint.standUp': 'SPACE to get up',
     'hint.camsOn': '[ SPACE ] cameras are live',
     'hint.cams': '[ SPACE ] switch the cameras on',
     'hint.art': '[ SPACE ] take a look',
@@ -1057,7 +1059,7 @@ const DICT = {
     'task.resent': '✈ Sent again, with full access.',
     'task.noteSent': '✈ The note went to {name}’s chat. The answer lands right here.',
 
-    'help': 'WASD to walk · SHIFT to run · B skateboard · SPACE to talk and to drink · TAB the round · N notes · C to change · P window on the world · U office colour · M sound · + 0 scale (×6…×8) · SECURITY below — floor cameras (T to cycle) · I invite · ESC back',
+    'help': 'WASD to walk · SHIFT to run · B skateboard · SPACE to talk, drink and sit · TAB the round · N notes · C to change · P window on the world · U office colour · M sound · + 0 scale (×6…×8) · SECURITY below — floor cameras (T to cycle) · I invite · ESC back',
     'doc.title': 'Valey — the office',
   },
 };
