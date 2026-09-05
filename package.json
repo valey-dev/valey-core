@@ -12,7 +12,8 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node server/index.js",
-    "test": "node tools/run-tests.mjs"
+    "test": "node tools/run-tests.mjs",
+    "coverage": "npx --yes c8@10 --reporter=text-summary --reporter=html --src=. --exclude=**/test-*.mjs --exclude=tools/run-tests.mjs --exclude=web/landing* --exclude=.claude/** --check-coverage --lines=70 --functions=55 node tools/run-tests.mjs"
   },
   "repository": {
     "type": "git",
