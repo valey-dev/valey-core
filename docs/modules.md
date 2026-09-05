@@ -79,6 +79,8 @@ Your `style.css` is loaded and applied **before** your `register` runs, so the f
 
 Your panel is your own element, created by you and appended to `body`. The core markup has no holes waiting for it. Panel chrome (`.vwrap`, `.vhead`, `.grid`) and `focusRing` from `web/ui.js` are yours to reuse: the keyboard walks panels the same way everywhere, and a second way to walk buttons is a second office.
 
+Prefix your class names. Stylesheets share one namespace with the core, and the core owns short common words: `.empty` is its placeholder for an empty list, and it comes with `padding:30px` and centred text. On 4 September 2026 the personnel file's rank rows used `class="frank empty"` for a branch with nothing in it, and every such row came out three times taller with its text centred. Nothing about the module was wrong, and neither the mock nor the module's own test could show it — both run without the core loaded. The dossier's own classes all start with `f`, and the one that broke was the one that did not.
+
 If your thing stands on the floor, give it `w` and `h` — the collision table in `blocked()` cannot know a stranger's kind. Measure from the core's constants, never from a number you copied: a hand-copied wall thickness once put an object fourteen pixels inside a wall, with every hook answering correctly.
 
 ## The server half
