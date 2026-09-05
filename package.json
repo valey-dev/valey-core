@@ -13,7 +13,9 @@
     "start": "node server/index.js",
     "dev": "node server/index.js",
     "test": "node tools/run-tests.mjs",
-    "coverage": "npx --yes c8@10 --reporter=text-summary --reporter=html --src=. --exclude=**/test-*.mjs --exclude=tools/run-tests.mjs --exclude=.claude/** --check-coverage --lines=70 --functions=55 node tools/run-tests.mjs"
+    "coverage": "npx --yes c8@10 --reporter=text-summary --reporter=html --src=. --exclude=**/test-*.mjs --exclude=tools/run-tests.mjs --exclude=.claude/** --check-coverage --lines=70 --functions=55 node tools/run-tests.mjs",
+    "release": "node tools/release.mjs",
+    "ship": "node tools/release.mjs --ship"
   },
   "repository": {
     "type": "git",
