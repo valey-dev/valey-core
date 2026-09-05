@@ -18,7 +18,7 @@ import { WALL, LIFT_DOOR_H, MARGIN } from '../../web/layout.js';
 
 const DICT = {
   ru: {
-    'help.plan': 'K — план офиса',
+    'plan.hint': 'план офиса',
     'plan.title': 'ПЛАН ОФИСА',
     'plan.floors': 'one:{n} этаж|few:{n} этажа|many:{n} этажей',
     'plan.projects': 'one:{n} проект|few:{n} проекта|many:{n} проектов',
@@ -44,7 +44,7 @@ const DICT = {
     'plan.keys': '← ↑ → ↓ комната · ENTER идти · ESC',
   },
   en: {
-    'help.plan': 'K office plan',
+    'plan.hint': 'office plan',
     'plan.title': 'OFFICE PLAN',
     'plan.floors': 'one:{n} floor|other:{n} floors',
     'plan.projects': 'one:{n} project|other:{n} projects',
@@ -501,14 +501,20 @@ export function planKey(raw) {
 export function register(api) {
   api.i18n(DICT);
 
-  // K opens and closes the plan; while it is open the arrows are its. On the entrance screen
-  // there is no plan: there is nothing to be "here" yet. The entrance screen is recognised by
-  // a class on body — that is how the core hides the HUD under it, and the same is enough for
-  // the module.
-  api.on('key', (raw) => {
-    if (planKey(raw)) return true;
-    const k = String(raw).toLowerCase();
-    if (k !== 'k' && k !== 'л') return false;
+  // The key is declared rather than tested letter by letter: the core holds the registry,
+  // and the core is what will let it be remapped one day. `KeyK` is a physical key, so
+  // under a Russian layout it is the same «Л», with no second branch in the code.
+  api.keys([{ id: 'toggle', codes: ['KeyK'], group: 'panel', hint: 'plan.hint' }]);
+
+  // While the panel is open the arrows are its; that is parsing inside a panel and stays
+  // on the raw key, as in every other panel of the office.
+  api.on('key', (raw) => planKey(raw));
+
+  // On the entrance screen there is no plan: there is nothing to be "here" yet. The screen
+  // is recognised by a class on body — that is how the core hides the HUD under it, and the
+  // same is enough for the module.
+  api.on('action', (id) => {
+    if (id !== 'plan.toggle') return false;
     if (document.body.classList.contains('titling')) return false;
     planOpen() ? closePlan() : openPlan();
     return true;
@@ -524,5 +530,4 @@ export function register(api) {
     refresh(false);
   });
   api.on('lang', () => { if (planOpen()) openPlan(); });
-  api.on('help', () => tr('help.plan'));
 }

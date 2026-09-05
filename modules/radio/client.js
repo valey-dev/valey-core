@@ -38,8 +38,8 @@ const nowPlaying = () => (radio.sdk && player.track ? player.track.name : statio
 
 const DICT = {
   ru: {
-    // its own line in the hint at the bottom of the screen: a module's key is the module's business
-    'help.radio': 'R — радио',
+    // The caption on its cap in the keys panel: a module's key is the module's business
+    'radio.hint': 'радио',
     'hud.radioTitle': 'радио — R',
     'hint.radioOn': '[ ПРОБЕЛ ] радио играет',
     'hint.radio': '[ ПРОБЕЛ ] включить радио',
@@ -86,7 +86,7 @@ const DICT = {
     'radio.noteEmbed': 'Играет прямо в этой вкладке. Пока радио играет, офис звучит тише.',
   },
   en: {
-    'help.radio': 'R radio',
+    'radio.hint': 'radio',
     'hud.radioTitle': 'radio — R',
     'hint.radioOn': '[ SPACE ] radio is playing',
     'hint.radio': '[ SPACE ] switch the radio on',
@@ -454,11 +454,13 @@ export function register(api) {
     return q ? { y: q.y, fn: (ctx) => drawRadio(ctx, q.x, q.y, t) } : null;
   });
 
-  // R opens and closes the receiver, and while the panel is open the arrows are its.
-  api.on('key', (raw) => {
-    if (radioKey(raw)) return true;
-    const k = String(raw).toLowerCase();
-    if (k !== 'r' && k !== 'к') return false;
+  // The key is declared in the shared registry: `KeyR` is physical, so the Russian «К» is
+  // the same key with no second branch. While the panel is open the arrows are its — and
+  // that stays on the raw key, as in every panel.
+  api.keys([{ id: 'toggle', codes: ['KeyR'], group: 'panel', hint: 'radio.hint' }]);
+  api.on('key', (raw) => radioKey(raw));
+  api.on('action', (id) => {
+    if (id !== 'radio.toggle') return false;
     radioOpen() ? closeRadio() : openRadio();
     return true;
   });
@@ -483,7 +485,6 @@ export function register(api) {
   });
 
   api.on('lang', () => relabelRadio());
-  api.on('help', () => tr('help.radio'));
 
   // The receiver has to know about the Spotify application: without it it plays through the
   // built-in player, with it through its own. The settings arrive on the same tick.

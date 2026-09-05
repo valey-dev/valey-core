@@ -71,6 +71,13 @@ const DICT = {
     'hint.lang': '[ ПРОБЕЛ ] язык и имена',
     'hint.kicker': '[ ПРОБЕЛ ] сыграть',
     'label.me': 'ТЫ',
+    // «ТЫ» is how the office addresses you, and it never travels outward: over
+    // a stranger's head it states something untrue. These two are how a person
+    // is seen by everyone else until they type a name of their own.
+    'title.yourName': 'как тебя зовут',
+    'title.nameLater': 'можно поменять потом — C',
+    'label.guest': 'ГОСТЬ',
+    'label.host': 'ХОЗЯИН',
     'label.gulp': 'буль',
     'label.ah': 'ах',
     'label.limited': 'лимит кончился — дремлет',
@@ -343,7 +350,7 @@ const DICT = {
     'title.sub': 'офис агентов',
     'title.enter': 'Войти',
     'title.who': 'Кто внутри',
-    'title.dress': 'Переодеться',
+    'title.dress': 'Одежда',
     'title.sky': 'Окно в мир',
     'title.behindDoor': 'за дверью',
     'title.nobody': 'пока никого',
@@ -410,6 +417,10 @@ const DICT = {
     'notes.closed': 'разговор закрыт',
     'notes.noProject': 'без проекта',
     'notes.noCtx': 'контекст не сохранился · заметка старше правки',
+    // A note whose address is not a session shows the line its owner wrote, and
+    // the button is named by whoever can open it. The core keeps no words about
+    // what such a note hangs on: it does not read those addresses.
+    'notes.noOpener': 'нечем открыть',
     'notes.nothingFound': 'Ничего не нашлось.',
     'notes.emptyHead': 'Здесь пока ничего',
     'notes.emptyWhy': 'Заметка заводится в разговоре: открой «дочитать» у любого агента и нажми N. Мысль привяжется к реплике, которую ты в этот момент читаешь, и попадёт сюда.',
@@ -604,7 +615,33 @@ const DICT = {
     'task.resent': '✈ Отправил заново, с полным доступом.',
     'task.noteSent': '✈ Записка ушла в чат {name}. Ответ придёт сюда же.',
 
-    'help': 'WASD — ходить · SHIFT — бежать · B — скейт · ПРОБЕЛ — заговорить, попить, сесть · TAB — обход · N — заметки · C — переодеться · P — окно в мир · U — цвет офиса · M — звук · + 0 — масштаб (×6…×8) · SECURITY внизу — камеры по этажу (T — автообход) · I — пригласить · ESC — назад',
+    // The strip at the bottom is assembled from the key registry: a caption per
+    // action, with the keys filled in by web/keymap.js. It stopped being a
+    // hand-written sentence on 5 September 2026 — that one lied about E, F9 and H,
+    // because a key was added in the code and the sentence was edited elsewhere,
+    // and not always.
+    'hint.walk': 'ходить', 'hint.run': 'бежать',
+    'hint.interact': 'действие', 'hint.skate': 'скейт',
+    'hint.sound': 'звук', 'hint.round': 'обход', 'hint.notes': 'заметки',
+    'hint.bag': 'одежда', 'hint.invite': 'гости',
+    'hint.sky': 'окно в мир', 'hint.skin': 'цвет офиса',
+    'hint.pager': 'пейджер', 'hint.zoom': 'масштаб',
+    'hint.shot': 'кадр 1:1', 'hint.shotMore': 'с SHIFT — ×4', 'hint.keys': 'клавиши',
+    'hint.cams': 'смена камер', 'hint.camsMore': 'сами, по кругу — в пультовой',
+    'keys.sameAs': 'то же, что {key}',
+    'keys.title': 'КЛАВИШИ',
+    'keys.free': 'one:{n} буква свободна|few:{n} буквы свободны|many:{n} букв свободно',
+    'keys.inPanel': 'внутри панели',
+    'keys.lgMove': 'движение', 'keys.lgAct': 'действие',
+    'keys.lgPanel': 'панели и предметы', 'keys.lgZoom': 'масштаб',
+    'keys.lgInPanel': 'только внутри панели', 'keys.lgService': 'служебное',
+    'keys.lgFree': 'свободна',
+    'keys.hint': 'ESC — закрыть',
+    // The name of a key when it differs from what is printed on the button itself.
+    // Only the space bar needs one: TAB and SHIFT read as they are.
+    'keycap.SPACE': 'ПРОБЕЛ',
+    // The tail of the strip: what is not a key and therefore not in the registry.
+    'help.tail': 'SECURITY внизу — камеры по этажу (T — автообход) · ESC — назад',
     'doc.title': 'Valey — офис',
   },
 
@@ -657,6 +694,10 @@ const DICT = {
     'hint.lang': '[ SPACE ] language and names',
     'hint.kicker': '[ SPACE ] play a round',
     'label.me': 'YOU',
+    'title.yourName': 'what should we call you',
+    'title.nameLater': 'you can change it later — C',
+    'label.guest': 'GUEST',
+    'label.host': 'HOST',
     'label.gulp': 'glug',
     'label.ah': 'ah',
     'label.limited': 'out of quota — dozing',
@@ -924,7 +965,7 @@ const DICT = {
     'title.sub': 'agents office',
     'title.enter': 'Enter',
     'title.who': "Who's inside",
-    'title.dress': 'Change your look',
+    'title.dress': 'Clothes',
     'title.sky': 'Window on the world',
     'title.behindDoor': 'behind the door',
     'title.nobody': 'nobody yet',
@@ -989,6 +1030,7 @@ const DICT = {
     'notes.closed': 'conversation closed',
     'notes.noProject': 'no project',
     'notes.noCtx': 'context was not kept · note predates the fix',
+    'notes.noOpener': 'nothing to open it with',
     'notes.nothingFound': 'Nothing found.',
     'notes.emptyHead': 'Nothing here yet',
     'notes.emptyWhy': 'Notes are made inside a conversation: open “read on” for any agent and press N. The thought attaches to the message you were reading and shows up here.',
@@ -1180,7 +1222,25 @@ const DICT = {
     'task.resent': '✈ Sent again, with full access.',
     'task.noteSent': '✈ The note went to {name}’s chat. The answer lands right here.',
 
-    'help': 'WASD to walk · SHIFT to run · B skateboard · SPACE to talk, drink and sit · TAB the round · N notes · C to change · P window on the world · U office colour · M sound · + 0 scale (×6…×8) · SECURITY below — floor cameras (T to cycle) · I invite · ESC back',
+    'hint.walk': 'walk', 'hint.run': 'run',
+    'hint.interact': 'action', 'hint.skate': 'skateboard',
+    'hint.sound': 'sound', 'hint.round': 'the round', 'hint.notes': 'notes',
+    'hint.bag': 'clothes', 'hint.invite': 'guests',
+    'hint.sky': 'window on the world', 'hint.skin': 'office colour',
+    'hint.pager': 'the pager', 'hint.zoom': 'scale',
+    'hint.shot': 'a 1:1 frame', 'hint.shotMore': 'SHIFT for ×4', 'hint.keys': 'the keys',
+    'hint.cams': 'cycling', 'hint.camsMore': 'by themselves, in the control room',
+    'keys.sameAs': 'same as {key}',
+    'keys.title': 'KEYS',
+    'keys.free': 'one:{n} letter free|other:{n} letters free',
+    'keys.inPanel': 'inside a panel',
+    'keys.lgMove': 'movement', 'keys.lgAct': 'action',
+    'keys.lgPanel': 'panels and things', 'keys.lgZoom': 'scale',
+    'keys.lgInPanel': 'inside a panel only', 'keys.lgService': 'service',
+    'keys.lgFree': 'free',
+    'keys.hint': 'ESC to close',
+    'keycap.SPACE': 'SPACE',
+    'help.tail': 'SECURITY below — floor cameras (T to cycle) · ESC back',
     'doc.title': 'Valey — the office',
   },
 };
