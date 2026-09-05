@@ -77,6 +77,11 @@ if (m.tall !== 1 || m.style !== 2 || m.name !== 'ЛИЗА') bad('перенос 
 if ('acc' in m || 'beard' in m) bad('старые поля остались в look после переноса');
 // the switcher person's cap lived in acc=5 and must arrive as headwear
 if (normalizeLook({ acc: 5 }).head !== 'ball') bad('acc=5 не стал бейсболкой');
+// The haircut: a look built by hand arrives without a style, and hair is drawn
+// only for 0…4. The office has no bald variant — the wardrobe offers five
+// haircuts — so an empty style is a forgotten field, not a decision.
+if (normalizeLook({ skin: SKIN[0] }).style !== 0) bad('внешность без причёски осталась лысой');
+if (normalizeLook({ style: 3 }).style !== 3) bad('заданная причёска подменена умолчанием');
 
 // ---- the arrows in the panel: the ring closes, the tick became a list of two
 for (const list of [HEADS, FACES, HANDS, BOOTS, [0, 1], [false, true]]) {
