@@ -113,14 +113,19 @@ check('и R тоже', UI.viewerKey('r', false) === false, 'перехвачен
 
 // --- copying a code block with C ---
 // The boundary matters more here than the copying itself: while there is a code
-// block in the viewer, C belongs to it; when there are no blocks it falls through
-// to the office and opens the inventory, as it always did.
+// block in the viewer, C belongs to it.
 // The screen is closed at this point by the previous check — we open it back, or
 // viewerKey returns false simply because there is nothing to look at, and the
 // check about the key turns into a check about nothing.
 viewer.hidden = false;
 logPresent = true;
-check('без блоков кода C не забирается просмотром', UI.viewerKey('c') === false, 'забрала');
+// The rule changed on 5 September 2026: C always belongs to the viewer. It used
+// to fall through into the office and open the inventory over the conversation
+// when no code block was around; now an empty page answers in the header and a
+// full one lights the numbers. A key that behaves differently depending on what
+// the page happens to hold reads as broken.
+check('без блоков кода C всё равно принадлежит просмотру', UI.viewerKey('c') === true, 'ушла в офис');
+check('и номера не зажглись, потому что копировать нечего', UI.pickOn() === false, 'зажглись');
 
 let copied = null;
 // In node globalThis.navigator has only a getter, so we substitute it through
@@ -145,13 +150,58 @@ check('в буфер ушёл текст кода, а не подсветка', 
 check('кнопка сказала «скопировано»', cbtn.textContent === 'скопировано', cbtn.textContent);
 check('и подсветилась', cbtn.classList.contains('done'), 'нет класса');
 
-// A clipboard refusal is what anyone who opened the office through a tunnel will see.
+// A clipboard refusal is what anyone who opened the office through a tunnel will
+// see. A second C in a row goes to the numbers, so this copies the way the first
+// one did — after another key has cleared the memory of that press.
 copied = null;
 setClipboard(async () => { throw new Error('нет доступа'); });
 globalThis.document.execCommand = () => false;
+UI.viewerKey('ArrowDown');                // any other key clears «already copied»
 UI.viewerKey('с');                        // and in Russian too
 await new Promise((r) => setTimeout(r, 0));
 check('отказ виден на кнопке', cbtn.classList.contains('fail') && /не вышло/.test(cbtn.textContent), cbtn.textContent);
+
+// --- numbers on everything copyable ---
+// Fake DOM: one code block and two inline fragments, all «on screen».
+const inlineBtn = (val) => Object.assign(node(), { dataset: val ? { copy: val } : {}, scrollIntoView() {} });
+const wrap = (text, val) => {
+  const btn = inlineBtn(val);
+  const body = Object.assign(node(), { textContent: text });
+  const w = Object.assign(node('mdcopyable'), {
+    getBoundingClientRect: () => ({ top: 20, bottom: 40 }),
+    querySelector: (sel) => (sel === '.mdcopy' ? null : sel === '.mdcopy-in' ? btn : sel === 'code, a' ? body : null),
+    dataset: {},
+  });
+  btn.closest = (sel) => (sel === '.mdcopyable' ? w : null);
+  return w;
+};
+const w1 = wrap('~/.claude/settings.json');
+const w2 = wrap('текст ссылки', 'https://valey.dev');
+const head = Object.assign(node('vhead'), { appendChild() {} });
+cblock.classList.add('mdblock');
+viewer.querySelectorAll = (sel) => (sel === '.mdblock, .mdcopyable' ? [cblock, w1, w2]
+  : sel === '.mdblock' ? [cblock] : []);
+viewer.querySelector = (sel) => (sel === '.mdblock' ? cblock : sel === '#chatlog' ? chatlog : sel === '.vhead' ? head : null);
+
+setClipboard(async (t) => { copied = t; });
+UI.viewerKey('ArrowDown');                // clear «already copied»
+UI.viewerKey('c');                        // the first C takes the top block
+check('первое C копирует блок, номера не зажигая', UI.pickOn() === false, 'зажглись');
+UI.viewerKey('c');                        // the second in a row lights the numbers
+check('второе C зажигает номера', UI.pickOn() === true, 'не зажглись');
+check('номер достался каждому куску', [cblock, w1, w2].every((n, i) => n.dataset.pick === String(i + 1)),
+  [cblock.dataset.pick, w1.dataset.pick, w2.dataset.pick].join(','));
+copied = null;
+UI.viewerKey('3');                        // the third is the link: its address is what lands in the clipboard
+await new Promise((r) => setTimeout(r, 0));
+check('цифра копирует адрес ссылки, а не её текст', copied === 'https://valey.dev', copied);
+check('и номера гаснут после выбора', UI.pickOn() === false, 'горят');
+// After a digit pick the «already copied» memory is cleared, so the numbers are
+// two presses away again: the first takes the block, the second lights them.
+UI.viewerKey('c'); UI.viewerKey('c');
+check('номера зажглись перед проверкой ESC', UI.pickOn() === true, 'не зажглись');
+check('ESC гасит номера', (UI.viewerKey('Escape'), UI.pickOn()) === false, 'горят');
+check('и не закрывает при этом разговор', viewer.hidden === false, 'закрыл');
 
 console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
 process.exit(failed ? 1 : 0);
