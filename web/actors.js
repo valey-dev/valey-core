@@ -102,6 +102,14 @@ function kickerFree(L, actors) {
   return L.kicker.sides.some((_, i) => !taken.has(i));
 }
 
+// How many works the agent has put up. A guest never receives the artifacts
+// field at all — it is not in SHOWN on the server, and that is a decision, not
+// an omission: another agent's board opens by consent. The client has to
+// survive its absence, or syncActors throws on a guest's first agent and the
+// office shows rooms with no people in them — the plan is built a line before
+// the actors are placed. Found on 5 September 2026 during a two-machine test.
+const artifactsOf = (a) => (a.artifacts || []).length;
+
 export function syncActors(actors, agents, L) {
   const live = new Set();
   for (const a of agents) {
@@ -113,7 +121,7 @@ export function syncActors(actors, agents, L) {
       act = {
         id: a.id, room: spot.room, seat: spot.desk,
         x: spot.desk.x, y: spot.desk.y, state: 'sit', path: [], until: 0,
-        dir: 0, frame: 0, artifacts: a.artifacts.length, showcase: 0, nextIdea: performance.now() + rnd(8000, 60000),
+        dir: 0, frame: 0, artifacts: artifactsOf(a), showcase: 0, nextIdea: performance.now() + rnd(8000, 60000),
       };
       actors.set(a.id, act);
     } else if (act.room.key === spot.room.key && act.seat.i === spot.desk.i) {
@@ -151,8 +159,8 @@ export function tickActors(actors, agents, L, dt, now, emit) {
     const room = act.room;
 
     // finished something new -> take it to the board
-    if (a.artifacts.length > act.artifacts) {
-      act.artifacts = a.artifacts.length;
+    if (artifactsOf(a) > act.artifacts) {
+      act.artifacts = artifactsOf(a);
       const b = room.board;
       act.path = pathTo(room, act, { x: b.x + b.w / 2, y: room.y + WALL + 20 });
       act.state = 'walk'; act.until = now + 22000; act.showcase = now + 22000;

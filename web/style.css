@@ -199,6 +199,23 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 #denyNote{width:100%; box-sizing:border-box; margin:8px 0 0; padding:6px;
   background:var(--field); border:2px solid var(--frame); color:var(--ink); font:inherit; font-size:13px}
 
+/* «попросить доступ» is the one button in the office with no row to stand in,
+   and in this sheet a button is painted by its container — .acts, .prow,
+   .sendrow. With no rule of its own it fell through to the browser default and
+   came out a grey system button, the only one in the office; a guest on a
+   second laptop saw it on 5 September 2026. The frames drew it wooden like
+   every other button from the start (378:3, 423:18) — the paint is what was
+   missing, not the design.
+   The .acts row is not an option for it: ui.js binds every .acts button to
+   switching the card's tab, and this one asks the owner for access. */
+#askAccess{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 10px; cursor:pointer;
+  margin:10px 0 0; white-space:nowrap}
+#askAccess:hover{background:var(--wood-lit); color:#fff}
+/* The same focus ring the bottom row and the note buttons wear: the arrows walk
+   onto this button too, and a focus you cannot see is a focus you cannot use. */
+#askAccess.focus{outline:2px solid var(--ink); outline-offset:2px; color:#fff}
+
 /* ---- пейджер ---- */
 /* Свой угол: тосты слева внизу, диалог по центру, пейджер справа — три вещи
    поверх холста и ни одна не перекрывает другую. Выезжает снизу: входящее
@@ -263,7 +280,18 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .go{background:var(--wood); color:var(--ink); border:2px solid var(--frame); font:11px "JetBrains Mono", "Courier New",monospace;
   padding:2px 8px; cursor:pointer}
 .go:hover{background:var(--wood-lit); color:var(--warn)}
-.bagwrap{width:min(700px,94vw)}
+/* Width is divided by the office scale, like the four panels above: vw inside
+   zoom is measured against the window and then multiplied by the scale, so an
+   undivided 94vw hands 175% a panel the width of the whole window. Written down
+   here on 2 September for the others and paid for again in the tree on the 5th.
+
+   The body scrolls because the panel has a ceiling — 84vh/--ui — and at 175%
+   that ceiling is 352 CSS px against the 480 the tree needs. At 100% everything
+   fitted, so the missing scroll was invisible; the second scale is what asked
+   the question. The tabs and the tree's own header stay put while it moves. */
+.bagwrap{width:min(700px, calc(94vw / var(--ui, 1)))}
+.bagwrap .bbody{overflow-y:auto; min-height:0}
+.bagwrap{display:flex; flex-direction:column}
 
 /* Вкладки инвентаря. Переключаются цифрой, а не стрелкой: стрелки внутри
    вкладки уже заняты — на «на себе» они крутят слот, на «вещах» ходят по
@@ -330,6 +358,67 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .tico{width:16px; height:16px; flex:none;
   background:conic-gradient(var(--c) 0 25%, color-mix(in srgb, var(--c) 55%, black) 25% 50%,
     var(--c) 50% 75%, color-mix(in srgb, var(--c) 55%, black) 75%)}
+/* The detailed view of the tree: six directions on top, one branch below.
+   The panel is the only one in the inventory that is wider than 700, and only
+   while this view is up — the price of the mode, paid where it is used.
+
+   Both thresholds are on the viewport rather than the panel, because the panel
+   is min(1000px, 94vw) and the two track each other: at 1070 the panel reaches
+   the 1000 the labels need, at 930 it drops under the 860 where a card can
+   still stand beside the tree. */
+.bagwrap.wide{width:min(1000px, calc(94vw / var(--ui, 1)))}
+/* The tree's own header: what the tab is, and the switch for how it is shown. */
+.thead2{display:flex; align-items:center; gap:10px}
+.thead2 b{font:bold 10px "JetBrains Mono", monospace; letter-spacing:.08em; color:var(--muted);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.vsw{display:flex; align-items:center; gap:6px; margin-left:auto; font-size:11px; color:var(--muted)}
+.vsw kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted-dim)}
+.vbtn{background:var(--field); color:var(--ink-dim); border:1px solid var(--frame-dim);
+  padding:2px 8px; cursor:pointer; font:11px "JetBrains Mono", "Courier New",monospace}
+.vbtn:hover{background:var(--wood); color:var(--ink)}
+.vbtn.on{background:var(--wood); color:var(--ink); border:2px solid var(--accent); padding:1px 7px}
+.tdirs{display:flex; gap:6px}
+.tdir{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; padding:6px 8px; cursor:pointer;
+  background:var(--bg-deep); border:1px solid var(--frame-dim); text-align:left;
+  font:10px "JetBrains Mono", "Courier New",monospace; color:var(--muted)}
+.tdir:hover{background:var(--wood)}
+.tdir.on{background:var(--wood); border:2px solid var(--accent); padding:5px 7px}
+.tdir b{font-size:10px; letter-spacing:.06em; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.tdir.on b{color:var(--ink)}
+.tdir span{font-size:10px}
+.tdir.free span{color:var(--accent)}
+.tdir em{font-style:normal; font-size:9px; color:var(--muted-dim)}
+.tbar{display:block; height:4px; background:var(--bg); border:1px solid var(--frame-dim)}
+.tbar u{display:block; height:100%; background:var(--accent)}
+.wbody{display:flex; gap:12px; align-items:flex-start}
+/* Tiers read bottom-up, the way the tree does: what you have is the ground, what
+   is paid grows above it. The markup is already in that order, so the column is
+   an ordinary one — pinned to the bottom, so a short branch does not float. */
+.wtree{position:relative; flex:1; min-width:0; display:flex; flex-direction:column;
+/* No fixed height: at 175% the panel keeps 352 CSS px for everything, and a
+   field holding 330 of them filled the first screen with emptiness while the
+   nodes waited below the fold. The rows are what set the height. */
+  justify-content:flex-end; gap:10px; padding:10px;
+  background:var(--bg-deep); border:1px solid var(--frame-dim)}
+.wtree .tedges{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
+.wtier{display:flex; gap:14px; flex-wrap:wrap; justify-content:space-around;
+  align-items:flex-start; position:relative; z-index:1}
+.wkey{display:flex; gap:6px; align-items:flex-start; max-width:270px; min-width:0}
+.wkey .tnode{flex:0 1 auto}
+.wsubs{display:flex; flex-direction:column; gap:2px; padding-top:2px}
+.wsub{font-style:normal; font-size:9px; color:var(--muted); white-space:nowrap}
+.wgate{display:flex; align-items:center; gap:8px; padding:2px 0; color:var(--muted-dim);
+  border-top:1px dashed var(--frame-dim); font-size:9px; position:relative; z-index:1}
+.wgate b{font-size:9px; letter-spacing:.1em; color:var(--warn)}
+.wempty{margin:0; padding:6px 0; font-size:10px; color:var(--muted-dim); text-align:center}
+.wroom{margin:0; font:bold 9px "JetBrains Mono", monospace; letter-spacing:.1em; color:var(--accent)}
+.wbody .lcard{width:255px; flex:none}
+/* Set from ui.js against the panel's own width — a media query inside zoom
+   still asks the window and answers about a panel that is not there. */
+.wbody.nosubs .wsubs{display:none}
+.wbody.stack{flex-direction:column}
+.wbody.stack .lcard{width:auto; align-self:stretch}
+
 .lcard{background:var(--bg-deep); border:1px solid var(--frame-dim); padding:10px 12px;
   display:flex; flex-direction:column; gap:8px; font-size:11px; color:var(--ink)}
 .lcard p{margin:0; line-height:1.4}
@@ -568,7 +657,12 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 /* ---- экран входа ---- */
 /* Оверлей привязан к прямоугольнику холста (координаты ставит layoutTitle),
    поэтому меню стоит у двери на любом размере окна, а не уезжает по вьюпорту. */
-#title{position:fixed; z-index:26; pointer-events:none}
+/* It fades in out of the dark rather than appearing: until the menu stands on
+   the canvas it is not visible at all, and the screen holds only the scene with
+   its lamp. The hinge is the ready class, hung by layoutTitle once the canvas
+   box is finally not zero. */
+#title{position:fixed; z-index:26; pointer-events:none; opacity:0; transition:opacity .5s ease}
+#title.ready{opacity:1}
 #title[hidden]{display:none}
 #title > *{pointer-events:auto}
 

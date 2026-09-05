@@ -5,7 +5,7 @@ import { drawPerson, drawItem, dressMe, cycle, hash, SKIN, HAIR, SHIRT, PANTS, B
 import { renderMarkdown } from './markdown.js';
 import { highlight, langOf } from './highlight.js';
 import { collect, moduleIds } from './modules.js';
-import { LIBRARY, TIERS, byId, children, colOf } from './library.js';
+import { LIBRARY, TIERS, DIRS, SUBS, byId, children, colOf, inDir, dirTally } from './library.js';
 import { theme, applyTheme, resetTheme, PRESETS, ui, UI_STEPS, applyUiScale } from './theme.js';
 import { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } from './notes.js';
 import { esc } from './esc.js';
@@ -605,8 +605,12 @@ const readLink = () => el.dialog.querySelector('#readAll');
 // «Дать задание» — это одно и то же место в карточке: список под текстом, в
 // который уводит стрелка вверх. Вкладки не открыты одновременно, поэтому
 // достаточно объединить селекторы и не разводить их по страницам.
+// «попросить доступ» belongs here too: until 5 September 2026 it was in no
+// focus list at all, and a guest could press it with a mouse and by no other
+// means — the one button in the office the keyboard could not reach. The tabs
+// are never open at the same time, so the selectors can share one list.
 const bodyRows = () => [...el.dialog.querySelectorAll(
-  '.files li, .notes [data-retry], .notes [data-send], .notes [data-edit], .notes [data-del], .prow button')];
+  '.files li, .notes [data-retry], .notes [data-send], .notes [data-edit], .notes [data-del], .prow button, #askAccess')];
 
 // Стрелка вверх на оборванном ответе уводит фокус на «дочитать»: длинную реплику
 // всё равно читают целиком, и тянуться за ней мышью — лишний шаг.
@@ -1430,10 +1434,104 @@ const treeCard = (n) => {
     </div>`;
 };
 
+// Two views of the same tab. The flat columns are the default and stay it: a
+// person opening the tree wants one glance — what I have, what I do not, what
+// it becomes. The detailed view is for the one who asks for a harder tree, and
+// it is entered on purpose, with V.
+//
+// While it is up, the digits belong to it: 1–6 pick a direction, the way the
+// numbers in the transcript own the digits while they are lit. Tabs come back
+// with the digits as soon as V returns the flat view, and the bottom line says
+// so — a mode may take the keys, but it has to admit that it did.
+//
+// Design: Figma, WIP «Дерево модулей: варианты представления», six direction
+// frames plus the two switch frames.
+let treeWide = false;
+let treeDir = 'work';
+
+const dirSub = (t) => (t.free ? tr('tree.dir.free') : tr('tree.dir.count', { n: t.own, m: t.total }));
+
+// The view switch lives in the tree's own header, not in the row of tabs. That
+// row is shared by all four tabs and holds the key hint; a fifth thing that
+// belongs to one tab pushed the hint onto a second line at 700 CSS px — before
+// any scaling. Here the switch sits with what it switches.
+const treeHeadHtml = () => {
+  const dir = treeWide ? DIRS.find((d) => d.id === treeDir) : null;
+  return `<div class="thead2">
+      <b>${tr('tree.title')}${dir ? ' · ' + esc(L(dir.name)) : ''}</b>
+      <span class="vsw">${tr('tree.view')}
+        <button class="vbtn${treeWide ? '' : ' on'}" data-view="flat">${tr('tree.view.flat')}</button>
+        <button class="vbtn${treeWide ? ' on' : ''}" data-view="wide">${tr('tree.view.wide')}</button>
+        <kbd>V</kbd></span>
+    </div>`;
+};
+
+const dirsHtml = () => `<div class="tdirs">${DIRS.map((d, i) => {
+  const t = dirTally(d.id, treeOwn);
+  return `<button class="tdir${d.id === treeDir ? ' on' : ''}${t.free ? ' free' : ''}" data-dir="${d.id}">
+      <b>${i + 1} ${esc(L(d.name))}</b><span>${dirSub(t)}</span>
+      ${t.free ? `<em>${tr('tree.dir.noTiers')}</em>`
+        : `<i class="tbar"><u style="width:${Math.round(100 * t.own / Math.max(1, t.total))}%"></u></i>`}
+    </button>`;
+}).join('')}</div>`;
+
+// A keystone with its own switches beside it. The chain is drawn only where the
+// panel is wide enough — below that CSS hides it and the card carries the same
+// list in one line, because a label over a neighbour is worse than no label.
+const wideNode = (n, sel) => {
+  const st = treeState(n), subs = SUBS[n.id] || [];
+  return `<div class="wkey">
+      <button class="tnode ${st}${n.id === sel.id ? ' on' : ''}" data-id="${n.id}">
+        ${st === 'ghost' ? '' : `<i class="tico" style="--c:${TONE[n.id] || '#8c7660'}"></i>`}
+        <span>${esc(L(n.name))}</span>
+        ${st === 'own' || st === 'ghost' ? '' : `<em>${tr('tree.tag.' + n.tier)}</em>`}
+      </button>
+      ${subs.length ? `<div class="wsubs">${subs.map((x) => `<i class="wsub">${esc(L(x))}</i>`).join('')}</div>` : ''}
+    </div>`;
+};
+
+const wideHtml = () => {
+  const sel = treeCur();
+  const here = inDir(treeDir);
+  const tierRow = (tier) => {
+    // The ghost «+ whatever ships this year» belongs to the flat view: it is a
+    // promise about the tier as a whole, and a branch has nothing to hang it on.
+    const list = here.filter((n) => n.tier === tier);
+    if (!list.length) {
+      return `<p class="wempty">${tr(tier === 'floor' ? 'tree.wide.noFloor'
+        : treeDir === 'you' ? 'tree.wide.noSale' : 'tree.wide.noOffice')}</p>`;
+    }
+    return `<div class="wtier">${list.map((n) => wideNode(n, sel)).join('')}</div>`;
+  };
+  const gate = (tier) => {
+    const list = here.filter((n) => n.tier === tier);
+    const own = list.filter(treeOwn).length;
+    return `<div class="wgate"><b>${tr('tree.tier.' + tier)}</b><span>${
+      list.length ? tr('tree.gate.' + tier, { n: own, m: list.length }) : tr('tree.gate.' + tier + 'None')}</span></div>`;
+  };
+  return `<div class="bbody tbody wide">
+      ${treeHeadHtml()}
+      ${dirsHtml()}
+      <div class="wbody">
+        <div class="wtree" id="wtree"><svg class="tedges"></svg>
+          ${tierRow('floor')}
+          ${gate('floor')}
+          ${tierRow('office')}
+          ${gate('office')}
+          ${tierRow('room')}
+          <p class="wroom">${tr('tree.wide.room')}</p>
+        </div>
+        ${treeCard(sel)}
+      </div>
+      <p class="hint dim">${tr('tree.wide.keys')}</p>
+    </div>`;
+};
+
 const treeHtml = () => {
   const sel = treeCur();
   const cols = TIERS.map(treeCount);
   return `<div class="bbody tbody">
+      ${treeHeadHtml()}
       <div class="tcols">${cols.map((c) => `<div class="tcol${c.n === c.m ? ' own' : ''}">
         <b>${tr('tree.col.' + c.t, { n: c.n, m: c.m })}</b><span>${treeSub(c)}</span></div>`).join('')}</div>
       <div class="tree" id="tree"><svg class="tedges"></svg>
@@ -1468,11 +1566,100 @@ function treeEdges() {
   svg.innerHTML = out;
 }
 
+// Edges in the detailed view join a paid node to the free one it grows out of,
+// across the gate between them. Same measuring as the flat view: real geometry,
+// because the panel width moves between 700 and 1000 and the rows do not.
+function wideEdges() {
+  const box = el.bag.querySelector('#wtree'), svg = box && box.querySelector('.tedges');
+  if (!svg || !box.getBoundingClientRect) return;
+  const o = box.getBoundingClientRect();
+  const at = (b) => {
+    const r = b.getBoundingClientRect();
+    return { x: r.left - o.left + r.width / 2, top: r.top - o.top, bottom: r.bottom - o.top };
+  };
+  const nodes = new Map([...box.querySelectorAll('.tnode')].map((b) => [b.dataset.id, b]));
+  let out = '';
+  for (const n of inDir(treeDir)) {
+    const p = n.parent && nodes.get(n.parent), c = nodes.get(n.id);
+    if (!p || !c) continue;
+    const a = at(p), z = at(c), my = (z.bottom + a.top) / 2;
+    const d = `M${a.x},${a.top} V${my} H${z.x} V${z.bottom}`;
+    out += `<path d="${d}"${c.classList.contains('own') ? ' class="lit"' : ''}/>`;
+  }
+  svg.setAttribute('viewBox', `0 0 ${o.width} ${o.height}`);
+  svg.innerHTML = out;
+}
+
+// Entering the detailed view opens the branch of what was being read, rather
+// than whatever direction was open last time: the card and the tree have to be
+// about the same thing, or the view reads as two panels stuck together.
+function toggleWide(to) {
+  const want = to === undefined ? !treeWide : to;
+  if (want === treeWide) return;
+  treeWide = want;
+  if (treeWide) {
+    const cur = treeCur();
+    if (cur && cur.dir) treeDir = cur.dir;
+  }
+  renderBag();
+}
+
+// Thresholds are measured off the panel, not the window: inside `zoom` a media
+// query still asks the window, and at 175% it answers about a panel twice the
+// size of the real one. The panel's own width in CSS pixels is the rect divided
+// by the scale, and that is the number the frames were drawn against.
+const uiScale = () => Number(getComputedStyle(document.documentElement).getPropertyValue('--ui')) || 1;
+
+function sizeWide() {
+  const wrap = el.bag.querySelector('.bagwrap');
+  const body = el.bag.querySelector('.wbody');
+  if (!wrap || !body || !wrap.getBoundingClientRect) return;
+  const w = wrap.getBoundingClientRect().width / uiScale();
+  body.classList.toggle('stack', w < 860);
+  body.classList.toggle('nosubs', w < 1000);
+}
+
+function bindTreeView() {
+  el.bag.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => toggleWide(b.dataset.view === 'wide'));
+  el.bag.querySelectorAll('[data-dir]').forEach((b) => b.onclick = () => pickDir(b.dataset.dir));
+  if (treeWide) { sizeWide(); wideEdges(); }
+}
+
+// Choosing a direction moves the card too: the node you were reading may live in
+// another branch, and a card about something off screen is a card about nothing.
+function pickDir(dir) {
+  if (!DIRS.some((d) => d.id === dir)) return;
+  treeDir = dir;
+  const here = inDir(dir);
+  if (!here.some((n) => n.id === treeSel)) {
+    treeSel = (here.find((n) => !treeOwn(n)) || here[0] || {}).id || treeSel;
+  }
+  renderBag();
+}
+
 function bindTree() {
   el.bag.querySelectorAll('.tnode').forEach((b) => b.onclick = () => { treeSel = b.dataset.id; renderBag(); });
+  if (treeWide) return;
   treeEdges();
   const on = el.bag.querySelector('.tnode.on');
   if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+}
+
+// Walking a direction: up and down cross the tiers, left and right step along a
+// tier. The tree here is small — five nodes at most — so the whole direction is
+// one list in reading order, and the arrows never leave it.
+function wideKey(key, cur) {
+  const here = inDir(treeDir);
+  const rank = (n) => TIERS.indexOf(n.tier === 'more' ? 'office' : n.tier);
+  const list = here.slice().sort((a, b) => rank(b) - rank(a) || a.row - b.row);
+  const i = Math.max(0, list.indexOf(cur));
+  let next = null;
+  if (key === 'arrowdown' || key === 'arrowright') next = list[(i + 1) % list.length];
+  else if (key === 'arrowup' || key === 'arrowleft') next = list[(i - 1 + list.length) % list.length];
+  else if (key === 'enter' || key === ' ') return true;
+  else return false;
+  if (next && next.id !== cur.id) { treeSel = next.id; renderBag(); }
+  return true;
 }
 
 // Ближайший по строке узел соседней колонки — когда ребра нет: «за год» не
@@ -1482,6 +1669,14 @@ const treeNear = (col, row) => LIBRARY.filter((n) => colOf(n) === col)
 
 function treeKey(key) {
   const cur = treeCur();
+  // V switches the view either way; in the detailed one the digits pick a
+  // direction, and the tiles carry those numbers so the promise is on screen.
+  if (key === 'v' || key === 'м') { toggleWide(); return true; }
+  if (treeWide) {
+    const n = Number(key);
+    if (Number.isInteger(n) && n >= 1 && n <= DIRS.length) { pickDir(DIRS[n - 1].id); return true; }
+    return wideKey(key, cur);
+  }
   let next = null;
   if (key === 'arrowup' || key === 'arrowdown') {
     const col = LIBRARY.filter((n) => colOf(n) === colOf(cur)).sort((a, b) => a.row - b.row);
@@ -1503,20 +1698,22 @@ export function renderBag(tab) {
   if (tab && tabs().includes(tab)) bagTab = tab;
   if (!tabs().includes(bagTab)) bagTab = 'self';
   el.bag.hidden = false;
-  el.bag.innerHTML = `<div class="rwrap bagwrap">
+  // The detailed view is the only place in the inventory that is wider than 700.
+  // That is the price of the mode, and it is paid only while the mode is on.
+  el.bag.innerHTML = `<div class="rwrap bagwrap${bagTab === 'tree' && treeWide ? ' wide' : ''}">
     <div class="vhead">${tr('bag.title')} · ${tr('bag.tab.' + bagTab)}<button id="bx">✕</button></div>
     <div class="btabs">
       ${tabs().map((t, i) => `<button class="btab${t === bagTab ? ' on' : ''}" data-tab="${t}">${tr('bag.tab.' + t)}<kbd>${i + 1}</kbd></button>`).join('')}
       <span class="bhint">${tr('bag.tabHint')}</span>
     </div>
-    ${bagTab === 'self' ? selfHtml() : bagTab === 'things' ? thingsHtml() : bagTab === 'tree' ? treeHtml() : officeHtml()}
+    ${bagTab === 'self' ? selfHtml() : bagTab === 'things' ? thingsHtml() : bagTab === 'tree' ? (treeWide ? wideHtml() : treeHtml()) : officeHtml()}
   </div>`;
 
   $('#bx').onclick = closeBag;
   el.bag.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => openTab(b.dataset.tab));
   if (bagTab === 'self') bindSelf();
   else if (bagTab === 'things') bindThings();
-  else if (bagTab === 'tree') bindTree();
+  else if (bagTab === 'tree') { bindTree(); bindTreeView(); }
   else bindOffice();
 }
 
@@ -1655,8 +1852,14 @@ export function bagKey(raw) {
 
   // Цифра — вкладка. Клавиши 1..9 в офисе больше ничем не заняты: масштаб
   // сидит на +, − и 0.
+  //
+  // The one exception is the detailed tree: while that view is up the digits
+  // pick a direction, because the tiles carry those numbers and a number on
+  // screen has to do what it says. Tabs get the digits back the moment V
+  // returns the flat view, and the line under the tree says so. The precedent
+  // is the transcript, where lit numbers own the digits until they go down.
   const n = Number(key);
-  if (Number.isInteger(n) && n >= 1 && n <= tabs().length) {
+  if (Number.isInteger(n) && n >= 1 && n <= tabs().length && !(bagTab === 'tree' && treeWide)) {
     openTab(tabs()[n - 1]);
     return true;
   }

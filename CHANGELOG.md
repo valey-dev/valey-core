@@ -4,6 +4,49 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.5.0 — 5 September 2026
+
+### Added
+
+- **release:** a tag becomes a page people can open, not just a pointer for git (484a3e6)
+
+### Fixed
+
+- **office:** the tree survives 175%, and the switch leaves the row of tabs (ecccaee)
+## v0.4.1 — 5 September 2026
+
+### Fixed
+
+- **release:** the release script no longer blocks its own next run (20a0426)
+- **test:** the release dry run stand goes green right after a release, too (8e0d76e)
+- **office:** #room= reaches the service rooms, which is what it is for (9f116d6)
+- **title:** the entrance menu appears in place, not on its way there (745fad7)
+- **guest:** the arrows reach «попросить доступ», the one button that answered only a mouse (cf35a23)
+- **guest:** the ask-for-access button was the one unpainted control in the office (3571e26)
+- **network:** the token loses its lookalikes, and forgives the ones a hand adds (90db920)
+- **office:** a guest saw rooms and no people, because one field never reaches them (0b6c312)
+- **title:** the entrance prints the address it is actually served from (ef4c8a7)
+
+### Other
+
+- docs: the two-machine test was on 5 September, not the 4th (ada3310)
+## v0.4.0 — 5 September 2026
+
+### Added
+
+- **office:** the tree gets a second, detailed view — six directions of the office (5373095)
+
+### Fixed
+
+- **shot:** the office plan can be photographed — K was in no key table (d190e4c)
+
+### Other
+
+- docs(modules): the last Russian comments are in English, and the repository is done (c84b49c)
+- docs(radio): the comments of the radio module are in English (e38f454)
+- docs(office): the comments of main.js are in English, and the core is done (109e2e9)
+- docs(library): the last Russian comment in the tree data is in English (e184ad2)
+- docs(readme) removed obsolete parts (2d73c91)
 ## v0.3.0 — 5 September 2026
 
 ### Added

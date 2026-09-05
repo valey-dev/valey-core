@@ -94,7 +94,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // M the sound, T the camera round, Z the loupe in the viewer. Without them the
 // strict check below rejects half of what this tool exists for.
 const VK = { Enter: 13, ' ': 32, Escape: 27, Tab: 9, F9: 120,
-  w: 87, a: 65, s: 83, d: 68, e: 69, b: 66, c: 67, i: 73, m: 77, n: 78, o: 79, p: 80, r: 82, t: 84, u: 85, z: 90,
+  w: 87, a: 65, s: 83, d: 68, e: 69, b: 66, c: 67, i: 73, k: 75, m: 77, n: 78, o: 79, p: 80, r: 82, t: 84, u: 85, z: 90,
   ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39 };
 // The digits: since 31 August 2026 they pick an item in an open panel — a tab
 // of the inventory or of the card, a floor in the lift, a station on the radio.
@@ -103,7 +103,10 @@ const VK = { Enter: 13, ' ': 32, Escape: 27, Tab: 9, F9: 120,
 for (let d = 0; d <= 9; d++) VK[String(d)] = 48 + d;
 const CODE = { Enter: 'Enter', ' ': 'Space', Escape: 'Escape', Tab: 'Tab', F9: 'F9',
   ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight' };
-for (const ch of 'wasdebcmnoprtuz') CODE[ch] = 'Key' + ch.toUpperCase();
+// The letters are listed once: a key in VK without a code here arrives at the page
+// with an empty code, and a panel that reads event.code — the office plan does —
+// never opens. That is how `i` sat here unusable, and `k` was missing outright.
+for (const ch of Object.keys(VK).filter((c) => /^[a-z]$/.test(c))) CODE[ch] = 'Key' + ch.toUpperCase();
 for (let d = 0; d <= 9; d++) CODE[String(d)] = 'Digit' + d;
 
 // A space is written in --keys as a literal space between commas, which is

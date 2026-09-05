@@ -18,16 +18,6 @@ import { russianComments } from './lib/comments.mjs';
 
 // Still Russian. Delete a line when the file is translated; never add one.
 const TODO = new Set([
-  'modules/plan/client.js',
-  'modules/plan/test-keys.mjs',
-  'modules/radio/client.js',
-  'modules/radio/covers.js',
-  'modules/radio/radio.js',
-  'modules/radio/server.js',
-  'modules/radio/spotify.js',
-  'modules/radio/test-cover.mjs',
-  'modules/radio/test-keys.mjs',
-  'web/main.js',
 ]);
 
 let bad = 0;
