@@ -9,6 +9,7 @@
 //   first   — we give the event to the first one who took it (a key, SPACE, ESC).
 import { addDict } from './i18n.js';
 import { define as defineKeys } from './keymap.js';
+import { define as definePlaces } from './places.js';
 
 // `action` and `note` are both new seams, and both sit beside `key` rather
 // than replacing it. A module that declared its keys through api.keys() gets an
@@ -23,7 +24,11 @@ import { define as defineKeys } from './keymap.js';
 // everyone and takes the first module that answers. It never reads such an
 // address itself. Nobody answered — the row says so out loud, and the note is
 // still readable from the line of context stored with it.
-const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'action', 'esc', 'tick', 'hud', 'lang', 'help', 'busy', 'note'];
+// `place` is how a module says the screen is its own: it answers with one of the
+// place ids it declared, and the keys panel draws that board instead of the floor.
+// Without it the office would have to know which module owns what, which is the
+// one thing the module system exists to avoid.
+const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'action', 'esc', 'tick', 'hud', 'lang', 'help', 'busy', 'note', 'place'];
 const hooks = Object.fromEntries(HOOKS.map(h => [h, []]));
 const dicts = [];
 let ids = [];
@@ -101,6 +106,14 @@ function apiFor(id) {
       const own = [].concat(list || []).map((a) => ({ ...a, id: a.id.startsWith(id + '.') ? a.id : `${id}.${a.id}` }));
       defineKeys(own);
       return own.map((a) => a.id);
+    },
+    // A module's places, named the same way as its keys. The ids come back so the
+    // module can answer the `place` hook with one of them rather than repeating
+    // its own prefix by hand and getting it wrong.
+    places(list) {
+      const own = [].concat(list || []).map((p) => ({ ...p, id: p.id.startsWith(id + '.') ? p.id : `${id}.${p.id}` }));
+      definePlaces(own);
+      return own.map((p) => p.id);
     }
   };
 }
