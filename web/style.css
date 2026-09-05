@@ -263,7 +263,18 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .go{background:var(--wood); color:var(--ink); border:2px solid var(--frame); font:11px "JetBrains Mono", "Courier New",monospace;
   padding:2px 8px; cursor:pointer}
 .go:hover{background:var(--wood-lit); color:var(--warn)}
-.bagwrap{width:min(700px,94vw)}
+/* Width is divided by the office scale, like the four panels above: vw inside
+   zoom is measured against the window and then multiplied by the scale, so an
+   undivided 94vw hands 175% a panel the width of the whole window. Written down
+   here on 2 September for the others and paid for again in the tree on the 5th.
+
+   The body scrolls because the panel has a ceiling — 84vh/--ui — and at 175%
+   that ceiling is 352 CSS px against the 480 the tree needs. At 100% everything
+   fitted, so the missing scroll was invisible; the second scale is what asked
+   the question. The tabs and the tree's own header stay put while it moves. */
+.bagwrap{width:min(700px, calc(94vw / var(--ui, 1)))}
+.bagwrap .bbody{overflow-y:auto; min-height:0}
+.bagwrap{display:flex; flex-direction:column}
 
 /* Вкладки инвентаря. Переключаются цифрой, а не стрелкой: стрелки внутри
    вкладки уже заняты — на «на себе» они крутят слот, на «вещах» ходят по
@@ -338,7 +349,11 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
    is min(1000px, 94vw) and the two track each other: at 1070 the panel reaches
    the 1000 the labels need, at 930 it drops under the 860 where a card can
    still stand beside the tree. */
-.bagwrap.wide{width:min(1000px,94vw)}
+.bagwrap.wide{width:min(1000px, calc(94vw / var(--ui, 1)))}
+/* The tree's own header: what the tab is, and the switch for how it is shown. */
+.thead2{display:flex; align-items:center; gap:10px}
+.thead2 b{font:bold 10px "JetBrains Mono", monospace; letter-spacing:.08em; color:var(--muted);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .vsw{display:flex; align-items:center; gap:6px; margin-left:auto; font-size:11px; color:var(--muted)}
 .vsw kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted-dim)}
 .vbtn{background:var(--field); color:var(--ink-dim); border:1px solid var(--frame-dim);
@@ -363,7 +378,10 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
    is paid grows above it. The markup is already in that order, so the column is
    an ordinary one — pinned to the bottom, so a short branch does not float. */
 .wtree{position:relative; flex:1; min-width:0; display:flex; flex-direction:column;
-  justify-content:flex-end; gap:10px; padding:10px; min-height:330px;
+/* No fixed height: at 175% the panel keeps 352 CSS px for everything, and a
+   field holding 330 of them filled the first screen with emptiness while the
+   nodes waited below the fold. The rows are what set the height. */
+  justify-content:flex-end; gap:10px; padding:10px;
   background:var(--bg-deep); border:1px solid var(--frame-dim)}
 .wtree .tedges{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
 .wtier{display:flex; gap:14px; flex-wrap:wrap; justify-content:space-around;
@@ -378,8 +396,11 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .wempty{margin:0; padding:6px 0; font-size:10px; color:var(--muted-dim); text-align:center}
 .wroom{margin:0; font:bold 9px "JetBrains Mono", monospace; letter-spacing:.1em; color:var(--accent)}
 .wbody .lcard{width:255px; flex:none}
-@media (max-width:1070px){ .wsubs{display:none} }
-@media (max-width:930px){ .wbody{flex-direction:column} .wbody .lcard{width:auto; align-self:stretch} }
+/* Set from ui.js against the panel's own width — a media query inside zoom
+   still asks the window and answers about a panel that is not there. */
+.wbody.nosubs .wsubs{display:none}
+.wbody.stack{flex-direction:column}
+.wbody.stack .lcard{width:auto; align-self:stretch}
 
 .lcard{background:var(--bg-deep); border:1px solid var(--frame-dim); padding:10px 12px;
   display:flex; flex-direction:column; gap:8px; font-size:11px; color:var(--ink)}
