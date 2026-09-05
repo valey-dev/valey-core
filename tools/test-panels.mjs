@@ -1,14 +1,14 @@
-// node tools/test-panels.mjs — каждая панель где-то расставлена.
+// node tools/test-panels.mjs — every panel is placed somewhere.
 //
-// Панели центрируются одним правилом в style.css, где они перечислены
-// поимённо. Забытая в этом списке панель не ломается заметно: она просто
-// ложится обычным блоком в конец страницы и уезжает под нижний край экрана.
-// 30 августа 2026 так приехало приглашение, и увидел это человек, а не стенд —
-// ни один тест здесь не смотрит на вёрстку.
+// The panels are centred by one rule in style.css, where they are listed by
+// name. A panel forgotten in that list does not break visibly: it simply lies as
+// an ordinary block at the end of the page and slides below the bottom edge of
+// the screen. On 30 August 2026 the invitation arrived that way, and a person saw
+// it rather than a stand — not one test here looks at layout.
 //
-// Поэтому проверяется не картинка, а решение: у каждой панели в разметке
-// должно быть сказано, центрируется она общим правилом или ставит себя сама.
-// Третьего — «никто про неё не подумал» — быть не должно.
+// So what is checked is not the picture but the decision: for every panel in the
+// markup it must be stated whether it is centred by the shared rule or places
+// itself. There must be no third option — "nobody thought about it".
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,15 +23,15 @@ const ok = (name, cond, got) => {
   else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
 };
 
-// Панели, которые ставят себя сами и в общий список не входят по замыслу.
-// Список короткий и осознанный: если панель попала сюда, значит у неё есть
-// своё правило в style.css — это и проверяется ниже.
+// The panels that place themselves and are left out of the shared list by
+// design. The list is short and deliberate: if a panel is here, it has a rule of
+// its own in style.css — which is what is checked below.
 const OWN = ['dialog', 'viewer', 'title', 'pager'];
 
 const hidden = [...html.matchAll(/<div id="([\w-]+)" hidden><\/div>/g)].map((m) => m[1]);
 ok('панели в разметке нашлись', hidden.length >= 8, hidden);
 
-// строка правила, где перечислены центрируемые
+// the rule line where the centred ones are listed
 const rule = (css.match(/^#[^{]*\{position:fixed; inset:0; z-index:28;[^}]*\}/m) || [''])[0];
 const centred = [...rule.matchAll(/#([\w-]+)/g)].map((m) => m[1]);
 ok('правило центрирования найдено', centred.length >= 7, centred);
@@ -40,17 +40,17 @@ const forgotten = hidden.filter((id) => !centred.includes(id) && !OWN.includes(i
 ok('ни одна панель не забыта: либо в общем правиле, либо ставит себя сама',
   forgotten.length === 0, forgotten);
 
-// Скрытие идёт тем же списком: без [hidden] правило display:flex перебивает
-// атрибут, и спрятанная панель остаётся на экране. Правил с [hidden] в файле
-// несколько — у панелей со своим расположением они свои, — поэтому собираем
-// все, а не первое попавшееся: на этом стенд сам и споткнулся, когда поймал
-// правило #dialog вместо длинного списка.
+// Hiding goes by the same list: without [hidden] the display:flex rule beats the
+// attribute, and a hidden panel stays on the screen. There are several [hidden]
+// rules in the file — panels that place themselves have their own — so we collect
+// them all rather than the first one that turns up: the stand tripped over that
+// itself when it caught the #dialog rule instead of the long list.
 const hiddenListed = [...css.matchAll(/#([\w-]+)\[hidden\]/g)].map((m) => m[1]);
 const notHidden = centred.filter((id) => !hiddenListed.includes(id));
 ok('и каждая центрируемая умеет прятаться', notHidden.length === 0, notHidden);
 
-// Обратная сторона: в правиле не должно быть имён, которых в разметке нет —
-// такое имя означает переименованную или удалённую панель.
+// The other way round: the rule must hold no names that are absent from the
+// markup — such a name means a panel renamed or deleted.
 const ghosts = centred.filter((id) => !hidden.includes(id));
 ok('в правиле нет призраков — все имена есть в разметке', ghosts.length === 0, ghosts);
 

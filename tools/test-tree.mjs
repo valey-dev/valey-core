@@ -1,10 +1,11 @@
-// node tools/test-tree.mjs — дерево модулей в инвентаре.
+// node tools/test-tree.mjs — the module tree in the inventory.
 //
-// Две половины. Первая — состав дерева в web/library.js: у каждого ребра есть
-// оба конца, потомок стоит в следующей колонке, строки в колонке не
-// повторяются, у всех текстов два языка, а id бесплатного модуля совпадает с
-// папкой на диске. Вторая — клавиши: DOM подставной, как во всех клавиатурных
-// стендах, проверяется не вёрстка, а куда переезжает выбранный узел.
+// Two halves. The first is the shape of the tree in web/library.js: every edge
+// has both ends, a child stands in the next column, rows do not repeat within a
+// column, every text has two languages, and a free module's id matches its
+// folder on disk. The second is the keys: the DOM is a stand-in, as in every
+// keyboard stand, and what is checked is not the layout but where the selected
+// node moves to.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +17,7 @@ const check = (name, ok, got) => {
   else { failed++; console.log('ПЛОХО |', name, '→', got); }
 };
 
-// ------------------------------------------------------------------ состав
+// ------------------------------------------------------------------ the shape
 const ids = new Set(LIBRARY.map((n) => n.id));
 check('id не повторяются', ids.size === LIBRARY.length, LIBRARY.length - ids.size);
 for (const n of LIBRARY) {
@@ -37,7 +38,7 @@ for (const c of [0, 1, 2]) {
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 for (const n of LIBRARY.filter((x) => x.module)) {
   const mf = path.join(root, 'modules', n.module, 'module.json');
-  // Платные папки в ядре не лежат — их нет и это нормально; бесплатная обязана.
+  // Paid folders are not in the core — they are absent and that is normal; a free one must be there.
   if (!fs.existsSync(mf)) { check(`${n.id}: модуль ${n.module} не на диске — допустимо для платного`, n.tier !== 'room', 'бесплатный без папки'); continue; }
   const m = JSON.parse(fs.readFileSync(mf, 'utf8'));
   check(`${n.id}: манифест ${n.module} совпадает по id`, m.id === n.module, m.id);
@@ -45,7 +46,7 @@ for (const n of LIBRARY.filter((x) => x.module)) {
 }
 check('в «Офисе» ровно пять модулей плюс узел про год', LIBRARY.filter((n) => n.tier === 'office').length === 5 && !!byId('more'), 'нет');
 
-// ------------------------------------------------------------------ клавиши
+// ------------------------------------------------------------------- the keys
 function node(cls = '', props = {}) {
   const classes = new Set(cls.split(' ').filter(Boolean));
   return {
@@ -87,8 +88,9 @@ check('корень горит целиком', (bag.innerHTML.match(/tnode own/
 UI.bagKey('ArrowDown');
 check('вниз — следующий в колонке', UI.treeSelected() === 'easel', UI.treeSelected());
 UI.bagKey('ArrowLeft');
-// Мольберт вырос из доски работ вместе с деревом гита, поэтому слева от него
-// не картины, а доска: у одного родителя два потомка, и это надо держать.
+// The easel grew out of the board of works together with the git tree, so what
+// stands to its left is the board rather than the paintings: one parent with two
+// children, and that has to hold.
 check('влево — к родителю', UI.treeSelected() === 'board', UI.treeSelected());
 UI.bagKey('ArrowRight');
 check('вправо — к первому потомку из двух', UI.treeSelected() === 'easel', UI.treeSelected());
@@ -112,7 +114,7 @@ check('цифра уводит на другую вкладку', !/class="tnode
 UI.closeBag();
 check('закрытый инвентарь стрелки не ест', UI.bagKey('ArrowDown') === false, 'съело');
 
-// Гость вкладку не видит и цифрой её не открывает.
+// A guest does not see the tab and does not open it with a digit.
 state.owner = false;
 UI.renderBag('self');
 check('гость: вкладки «дерево» нет', !/data-tab="tree"/.test(bag.innerHTML), 'есть');

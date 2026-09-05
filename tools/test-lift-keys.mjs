@@ -1,16 +1,16 @@
-// node tools/test-lift-keys.mjs — клавиши в панели лифта и на стойке.
-// DOM подставной, как и в остальных клавиатурных стендах: проверяется не
-// вёрстка, а состояние фокуса — на каком этаже он стоит при открытии, куда
-// ходит стрелками и что нажимает Enter.
+// node tools/test-lift-keys.mjs — the keys in the lift panel and at the desk.
+// The DOM is a stand-in, as in every keyboard stand: what is checked is not the
+// layout but the state of the focus — which floor it starts on, where the arrows
+// take it and what Enter presses.
 
 import { node, proxy, installDom } from './lib/dom.mjs';
 
-// В панели живут либо этажи, либо строки стойки — узел el.lift один и тот же.
+// The panel holds either floors or desk rows — el.lift is the same node.
 function makeLift(kind = 'floors', n = 3) {
   const cls = kind === 'floors' ? 'liftbtn' : 'recgo';
   const btns = Array.from({ length: n }, (_, i) => {
     const b = node(cls);
-    b.dataset.n = String(i + 1);      // этажи пронумерованы, и цифра ищет по номеру
+    b.dataset.n = String(i + 1);      // the floors are numbered, and a digit looks up by number
     return b;
   });
   return {
@@ -62,29 +62,29 @@ const check = (name, ok, got) => {
 };
 const focusAt = () => lift.btns.findIndex((b) => b.has('focus'));
 
-// --- 1. фокус открывается на том этаже, где стоишь ---
+// --- 1. the focus opens on the floor you are standing on ---
 const floors = { floors: [{ n: 1, rooms: [] }, { n: 2, rooms: [] }, { n: 3, rooms: [] }] };
 lift = makeLift('floors', 3);
 let picked = null;
 UI.openLift(floors, 2, (n) => { picked = n; });
 check('фокус на текущем этаже, а не на первом', focusAt() === 1, focusAt());
 
-// --- 2. стрелки ходят по этажам ---
+// --- 2. the arrows walk the floors ---
 check('вверх обработана', UI.liftKey('ArrowUp') === true, 'не обработана');
 check('и подняла на этаж выше по списку', focusAt() === 0, focusAt());
 UI.liftKey('ArrowDown'); UI.liftKey('ArrowDown');
 check('вниз опускает', focusAt() === 2, focusAt());
 
-// --- 3. список закольцован: с края шаг переносит на другой ---
+// --- 3. the list wraps: a step off the edge goes to the other end ---
 UI.liftKey('ArrowDown');
 check('с последнего вниз — на первый', focusAt() === 0, focusAt());
 
-// --- 4. Enter нажимает выбранный этаж ---
+// --- 4. Enter presses the chosen floor ---
 UI.liftKey('Enter');
 check('Enter нажимает этаж под фокусом', lift.btns[0].clicked === 1, lift.btns[0].clicked);
 check('и только его', lift.btns.filter((b) => b.clicked).length === 1, lift.btns.map((b) => b.clicked).join(','));
 
-// --- 5. цифра — прямой выбор этажа: «3» это третий этаж, а не третий пункт ---
+// --- 5. a digit picks a floor directly: "3" is floor three, not item three ---
 lift = makeLift('floors', 3);
 check('цифра обработана панелью', UI.liftKey('2') === true, 'не обработана');
 check('и нажала этаж с этим номером', lift.btns[1].clicked === 1, lift.btns[1].clicked);
@@ -94,13 +94,13 @@ UI.liftKey('7');
 check('цифра мимо списка ничего не нажала', lift.btns.every((b) => b.clicked <= 1), 'нажала');
 check('но в офис не уехала', UI.liftKey('7') === true, 'уехала');
 
-// --- 6. закрытая панель клавиши не забирает ---
-// иначе стрелки перестанут ходить по офису после первой же поездки
+// --- 6. a closed panel does not take the keys ---
+// otherwise the arrows stop walking the office after the very first ride
 lift.hidden = true;
 check('закрытая панель не ест стрелки', UI.liftKey('ArrowUp') === false, 'съела');
 check('и не ест Enter', UI.liftKey('Enter') === false, 'съела');
 
-// --- 6. стойка ресепшена: те же клавиши на том же узле ---
+// --- 6. the reception desk: the same keys on the same node ---
 lift = makeLift('rec', 2);
 UI.openReception({ n: 1, rooms: ['AI valey', 'figma'] }, () => {});
 check('на стойке фокус встаёт на первую строку', focusAt() === 0, focusAt());
@@ -109,8 +109,8 @@ check('и ходит по строкам', focusAt() === 1, focusAt());
 UI.liftKey(' ');
 check('ПРОБЕЛ нажимает строку', lift.btns[1].clicked === 1, lift.btns[1].clicked);
 
-// --- 7. этаж без строк: панель не должна залипать ---
-// на пустом этаже стойка рисует приветствие и ни одной кнопки
+// --- 7. a floor with no rows: the panel must not get stuck ---
+// on an empty floor the desk draws a greeting and not a single button
 lift = makeLift('rec', 0);
 UI.openReception({ n: 9, rooms: [] }, () => {});
 check('пустая стойка стрелки не забирает', UI.liftKey('ArrowDown') === false, 'забрала');

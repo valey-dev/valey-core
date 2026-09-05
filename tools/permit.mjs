@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Хук `PermissionRequest`: относит вопрос «можно выполнить?» в офис и приносит
-// оттуда ответ. Ставится в `~/.claude/settings.json`:
+// The `PermissionRequest` hook: it carries the question "may I run this?" into
+// the office and brings the answer back. Installed in `~/.claude/settings.json`:
 //
 //   "hooks": {
 //     "PermissionRequest": [
@@ -8,23 +8,25 @@
 //     ]
 //   }
 //
-// Всё, что здесь есть, подчинено одному правилу: **офис не имеет права мешать
-// работать**. Он выключен, занят, отвечает ерундой, сломан — хук молчит и
-// выходит с нулём, а Claude Code показывает свой обычный диалог. Молчание и
-// есть «спроси сам»: пустой ответ пропускает вопрос дальше по штатному пути.
+// Everything here obeys one rule: **the office has no right to get in the way of
+// work**. It is off, it is busy, it answers nonsense, it is broken — the hook
+// stays quiet and exits with zero, and Claude Code shows its usual dialog.
+// Silence is "ask for yourself": an empty answer lets the question continue down
+// the normal path.
 //
-// Поэтому здесь нет ни одного throw наружу и ни одной ветки, которая печатает
-// что-то, кроме готового вердикта. Ошибка в хуке — это чужой сеанс, замерший
-// на вопросе, которого человек не видит.
+// So there is not one throw out of here and not one branch that prints anything
+// but a finished verdict. An error in the hook is somebody's session frozen on a
+// question they cannot see.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 const URL_BASE = (process.env.VALEY_URL || 'http://127.0.0.1:5177').replace(/\/+$/, '');
 
-// Токен хозяина лежит в том же файле, что и весь остальной офис. В private он
-// не нужен — петля и так своя, — но в shared без него офис ответит «смотреть
-// можно, командовать нельзя», и вопрос вернётся в терминал молча.
+// The owner token lives in the same file as the rest of the office. In private
+// it is not needed — loopback is our own anyway — but in shared, without it, the
+// office answers "watching is allowed, commanding is not", and the question
+// returns to the terminal in silence.
 function ownerToken() {
   const file = process.env.VALEY_SETTINGS
     || path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'valey', 'settings.json');
@@ -40,8 +42,8 @@ async function readStdin() {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-// Пустой ответ = «спрашивай сам». Печатаем ничего и уходим с нулём: код выхода
-// 2 у этого события ничего не блокирует, а единица читается как поломка хука.
+// An empty answer = "ask for yourself". We print nothing and leave with zero:
+// exit code 2 blocks nothing for this event, and a 1 reads as a broken hook.
 const passThrough = () => process.exit(0);
 
 const payload = JSON.parse(await readStdin().catch(() => '')) || null;
@@ -60,16 +62,17 @@ try {
   });
   if (res.ok) answer = await res.json();
 } catch {
-  // Офиса нет на этом порту — самый обычный случай: он и не обязан быть
-  // запущен. Соединение отказывают мгновенно, задержки для человека нет.
+  // There is no office on this port — the most ordinary case: it is not obliged
+  // to be running. The connection is refused instantly, with no delay for the
+  // person.
 }
 
 if (!answer || !answer.decision) passThrough();
 
-// Вердикт офиса — в форму, которую ждёт Claude Code. Правила для «всегда
-// разрешать» едут теми же объектами, какими пришли в permission_suggestions:
-// офис их не сочиняет, а возвращает, — и записывает их сам Claude Code, туда
-// же, куда записала бы кнопка «Always allow».
+// The office's verdict, in the shape Claude Code expects. The rules for "always
+// allow" travel as the very objects that arrived in permission_suggestions: the
+// office does not invent them, it returns them — and Claude Code writes them
+// itself, in the same place the "Always allow" button would have.
 const out = {
   hookEventName: 'PermissionRequest',
   decision: answer.decision,

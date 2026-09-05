@@ -1,58 +1,61 @@
 #!/usr/bin/env node
-// Снимок офиса из терминала, без рук. Нужен затем, что судить о мелком тексте
-// по макету нельзя: холст 400×225 растягивается целыми пикселями, и настоящую
-// букву видно только на настоящем кадре.
+// A frame of the office from the terminal, hands off. Needed because small text
+// cannot be judged from a mock-up: the 400×225 canvas is stretched by whole
+// pixels, and a real letter is only visible on a real frame.
 //
-//   node tools/shot.mjs                        # кадр целиком, в .shots/shot.png
-//   node tools/shot.mjs --port 5179            # офис на другом порту
+//   node tools/shot.mjs                        # the whole frame, into .shots/shot.png
+//   node tools/shot.mjs --port 5179            # an office on another port
 //   node tools/shot.mjs --keys Enter,hold-w:1500,shift-F9
 //   node tools/shot.mjs --out /tmp/office.png --wait 6000
-//   node tools/shot.mjs --url .../soon.html --viewport 390,900   # ширина телефона
-//   node tools/shot.mjs --eval "document.title"   # заглянуть в живую страницу
+//   node tools/shot.mjs --url .../soon.html --viewport 390,900   # a phone's width
+//   node tools/shot.mjs --eval "document.title"   # look inside the live page
 //   node tools/shot.mjs --video .shots/v0.2.0.mp4 --keys Enter,hold-w:4000
 //
-// --keys ведёт офис по шагам через CDP, чтобы дойти до нужного места:
-//   Enter        нажать и отпустить
-//   Space        пробел; можно и буквальным пробелом между запятыми
-//   ArrowUp      стрелки; Up/Down/Left/Right — синонимы
-//   hold-w:1500  держать W полторы секунды (ходьба)
-//   wait:800     просто подождать
-//   F9           служебный снимок холста 1:1 в .shots (пишет сам офис)
-//   shift-F9     то же самое, но ×4 без сглаживания
-// Обычный --out снимает страницу целиком вместе с панелями; F9 внутри офиса —
-// только холст, зато пиксель в пиксель.
+// --keys walks the office through CDP, step by step, to reach the right place:
+//   Enter        press and release
+//   Space        the space bar; a literal space between commas works too
+//   ArrowUp      arrows; Up/Down/Left/Right are synonyms
+//   hold-w:1500  hold W for a second and a half (walking)
+//   wait:800     simply wait
+//   F9           the office's own 1:1 canvas shot into .shots (written by the office)
+//   shift-F9     the same, but ×4 with no smoothing
+// An ordinary --out captures the whole page with the panels; F9 inside the
+// office captures the canvas alone, but pixel for pixel.
 //
-// --video пишет тот же проход целиком, а не одним кадром: это исходник для
-// релизного ролика. Смысл в том, что проход задан строкой --keys, поэтому
-// после правки он переснимается той же командой, а не руками заново.
+// --video records that same walk whole rather than as one frame: it is the
+// source for a release video. The point is that the walk is written down in a
+// --keys string, so after a change it is re-shot with the same command instead
+// of by hand.
 //
-// ------------------------------------------------------------------ ловушки
+// -------------------------------------------------------------------- traps
 //
-// Две штуки, на которые 29 августа 2026 ушло два часа, обе молчаливые:
+// Two of these cost two hours on 29 August 2026, and both were silent:
 //
-// 1. Без своего --user-data-dir Chrome натыкается на уже запущенный у человека
-//    браузер, пишет «Failed to create a ProcessSingleton for your profile
-//    directory» и выходит, ничего не сняв. Тот же отказ — если переиспользовать
-//    каталог, в котором остался живой процесс. Поэтому здесь каждый раз свежий
-//    временный профиль.
+// 1. Without a --user-data-dir of its own, Chrome runs into the browser the
+//    person already has open, prints "Failed to create a ProcessSingleton for
+//    your profile directory" and exits having captured nothing. The same
+//    refusal comes from reusing a directory where a live process remains. So a
+//    fresh temporary profile is made every time.
 //
-// 2. `chrome --headless --screenshot` на этой странице не срабатывает НИКОГДА:
-//    офис держит открытым /api/stream, событие load не наступает, и Chrome
-//    ждёт вечно. Единственный рабочий путь — поднять --remote-debugging-port и
-//    позвать Page.captureScreenshot по таймеру, что и делается ниже. Зависимо-
-//    стей не нужно: в Node 22 есть глобальный WebSocket.
-// 3. Кадры экранной трансляции приходят неравномерно: Chrome шлёт их на
-//    изменение картинки, а не по таймеру, и каждый надо подтвердить —
-//    screencastFrameAck. Без подтверждения поток встаёт после первого же кадра,
-//    и на диск ложится ровно одна картинка вместо ролика. Поэтому длительность
-//    каждого кадра берётся из его метки времени, а не считается как 1/30: иначе
-//    ходьба по коридору едет то быстрее, то медленнее записанного.
-// 4. Убитый прогон оставляет за собой живой Chrome, и он держит порт 9222.
-//    Следующий запуск после этого висит молча — сколько ни жди, кадра не будет,
-//    и выглядит это как «сломался офис», а не «сломался снимок». 2 сентября
-//    2026 на это ушло два запуска подряд. Лечится до запуска:
+// 2. `chrome --headless --screenshot` NEVER works on this page: the office keeps
+//    /api/stream open, the load event never fires, and Chrome waits forever. The
+//    only working path is to raise --remote-debugging-port and call
+//    Page.captureScreenshot on a timer, which is what happens below. No
+//    dependencies needed: Node 22 has a global WebSocket.
+// 3. Screencast frames arrive unevenly: Chrome sends them when the picture
+//    changes rather than on a timer, and each one has to be acknowledged with
+//    screencastFrameAck. Without the acknowledgement the stream stops after the
+//    very first frame, and exactly one picture lands on disk instead of a video.
+//    So each frame's duration is taken from its own timestamp rather than
+//    computed as 1/30: otherwise the walk down the corridor runs faster and
+//    slower than it was recorded.
+// 4. A killed run leaves a live Chrome behind, and it holds port 9222. The next
+//    run then hangs in silence — wait as long as you like, no frame comes, and
+//    it looks like "the office broke" rather than "the screenshot broke". On
+//    2 September 2026 that cost two runs in a row. Cured before starting:
 //        pgrep -f 'user-data-dir=/var/folders/.*/T/valey-shot-' | xargs kill
-//    Шаблон обязателен целиком: `pkill -f chrome` уносит браузер пользователя.
+//    The whole pattern is mandatory: `pkill -f chrome` takes the user's browser
+//    with it.
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -72,40 +75,44 @@ const evalJs = arg('eval', '');
 const out = arg('out', path.join(process.cwd(), '.shots', 'shot.png'));
 const settle = Number(arg('wait', 5000));
 const video = arg('video', '');
-// Окно шире обычного только под видео: у ролика 1920×1080 целевые, а у кадра
-// свой устоявшийся размер, и менять его задним числом значит переснять всё.
+// The window is wider than usual only for video: 1920×1080 is what a video is
+// for, while a frame has its own settled size, and changing that after the fact
+// means re-shooting everything.
 const size = arg('size', video ? '1920,1080' : '1400,820');
 const viewport = arg('viewport', '');
 const steps = arg('keys', '').split(',').filter(Boolean);
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Коды нужны Chrome: без windowsVirtualKeyCode страница получает событие, у
-// которого key есть, а keyCode нет, и офис его не узнаёт.
-// Стрелки нужны, чтобы дойти клавиатурой до того, что клавиатурой и проверяется:
-// фокус в карточке агента без них не сдвинуть, а мышью тут ходить нечем.
-// Буквы офиса, а не только ходьба: B — скейт, N — заметки, C — переодеться,
-// P — окно в мир, U — цвет офиса, R — радио, M — звук, T — автообход камер,
-// Z — лупа в просмотрщике. Без них строгая проверка ниже отвергает половину
-// того, ради чего стенд и заводился.
+// Chrome needs the codes: without windowsVirtualKeyCode the page gets an event
+// that has a key but no keyCode, and the office does not recognise it.
+// The arrows are needed to reach by keyboard the things that are checked by
+// keyboard: the focus in an agent's card cannot be moved without them, and
+// there is no mouse to walk with here.
+// The office's letters, not only walking: B is the skateboard, N the notes,
+// C the wardrobe, P the window on the world, U the office colour, R the radio,
+// M the sound, T the camera round, Z the loupe in the viewer. Without them the
+// strict check below rejects half of what this tool exists for.
 const VK = { Enter: 13, ' ': 32, Escape: 27, Tab: 9, F9: 120,
   w: 87, a: 65, s: 83, d: 68, e: 69, b: 66, c: 67, i: 73, m: 77, n: 78, o: 79, p: 80, r: 82, t: 84, u: 85, z: 90,
   ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39 };
-// Цифры: с 31 августа 2026 они выбирают пункт в открытой панели — вкладку
-// инвентаря и карточки, этаж в лифте, волну в радио. Без них снять эти экраны
-// нельзя вообще: до панели можно дойти, а переключить в ней нечем.
+// The digits: since 31 August 2026 they pick an item in an open panel — a tab
+// of the inventory or of the card, a floor in the lift, a station on the radio.
+// Without them those screens cannot be captured at all: the panel can be
+// reached, but nothing in it can be switched.
 for (let d = 0; d <= 9; d++) VK[String(d)] = 48 + d;
 const CODE = { Enter: 'Enter', ' ': 'Space', Escape: 'Escape', Tab: 'Tab', F9: 'F9',
   ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight' };
 for (const ch of 'wasdebcmnoprtuz') CODE[ch] = 'Key' + ch.toUpperCase();
 for (let d = 0; d <= 9; d++) CODE[String(d)] = 'Digit' + d;
 
-// Пробел пишется в --keys буквальным пробелом между запятыми, и это неудобно
-// ровно настолько, чтобы вместо него написали Space. Раньше такой токен молча
-// проваливался: VK/CODE его не знали, Chrome слал событие без keyCode, офис
-// такое не узнавал. 30 августа 2026 на этом ушло четыре кадра и неверный вывод
-// «нажатие включило и выключило камеры» — не сработало ни одно. Синонимы
-// нужны затем, чтобы промах по названию был опечаткой, а не тишиной.
+// A space is written in --keys as a literal space between commas, which is
+// awkward exactly enough that people write Space instead. Such a token used to
+// fail in silence: VK/CODE did not know it, Chrome sent an event without a
+// keyCode, and the office did not recognise that. On 30 August 2026 this cost
+// four frames and the wrong conclusion "the press switched the cameras on and
+// off" — neither had worked. The synonyms exist so that missing the name is a
+// typo rather than silence.
 const ALIAS = { Space: ' ', Spacebar: ' ', Esc: 'Escape', Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight' };
 const alias = (k) => (Object.prototype.hasOwnProperty.call(ALIAS, k) ? ALIAS[k] : k);
 
@@ -119,14 +126,14 @@ const chrome = spawn(CHROME, [
 
 let ws;
 const bye = async (code) => {
-  try { ws?.close(); } catch { /* уже закрыт */ }
-  try { process.kill(-chrome.pid); } catch { try { chrome.kill(); } catch { /* уже умер */ } }
+  try { ws?.close(); } catch { /* already closed */ }
+  try { process.kill(-chrome.pid); } catch { try { chrome.kill(); } catch { /* already dead */ } }
   await fs.rm(profile, { recursive: true, force: true }).catch(() => {});
   process.exit(code);
 };
 
 try {
-  // порт открывается не мгновенно, а спрашивать раньше времени — ECONNREFUSED
+  // the port does not open instantly, and asking too early is an ECONNREFUSED
   let ready = false;
   for (let i = 0; i < 60 && !ready; i++) {
     try { await fetch(`http://127.0.0.1:${PORT_CDP}/json/version`); ready = true; } catch { await wait(250); }
@@ -152,21 +159,23 @@ try {
     const n = ++id; pending.set(n, res); ws.send(JSON.stringify({ id: n, method, params }));
   });
 
-  // вкладка переиспользуется между запусками, и без этого можно получить кадр
-  // по старому коду — с виду свежий, а на деле прошлый
+  // the tab is reused between runs, and without this you can get a frame of the
+  // old code — fresh-looking and in fact stale
   await send('Network.enable');
   await send('Network.setCacheDisabled', { cacheDisabled: true });
   await send('Page.enable');
-  // Размер окна и размер страницы — не одно и то же: у окна 1920×1080 область
-  // страницы вышла 1920×993, а h264 не кодирует нечётную высоту и падает уже на
-  // сборке, когда все кадры сняты. Вычитать высоту хрома на глаз бессмысленно,
-  // она своя у каждой версии, — поэтому вьюпорт задаётся явно.
+  // The window size and the page size are not the same thing: with a 1920×1080
+  // window the page area came out 1920×993, and h264 does not encode an odd
+  // height — it fails at assembly, once every frame has been captured.
+  // Subtracting the browser chrome by eye is pointless, it differs by version,
+  // so the viewport is set explicitly.
   //
-  // --viewport делает то же самое для обычного кадра, и нужен он затем, что
-  // Chrome не сужает окно меньше пятисот пикселей: `--size 390,1000` молча
-  // даёт пятьсот, и мобильная вёрстка снимается не на той ширине, на которой
-  // её судят. По умолчанию флага нет и метрики не трогаются — иначе все
-  // прежние кадры офиса сменили бы высоту с ~733 на 820.
+  // --viewport does the same for an ordinary frame, and it is needed because
+  // Chrome will not make a window narrower than five hundred pixels: `--size
+  // 390,1000` quietly gives five hundred, and the mobile layout is then shot at
+  // a width it is not judged at. By default the flag is absent and the metrics
+  // are left alone — otherwise every earlier frame of the office would change
+  // height from ~733 to 820.
   const forced = viewport || (video ? size : '');
   if (forced) {
     const [w, h] = forced.split(',').map(Number);
@@ -177,8 +186,8 @@ try {
   await send('Page.reload', { ignoreCache: true });
   await wait(settle);
 
-  // Запись начинается до клавиш: первый кадр ролика — офис в покое, а не
-  // человек, уже шагнувший в дверь.
+  // Recording starts before the keys: the first frame of the video is the office
+  // at rest, not a person already stepping through the door.
   let frames = [];
   let framesDir = '';
   if (video) {
@@ -212,18 +221,19 @@ try {
       await key('keyDown', k); await wait(Number(ms) || 800); await key('keyUp', k); continue;
     }
     const k = alias(what);
-    // Молча отправить событие без keyCode — значит соврать: офис его не увидит,
-    // а кадр выйдет такой, будто клавиша нажалась и ничего не изменила.
+    // Sending an event without a keyCode in silence is a lie: the office will
+    // not see it, and the frame comes out as if the key was pressed and changed
+    // nothing.
     if (!VK[k]) throw new Error(`--keys: не знаю клавишу «${what}». Известны: ${Object.keys(VK).map((x) => (x === ' ' ? 'Space' : x)).join(', ')}`);
     await key('keyDown', k); await key('keyUp', k);
     await wait(Number(ms) || 400);
   }
   await wait(600);
 
-  // --eval — заглянуть внутрь живой страницы, когда офис на вид работает, а
-  // предмета нет. Без этого остаётся гадать: модуль не встал, точка не
-  // сработала или рисуется мимо. Печатается до кадра, чтобы вывод шёл в том
-  // порядке, в каком проверяют.
+  // --eval is for looking inside the live page when the office appears to work
+  // and the thing is not there. Without it one is left guessing: the module did
+  // not load, the point did not fire, or it draws off-screen. Printed before the
+  // frame so the output comes in the order things are checked in.
   if (evalJs) {
     const r = await send('Runtime.evaluate', { expression: evalJs, awaitPromise: true, returnByValue: true });
     if (r.exceptionDetails) console.log('--eval упал:', r.exceptionDetails.text || r.exceptionDetails.exception?.description);
@@ -240,10 +250,10 @@ try {
     await Promise.all(frames.writes);
     if (frames.length < 2) throw new Error('трансляция дала ' + frames.length + ' кадр(ов) — записывать нечего');
 
-    // Список для concat-демуксера: у каждого кадра своя длительность, взятая из
-    // метки времени. Последний кадр метки «до следующего» не имеет, поэтому ему
-    // даётся минимум, и он же повторяется строкой ниже — без повтора ffmpeg
-    // обрезает хвост ролика.
+    // The list for the concat demuxer: every frame has its own duration, taken
+    // from its timestamp. The last frame has no "until the next one", so it gets
+    // the minimum and is repeated on the line below — without the repeat ffmpeg
+    // cuts the tail off the video.
     const lines = [];
     for (let i = 0; i < frames.length; i++) {
       const dur = i + 1 < frames.length ? frames[i + 1].at - frames[i].at : 1 / 30;
@@ -255,8 +265,8 @@ try {
 
     const secs = (frames[frames.length - 1].at - frames[0].at).toFixed(1);
     const ff = ['-y', '-f', 'concat', '-safe', '0', '-i', 'frames.txt',
-      // crop до чётного — страховка на случай своего --size: без неё падение
-      // приходит после съёмки, когда переснимать дорого
+      // cropping to an even size is the guard against a custom --size: without
+      // it the failure arrives after the shoot, when re-shooting is expensive
       '-vf', 'fps=30,crop=trunc(iw/2)*2:trunc(ih/2)*2', '-c:v', 'libx264', '-preset', 'slow', '-crf', '18',
       '-pix_fmt', 'yuv420p', path.resolve(video)];
     const ok = await new Promise((res) => {
@@ -268,8 +278,9 @@ try {
       await fs.rm(framesDir, { recursive: true, force: true }).catch(() => {});
       console.log(`записано: ${video} — ${frames.length} кадров, ${secs} с`);
     } else {
-      // ffmpeg тут не зависимость проекта, а удобство: без него остаются кадры
-      // и строчка, которой их собрать где угодно.
+      // ffmpeg is a convenience here rather than a dependency of the project:
+      // without it you are left with the frames and the line that assembles them
+      // anywhere.
       console.log(`кадры: ${framesDir} — ${frames.length} шт, ${secs} с`);
       console.log(`собрать:\n  cd ${framesDir} && ffmpeg -f concat -safe 0 -i frames.txt \\\n    -vf 'fps=30,crop=trunc(iw/2)*2:trunc(ih/2)*2' -c:v libx264 -crf 18 -pix_fmt yuv420p ${path.resolve(video)}`);
     }

@@ -1,14 +1,14 @@
-// node tools/test-modules.mjs — загрузчик модулей.
+// node tools/test-modules.mjs — the module loader.
 //
-// Модуль — это папка, которой в бесплатной сборке просто нет. Отсюда главное
-// свойство, которое здесь и проверяется: **отсутствие модулей не сбой**. Если
-// загрузчик начнёт падать или шуметь на пустом месте, бесплатная сборка
-// перестанет собираться, и узнается это на пользователе.
+// A module is a folder that in the free build is simply not there. Hence the
+// main property, and the one checked here: **no modules is not a failure**. If
+// the loader starts throwing or complaining over nothing, the free build stops
+// building, and that gets discovered by a user.
 //
-// Остальное — про то, что модуль нельзя подсунуть мимо манифеста: папка без
-// `module.json` и папка, чей id разъехался с именем, игнорируются. Второе не
-// придирка: по id строится путь /modules/<id>/, и разъехавшись, они дают
-// модуль, чей клиент не скачивается.
+// The rest is about a module not being smuggled in past its manifest: a folder
+// without a `module.json`, and a folder whose id drifted from its name, are
+// ignored. The second is not pedantry: the path /modules/<id>/ is built from the
+// id, and once they drift you get a module whose client cannot be downloaded.
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -21,21 +21,22 @@ const ok = (name, cond, got) => {
 };
 
 const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-modules-'));
-// Настоящий модуль лежит внутри репозитория, а у того в package.json стоит
-// "type": "module" — оттуда его `server.js` и знает, что он ESM. Подставной
-// лежит во временной папке, где такого package.json нет, поэтому он свой
-// пишет сам. Без этой строки стенд проходил на Node 20 и 22, где синтаксис
-// модуля определяется сам, и падал на Node 18, где нет: нашлось первым же
-// прогоном CI 4 сентября 2026 — ради этого матрица и заведена.
+// A real module lies inside the repository, and that repository's package.json
+// says "type": "module" — which is how its `server.js` knows it is ESM. The
+// stand-in lies in a temp folder where there is no such package.json, so it
+// writes its own. Without this line the stand passed on Node 20 and 22, where
+// module syntax is detected automatically, and failed on Node 18, where it is
+// not: found by the very first CI run on 4 September 2026 — which is what the
+// matrix was set up for.
 await fsp.writeFile(path.join(root, 'package.json'), JSON.stringify({ type: 'module' }));
 
-// 1. Каталога modules/ нет вовсе — бесплатная сборка.
+// 1. No modules/ directory at all — the free build.
 ok('без каталога modules/ загрузчик молчит и отдаёт пустоту', (await loadModules(root)).length === 0);
 ok('список пуст', moduleList().length === 0);
 ok('настроек не добавилось', Object.keys(moduleDefaults()).length === 0);
 ok('маршрут никем не перехвачен', (await moduleRoute(new URL('http://x/api/wip'), {}, {}, () => {})) === false);
 
-// 2. Нормальный модуль с сервером.
+// 2. A normal module with a server.
 const mods = path.join(root, 'modules');
 await fsp.mkdir(path.join(mods, 'пример'), { recursive: true });
 await fsp.writeFile(path.join(mods, 'пример', 'module.json'), JSON.stringify({
@@ -46,11 +47,12 @@ await fsp.writeFile(path.join(mods, 'пример', 'server.js'),
   'import fsp from "node:fs/promises";\n' +
   'export const defaults = () => ({ пример: { ключ: "" } });\n' +
   'export const route = (url, req, res, send) => url.pathname === "/api/wip" ? (send(res, 200, { ok: true }), true) : false;\n' +
-  // Наблюдатель пишет на диск, а не в память: проверять через повторный
-  // import нельзя — модуль уже загружен, и второй import отдаст кэш.
+  // The observer writes to disk rather than to memory: checking through a second
+  // import is not on — the module is already loaded, and a second import returns
+  // the cache.
   `export async function observe(now, prev) { await fsp.writeFile(${JSON.stringify(path.join(root, 'seen.json'))}, JSON.stringify([now?.n, prev?.n])); }\n`);
 
-// 3. Папка без манифеста и папка с чужим id — не модули.
+// 3. A folder with no manifest and a folder with a foreign id are not modules.
 await fsp.mkdir(path.join(mods, 'мусор'), { recursive: true });
 await fsp.mkdir(path.join(mods, 'чужой'), { recursive: true });
 await fsp.writeFile(path.join(mods, 'чужой', 'module.json'), JSON.stringify({ id: 'не-тот-id', client: 'client.js' }));
@@ -68,7 +70,7 @@ const taken = await moduleRoute(new URL('http://x/api/wip'), {}, {}, (_res, code
 ok('модуль забрал свой маршрут', taken === true && answered?.code === 200, answered);
 ok('чужой маршрут не забрал', (await moduleRoute(new URL('http://x/api/state'), {}, {}, () => {})) === false);
 
-// 4. Сломанный сервер модуля не роняет офис, но и не молчит.
+// 4. A broken module server does not bring the office down, but does not stay quiet either.
 await fsp.mkdir(path.join(mods, 'broken'), { recursive: true });
 await fsp.writeFile(path.join(mods, 'broken', 'module.json'), JSON.stringify({ id: 'broken', server: 'server.js' }));
 await fsp.writeFile(path.join(mods, 'broken', 'server.js'), 'this is not javascript(');
@@ -77,18 +79,18 @@ ok('сломанный модуль не уронил загрузку', moduleL
 ok('сломанный модуль не попал в список для клиента', !moduleList().some(m => m.id === 'broken'));
 ok('и о нём сказано вслух', moduleErrors().some(e => e.id === 'broken'), moduleErrors());
 
-// 5. Наблюдение за снимком офиса. Точка серверная, и она нужна тем, кто ведёт
-// журнал: клиентский `tick` — про кадр в браузере, а браузер бывает закрыт,
-// пока офис работает.
+// 5. Watching the office snapshot. The point is server-side, and it is needed by
+// whoever keeps a journal: the client's `tick` is about a frame in the browser,
+// and the browser is often closed while the office keeps running.
 await moduleObserve({ n: 2 }, { n: 1 });
-// Читаем один раз и с запасом: если наблюдатель не отработал, файла нет, и
-// второе чтение роняло стенд вместе с оставшимися проверками — так первый
-// прогон CI показал крушение вместо четырёх честных «УПАЛ».
+// Read once and defensively: if the observer never ran there is no file, and a
+// second read brought the stand down along with the remaining checks — that is
+// how the first CI run showed a crash instead of four honest failures.
 const seen = await fsp.readFile(path.join(root, 'seen.json'), 'utf8').catch(() => null);
 ok('наблюдателю достались снимок и предыдущий', seen === '[2,1]', seen);
 
-// Упавший наблюдатель не роняет такт и не глотает соседей: это зовётся раз в
-// 2.5 секунды и обязано пережить любой чужой код.
+// An observer that throws neither stops the tick nor swallows its neighbours:
+// this is called every 2.5 seconds and has to survive any foreign code.
 await fsp.mkdir(path.join(mods, 'падучий'), { recursive: true });
 await fsp.writeFile(path.join(mods, 'падучий', 'module.json'), JSON.stringify({ id: 'падучий', server: 'server.js' }));
 await fsp.writeFile(path.join(mods, 'падучий', 'server.js'),

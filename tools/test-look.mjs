@@ -1,12 +1,12 @@
-// node tools/test-look.mjs — внешность агентов: офис не перетасовывается
-// новыми слотами. Стенд ходит по старой раздаче, переписанной здесь целиком:
-// если сдвиг в web/sprites.js поедет, тест увидит это, а не поверит на слово.
+// node tools/test-look.mjs — the agents' looks: the office is not reshuffled by
+// new slots. The stand walks the old allocation, rewritten here in full: if a
+// shift in web/sprites.js moves, the test sees it rather than taking it on trust.
 import { lookOf, normalizeLook, drawPerson, dressOf, dressMe, cycle, hash, SKIN, HAIR, SHIRT, PANTS, BOOTS, HEADS, FACES, HANDS,
   SHIRT_WORK, BLOUSE, JACKET, TIE, WORK_BOOTS } from '../web/sprites.js';
 
 const pick = (arr, n) => arr[Math.abs(n >>> 0) % arr.length];
 
-// Раздача до появления роста-в-панели, слотов и предметов, слово в слово.
+// The allocation before height-in-panel, slots and props appeared, word for word.
 const oldLookOf = (id) => {
   const h = hash(id);
   return {
@@ -30,22 +30,22 @@ ids.push('Петя', 'Petya', 'agent', '', 'ы');
 let failed = 0;
 const bad = (msg) => { failed++; console.log('ПЛОХО |', msg); };
 
-// ---- ни один существующий сдвиг не поехал
+// ---- not one existing shift has moved
 for (const id of ids) {
   const was = oldLookOf(id), now = lookOf(id);
   for (const k of ['skin', 'hair', 'shirt', 'pants', 'style', 'tall']) {
     if (was[k] !== now[k]) bad(`${id}: ${k} было ${was[k]}, стало ${now[k]}`);
   }
-  // acc разъехался на два слота, но каждый агент остался в том же
+  // acc moved by two slots, but every agent stayed in the same one
   const head = was.acc === 2 ? 'phones' : was.acc === 3 ? 'cap' : 'none';
   if (now.head !== head) bad(`${id}: acc=${was.acc} даёт голову ${now.head}, ждали ${head}`);
   if (now.glasses !== (was.acc === 1)) bad(`${id}: acc=${was.acc} даёт очки ${now.glasses}`);
-  // борода осталась бородой: щетина и усы агентам не раздаются
+  // a beard stayed a beard: stubble and a moustache are not handed to agents
   if (now.face !== (was.beard ? 'beard' : 'none')) bad(`${id}: борода ${was.beard} стала лицом ${now.face}`);
   if (now.face === 'stubble' || now.face === 'mous') bad(`${id}: агенту досталась ${now.face}`);
 }
 
-// ---- новые слоты живут в свободных старших битах и ничего не занимают ниже 25
+// ---- new slots live in the free high bits and take nothing below 25
 for (const id of ids) {
   const h = hash(id), l = lookOf(id);
   if (l.boots !== pick(BOOTS, h >>> 25)) bad(`${id}: обувь не с бита 25`);
@@ -56,13 +56,13 @@ for (const id of ids) {
   if (!FACES.includes(l.face)) bad(`${id}: лицо вне списка: ${l.face}`);
 }
 
-// ---- раздача не выродилась: все четыре цвета обуви и оба предмета встречаются
+// ---- the allocation has not degenerated: all four boot colours and both props occur
 const seen = { boots: new Set(), hands: new Set() };
 for (const id of ids) { const l = lookOf(id); seen.boots.add(l.boots); seen.hands.add(l.hands); }
 if (seen.boots.size < 4) bad(`обувь: из четырёх цветов встретилось ${seen.boots.size}`);
 if (seen.hands.size < 3) bad(`руки: из трёх значений встретилось ${seen.hands.size}`);
 
-// ---- сохранённый старый look читается, а не сбрасывает человека в незнакомца
+// ---- a saved old look is read rather than turning the person into a stranger
 const legacy = { skin: '#ffdcb8', hair: '#3a2a20', shirt: '#4fa89a', pants: '#3f4a63', style: 2, acc: 1, beard: true, tall: 1, name: 'ТЫ' };
 const m = normalizeLook(legacy);
 if (m.glasses !== true) bad('старый acc=1 не превратился в очки');
@@ -72,10 +72,10 @@ if (m.boots !== BOOTS[0]) bad('обуви без сохранённой не д�
 if (m.hands !== 'none') bad('в руке из ниоткуда взялся предмет');
 if (m.tall !== 1 || m.style !== 2 || m.name !== 'ТЫ') bad('перенос потерял то, что было сохранено');
 if ('acc' in m || 'beard' in m) bad('старые поля остались в look после переноса');
-// бейсболка человечка-переключателя жила в acc=5 и должна доехать головой
+// the switcher person's cap lived in acc=5 and must arrive as headwear
 if (normalizeLook({ acc: 5 }).head !== 'ball') bad('acc=5 не стал бейсболкой');
 
-// ---- стрелки в панели: круг замыкается, галочка стала списком из двух
+// ---- the arrows in the panel: the ring closes, the tick became a list of two
 for (const list of [HEADS, FACES, HANDS, BOOTS, [0, 1], [false, true]]) {
   let v = list[0];
   for (let i = 0; i < list.length; i++) v = cycle(list, v, 1);
@@ -84,13 +84,13 @@ for (const list of [HEADS, FACES, HANDS, BOOTS, [0, 1], [false, true]]) {
 }
 if (cycle([false, true], false, 1) !== true) bad('очки не надеваются: false в списке считается пустым местом');
 if (cycle([0, 1], 1, 1) !== 0) bad('рост не возвращается с высокого на обычный');
-// значение, которого в списке нет (из чужого сохранения), не вешает стрелку
+// a value absent from the list (from somebody else's save) does not hang the arrow
 if (cycle(HANDS, 'бутерброд', 1) !== HANDS[0]) bad('незнакомое значение не сбросилось в первое');
 if (cycle(HANDS, undefined, -1) !== HANDS[0]) bad('пустой слот не сбросился в первое значение');
 
-// ---- рисовалка переживает любое сочетание слотов во всех позах
-// Холста здесь нет: подставной контекст записывает прямоугольники, и по ним
-// видно, что новый кусок вообще нарисовался, а не потерялся в ветке.
+// ---- the drawing survives any combination of slots in every pose
+// There is no canvas here: a stand-in context records rectangles, and by them one
+// can see that the new piece was drawn at all rather than lost in a branch.
 const stub = () => {
   const rects = [];
   return {
@@ -115,7 +115,7 @@ for (const pose of ['stand', 'walk', 'sit']) {
       }
       if (!ctx.rects.length) bad(`${pose}: ничего не нарисовано`);
       const has = (c) => ctx.rects.some((r) => r.c === c);
-      // обувь есть только на ногах — сидящий поджал их под стол
+      // boots exist only on legs — a seated person has tucked them under the desk
       if (pose !== 'sit' && !has('#c2a06b')) bad(`${pose}: обувь своим цветом не нарисовалась`);
       if (hands === 'mug' && !has('#d9d3c8')) bad(`${pose}: кружка не нарисовалась`);
       if (hands === 'pad' && !has('#e6d9b8')) bad(`${pose}: блокнот не нарисовался`);
@@ -125,17 +125,17 @@ for (const pose of ['stand', 'walk', 'sit']) {
   }
 }
 
-// ---- дресс-код: офисная одежда считается отдельно и свободный вид не трогает
+// ---- the dress code: office clothes are counted separately and leave the casual look alone
 for (const id of ids) {
   const free = lookOf(id);
   const same = dressOf(free, id, 'm', 'casual');
   if (same !== free) bad(`${id}: свободный дресс-код вернул не тот же самый look`);
   const work = dressOf(free, id, 'm', 'office');
-  // главное: одевание НЕ мутирует исходный вид
+  // the main thing: dressing does NOT mutate the original look
   for (const k of ['skin', 'hair', 'shirt', 'pants', 'style', 'tall', 'boots', 'head', 'face', 'hands', 'glasses']) {
     if (JSON.stringify(free[k]) !== JSON.stringify(lookOf(id)[k])) bad(`${id}: dressOf испортил свободный ${k}`);
   }
-  // и не трогает то, чем человек узнаётся
+  // and does not touch what a person is recognised by
   for (const k of ['skin', 'hair', 'style', 'tall', 'head', 'face', 'hands', 'glasses', 'pants']) {
     if (JSON.stringify(work[k]) !== JSON.stringify(free[k])) bad(`${id}: офис поменял ${k}, а не должен`);
   }
@@ -147,7 +147,7 @@ for (const id of ids) {
   if (work.bottom !== 'pants') bad(`${id}: мужчина в юбке`);
 }
 
-// раздача не выродилась: нужны и пиджаки, и все три мужских кроя, и юбки
+// the allocation has not degenerated: jackets, all three male cuts and skirts are needed
 const seenWork = { cuts: new Set(), jackets: 0, skirts: 0, trousers: 0, blouses: new Set(), bows: 0, women: 0 };
 for (const id of ids) {
   const m = dressOf(lookOf(id), id, 'm', 'office');
@@ -167,7 +167,7 @@ if (seenWork.blouses.size < 3) bad(`блузок встретилось ${seenWo
 if (!seenWork.bows) bad('бабочка не досталась ни одной');
 if (seenWork.bows > seenWork.women / 2) bad(`бабочек ${seenWork.bows} на ${seenWork.women} женщин — это не «иногда»`);
 
-// свой персонаж одевается руками, и свободный верх при этом не теряется
+// your own character is dressed by hand, and the casual top is not lost by it
 const me = normalizeLook({ ...base, name: 'ТЫ' });
 const meFree = dressMe(me, 'casual');
 if (meFree !== me) bad('свой персонаж в свободном режиме подменился копией');
@@ -177,7 +177,7 @@ if (meWork.bottom !== 'skirt') bad('крой низа своего персон�
 if (me.shirt !== base.shirt) bad('свободный верх своего персонажа затёрся офисным');
 if (dressMe(me, 'office').shirt !== SHIRT_WORK[0]) bad('без выбранного верха офис не подставил первый');
 
-// ---- юбка и галстук действительно рисуются, а не теряются в ветке
+// ---- a skirt and a tie are really drawn rather than lost in a branch
 for (const pose of ['stand', 'walk', 'sit']) {
   for (let frame = 0; frame < 4; frame++) {
     const look = { ...base, office: true, shirt: SHIRT_WORK[0], boots: WORK_BOOTS,
@@ -188,7 +188,7 @@ for (const pose of ['stand', 'walk', 'sit']) {
     if (!has(JACKET[0])) bad(`${pose}/${frame}: пиджак не нарисовался`);
     if (pose !== 'sit' && !has(TIE[0])) bad(`${pose}/${frame}: галстук не нарисовался`);
     if (pose !== 'sit') {
-      // под юбкой видно кожу ног — именно этим она отличается от штанов
+      // the skin of the legs shows under a skirt — that is exactly what makes it not trousers
       const legs = ctx.rects.filter((r) => r.c === base.skin && r.y > 40 - 7 && r.w === 2);
       if (!legs.length) bad(`${pose}/${frame}: под юбкой не видно ног`);
     }
@@ -200,7 +200,7 @@ for (const cut of ['plain', 'slim', 'stripe', 'bow']) {
   if (!ctx.rects.some((r) => r.c === TIE[4])) bad(`крой ${cut} не нарисовался`);
 }
 
-// ---- старый look рисуется и после переноса: очки не пропали вместе с acc
+// ---- an old look is drawn after the migration too: the glasses did not vanish with acc
 const legacyCtx = stub();
 drawPerson(legacyCtx, 20, 40, normalizeLook({ ...base, acc: 1, beard: true, tall: 0 }), { pose: 'stand' });
 if (!legacyCtx.rects.some((r) => r.c === '#cfe8ff')) bad('очки из старого acc=1 не нарисовались');

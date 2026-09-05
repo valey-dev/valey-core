@@ -1,13 +1,14 @@
-// node tools/test-routes.mjs — маршруты офиса, в этом же процессе.
+// node tools/test-routes.mjs — the office routes, in this same process.
 //
-// Пять стендов до этого поднимали настоящий сервер отдельным процессом: спавн,
-// ожидание порта, гашение. Так проверяется то, что переживает HTTP, и только
-// оно; ветки вроде «файл слишком большой» или «путь вылез из web/» туда не
-// попадали вовсе — их и не было в прогоне до 4 сентября 2026.
+// Five stands used to raise a real server in a separate process: spawn, wait for
+// the port, kill. That checks what survives HTTP and only that; branches like
+// "the file is too big" or "the path climbed out of web/" never got there — they
+// were not in the run at all until 4 September 2026.
 //
-// `server/index.js` теперь отдаёт обработчик отдельно от запуска, и стенд
-// вешает его на свой сервер на свободном порту. Настройки и каталог сессий
-// свои: настоящие трогать нельзя, а живых агентов у стенда быть не должно.
+// `server/index.js` now hands out its handler separately from the start-up, and
+// the stand hangs it on a server of its own on a free port. The settings and the
+// sessions directory are its own: the real ones must not be touched, and the
+// stand must have no live agents.
 import http from 'node:http';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
@@ -27,7 +28,7 @@ await fsp.writeFile(path.join(dir, 'settings.json'), JSON.stringify({
   access: { mode: 'private', token: OWNER, invites: [] },
   weather: { enabled: false }, delivery: { mode: 'default' },
 }, null, 2));
-// Переменные — до импорта: и настройки, и каталог сессий читаются на нём.
+// The variables come before the import: both the settings and the sessions directory are read on it.
 process.env.VALEY_SETTINGS = path.join(dir, 'settings.json');
 process.env.VALEY_CLAUDE_DIR = path.join(dir, 'no-claude');
 delete process.env.VALEY_STAND;
@@ -40,8 +41,8 @@ const server = http.createServer(createHandler());
 await new Promise((r) => server.listen(port, '127.0.0.1', r));
 const base = `http://127.0.0.1:${port}`;
 
-// node:http, а не fetch: fetch выбрасывает заголовок Host и сам ходит по
-// редиректам, а здесь проверяется и то, и другое.
+// node:http rather than fetch: fetch drops the Host header and follows
+// redirects by itself, and both are what is being checked here.
 const req = (p, { method = 'GET', headers = {}, body } = {}) => new Promise((resolve, reject) => {
   const r = http.request(base + p, { method, headers }, (res) => {
     const chunks = [];
@@ -58,7 +59,7 @@ const req = (p, { method = 'GET', headers = {}, body } = {}) => new Promise((res
 });
 
 try {
-  // ------------------------------------------------------------- статика
+  // ------------------------------------------------------------- static files
   const home = await req('/');
   ok('корень отдаёт страницу офиса', home.status === 200 && /<title/i.test(home.text), home.status);
   const callback = await req('/callback');
@@ -71,13 +72,13 @@ try {
   const missing = await req('/нет-такого.js');
   ok('чего нет — 404 текстом, а не пустотой', missing.status === 404 && missing.text === 'not found', missing.status);
 
-  // -------------------------------------------------------------- модули
+  // -------------------------------------------------------------- modules
   const mods = await req('/api/modules');
   ok('список модулей — массив', mods.status === 200 && Array.isArray(mods.j), mods.j);
   const modEscape = await req('/modules/../server/index.js');
   ok('из папки модулей наружу тоже не выйти', modEscape.status === 403 || modEscape.status === 404, modEscape.status);
 
-  // -------------------------------------------------------------- стенд
+  // -------------------------------------------------------------- the stand
   const stand = await req('/api/stand');
   ok('без VALEY_STAND таблички нет', stand.status === 200 && stand.j.text === null, stand.j);
   const toggle = await req('/api/stand/toggle', {
@@ -90,7 +91,7 @@ try {
   await fsp.writeFile(artifact, '# сделано\n');
   const huge = path.join(dir, 'огромный.png');
   const fh = await fsp.open(huge, 'w');
-  await fh.truncate(9 * 1024 * 1024);   // разреженный: место на диске не занимает
+  await fh.truncate(9 * 1024 * 1024);   // sparse: it takes up no space on disk
   await fh.close();
   const page = path.join(dir, 'страница.html');
   await fsp.writeFile(page, '<h1>агент написал</h1>');
@@ -115,9 +116,9 @@ try {
   const vanished = await req('/api/file?path=' + encodeURIComponent(gone));
   ok('пропавший файл — 404', vanished.status === 404, vanished.status);
 
-  // ------------------------------------------------------- сетевой гейт
-  // Через посредника — значит снаружи. Закрытый офис отвечает 404: сканеру
-  // незачем знать, что здесь кто-то живёт.
+  // ------------------------------------------------------- the network gate
+  // Through a middleman means from outside. A closed office answers 404: a
+  // scanner has no business learning that anyone lives here.
   const VIA = { 'x-forwarded-for': '203.0.113.7' };
   const closed = await req('/api/whoami', { headers: VIA });
   ok('закрытый офис снаружи — 404', closed.status === 404 && closed.j.errorKey === 'err.notFound', closed.j);
@@ -130,7 +131,7 @@ try {
   const withToken = await req('/api/whoami', { headers: { ...VIA, authorization: 'Bearer ' + NET } });
   ok('с токеном пускают', withToken.status === 200, withToken.status);
 
-  // ------------------------------------------- токен из адреса уезжает в куку
+  // ------------------------------------------- the token moves from the address into a cookie
   const viaQuery = await req('/?token=' + NET, { headers: VIA });
   ok('страницу с токеном в адресе отдают редиректом', viaQuery.status === 302, viaQuery.status);
   ok('и токен из адреса убран', viaQuery.h.location === '/', viaQuery.h.location);

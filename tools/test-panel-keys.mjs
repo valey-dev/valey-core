@@ -1,8 +1,9 @@
-// node tools/test-panel-keys.mjs — клавиши в панелях офиса.
+// node tools/test-panel-keys.mjs — the keys in the office panels.
 //
-// Радио уехало отсюда в modules/radio/test-keys.mjs вместе с самим радио.
-// DOM подставной, как и в остальных клавиатурных стендах: проверяется не
-// вёрстка, а состояние фокуса — куда он встаёт, как ходит и что нажимает.
+// The radio moved out of here into modules/radio/test-keys.mjs along with the
+// radio itself. The DOM is a stand-in, as in the other keyboard stands: what is
+// checked is not the layout but the focus state — where it lands, how it moves
+// and what it presses.
 
 import { node, proxy, installDom } from './lib/dom.mjs';
 
@@ -22,8 +23,8 @@ function makeRoster(n) {
   };
 }
 
-// Слот одежды — строка с ◀ и ▶ внутри, а не кнопка. Стрелки в стороны должны
-// жать эти кнопки, а не перескакивать на соседний слот.
+// A clothing slot is a row with ◀ and ▶ inside, not a button. The sideways arrows
+// have to press those buttons rather than jump to the neighbouring slot.
 function makeBagSelf(slots) {
   const rows = [];
   const name = node('namerow');
@@ -45,8 +46,8 @@ function makeBagSelf(slots) {
   };
 }
 
-// Вкладка «вещи» — сетка: ряд на слот, в ряду клетки. Стрелки тут значат не то
-// же самое, что на «на себе», поэтому у неё свой стенд.
+// The "things" tab is a grid: a row per slot, cells in the row. The arrows here
+// do not mean the same as on "worn", so it has a stand of its own.
 function makeBagThings(rows) {
   const cats = rows.map((n) => {
     const cells = Array.from({ length: n }, () => node('bcell'));
@@ -62,7 +63,7 @@ function makeBagThings(rows) {
   };
 }
 
-// Вкладка «офис» — просто ряд кнопок, кольцо фокуса как у окна в мир.
+// The "office" tab is just a row of buttons, a focus ring like the window on the world.
 function makeBagOffice(n) {
   const btns = Array.from({ length: n }, () => node('obtn'));
   return {
@@ -72,7 +73,7 @@ function makeBagOffice(n) {
   };
 }
 
-// Плоское кольцо: окно в мир и цвет офиса устроены одинаково.
+// A flat ring: the window on the world and the office colour are built the same way.
 function makeRing(items) {
   const btns = items.map((it) => node('', it));
   return {
@@ -129,14 +130,15 @@ const rosterProxy = proxy(() => roster);
 const langProxy = proxy(() => langPanel);
 const viewerProxy = proxy(() => viewer);
 
-// Правая панель дерева гита: её листают PgUp/PgDn, поэтому у неё должна быть
-// высота и прокрутка, а не общая заглушка с нулями.
+// The right panel of the git tree: it is paged with PgUp/PgDn, so it must have a
+// height and a scroll rather than the shared stub full of zeros.
 const pane = () => node('', { clientHeight: 400, scrollHeight: 4000 });
 const gcard = pane();
 const gcode = pane();
 
-// Адрес страницы нужен подсказке про Redirect URI в радио — второй кусок,
-// который отложенный ответ probeDrm достаёт из панели уже после её отрисовки.
+// The page address is needed by the hint about the Redirect URI in the radio —
+// the second piece the deferred answer of probeDrm pulls out of the panel after
+// it has been drawn.
 const { stub } = installDom({
   byId: {
     roster: rosterProxy, gcard, gcode, viewer: viewerProxy, notes: notesProxy,
@@ -151,7 +153,7 @@ const agents = (n) => Array.from({ length: n }, (_, i) => ({
   id: 'a' + i, name: 'Агент ' + i, project: 'AI valey', status: 'awaiting',
   title: 'задача', lastSaid: 'ждёт', idleFor: 60, roleKey: 'code',
 }));
-// me нужен: инвентарь рисует человечка и подписи слотов из него
+// me is needed: the bag draws the little person and the slot labels out of it
 const state = { agents: [], looks: new Map(), settings: {}, delivery: {}, visited: new Set(),
   me: { skin: '#e8ad7e', hair: '#3a2a20', shirt: '#c25a4b', pants: '#3f4a63', boots: '#2a2118',
         style: 0, tall: 0, face: 'none', head: 'none', glasses: false, hands: 'none', name: 'ТЫ' } };
@@ -181,7 +183,7 @@ const check = (name, ok, got) => {
   else { failed++; console.log('ПЛОХО |', name, '→', got); }
 };
 
-// ------------------------------------------------------------------- обход
+// ------------------------------------------------------------------- the round
 const at = (list) => list.findIndex((b) => b.has('focus'));
 
 state.agents = agents(3);
@@ -196,20 +198,20 @@ check('Enter ведёт к выбранному, а не к первому', ros
 UI.rosterKey('ArrowUp'); UI.rosterKey('ArrowUp');
 check('список закольцован', at(roster.gos) === 2, at(roster.gos));
 
-// закрытая панель не должна забирать стрелки — иначе после первого же обхода
-// по офису перестанет ходить игрок
+// a closed panel must not take the arrows — otherwise after the very first round
+// the player stops walking around the office
 roster.hidden = true;
 check('закрытый обход стрелки не ест', UI.rosterKey('ArrowDown') === false, 'съел');
 
-// пустой обход: ждущих нет, нажимать нечего
+// an empty round: nobody is waiting, there is nothing to press
 state.agents = [];
 roster = makeRoster(0);
 UI.renderRoster();
 check('пустой обход стрелки не ест', UI.rosterKey('ArrowDown') === false, 'съел');
 check('и Enter не ест', UI.rosterKey('Enter') === false, 'съел');
 
-// ----------------------------------------------------------------- заметки
-notes = makeNotes(2);            // две заметки: у каждой «открыть» и ✕
+// ----------------------------------------------------------------- the notes
+notes = makeNotes(2);            // two notes: each has "open" and ✕
 UI.renderNotes();
 const nb = notes.btns;
 check('заметки: фокус встаёт на первую кнопку', at(nb) === 0, at(nb));
@@ -223,19 +225,19 @@ check('и только её', nb.filter((b) => b.clicked).length === 1, nb.filte
 UI.notesKey('ArrowUp'); UI.notesKey('ArrowUp'); UI.notesKey('ArrowUp');
 check('кольцо замкнуто', at(nb) === 3, at(nb));
 
-// закрытая панель клавиши не забирает
+// a closed panel does not take the keys
 UI.closeNotes();
 check('закрытые заметки стрелки не едят', UI.notesKey('ArrowDown') === false, 'съели');
 
-// пустая панель: нажимать нечего, стрелки должны уйти в офис
+// an empty panel: there is nothing to press, the arrows have to go to the office
 notes = makeNotes(0);
 UI.renderNotes();
 check('пустые заметки стрелки не едят', UI.notesKey('ArrowDown') === false, 'съели');
 
-// --------------------------------------------------------------- инвентарь
-// Вкладка «на себе» — бывшая панель C, слово в слово: стрелки вверх-вниз по
-// слотам, в стороны крутят значение того, на котором стоишь.
-bag = makeBagSelf(3);            // строка имени плюс три слота
+// --------------------------------------------------------------- the bag
+// The "worn" tab is the former panel C, word for word: up and down the slots,
+// sideways turns the value of the one you are standing on.
+bag = makeBagSelf(3);            // the name row plus three slots
 const rows = bag.rows;
 const focusRow = () => rows.findIndex((r) => r.has('focus'));
 UI.bagKey('ArrowDown');
@@ -249,12 +251,12 @@ check('соседний слот не тронут', rows[2].next.clicked === 0 
 UI.bagKey('Enter');
 check('Enter на слоте делает то же, что ▶', rows[1].next.clicked === 2, rows[1].next.clicked);
 
-// имя — поле ввода: Enter должен отдать ему фокус, иначе с клавиатуры не набрать
+// the name is an input: Enter has to give it the focus, or it cannot be typed from the keyboard
 UI.bagKey('ArrowUp');
 UI.bagKey('Enter');
 check('Enter на имени отдаёт полю фокус', rows[0].input.focused === 1, rows[0].input.focused);
 
-// Вкладки: цифра переключает, и стрелки после этого значат другое.
+// The tabs: a digit switches, and the arrows mean something else afterwards.
 bag = makeBagThings([3, 2]);
 check('цифра 2 обработана панелью', UI.bagKey('2') === true, 'не обработана');
 const cells = bag.cells;
@@ -276,15 +278,15 @@ check('подсвечена ровно одна клетка', cells.flat().filt
   cells.flat().filter((c) => c.has('focus')).length);
 check('вправо по кругу возвращает в начало ряда', (UI.bagKey('ArrowRight'), focusCell()) === '1:0', focusCell());
 
-// назад на «на себе»: фокус там начинается заново, а не помнит клетку сетки
+// back to "worn": the focus starts over there rather than remembering a cell of the grid
 bag = makeBagSelf(3);
 UI.bagKey('1');
 check('цифра 1 вернула на «на себе»', focusRow() === 0, focusRow());
 check('несуществующая вкладка не ловится', UI.bagKey('9') === false, 'поймана');
 
-// Вкладка «офис»: ряд кнопок, и стрелка вниз должна по ним ходить. До
-// 31 августа 2026 она не делала ничего — обработчик знал только две вкладки из
-// трёх, и клавиша уезжала в офис из-под открытой панели.
+// The "office" tab: a row of buttons, and the down arrow has to walk along them.
+// Until 31 August 2026 it did nothing — the handler knew only two tabs out of
+// three, and the key went off into the office from under an open panel.
 bag = makeBagOffice(5);
 check('офис: цифра 3 открыла вкладку', UI.bagKey('3') === true, 'не обработана');
 check('вниз обработана', UI.bagKey('ArrowDown') === true, 'не обработана');
@@ -299,7 +301,7 @@ check('вверх возвращает на первую', bag.btns[0].has('focu
 UI.closeBag();
 check('закрытый инвентарь стрелки не ест', UI.bagKey('ArrowDown') === false, 'съело');
 
-// ------------------------------------------- окно в мир и цвет офиса (кольцо)
+// ------------------------------------------- the window on the world and the office colour (the ring)
 sky = makeRing([{ id: 'skytoggle' }, { id: 'skyq', tagName: 'INPUT' }, { id: 'skygeo' }]);
 check('окно в мир: стрелка обработана', UI.skyKey('ArrowDown') === true, 'нет');
 UI.skyKey('Enter');
@@ -308,7 +310,7 @@ check('и не жмёт его как кнопку', sky.btns[1].clicked === 0, 
 UI.closeSky();
 check('закрытое окно в мир стрелки не ест', UI.skyKey('ArrowDown') === false, 'съело');
 
-// ползунок оттенка: стрелки в стороны крутят его, а не уводят фокус
+// the hue slider: the sideways arrows turn it rather than lead the focus away
 skin = makeRing([
   { className: 'swatch' },
   { id: 'skinhue', tagName: 'INPUT', type: 'range', min: '0', max: '359', value: '100' },

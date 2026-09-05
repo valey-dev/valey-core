@@ -1,4 +1,4 @@
-// node tools/test-highlight.mjs — проверка подсветки без браузера
+// node tools/test-highlight.mjs — the syntax highlighter, without a browser
 import { readFileSync } from 'node:fs';
 import { highlight, langOf, normaliseLang } from '../web/highlight.js';
 
@@ -53,7 +53,7 @@ for (const [name, lang, src, must = [], mustNot = []] of cases) {
   }
 }
 
-// язык по расширению и по метке блока в markdown
+// the language from the extension and from the fence label in markdown
 const byExt = [['a/b.js', 'js'], ['style.css', 'css'], ['data.json', 'json'],
   ['page.html', 'html'], ['page.htm', 'html'], ['photo.png', null]];
 for (const [path, want] of byExt) {
@@ -67,7 +67,7 @@ for (const [tag, want] of [['JavaScript', 'js'], ['CSS', 'css'], ['html', 'html'
   else console.log(`ok    | normaliseLang(${tag}) → ${got}`);
 }
 
-// на настоящих файлах проекта: скорость и отсутствие потери текста
+// on the project's real files: speed, and no text lost
 const strip = (html) => html.replace(/<[^>]*>/g, '')
   .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 

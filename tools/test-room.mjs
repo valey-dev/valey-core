@@ -1,10 +1,9 @@
-// node tools/test-room.mjs — комната как проект, а не как рабочая копия.
+// node tools/test-room.mjs — a room is a project, not a working copy.
 //
-// Проверяется на настоящем репозитории с настоящим worktree: разбор строки
-// git можно написать красиво и всё равно промахнуться, потому что `git
-// rev-parse` отвечает по-разному из основного чекаута и из worktree. Тест
-// поднимает и то и другое во временном каталоге — секунда работы против
-// девяти комнат на четыре проекта.
+// Checked against a real repository with a real worktree: parsing git's answer
+// can be written beautifully and still miss, because `git rev-parse` answers
+// differently from the main checkout and from a worktree. The test raises both
+// in a temp directory — a second of work against nine rooms for four projects.
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -20,7 +19,7 @@ const ok = (name, cond, got) => {
   else { bad++; console.log('УПАЛ  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
 };
 
-// ------------------------------------------------- разбор ответа git
+// ------------------------------------------------- parsing git's answer
 
 ok('обычный .git → каталог рядом с ним',
    rootFromCommonDir('/tmp/repo/.git', '/tmp/repo/wt') === '/tmp/repo');
@@ -31,11 +30,11 @@ ok('косая черта на хвосте не ломает',
 ok('git промолчал — остаётся свой каталог',
    rootFromCommonDir('', '/tmp/whatever') === '/tmp/whatever');
 
-// ------------------------------------------------- настоящий worktree
+// ------------------------------------------------- a real worktree
 
-// realpath: на macOS os.tmpdir() — это /var, симлинк на /private/var, и git
-// отвечает развёрнутым путём. Сравнивать надо с тем же, иначе тест падает на
-// разнице, которой в имени комнаты всё равно нет.
+// realpath: on macOS os.tmpdir() is /var, a symlink to /private/var, and git
+// answers with the resolved path. The comparison has to use the same, or the
+// test fails on a difference the room name does not have anyway.
 const tmp = await fsp.realpath(await fsp.mkdtemp(path.join(os.tmpdir(), 'ai-valey-room-')));
 const repo = path.join(tmp, 'my-project');
 await fsp.mkdir(repo);
@@ -47,10 +46,10 @@ await fsp.writeFile(path.join(repo, 'readme.md'), '# hi\n');
 await git(['add', '-A'], repo);
 await git(['commit', '-qm', 'first'], repo);
 
-// worktree внутри репозитория — так их кладёт Claude Code
+// a worktree inside the repository — that is where Claude Code puts them
 const inside = path.join(repo, '.claude', 'worktrees', 'some-topic-ab12cd');
 await git(['worktree', 'add', '-q', '-b', 'topic-inside', inside], repo);
-// и снаружи — так советует AGENTS.md
+// and outside it — that is what AGENTS.md advises
 const outside = path.join(tmp, 'my-project-topic');
 await git(['worktree', 'add', '-q', '-b', 'topic-outside', outside], repo);
 
@@ -62,10 +61,10 @@ const notGit = path.join(tmp, 'just-a-folder');
 await fsp.mkdir(notGit);
 ok('не репозиторий — остаётся своим каталогом', await repoRoot(notGit) === notGit, await repoRoot(notGit));
 
-// ------------------------------------------------- этаж: одна комната
+// ------------------------------------------------- the floor: one room
 
-// Ровно то, что видно глазами: три сессии одного репозитория дают одну
-// комнату на троих, а не три комнаты по одному человеку.
+// Exactly what is visible by eye: three sessions of one repository make one room
+// for the three of them, not three rooms with one person each.
 const roomOf = async (cwd) => path.basename(await repoRoot(cwd));
 const agents = [
   { id: 'a', name: 'Гоша', project: await roomOf(repo), status: 'working' },
@@ -76,19 +75,20 @@ ok('все три сессии зовут комнату одинаково',
    new Set(agents.map((a) => a.project)).size === 1, agents.map((a) => a.project));
 
 const plan = buildLayout(agents, {});
-// Считаем комнаты проектов, а не всё подряд: с тех пор как этот стенд писался,
-// этаж оброс служебными — пультовая, переговорка, оранжерея, — и они к вопросу
-// «сколько комнат у одного репозитория» отношения не имеют.
+// We count project rooms rather than everything: since this stand was written
+// the floor has grown service rooms — the control room, the meeting room, the
+// greenhouse — and they have nothing to do with "how many rooms does one
+// repository get".
 ok('на этаже одна комната проекта', plan.projectRooms.length === 1, plan.projectRooms.map((r) => r.title));
 ok('и в ней три стола', plan.rooms[0]?.desks.length === 3, plan.rooms[0]?.desks.length);
 ok('и все трое за ними', plan.rooms[0]?.agents.length === 3, plan.rooms[0]?.agents);
 ok('комната названа репозиторием', plan.rooms[0]?.title === 'my-project', plan.rooms[0]?.title);
 
-// --- комната от модуля ---
-// Точка `room` спрашивается внутри сборки, до того как посчитается высота мира
-// и соберётся лифт: комната, добавленная позже, оказалась бы за границей этажа
-// и без остановки. Стенд ловит именно это — не «вызвалась ли функция», а
-// попала ли комната в мир и в лифт.
+// --- a room from a module ---
+// The `room` point is asked inside the build, before the height of the world is
+// computed and the lift is assembled: a room added later would end up outside the
+// floor and without a stop. The stand catches exactly that — not "was the
+// function called" but whether the room made it into the world and into the lift.
 const withRoom = buildLayout(agents, {
   rooms: ({ below, security }) => ({
     key: '__test', title: 'ЧИТАЛЬНЯ', service: true, draw: 'library',

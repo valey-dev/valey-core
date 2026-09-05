@@ -1,16 +1,19 @@
-// node tools/test-names.mjs — выдача имён агентам и род при имени.
+// node tools/test-names.mjs — handing names to agents, and the gender that comes
+// with a name.
 //
-// Проверяется то, из-за чего это переписали 30 августа 2026. Пул в пятьдесят
-// имён кончился на пятьдесят первой сессии, потому что `taken` собирался из
-// всех когда-либо выданных имён и ничего не возвращалось: в реестре было 152
-// записи, 102 из них с номером. И род угадывался по последней букве, отчего
-// офис писал «Гоша освободилась» на четырнадцати именах из пятидесяти.
+// What is checked is what caused the rewrite on 30 August 2026. A pool of fifty
+// names ran out on the fifty-first session, because `taken` was assembled from
+// every name ever handed out and nothing came back: the registry held 152
+// entries, 102 of them with a number. And the gender was guessed from the last
+// letter, which is why the office wrote "Гоша освободилась" for fourteen names
+// out of fifty.
 //
-// Обе поломки тихие: имя с номером выглядит как имя, чужой род — как опечатка.
-// С 4 сентября 2026 словарь не один: проверка словаря идёт по каждому паку, а
-// не по одному «тому самому». Пак, у которого пул вдвое короче или в котором
-// половина имён без рода, — это не полпака, это офис, где каждый второй агент
-// зовётся с номером или «освободилась».
+// Both failures are quiet: a name with a number looks like a name, and the wrong
+// gender looks like a typo. Since 4 September 2026 there is more than one
+// dictionary: the dictionary check runs over every pack rather than over one
+// "the real one". A pack whose pool is half as long, or in which half the names
+// have no gender, is not half a pack — it is an office where every second agent
+// is called with a number or with "освободилась".
 import { assignNames, genderOf, namePool, PACK_IDS } from '../server/agents.js';
 
 let bad = 0;
@@ -22,10 +25,10 @@ const ok = (name, cond, got) => {
 const ids = (n, from = 0) => Array.from({ length: n }, (_, i) => `session-${from + i}`);
 const all = (arr) => new Set(arr);
 
-// Раздача проверяется на русском — на нём написаны все истории ниже.
+// The handing out is checked in Russian — every story below is written in it.
 const NAME_POOL = namePool('ru');
 
-// ------------------------------------------------------------------ словари
+// ------------------------------------------------------------------ the dictionaries
 ok('паков больше одного', PACK_IDS.length > 1, PACK_IDS);
 for (const id of PACK_IDS) {
   const pool = namePool(id);
@@ -35,13 +38,13 @@ for (const id of PACK_IDS) {
     pool.every((n) => genderOf(n, id) === 'm' || genderOf(n, id) === 'f'));
   ok(`${id}: словарь заметно больше прежних пятидесяти`, pool.length > 150, pool.length);
 }
-// Пул одного размера у всех паков — не придирка: имя выдаётся от хеша по
-// кругу, и офис, переехавший на короткий пак, упрётся в номера там, где на
-// длинном их не было.
+// One pool size across the packs is not pedantry: a name is handed out from a
+// hash around the circle, and an office that moved onto a short pack will run
+// into numbers where a long one had none.
 const sizes = PACK_IDS.map((id) => namePool(id).length);
 ok('паки сопоставимы по размеру', Math.max(...sizes) - Math.min(...sizes) < 30, sizes);
 
-// Ровно те имена, на которых врала догадка по последней букве.
+// Exactly the names the last-letter guess was wrong about.
 const wasWrong = ['Гоша', 'Тимка', 'Сеня', 'Гриша', 'Лёва', 'Стёпа', 'Кузя', 'Савва', 'Митя', 'Ося', 'Никита'];
 ok('мужские имена на а/я больше не женские', wasWrong.every((n) => genderOf(n) === 'm'),
   wasWrong.filter((n) => genderOf(n) !== 'm'));
@@ -49,28 +52,28 @@ ok('женское имя осталось женским', genderOf('Марта
 ok('номер на исчерпании пула рода не меняет', genderOf('Ося 51') === 'm' && genderOf('Марта 77') === 'f');
 ok('имя не из словаря падает на догадку по букве', genderOf('Пелагея') === 'f' && genderOf('Аристарх') === 'm');
 
-// ------------------------------------------------------------------ выдача
+// ------------------------------------------------------------------ handing out
 const first = assignNames({}, ids(3), all([]));
 ok('новым сессиям выдаются разные имена', new Set(Object.values(first)).size === 3, first);
 
 const again = assignNames(first, ids(3), all(ids(3)));
 ok('имя не меняется на следующем тике', JSON.stringify(again) === JSON.stringify(first));
 
-// Сессия ушла, но транскрипт на диске остался: --resume вернёт тот же
-// sessionId, и агент обязан вернуться собой.
+// The session left but the transcript stayed on disk: --resume returns the same
+// sessionId, and the agent has to come back as himself.
 const resting = assignNames(first, [], all(ids(3)));
 ok('имя ждёт вернувшуюся сессию', JSON.stringify(resting) === JSON.stringify(first));
 const resumed = assignNames(resting, ['session-1'], all(ids(3)));
 ok('--resume застаёт своё имя', resumed['session-1'] === first['session-1']);
 
-// Транскрипта не стало — имя возвращается в пул.
+// The transcript is gone — the name returns to the pool.
 const pruned = assignNames(first, [], all(['session-0']));
 ok('имя ушедшего насовсем освобождается', Object.keys(pruned).length === 1, pruned);
 const reused = assignNames(pruned, ['session-9'], all(['session-0', 'session-9']));
 ok('освобождённое имя снова раздаётся',
   new Set(Object.values(reused)).size === 2 && Object.keys(reused).length === 2, reused);
 
-// ------------------------------------------------- исчерпание и его отсутствие
+// ------------------------------------------------- running out, and not running out
 const many = ids(NAME_POOL.length);
 const full = assignNames({}, many, all(many));
 ok('пул раздаётся целиком без номеров',
@@ -80,19 +83,19 @@ ok('на полном пуле имена не повторяются', new Set(
 const over = assignNames(full, [...many, 'session-over'], all([...many, 'session-over']));
 ok('за пулом имя всё-таки выдаётся, с номером', /\s\d+$/.test(over['session-over']), over['session-over']);
 
-// Та самая поломка: пятьдесят сессий подряд, каждая уходит насовсем.
+// The very failure: fifty sessions in a row, each leaving for good.
 let carry = {};
 let numbered = 0;
 for (let i = 0; i < NAME_POOL.length * 3; i++) {
   const id = `wave-${i}`;
-  carry = assignNames(carry, [id], all([id]));   // прошлой сессии на диске уже нет
+  carry = assignNames(carry, [id], all([id]));   // the previous session is no longer on disk
   if (/\s\d+$/.test(carry[id])) numbered++;
 }
 ok('сессии подряд не упираются в стену', numbered === 0, numbered);
 
-// ------------------------------------------- лечение имён с номером
-// В настоящем реестре 30 августа 2026 таких было 27 у живых сессий: они
-// достались от прежнего распределителя и остались бы навсегда.
+// ------------------------------------------- curing the numbered names
+// In the real registry on 30 August 2026 there were 27 of these among live
+// sessions: they came from the old allocator and would have stayed forever.
 const scarred = { 'session-a': 'Клим 97', 'session-b': 'Ося 51' };
 const healed = assignNames(scarred, [], all(['session-a', 'session-b']));
 ok('имя с номером лечится, когда пул позволяет',
@@ -101,17 +104,17 @@ ok('вылеченные имена не совпали', healed['session-a'] !=
 ok('лечение устойчиво: второй прогон ничего не меняет',
   JSON.stringify(assignNames(healed, [], all(['session-a', 'session-b']))) === JSON.stringify(healed));
 
-// А когда лечить нечем — номер остаётся, и это не поломка.
+// And when there is nothing to cure it with, the number stays, and that is not a failure.
 const packed = {};
 NAME_POOL.forEach((n, i) => { packed['busy-' + i] = n; });
 packed['scarred'] = 'Клим 999';
 const noRoom = assignNames(packed, [], all(Object.keys(packed)));
 ok('на полном пуле номер остаётся на месте', noRoom['scarred'] === 'Клим 999', noRoom['scarred']);
 
-// ------------------------------------------------------- смена пака и обратно
-// На этом держится вся панель: строка в ней обещает, что вернёшь пак — вернутся
-// имена. Если бы не держалось, переключение было бы необратимым, и его просто
-// не нажали бы ни разу.
+// ------------------------------------------------- switching the pack and back
+// The whole panel rests on this: a line in it promises that giving the pack back
+// gives the names back. If it did not hold, the switch would be irreversible,
+// and nobody would ever press it once.
 const crowd = ids(12);
 const ru = assignNames({}, crowd, all(crowd), 'ru');
 const en = assignNames({}, crowd, all(crowd), 'en');
@@ -123,8 +126,9 @@ const back = assignNames({}, crowd, all(crowd), 'ru');
 ok('вернул пак — вернулись имена', JSON.stringify(back) === JSON.stringify(ru));
 ok('род едет вместе с паком',
   genderOf(en[crowd[0]], 'en') === 'm' || genderOf(en[crowd[0]], 'en') === 'f');
-// Имена, выданные прежним паком, лежат на диске до следующего снимка, и род им
-// нужен ровно тот же: иначе между нажатием и снимком полэтажа меняет род.
+// Names handed out by the previous pack lie on disk until the next snapshot, and
+// they need exactly the same gender: otherwise half the floor changes gender
+// between the press and the snapshot.
 ok('чужому паку род прежнего имени всё равно известен', genderOf('Гоша', 'en') === 'm');
 
 console.log(bad ? `\nПЛОХО: ${bad}` : '\nвсё хорошо');
