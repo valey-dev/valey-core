@@ -1,15 +1,15 @@
-// node tools/test-pager-keys.mjs — пейджер: звонок, отсрочка, возврат.
+// node tools/test-pager-keys.mjs — the pager: the ring, the deferral, the return.
 //
-// DOM подставной, как и в остальных клавиатурных стендах: вёрстка тут ни при
-// чём, проверяется поведение — кому звонят, что происходит по Enter и Esc, и
-// переживает ли отложенный запрос то, что его ответили в другом месте.
+// The DOM is a stand-in, as in every keyboard stand: the layout has nothing to do
+// with it, what is checked is the behaviour — who gets called, what Enter and Esc
+// do, and whether a deferred request survives being answered somewhere else.
 //
-// Отдельно проверяется звук: пейджер — единственное, что зовёт к экрану, и
-// звонить он должен ровно один раз на запрос. Пейджер, зовущий повторно, —
-// это будильник.
-// Импорт динамический и не просто так: sound.js читает localStorage прямо при
-// загрузке, а pager.js тянет его за собой. Статический import выполнился бы
-// раньше подставок ниже и упал бы на пустом месте.
+// The sound is checked separately: the pager is the only thing that calls you to
+// the screen, and it must ring exactly once per request. A pager that rings again
+// is an alarm clock.
+// The import is dynamic for a reason: sound.js reads localStorage right at load
+// time, and pager.js pulls it in. A static import would run before the stand-ins
+// below and fail over nothing.
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -17,7 +17,7 @@ const ok = (name, cond, got) => {
   else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
 };
 
-// --------------------------------------------------------------- подставной DOM
+// --------------------------------------------------------------- the stand-in DOM
 const buttons = new Map();
 const pager = {
   hidden: true, innerHTML: '',
@@ -37,7 +37,7 @@ globalThis.document = {
 
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 
-// Звук считаем, а не слушаем: важно сколько раз позвали, а не как это звучит.
+// The sound is counted, not listened to: what matters is how many times it called, not how it sounded.
 let beeps = 0;
 const { sound } = await import('../web/sound.js');
 sound.pager = () => { beeps += 1; };
@@ -60,14 +60,14 @@ const P = (id, agentId, command = 'git push') => ({
   rule: 'Bash(git push *)', at: Date.now(), until: Date.now() + 60000,
 });
 
-// ------------------------------------------------------------------ звонок
+// ------------------------------------------------------------------ the ring
 seePermits([P('a', 's1')]);
 ok('пейджер выехал', pagerOpen(), pager.hidden);
 ok('и позвонил один раз', beeps === 1, beeps);
 ok('на экране команда просящего', pager.innerHTML.includes('git push') && pager.innerHTML.includes('ТОНЯ'), pager.innerHTML.slice(0, 80));
 
-// Тот же список пришёл снова — снимок ходит раз в 2.5 секунды, и каждый из них
-// не повод звонить.
+// The same list arrived again — the snapshot goes out every 2.5 seconds, and
+// none of them is a reason to ring.
 seePermits([P('a', 's1')]);
 ok('повторный снимок не звонит второй раз', beeps === 1, beeps);
 
@@ -88,7 +88,7 @@ ok('в шапке остаётся счётчик', waitingCount() === 1, waitin
 ok('шапку попросили перерисоваться', hudTicks === 1, hudTicks);
 ok('и сказали словами, кто ждёт', toasts.length === 1 && toasts[0].text.includes('Тоня'), toasts);
 
-// Отложенный не звонит на каждом снимке — иначе «перезвоню» ничего не значит.
+// A deferred one does not ring on every snapshot — otherwise "later" means nothing.
 seePermits([P('b', 's1', 'npm publish')]);
 ok('отложенный молчит и не показывается', beeps === 1 && !pagerOpen(), { beeps, hidden: pager.hidden });
 
@@ -98,29 +98,31 @@ ok('и он снова на экране', pagerOpen(), pager.hidden);
 ok('счётчик обнулился', waitingCount() === 0, waitingCount());
 ok('возвращать нечего — H не тратится', recall() === false, null);
 
-// --------------------------------------------------- второй просит, пока ждёт первый
+// --------------------------------------------------- a second asks while the first waits
 beeps = 0;
 seePermits([P('b', 's1', 'npm publish'), P('c', 's2', 'rm -rf tmp')]);
 ok('первым показан тот, кто спросил первым', pager.innerHTML.includes('ТОНЯ'), pager.innerHTML.slice(0, 60));
 ok('и видно, что он не один', pager.innerHTML.includes('1/2'), pager.innerHTML.slice(0, 200));
-// Первый из этих двоих звонил ещё до отсрочки и из списка не уходил: один
-// сигнал на вопрос считается по вопросу, а не по появлению его на экране.
+// The first of these two rang before the deferral and never left the list: one
+// signal per question is counted by the question, not by its appearing on screen.
 ok('уже звонивший не звонит снова', beeps === 0, beeps);
 
-pagerKey('Escape');                                   // отложили первого
+pagerKey('Escape');                                   // the first one was deferred
 ok('следующий выходит сам', pagerOpen() && pager.innerHTML.includes('ПЁТР'), pager.innerHTML.slice(0, 60));
-// Очередь сдвинулась не снимком, а руками — и всё равно звонит: иначе
-// «пищит через раз, смотря откуда пришло».
+// The queue moved by hand rather than by a snapshot — and it still rings:
+// otherwise it "beeps every other time, depending on where it came from".
 ok('и звонит, потому что его ещё не звали', beeps === 1, beeps);
 
-// ------------------------------------------- ответили в другом месте
-// Запрос ушёл из списка, пока лежал отложенным: ответили с другой вкладки или
-// он истёк. Счётчик обязан это заметить, иначе в шапке остаётся вечное «1».
+// ------------------------------------------- answered somewhere else
+// The request left the list while it lay deferred: it was answered from another
+// tab, or it expired. The counter has to notice, or an eternal "1" stays in the
+// header.
 seePermits([P('c', 's2', 'rm -rf tmp')]);
 ok('исчезнувший отложенный уходит из счётчика', waitingCount() === 0, waitingCount());
 
-// А если он вернётся с тем же id — это тот же вопрос, и звонить снова незачем
-// до тех пор, пока он не исчезал: rung чистится только вместе со списком.
+// And if it comes back with the same id, it is the same question, and there is no
+// point ringing again until it has disappeared: rung is cleared only along with
+// the list.
 seePermits([]);
 ok('пустой список гасит пейджер', !pagerOpen(), pager.hidden);
 

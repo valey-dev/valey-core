@@ -1,12 +1,13 @@
-// Радио — серверная половина.
+// The radio — the server half.
 //
-// Секрета здесь нет: у PKCE его не бывает, наружу уходит только client id
-// приложения, заведённого самим человеком. Сервер нужен для другого — он
-// ходит за обложкой, чтобы адрес картинки не разбирала страница.
+// There is no secret here: PKCE does not have one, and only the client id of an
+// application the person set up themselves goes outside. The server is needed for
+// something else — it goes for the cover, so that the address of the picture is not
+// taken apart by the page.
 import { covers } from './covers.js';
 
 export const defaults = () => ({
-  // приложение Spotify, заведённое пользователем: только client id
+  // the Spotify application set up by the user: the client id only
   spotify: { clientId: '' },
 });
 
@@ -14,15 +15,15 @@ export const merge = (prev, patch) => ({
   spotify: { ...prev.spotify, ...(patch.spotify || {}) },
 });
 
-// Сколько обложки нам надо. Картинка для корпуса 40×40, а самый большой
-// вариант у Spotify — 640×640 jpeg, это десятки килобайт; два мегабайта — не
-// потолок для обложки, а потолок для того, что обложкой не является.
+// How much cover we need. The picture for the body is 40×40, while the largest variant
+// at Spotify is a 640×640 jpeg, tens of kilobytes; two megabytes is not a ceiling for a
+// cover but a ceiling for what is not a cover.
 const MAX_COVER = 2 * 1024 * 1024;
 
-// Один поход за картинкой. Проверка хоста стоит выше, но сама по себе она
-// обходится: открытый редирект на CDN уводил бы fetch куда угодно, а тип
-// ответа уходил в браузер как есть. Поэтому редирект — ошибка, не-картинка —
-// ошибка, и размер ограничен до и после чтения.
+// One trip for a picture. The host check stands above, but on its own it can be got
+// around: an open redirect on the CDN would take the fetch anywhere, and the type of the
+// answer went into the browser as it was. So a redirect is an error, a non-picture is an
+// error, and the size is limited both before and after reading.
 async function fetchCover(src) {
   const img = await fetch(src, { signal: AbortSignal.timeout(8000), redirect: 'error' });
   if (!img.ok) throw new Error(`cover ${img.status}`);
@@ -34,16 +35,17 @@ async function fetchCover(src) {
   return { buf, type };
 }
 
-// Обложка волны для пиксельного корпуса. Наружу ходит сервер, а не страница:
-// адрес картинки берётся из oEmbed Spotify и принимается только с его же CDN.
+// The cover of a wave for the pixel body. It is the server that goes outside, not the
+// page: the address of the picture is taken from Spotify's oEmbed and accepted only from
+// its own CDN.
 export async function route(url, req, res, send) {
   if (url.pathname !== '/api/cover') return false;
-  // В ядре тело писалось как `return send(...)`, и возвращённое значение никого
-  // не интересовало. Здесь оно решает, забрал ли модуль запрос: вернув undefined,
-  // модуль сказал бы «не мой», и ядро попыталось бы ответить вторым разом в те
-  // же заголовки. Поэтому отвечаем через обёртку, которая говорит «забрал».
+  // In the core the body was written as `return send(...)`, and the returned value
+  // interested nobody. Here it decides whether the module took the request: returning
+  // undefined, a module would say "not mine", and the core would try to answer a second
+  // time into the same headers. So we answer through a wrapper that says "taken".
   const reply = (...a) => { send(...a); return true; };
-    // Плеер знает обложку текущего трека прямым адресом, встроенный — только uri волны.
+    // The player knows the cover of the current track by direct address, the built-in one only the uri of a wave.
   const direct = url.searchParams.get('img');
   if (direct) {
     try {

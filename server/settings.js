@@ -1,16 +1,17 @@
 // Small persisted settings blob. Lives in the user's config directory, NOT next
 // to the code.
 //
-// Оно лежало рядом с кодом до 30 августа 2026, и это работало ровно пока
-// единственным способом доставки был git clone. Как только офис уезжает
-// приложением или пакетом, каталог с кодом становится чужим и сменным: при
-// обновлении версии он заменяется целиком. А в этом файле — имена агентов
-// (сессия -> имя), рассадка и ключи подключённых сервисов. То есть обновление молча
-// переименовывало бы весь офис и роняло мольберт, а секрет оставался бы
-// лежать в кеше пакетного менеджера.
+// It sat next to the code until 30 August 2026, and that worked exactly as
+// long as git clone was the only way to deliver it. The moment the office ships
+// as an app or a package, the code directory becomes someone else's and
+// replaceable: a version update swaps it whole. And this file holds the agents'
+// names (session -> name), the seating and the keys of connected services. So
+// an update would quietly rename the whole office and break the easel, while
+// the secret stayed behind in a package manager's cache.
 //
-// Каталог свой, не `~/.claude`: офис сегодня читает состояние оттуда, но это
-// источник данных, а не наш дом, и оркестратор со временем может быть другим.
+// A directory of its own, not `~/.claude`: the office reads state from there
+// today, but that is a source of data, not our home, and the orchestrator may
+// be a different one in time.
 import crypto from 'node:crypto';
 import fsp from 'node:fs/promises';
 import { moduleDefaults, moduleMerge, modulePublic } from './modules.js';
@@ -19,93 +20,113 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-// Каталог настроек. VALEY_CONFIG_DIR — для тестов и для тех, кто держит
-// конфиги не по XDG.
+// The settings directory. VALEY_CONFIG_DIR is for the stands and for people
+// who keep their configs somewhere other than XDG.
 const CONFIG_DIR = process.env.VALEY_CONFIG_DIR
   || path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'valey');
-// VALEY_SETTINGS уводит весь файл в сторону целиком: так стенд не переписывает
-// настройки офиса, в котором вы работаете, — а он их переписал бы, потому что
-// токен хозяина заводится при первом же запуске. Пригодится и для второго
-// офиса на одной машине.
+// VALEY_SETTINGS moves the whole file aside: that way a stand does not
+// overwrite the settings of the office you work in — and it would, because the
+// owner token is created on the very first start. Useful for a second office on
+// one machine, too.
 const FILE = process.env.VALEY_SETTINGS || path.join(CONFIG_DIR, 'settings.json');
-// Файл со старого места. Он НЕ удаляется и не переписывается никогда: это
-// единственная копия имён и токена у тех, кто обновится, и цена ошибки тут —
-// чужие данные, а не наши.
+// Drafts of the release scripts. They belong to whoever cuts the release —
+// working papers, not code and not a module — so they live next to the settings
+// and outside every git tree. In the repository the draft was untracked and
+// unignored, which means the next release refused to start on a dirty tree
+// until somebody deleted it by hand; that happened while cutting v0.3.0 on
+// 5 September 2026. VALEY_SCRIPTS moves them aside for a stand.
+export const SCRIPTS_DIR = process.env.VALEY_SCRIPTS || path.join(CONFIG_DIR, 'scripts');
+
+// The file from the old place. It is NEVER deleted and never overwritten: for
+// anyone who updates it is the only copy of the names and the token, and the
+// cost of a mistake here is somebody else's data, not ours.
 const LEGACY = path.join(ROOT, '.settings.json');
 
 export const PATHS = { dir: CONFIG_DIR, file: FILE, legacy: LEGACY };
 
 const exists = async (f) => { try { await fsp.access(f); return true; } catch { return false; } };
 
-// Разовый переезд: старый файл копируется на новое место и остаётся лежать
-// где лежал. Если на новом месте уже что-то есть — не трогаем ничего и
-// говорим об этом вслух: молча выбрать один из двух файлов с именами
-// агентов значит потерять половину офиса без единого сообщения.
+// A one-time move: the old file is copied to the new place and stays where it
+// was. If something is already at the new place, nothing is touched and it is
+// said out loud: silently picking one of two files full of agent names means
+// losing half the office without a single message.
 export async function migrateSettings() {
   const hasNew = await exists(FILE);
   const hasOld = await exists(LEGACY);
   if (hasNew) return hasOld ? { done: false, reason: 'both', file: FILE, legacy: LEGACY } : { done: false, reason: 'new-only' };
   if (!hasOld) return { done: false, reason: 'nothing-to-move' };
   const raw = await fsp.readFile(LEGACY, 'utf8');
-  JSON.parse(raw);                                   // битый файл не переносим
+  JSON.parse(raw);                                   // a broken file is not moved
   await fsp.mkdir(path.dirname(FILE), { recursive: true });
-  await fsp.writeFile(FILE, raw, { flag: 'wx' });    // wx — не перезаписать гонкой
+  await fsp.writeFile(FILE, raw, { flag: 'wx' });    // wx — do not let a race overwrite it
   return { done: true, reason: 'moved', file: FILE, legacy: LEGACY };
 }
 
-// Умолчания модулей приезжают сюда же, но функцией, а не константой: модули
-// поднимаются при старте сервера, и снимок, снятый на разборе файла, был бы
-// пуст. Ключи модуля лежат в общем файле рядом с остальными — отдельного
-// файла настроек у модуля нет, иначе их станет столько же, сколько модулей.
+// Module defaults arrive here too, but as a function rather than a constant:
+// modules load when the server starts, and a snapshot taken while the file is
+// parsed would be empty. A module's keys live in the shared file next to the
+// rest — a module gets no settings file of its own, or there would be as many
+// as there are modules.
 const withModules = () => ({ ...DEFAULTS, ...moduleDefaults() });
 
 const DEFAULTS = {
   weather: { enabled: false, lat: null, lon: null, label: '' },
-  // язык интерфейса. Живёт здесь, а не в браузере: переключатель стоит в
-  // коридоре, и его щелчок должен доехать до всех открытых вкладок сразу
+  // the interface language. Lives here rather than in the browser: the switch
+  // stands in the corridor, and one click of it must reach every open tab
   lang: 'ru',
+  // The name pack: 'auto' follows the office language, otherwise a pack id
+  // ('ru', 'en'). One picked by hand survives switching the interface — that is
+  // what "the names are unpinned from the language" means.
+  namePack: 'auto',
+  // Which pack the names sitting in `names` were issued with. Not a setting but
+  // a mark: without it the server cannot tell "the pack was never touched" from
+  // "the pack changed while the office was down", and the office would either
+  // never rename or rename on every snapshot.
+  namesPack: '',
   // how much a delivered task is allowed to do on its own
   delivery: { mode: 'acceptEdits' },
-  // Кто в офисе хозяин и открыт ли он наружу.
+  // Who owns the office and whether it is open to the outside.
   //
-  // token — настоящий секрет этого файла: он и есть право
-  // раздавать задания. Наружу не отдаётся, см. publicSettings ниже.
+  // token is the real secret of this file: it IS the right to hand out tasks.
+  // It never goes out, see publicSettings below.
   //
-  // mode: 'private' — офис ваш, и всё, что пришло с этой же машины, считается
-  // хозяйским: так офис вёл себя всегда, и локальная работа не меняется.
-  // 'shared' — этот сокращённый путь выключается, и хозяином считается только
-  // тот, кто предъявил token. Переключать надо ДО того, как офис станет виден
-  // снаружи: туннель работает с этой же машины, и для сервера его гость
-  // выглядит как вы.
-  // invites — выданные приглашения: { code, name, from, at, usedAt, guest }.
-  // Живут на диске, потому что ссылку отправляют в мессенджер и открывают
-  // позже: приглашение, умирающее с перезапуском сервера, бесполезно.
+  // mode: 'private' — the office is yours, and everything from this machine
+  // counts as the owner's: that is how the office always behaved, and local
+  // work does not change. 'shared' turns that shortcut off, and only whoever
+  // presents the token is the owner. Switch BEFORE the office becomes visible
+  // from outside: a tunnel runs from this same machine, and to the server its
+  // guest looks like you.
+  // invites — the invitations handed out: { code, name, from, at, usedAt,
+  // guest }. They live on disk because the link is sent in a messenger and
+  // opened later: an invitation that dies with a server restart is useless.
   access: { mode: 'private', token: '', invites: [] },
-  // С каких адресов офис вообще отвечает. Выключено — значит слушается петля,
-  // и это не осторожность ради осторожности: офис отдаёт транскрипты всех
-  // сессий целиком, поэтому открытый порт равен открытой переписке. Токен
-  // заводится в момент включения, см. server/network.js.
+  // Which addresses the office answers at all. Off means loopback is listened
+  // to, and that is not caution for its own sake: the office serves every
+  // session transcript in full, so an open port equals an open correspondence.
+  // The token is created at the moment it is switched on, see
+  // server/network.js.
   network: { external: false, token: '' },
-  // Дресс-код этажа: 'casual' — как рисовалось всегда, 'office' — светлый верх,
-  // галстуки, пиджаки и юбки. Настройка офиса, а не браузера: переодеваются
-  // все вкладки сразу, как и с погодой.
+  // The floor's dress code: 'casual' is how it was always drawn, 'office' is
+  // light tops, ties, jackets and skirts. A setting of the office, not of the
+  // browser: every tab changes clothes at once, as with the weather.
   dress: { code: 'casual' },
-  // Оранжерея. Общая на офис, как имена и рассадка: полил ты — увидят все.
-  // pots: индекс горшка -> { wateredAt, streak }. Четыре полива в лейке —
-  // столько же, сколько в web/garden.js CAN_FULL; сюда его не импортировать,
-  // сервер про web/ ничего не знает.
+  // The greenhouse. Shared across the office, like the names and the seating:
+  // you water it, everyone sees. pots: pot index -> { wateredAt, streak }. Four
+  // waterings in the can — the same as CAN_FULL in web/garden.js; it cannot be
+  // imported here, the server knows nothing about web/.
   garden: { pots: {}, can: { left: 4 } },
   // sessionId -> name, so an agent keeps the face and the name you learned
   names: {},
-  // sessionId -> { project, i }: чей стол какой. Живёт на диске, чтобы место
-  // пережило перезапуск сервера и F5 — пока агент здесь, он сидит там же.
+  // sessionId -> { project, i }: whose desk is whose. Lives on disk so a seat
+  // survives a server restart and an F5 — while the agent is here, it sits in
+  // the same place.
   seats: {},
 };
 
 let cache = null;
 
-// Токен заводится один раз и живёт в файле. Без него офис не отличает хозяина
-// от гостя, поэтому он должен существовать раньше первого запроса.
+// The token is created once and lives in the file. Without it the office
+// cannot tell an owner from a guest, so it must exist before the first request.
 export async function ownerToken() {
   const s = await getSettings();
   if (!s.access.token) await patchSettings({ access: { ...s.access, token: crypto.randomUUID() } });
@@ -117,33 +138,35 @@ export async function getSettings() {
   try {
     const m = await migrateSettings();
     if (m.done) console.log(`Настройки переехали в ${m.file}; старый файл оставлен на месте.`);
-    // Два файла — единственный случай, когда офис может тихо потерять половину
-    // имён. Сказать вслух дешевле, чем угадать.
+    // Two files are the one case where the office can quietly lose half the
+    // names. Saying it out loud is cheaper than guessing.
     if (m.reason === 'both') console.log(`Настройки есть и в ${m.file}, и в ${m.legacy}. Взят первый; второй не тронут.`);
   } catch (e) { console.log(`Настройки не переехали: ${e.message}. Старый файл цел.`); }
-  // Нет файла и битый файл — разные случаи. Первый — обычный первый запуск.
-  // Второй до 4 сентября 2026 выглядел так же: офис молча стартовал с
-  // умолчаний, а следующее сохранение переписывало файл — и имена агентов,
-  // токен хозяина и приглашения пропадали без единой строки в логе. Теперь
-  // битый файл откладывается в копию рядом, и об этом говорится вслух.
+  // No file and a broken file are different cases. The first is an ordinary
+  // first start. The second looked the same until 4 September 2026: the office
+  // quietly started from defaults, and the next save overwrote the file — the
+  // agents' names, the owner token and the invitations vanished without a line
+  // in the log. Now a broken file is set aside as a copy next to it, and that
+  // is said out loud.
   let raw = null;
-  try { raw = await fsp.readFile(FILE, 'utf8'); } catch { /* первый запуск */ }
+  try { raw = await fsp.readFile(FILE, 'utf8'); } catch { /* first start */ }
   let saved = null;
   if (raw !== null) {
     try { saved = JSON.parse(raw); } catch (e) {
       const backup = `${FILE}.broken-${new Date().toISOString().replace(/[:.]/g, '-')}`;
-      try { await fsp.writeFile(backup, raw); } catch { /* хотя бы сказать */ }
+      try { await fsp.writeFile(backup, raw); } catch { /* at least say it */ }
       console.error(`Настройки не читаются: ${e.message}. Файл отложен в ${backup}; `
         + `офис стартует с умолчаний, и следующее сохранение перепишет ${FILE}. `
         + 'Имена, токен и приглашения — в отложенной копии.');
     }
   }
   if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
-    // Мерж поверхностный ровно на один уровень вглубь: файл, записанный до
-    // появления нового ключа, иначе прячет его целиком. На этом молча
-    // отвалился мольберт: в файле лежала половина его секции, и комната
-    // решила, что файл для неё не настроен. Сам мольберт с тех пор уехал в
-    // модуль, а правило осталось — оно про любую секцию, не про его.
+    // The merge is shallow exactly one level deep: a file written before a new
+    // key appeared would otherwise hide that key entirely. The easel fell off
+    // this in silence: half of its section sat in the file, and the room
+    // decided the file was not configured for it. The easel has since left for
+    // a module; the rule stayed, because it is about any section, not about
+    // that one.
     const base = withModules();
     cache = { ...base, ...saved };
     for (const [k, v] of Object.entries(base)) {
@@ -167,42 +190,47 @@ export async function patchSettings(patch) {
     ...s, ...patch,
     weather: { ...s.weather, ...(patch.weather || {}) },
     delivery: { ...s.delivery, ...(patch.delivery || {}) },
-    // Токен хозяина — по той же причине: страница его не видела, и первое же
-    // сохранение настроек стёрло бы право раздавать задания.
+    // The owner token, for the same reason: the page never saw it, and the
+    // first settings save would have wiped the right to hand out tasks.
     access: {
       ...s.access, ...(patch.access || {}),
       token: (patch.access || {}).token || s.access.token,
-      // Список приглашений заменяется целиком: погашенное должно исчезать, а
-      // слияние по ключам удалять не умеет — та же причина, что у names.
+      // The invitation list is replaced whole: a revoked one has to disappear,
+      // and a key-wise merge cannot delete — the same reason as for names.
       invites: (patch.access || {}).invites || s.access.invites || [],
     },
-    // Сетевой токен переживает patch без него по той же причине, что и токен
-    // хозяина: страница присылает настройки целиком, а токена она не видела.
+    // The network token survives a patch that omits it for the same reason as
+    // the owner token: the page sends the settings whole and has never seen it.
     network: {
       ...s.network, ...(patch.network || {}),
       token: (patch.network || {}).token || (s.network || {}).token || '',
     },
-    // names и seats заменяются целиком по одной причине: ушедшая сессия должна
-    // освобождать и стол, и имя, а слияние по ключам удалять записи не умеет.
-    // Имена мержились до 30 августа 2026 — из-за этого пул в пятьдесят имён
-    // кончился на пятьдесят первой сессии и не восстанавливался никогда.
+    // names and seats are replaced whole for one reason: a session that has
+    // left must free both its desk and its name, and a key-wise merge cannot
+    // delete entries. Names were merged until 30 August 2026 — which is how a
+    // pool of fifty names ran out on the fifty-first session and never
+    // recovered.
     names: patch.names || s.names,
     seats: patch.seats || s.seats,
-    // Модули — последними: их фрагмент кладётся поверх, потому что про свои
-    // ключи они знают то, чего не знает ядро.
+    // The pack mark travels beside the names and is replaced the same way: it
+    // describes them. An empty string is a legal value here ("nobody has been
+    // handed a name yet"), so || will not do.
+    namesPack: patch.namesPack !== undefined ? patch.namesPack : s.namesPack,
+    // Modules last: their fragment goes on top, because they know things about
+    // their own keys that the core does not.
     ...moduleMerge(s, patch),
   };
   await persist();
   return cache;
 }
 
-// Запись — через временный файл и rename, и по одной. Такт офиса и обработчики
-// запросов сохраняют настройки независимо друг от друга; две записи в один
-// файл напрямую перемешивали байты, и битый JSON, который получался, при
-// следующем старте молча превращался в умолчания. rename на одном диске
-// атомарен: на диске всегда лежит либо прошлая версия целиком, либо новая.
-// Очередь пишет то состояние кэша, которое было в момент вызова, — кто
-// последний позвал, тот и на диске.
+// Writes go through a temp file and a rename, and one at a time. The office
+// tick and the request handlers save settings independently of each other; two
+// writes into one file directly interleaved bytes, and the broken JSON that
+// resulted quietly became defaults at the next start. rename on one disk is
+// atomic: what lies on disk is always either the previous version whole or the
+// new one. The queue writes the cache as it stood when it was called — whoever
+// called last is what ends up on disk.
 let writing = Promise.resolve();
 function persist() {
   const text = JSON.stringify(cache, null, 2);
@@ -215,20 +243,20 @@ function persist() {
   return writing;
 }
 
-// Всё, что можно показать странице. Токен сюда не попадает никогда: настройки
-// уходят в браузер и SSE-потоком каждые 2.5 секунды, а на странице живут
-// чужие iframe — приёмник модуля радио и песочница для чужого HTML.
+// Everything that may be shown to the page. The token never gets in here: the
+// settings go to the browser, and down the SSE stream every 2.5 seconds, and
+// the page hosts foreign iframes — the radio module's player and the sandbox
+// for foreign HTML.
 export function publicSettings(s) {
-  // Токен хозяина не отдаётся никогда и никому: страница гостя читает эти
-  // настройки тем же запросом, что и страница хозяина.
-  // Ни токена хозяина, ни кодов приглашений, ни выданных гостевых токенов:
-  // эти настройки читает страница гостя тем же запросом, что и страница
-  // хозяина. Наружу уходит только то, что и так видно — режим и сколько
-  // приглашений висит невостребованными.
+  // Neither the owner token, nor invitation codes, nor the guest tokens handed
+  // out: a guest's page reads these settings with the same request as the
+  // owner's page. Only what is visible anyway goes out — the mode, and how many
+  // invitations are still unclaimed.
   const { token: owner, invites = [], ...access } = s.access || {};
-  // Сетевой токен не показывается даже своим: настройки уходят SSE-потоком в
-  // браузер, где живут iframe радио и песочница чужого HTML. Прочитать его
-  // можно только с диска — это и есть смысл слова «секрет».
+  // The network token is not shown even to our own: the settings go down the
+  // SSE stream into a browser that hosts the radio iframe and the sandbox for
+  // foreign HTML. It can only be read from disk — which is what the word
+  // "secret" means.
   const { token: net, ...network } = s.network || {};
   return {
     ...s,

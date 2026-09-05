@@ -1,4 +1,4 @@
-// node tools/test-markdown.mjs — проверка рендерера без браузера
+// node tools/test-markdown.mjs — the renderer, without a browser
 import { renderMarkdown } from '../web/markdown.js';
 
 const cases = [
@@ -7,18 +7,29 @@ const cases = [
   ['жирный и курсив', 'это **важно** и *слегка*', ['<b>важно</b>', '<i>слегка</i>']],
   ['зачёркнутый', 'было ~~плохо~~', ['<s>плохо</s>']],
   ['инлайн-код', 'зови `npm start` так', ['<code>npm start</code>']],
-  // с подсветкой текст разбит на span'ы, но экранирование остаётся обязательным
+  // with highlighting the text is split into spans, but the escaping stays mandatory
   ['блок кода', '```js\nconst a = 1 < 2;\n```',
     ['<pre class="mdcode" data-lang="js">', '<span class="t-keyword">const</span>', '&lt;'], ['<script']],
   ['блок кода без языка', '```\nпросто текст < тут\n```',
     ['<pre class="mdcode"><code>просто текст &lt; тут</code></pre>']],
-  // Кнопка копирования: живёт в обёртке рядом с <pre>, а не внутри него —
-  // внутри она уезжала бы вбок вместе с длинной строкой.
+  // The copy button: it lives in the wrapper next to <pre> rather than inside
+  // it — inside it would slide sideways along with a long line.
   ['кнопка копирования у блока', '```bash\ngit push\n```',
     ['<div class="mdblock">', '<button class="mdcopy" type="button" data-copy>', '</pre><button']],
   ['текста кода в разметке ровно одна копия', '```\nsecret-command\n```',
     ['secret-command'], ['secret-command</button>']],
-  ['у инлайн-кода кнопки нет', 'зови `npm start` так', ['<code>npm start</code>'], ['mdcopy']],
+  // On 4 September inline code had no button on purpose — «selecting it with
+  // the mouse is faster there». On the 5th it turned out selection was off
+  // entirely (user-select:none on body), and the decision flipped: paths and
+  // commands in backticks are what gets copied most.
+  ['у инлайн-кода своя кнопка', 'зови `npm start` так',
+    ['<span class="mdcopyable">', 'class="mdcopy-in"', '<code>npm start</code>']],
+  ['кнопка пустая: значок приходит из стиля', 'зови `npm start` так',
+    ['tabindex="-1"></button>'], ['копировать</button>', '⧉']],
+  ['у ссылки кнопка тоже есть, и она копирует адрес', '[текст](https://example.com/x)',
+    ['class="mdcopyable"', 'data-copy="https://example.com/x"', '>текст</a>']],
+  ['у голой ссылки адрес и есть текст, второй копии не нужно',
+    'смотри https://valey.dev вот', ['class="mdcopy-in" type="button" tabindex="-1">'], ['data-copy=']],
   ['маркированный список', '- раз\n- два', ['<ul><li>раз</li><li>два</li></ul>']],
   ['нумерованный список', '1. раз\n2. два', ['<ol><li>раз</li><li>два</li></ol>']],
   ['вложенный список', '- раз\n  - вложено', ['<li>раз<ul><li>вложено</li></ul></li>']],
@@ -53,7 +64,7 @@ for (const [name, src, must = [], mustNot = []] of cases) {
   }
 }
 
-// на настоящем файле проекта
+// on a real file of the project
 const real = await import('node:fs').then((fs) => fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8'));
 const out = renderMarkdown(real);
 console.log('\nREADME.md:', real.length, 'символов →', out.length, 'символов html');

@@ -34,9 +34,9 @@ const COLOUR = {
 const IN_PANEL = new Set([
   'Escape', 'Enter',
   'PageUp', 'PageDown', 'Home', 'End',
-  // Z — лупа в просмотрщике одного файла, R там же перечитывает. R занята и на
-  // этаже радио, поэтому в реестре она уже есть; Z не занята нигде больше и без
-  // этой строки считалась бы свободной.
+  // Z is the loupe in the single-file viewer, and R rereads the file there. R is
+  // also the radio on the floor, so the registry already knows it; Z is taken
+  // nowhere else and without this line would be counted as free.
   'KeyZ',
   'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9',
 ]);
@@ -75,9 +75,9 @@ const PRINTED = {
 
 const printed = (code) => (code in PRINTED ? PRINTED[code] : labelFor(code));
 
-// Имя клавиши словами, на языке офиса: ПРОБЕЛ, а не SPACE. Тот же словарь,
-// что у строки подсказки внизу, — иначе одна и та же клавиша называлась бы в
-// двух местах по-разному.
+// The key's name in words, in the office's language: "ПРОБЕЛ" rather than SPACE.
+// The same dictionary the strip at the bottom uses — otherwise one key would be
+// called two different things in two places.
 const named = (code) => {
   const l = printed(code) || labelFor(code);
   const t = tr('keycap.' + l);
@@ -86,7 +86,7 @@ const named = (code) => {
 
 // The character this key really produces, when the browser will say. Chromium
 // answers; the rest do not, and then the cap simply shows nothing extra rather
-// than a hard-coded ЙЦУКЕН table that would be wrong on every other layout.
+// than a hard-coded "ЙЦУКЕН" table that would be wrong on every other layout.
 let engraved = new Map();
 export async function readLayout() {
   try {
@@ -95,16 +95,16 @@ export async function readLayout() {
   } catch { engraved = new Map(); }
 }
 
-// Расстояние между клавишами и отступ между доской и блоком стрелок — те же
-// числа, что в style.css. Держать их здесь приходится потому, что размер
-// колпачка считается арифметикой, а не подбирается: клавиатура обязана занять
-// всю ширину панели, иначе на большом экране она сидит островком посередине.
+// The gap between keys and the gap between the board and the arrow block are the
+// same numbers as in style.css. They have to be kept here because the cap size is
+// solved rather than chosen: the keyboard has to fill the panel's width, or on a
+// large screen it sits as an island in the middle of it.
 const GAP = 6, BLOCK_GAP = 14, PAD = 14, ARROW_UNITS = 3;
 
 /**
- * Ширина колпачка, при которой самый широкий ряд впритык влезает в панель.
- * Считается по каждому ряду и берётся наименьшая: ряды разной длины и в
- * клавишах, и в промежутках между ними.
+ * The cap width at which the widest row still just fits the panel. Solved per row
+ * and the smallest answer wins: rows differ both in keys and in the gaps between
+ * them.
  */
 function capSize(available) {
   const fits = ROWS.map((row) => {
@@ -118,8 +118,8 @@ function capSize(available) {
 let el = null;
 export function keysOpen() { return !!el && !el.hidden; }
 
-// Пересчёт при открытии и при каждом изменении окна: панель на весь экран, и
-// её ширина меняется вместе с ним.
+// Recomputed on opening and on every window change: the panel is full-screen, and
+// its width moves with the window.
 function fit() {
   if (!keysOpen()) return;
   const body = el.querySelector('.keysbody');
@@ -133,14 +133,14 @@ function capHtml(code, units) {
   const id = actionOf({ code });
   const group = id ? groupOf(id) : (IN_PANEL.has(code) ? 'inpanel' : null);
   const action = id ? all().find((a) => a.id === id) : null;
-  // Свободная буква так и подписана — «свободна», как на кадре. Модификаторы,
-  // скобки и функциональные клавиши подписи не получают: они не свободны, их
-  // забирает браузер и система, и это в легенде отдельной строкой.
+  // A free letter is captioned as free, exactly as on the frame. Modifiers,
+  // brackets and the F row get no caption: they are not free, the browser and the
+  // system take them, and the legend carries that as a line of its own.
   const freeLetter = !id && !IN_PANEL.has(code) && /^Key/.test(code);
-  // Вторая клавиша действия подписывается «то же, что ПРОБЕЛ», а не повторяет
-  // подпись целиком: так сделано на кадре, и на узкий колпачок длинная фраза
-  // всё равно не влезает. Кроме случая, когда на обеих написано одно и то же:
-  // у правого SHIFT выходило «то же, что SHIFT».
+  // The second key of an action points at the first instead of repeating the
+  // caption: that is what the frame prints, and a long phrase would not fit a
+  // narrow cap anyway. Except when both caps print the same thing — the right
+  // SHIFT used to say it was the same as SHIFT.
   const secondary = action && action.codes[0] !== code
     && printed(action.codes[0]) !== printed(code);
   const caption = secondary ? tr('keys.sameAs', { key: named(action.codes[0]) })
@@ -148,12 +148,12 @@ function capHtml(code, units) {
     : IN_PANEL.has(code) ? tr('keys.inPanel')
     : freeLetter ? tr('keys.lgFree')
     : '';
-  // Под курсором — подпись целиком плюс подробность, если она у действия есть.
+  // Under the cursor: the caption in full plus the footnote, when the action has one.
   const full = caption + (action && action.more ? ` · ${tr(action.more)}` : '');
   const outline = group ? COLOUR[group] : '';
   const face = printed(code);
-  // Вторая подпись — то, что на этой клавише написано на самом деле, если
-  // браузер знает раскладку. Для латиницы она совпадает с первой и не рисуется.
+  // The second label is what this key is really engraved with, when the browser
+  // knows the layout. For Latin it matches the first and is not drawn.
   const real = engraved.get(code);
   const twin = real && real.toUpperCase() !== face ? real.toUpperCase() : '';
   return `<div class="kcap${outline ? '' : ' free'}" style="--u:${units}${outline ? `;--edge:${outline}` : ''}"

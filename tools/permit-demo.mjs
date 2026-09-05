@@ -1,19 +1,20 @@
 #!/usr/bin/env node
-// Позвонить в пейджер, не дожидаясь настоящего запроса из Claude Code.
+// Ring the pager without waiting for a real request from Claude Code.
 //
-//   node tools/permit-demo.mjs                 # офис на 5177, один вопрос
+//   node tools/permit-demo.mjs                 # the office on 5177, one question
 //   node tools/permit-demo.mjs --port 5189
-//   node tools/permit-demo.mjs --n 2           # двое просят подряд — очередь
+//   node tools/permit-demo.mjs --n 2           # two ask in a row — a queue
 //
-// Зачем это есть. Хук `PermissionRequest` срабатывает только тогда, когда в
-// терминале должен был появиться диалог, — а в auto-режиме почти ничего не
-// спрашивают, и увидеть пейджер живьём нечем. 5 сентября 2026 на этом ушёл
-// вечер: фича работала, а показать её было нельзя, и это читалось как «не
-// работает». Скрипт делает ровно то же, что сделал бы хук, и печатает, что
-// ответил офис.
+// Why this exists. The `PermissionRequest` hook only fires when a dialog was
+// about to appear in the terminal — and in auto mode almost nothing is asked, so
+// there is no way to see the pager for real. On 5 September 2026 that cost an
+// evening: the feature worked and could not be shown, and that read as "it does
+// not work". The script does exactly what the hook would do, and prints what the
+// office answered.
 //
-// Это НЕ подделка ответа: офис не знает, кто постучался, и обрабатывает запрос
-// обычным путём. Разница только в том, что на том конце не ждёт живой агент.
+// This is NOT a faked answer: the office does not know who knocked and handles
+// the request the usual way. The only difference is that no live agent is waiting
+// at the other end.
 const arg = (name, def) => {
   const i = process.argv.indexOf('--' + name);
   return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : def;
@@ -22,8 +23,8 @@ const PORT = arg('port', '5177');
 const BASE = `http://127.0.0.1:${PORT}`;
 const N = Math.max(1, Math.min(5, Number(arg('n', '1')) || 1));
 
-// Команды выдуманные, но правдоподобные: пейджер показывает то, по чему решают,
-// и на «echo привет» смотреть незачем.
+// The commands are invented but plausible: the pager shows what the decision is
+// made on, and there is no point looking at "echo hello".
 const ASKS = [
   {
     command: 'git push -u origin HEAD 2>&1 | tail -5',
@@ -78,8 +79,8 @@ for (let i = 0; i < N; i++) {
       }],
     }),
   }).then((r) => r.json()).then((v) => ({ who: who.name, v })));
-  // Второй звонок чуть позже первого: очередь должна выстроиться по времени,
-  // а не по тому, чей запрос сервер разобрал первым.
+  // The second call comes slightly after the first: the queue must line up by
+  // time rather than by whose request the server parsed first.
   if (i + 1 < N) await new Promise((r) => setTimeout(r, 400));
 }
 

@@ -1,51 +1,63 @@
-// Клиентская половина загрузчика.
+// The client half of the loader.
 //
-// Ядро объявляет точки, модули в них встают. Когда модулей нет, все списки
-// пустые и офис работает ровно как работал — это проверяется тем, что ни одна
-// точка не знает имён модулей.
+// The core declares the points, the modules step into them. When there are no
+// modules every list is empty and the office works exactly as it did — which is
+// checked by the fact that no point knows the name of a module.
 //
-// Две семантики вызова, и путать их дорого:
-//   collect — спрашиваем всех и складываем, что вернули (отрисовка, подсказки);
-//   first   — отдаём событие первому, кто взялся (клавиша, ПРОБЕЛ, ESC).
+// Two calling semantics, and confusing them is expensive:
+//   collect — we ask everyone and put together what came back (drawing, hints);
+//   first   — we give the event to the first one who took it (a key, SPACE, ESC).
 import { addDict } from './i18n.js';
 import { define as defineKeys } from './keymap.js';
 
-// `action` — новая точка рядом со старой `key`, а не вместо неё. Модуль,
-// объявивший свои действия через api.keys(), получает сюда идентификатор и не
-// знает никаких букв; модуль, который так и остался на `key`, работает как
-// работал. Это не любезность: платные модули уезжают покупателю архивом, и
-// сломать их обновлением офиса нельзя.
-const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'action', 'esc', 'tick', 'hud', 'lang', 'help', 'busy'];
+// `action` and `note` are both new seams, and both sit beside `key` rather
+// than replacing it. A module that declared its keys through api.keys() gets an
+// action id here and knows no letters at all; one that stayed on `key` works as
+// it always did. That is not politeness: paid modules reach a buyer as an
+// archive, and an office update must not break one.
+//
+// `note` — the ninth seam, from 5 September 2026. A note used to hang on a
+// reply in a conversation and nothing else; now it hangs on an address, and a
+// module can name addresses of its own. The list of notes stays in the core,
+// and opening one belongs to whoever owns the address: the core shows it to
+// everyone and takes the first module that answers. It never reads such an
+// address itself. Nobody answered — the row says so out loud, and the note is
+// still readable from the line of context stored with it.
+const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'action', 'esc', 'tick', 'hud', 'lang', 'help', 'busy', 'note'];
 const hooks = Object.fromEntries(HOOKS.map(h => [h, []]));
 const dicts = [];
 let ids = [];
-// Модули, которые не встали. Пустой список — не то же самое, что «всё
-// хорошо»: пока он не показывался, мольберт молча отсутствовал в офисе,
-// потому что register бросил на неизвестной точке, а видно это было
-// только в консоли браузера. Стенд теперь спрашивает этот список.
+// The modules that did not come up. An empty list is not the same as "all is
+// well": while it was not shown, the easel was silently missing from the office,
+// because register threw on an unknown point, and that was visible only in the
+// browser console. The stand now asks for this list.
+import { owned } from './owned.js';
+
 let failed = [];
 
 export async function loadModules() {
   let list = [];
   try {
-    list = await (await fetch('/api/modules')).json();
+    list = await (await fetch('/api/modules', { headers: owned() })).json();
   } catch {
-    return [];                       // сервер без модулей — обычный случай
+    return [];                       // a server with no modules is the ordinary case
   }
-  // Ответом может прийти не список, а отказ: гость без приглашения получает
-  // {error}. Раньше здесь начинался for..of по объекту, он падал, а падал он на
-  // верхнеуровневом await в main.js — то есть уносил с собой весь офис. Пустой
-  // этаж и «нужно приглашение» вместо комнат: найдено 1 сентября 2026 первым же
-  // кадром в режиме shared.
+  // The answer can come as a refusal rather than a list: a guest without an
+  // invitation gets {error}. There used to be a for..of over an object starting
+  // here; it threw, and it threw on a top-level await in main.js — that is, it
+  // carried the whole office away with it. An empty floor and "an invitation is
+  // needed" instead of the rooms: found on 1 September 2026 by the very first
+  // frame in shared mode.
   if (!Array.isArray(list)) return [];
-  // Стили — раньше клиентов и с ожиданием. Ссылка, добавленная в head, не
-  // задерживает ничего: страница живёт дальше, а стиль приезжает когда приедет.
-  // Пока он в пути, разметка модуля уже может быть на экране и уже может быть
-  // измерена — и намерить она способна что угодно. 3 сентября 2026 книга в
-  // читальне так и вышла: панель без своих стилей растянулась во всё окно,
-  // ширина колонки посчиталась по 1372 пикселям вместо 886, и глава легла одной
-  // колонкой поперёк разворота. Тайм-аут на случай стиля, который не приедет
-  // никогда: офис важнее одного модуля.
+  // The styles go before the clients, and with a wait. A link added to head holds
+  // nothing up: the page lives on, and the style arrives when it arrives. While it
+  // is on its way, a module's markup can already be on the screen and can already
+  // be measured — and it is capable of measuring anything at all. On 3 September
+  // 2026 the book in the reading room came out exactly that way: a panel without
+  // its styles stretched across the whole window, the column width was counted
+  // over 1372 pixels instead of 886, and the chapter lay in one column across the
+  // spread. The timeout is for a style that never arrives: the office matters more
+  // than one module.
   const styles = list.filter((m) => m.style).map((m) => new Promise((done) => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
@@ -63,7 +75,7 @@ export async function loadModules() {
       await mod.register?.(apiFor(m.id));
       ids.push(m.id);
     } catch (err) {
-      // Молча падать нельзя: «мольберт пропал» иначе расследуется глазами.
+      // Failing silently is not allowed: "the easel is gone" would otherwise be investigated by eye.
       console.warn('модуль не встал:', m.id, err);
       failed.push({ id: m.id, error: String((err && err.message) || err) });
     }
@@ -78,13 +90,13 @@ function apiFor(id) {
       if (!hooks[name]) throw new Error(`нет такой точки: ${name}`);
       hooks[name].push({ id, fn });
     },
-    // Словарь модуля вливается в общий сразу: ключи именуются с его id
-    // впереди, иначе два модуля однажды подерутся за одно имя.
+    // A module's dictionary is poured into the common one at once: the keys are
+    // named with its id in front, or two modules will one day fight over one name.
     i18n(dict) { dicts.push(dict); addDict(dict); },
-    // Клавиши модуля объявляются, а не проверяются буквой в обработчике. Так
-    // ядро знает, что занято, и умеет об этом рассказать — до 5 сентября 2026
-    // спор двух модулей за одну букву решался порядком загрузки, то есть
-    // алфавитом по имени папки, и молча.
+    // A module's keys are declared, not tested letter by letter in a handler.
+    // That way the core knows what is taken and can say so — until 5 September
+    // 2026 a fight between two modules over one letter was settled by load
+    // order, which is alphabetical by folder name, and settled in silence.
     keys(list) {
       const own = [].concat(list || []).map((a) => ({ ...a, id: a.id.startsWith(id + '.') ? a.id : `${id}.${a.id}` }));
       defineKeys(own);

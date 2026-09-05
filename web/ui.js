@@ -4,11 +4,12 @@ import { drawPerson, drawItem, dressMe, cycle, hash, SKIN, HAIR, SHIRT, PANTS, B
   SHIRT_WORK, BLOUSE, JACKET, TIE, CUTS, BOTTOMS } from './sprites.js';
 import { renderMarkdown } from './markdown.js';
 import { highlight, langOf } from './highlight.js';
-import { collect, moduleIds } from './modules.js';
-import { LIBRARY, TIERS, byId, children, colOf } from './library.js';
+import { collect, first, moduleIds } from './modules.js';
+import { LIBRARY, TIERS, DIRS, SUBS, byId, children, colOf, inDir, dirTally } from './library.js';
 import { theme, applyTheme, resetTheme, PRESETS, ui, UI_STEPS, applyUiScale } from './theme.js';
 import { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } from './notes.js';
 import { esc } from './esc.js';
+import { owned } from './owned.js';
 
 const $ = (s) => document.querySelector(s);
 const el = { hud: null, dialog: null, viewer: null, roster: null, bag: null, toasts: null };
@@ -23,14 +24,16 @@ export function initUI(state, callbacks) {
   el.lift = $('#lift');
   el.invite = $('#invite');
   el.notes = $('#notes');
-  // Один обработчик на всю панель просмотра, поставленный на входе: разметка
-  // внутри неё перерисовывается постоянно, а он это переживает.
+  el.lang = $('#lang');
+  // One handler for the whole viewer panel, set at the entrance: the markup
+  // inside it is repainted constantly, and the handler outlives that.
   bindCopyButtons();
-  // Панели с полем ввода закрывают себя сами. onKey в main.js возвращается на
-  // любом INPUT — так недописанное задание переживает случайный Escape, — и до
-  // closeAll() нажатие не доходит: пока фокус в поле, панель заперта. У обхода
-  // и лифта полей нет, им хватает closeAll(); карточка агента не в списке
-  // намеренно, там поле задания и Escape ему не хозяин.
+  // Panels with an input field close themselves. onKey in main.js returns on any
+  // INPUT — that is how an unfinished task survives an accidental Escape — and the
+  // press never reaches closeAll(): while the focus is in a field, the panel is
+  // locked. The round and the lift have no fields, closeAll() is enough for them;
+  // the agent's card is deliberately not in the list, the task field is there and
+  // Escape is not its master.
   selfClosing(el.sky, closeSky);
   selfClosing(el.notes, closeNotes);
   selfClosing(el.invite, closeInvite);
@@ -38,8 +41,8 @@ export function initUI(state, callbacks) {
   selfClosing(el.skin, closeSkin);
 }
 
-// Обработчик вешается на саму панель, а не на поле: нутро панели переписывается
-// на каждый рендер, а она сама остаётся.
+// The handler is hung on the panel itself rather than on the field: the innards
+// of the panel are rewritten on every render, while the panel itself stays.
 function selfClosing(box, close) {
   if (!box) return;
   box.onkeydown = (e) => {
@@ -61,14 +64,14 @@ export function toast(text, kind = '') {
 }
 
 // ---------------------------------------------------------------------- hud
-// tr, а не t: в ui.js `t` уже занят локальными переменными в нескольких
-// функциях, и импорт там молча перекрывался
+// tr, not t: in ui.js `t` is already taken by local variables in several
+// functions, and the import there was silently shadowed
 import { t as tr, lang } from './i18n.js';
 import { cardClosed } from './pager.js';
 
 const WEATHER_ICON = { clear: '☀', clouds: '☁', rain: '☂', storm: '⚡', snow: '❄', fog: '≋' };
 
-// Свой плеер знает трек поимённо, встроенный — только волну, на которую настроен.
+// Our own player knows the track by name, the built-in one only the wave it is tuned to.
 
 export function renderHud() {
   const waiting = S.agents.filter((a) => a.status === 'awaiting').length;
@@ -94,13 +97,14 @@ export function renderHud() {
 
 // ------------------------------------------------------------------- dialog
 let dialogKey = '';
-// Отказ в два шага: сначала кнопка, потом поле для записки. Живёт здесь, а не
-// в состоянии офиса, — это не то, что должно пережить закрытие карточки.
+// A refusal in two steps: the button first, then the field for a note. It lives
+// here rather than in the state of the office — this is not something that should
+// outlive the closing of the card.
 let denying = false;
 
-// Сервер отдаёт и русский текст ошибки, и ключ, если ошибка его собственная.
-// Знаем ключ — переводим; не знаем — показываем как есть: то, что вернул claude,
-// в словаре не лежит и лежать не может.
+// The server gives out both the Russian text of an error and a key, if the error
+// is its own. Where we know the key we translate; where we do not, we show it as
+// it is: what claude returned is not in the dictionary and cannot be.
 const said = (o, field = 'error') => {
   if (!o) return '';
   const key = field === 'hint' ? o.hintKey : o.errorKey;
@@ -116,8 +120,38 @@ export const ago = (sec) => sec == null || !Number.isFinite(sec) ? ''
 const metaLine = (a) => `${esc(a.project)}${a.branch ? ' · ' + esc(a.branch) : ''} · ${statusWord(a)}`
   + (a.status !== 'working' && a.idleFor > 300 ? tr('meta.spoke', { ago: ago(a.idleFor) }) : '');
 const chatLine = (a) => (a.title ? `<span class="chatname">💬 ${esc(a.title)}</span>` : '');
-// Сервер присылает ключ занятия, а готовую русскую фразу оставляет для
-// совместимости: если ключа нет — показываем её как есть.
+// The report tail in the head. The task in the main colour, full width; the
+// status dim under it, with the session name riding along at its end — telling
+// two sessions of one project apart is all it was ever needed for. No tail and
+// the head looks as it did, because the report ends answers by this repository's
+// rule, not by Claude Code's.
+const COLD_TASK = 3600;   // seconds of silence after which the task is no longer "now"
+const taskRow = (a) => {
+  const t = a.task;
+  if (!t || !t.what) return chatLine(a);
+  const cold = a.status !== 'working' && (a.idleFor || 0) > COLD_TASK;
+  // The session name is not on its own blue line here, as it is without a task,
+  // but at the end of the status: it stops being the first thing read, and does
+  // not disappear. It sits in its own cell, because the status is clipped to fit
+  // and the name is not clippable — it is short, and it is the thing that
+  // identifies which of a project's two sessions this is.
+  const stat = t.status ? `<span class="tval">${tr('task.status', { s: esc(t.status) })}</span>` : '';
+  const sess = a.title ? `<span class="tsess">${stat ? '· ' : ''}💬 ${esc(a.title)}</span>` : '';
+  return `<p class="task${cold ? ' cold' : ''}">${esc(t.what)}</p>`
+    + (stat || sess ? `<p class="tstat">${stat}${sess}</p>` : '')
+    + (t.need ? `<p class="need">⚑ ${tr('task.need', { s: esc(t.need) })}</p>` : '');
+};
+
+// The same task in the conversation header: it on the left, the status on the
+// right. The session name is not repeated here — it is a row above, in its corner.
+const chatTask = (a) => {
+  const t = a && a.task;
+  if (!t || !t.what) return '';
+  return `<span class="task">${esc(t.what)}</span>`
+    + (t.status ? `<span class="tstat">${tr('task.status', { s: esc(t.status) })}</span>` : '');
+};
+// The server sends the key of an activity and leaves the ready Russian phrase for
+// compatibility: if there is no key, we show the phrase as it is.
 const FALLBACK_ARG = { edit: 'act.someCode', read: 'act.someFile' };
 export const actText = (a) => {
   if (!a || !a.act || !a.act.key) return (a && a.activity) || '';
@@ -125,9 +159,9 @@ export const actText = (a) => {
   return tr('act.' + a.act.key, { arg });
 };
 export const roleText = (a) => (a && a.roleKey ? tr('role.' + a.roleKey) : (a && a.role) || '');
-// actText и roleText — текст: их же кладут в textContent. В разметку они
-// входят только через esc, потому что arg занятия — имя файла или команда из
-// транскрипта, а неизвестный ключ tr возвращает как есть.
+// actText and roleText are text: they are also put into textContent. They enter
+// the markup only through esc, because the arg of an activity is a file name or a
+// command out of the transcript, and an unknown key is returned by tr as it is.
 const actLine = (a) => `${esc(actText(a))}${(a.outbox || []).length ? ` · 📋 ${a.outbox.length}` : ''}`;
 const readLabel = (a) => {
   const cut = (a.saidLen || 0) - (a.lastSaid || '').length;
@@ -203,8 +237,10 @@ function patchDialog(a) {
   const set = (sel, html) => { const n = el.dialog.querySelector(sel); if (n && n.innerHTML !== html) n.innerHTML = html; };
   set('.meta', metaLine(a));
   set('.act', actLine(a));
-  const chat = el.dialog.querySelector('.chatname');
-  if (chat && a.title && chat.textContent !== `💬 ${a.title}`) chat.textContent = `💬 ${a.title}`;
+  // The task is rewritten by every answer, so its row moves as a whole rather
+  // than being patched piece by piece: between "you are needed" and its absence
+  // what changes is the set of rows, not the text.
+  set('.taskrow', taskRow(a));
 
   if (S.page === 'talk') {
     const said = clean(a.lastSaid) || tr('dlg.silent');
@@ -355,7 +391,7 @@ function buildDialog(a) {
     <div class="portrait"><canvas width="48" height="48" id="pf"></canvas></div>
     <div class="content">
       <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${esc(roleText(a))}</span>
-        <span class="meta">${metaLine(a)}</span>${chatLine(a)}</div>
+        <span class="meta">${metaLine(a)}</span><div class="taskrow">${taskRow(a)}</div></div>
       <div class="act">${actLine(a)}</div>
       <div class="body">${body}</div>
       <div class="acts">
@@ -602,8 +638,12 @@ const readLink = () => el.dialog.querySelector('#readAll');
 // «Дать задание» — это одно и то же место в карточке: список под текстом, в
 // который уводит стрелка вверх. Вкладки не открыты одновременно, поэтому
 // достаточно объединить селекторы и не разводить их по страницам.
+// «попросить доступ» belongs here too: until 5 September 2026 it was in no
+// focus list at all, and a guest could press it with a mouse and by no other
+// means — the one button in the office the keyboard could not reach. The tabs
+// are never open at the same time, so the selectors can share one list.
 const bodyRows = () => [...el.dialog.querySelectorAll(
-  '.files li, .notes [data-retry], .notes [data-send], .notes [data-edit], .notes [data-del], .prow button')];
+  '.files li, .notes [data-retry], .notes [data-send], .notes [data-edit], .notes [data-del], .prow button, #askAccess')];
 
 // Стрелка вверх на оборванном ответе уводит фокус на «дочитать»: длинную реплику
 // всё равно читают целиком, и тянуться за ней мышью — лишний шаг.
@@ -826,6 +866,103 @@ function copyTopBlock() {
   return true;
 }
 
+// A path or a link is copied by the fragment itself: the button beside it takes
+// the click, the fragment answers with a flash. Its text is never swapped —
+// «copied» is two characters longer than «copy» in Russian and would move the
+// sentence it sits in.
+async function copyInline(btn) {
+  const wrap = btn.closest('.mdcopyable');
+  if (!wrap) return false;
+  const body = wrap.querySelector('code, a');
+  const text = btn.dataset.copy || (body ? body.textContent : '');
+  if (!text) return false;
+  const ok = await copyText(text);
+  wrap.classList.remove('done', 'fail');
+  wrap.classList.add(ok ? 'done' : 'fail');
+  clearTimeout(wrap._back);
+  wrap._back = setTimeout(() => wrap.classList.remove('done', 'fail'), ok ? 1200 : 4000);
+  return ok;
+}
+
+// ------------------------------------------------------------- digit picking
+// The office is keyboard-first, and a button reachable only by mouse is a
+// half-built one. C copies the block you are reading; pressed again — or where
+// there is no block — it numbers everything copyable on screen, and a digit
+// takes it. Digits already pick in this office: inventory tabs, lift floors,
+// radio waves, so the gesture is not a new one.
+let picked = [];
+let copiedByC = false;
+
+const pickBox = () => el.viewer.querySelector('#chatlog') || el.viewer.querySelector('.single') || el.viewer;
+
+// Only what is on screen: nine badges are a promise about the visible page, not
+// about a transcript of four hundred messages.
+function pickTargets() {
+  const box = pickBox();
+  if (!box.getBoundingClientRect) return [];
+  const r = box.getBoundingClientRect();
+  return [...el.viewer.querySelectorAll('.mdblock, .mdcopyable')]
+    .filter((n) => {
+      const b = n.getBoundingClientRect();
+      return b.bottom > r.top + 2 && b.top < r.bottom - 2;
+    })
+    .slice(0, 9);
+}
+
+// A key that answers with silence is the kind this project keeps paying for, so
+// an empty page says so in the header instead of swallowing the press.
+function pickNothing() {
+  const head = el.viewer.querySelector('.vhead');
+  if (!head || el.viewer.querySelector('.pickhint')) return;
+  const hint = document.createElement('span');
+  hint.className = 'pickhint';
+  hint.textContent = tr('md.nothing');
+  head.appendChild(hint);
+  setTimeout(() => hint.remove(), 1500);
+}
+
+export function pickOpen() {
+  pickClose();
+  picked = pickTargets();
+  if (!picked.length) { pickNothing(); return false; }
+  picked.forEach((n, i) => { n.classList.add('picked'); n.dataset.pick = String(i + 1); });
+  const head = el.viewer.querySelector('.vhead');
+  if (head && !el.viewer.querySelector('.pickhint')) {
+    const hint = document.createElement('span');
+    hint.className = 'pickhint';
+    hint.textContent = tr('md.pick');
+    head.appendChild(hint);
+  }
+  return true;
+}
+
+export function pickClose() {
+  if (!picked.length) return;
+  for (const n of picked) { n.classList.remove('picked'); delete n.dataset.pick; }
+  picked = [];
+  const hint = el.viewer.querySelector('.pickhint');
+  if (hint) hint.remove();
+  // Whatever the server sent while the numbers were up has been waiting; put it
+  // in now, the same way the note editor does when it closes.
+  if (chatView && chatView.pending) {
+    const waiting = chatView.pending;
+    chatView.pending = null;
+    paintChat(waiting.msgs, waiting.fresh, true);
+  }
+}
+
+export const pickOn = () => picked.length > 0;
+
+function pickTake(n) {
+  const node = picked[n - 1];
+  pickClose();
+  if (!node) return true;
+  const btn = node.querySelector('.mdcopy') || node.querySelector('.mdcopy-in');
+  if (!btn) return true;
+  if (node.classList.contains('mdblock')) copyBlock(btn); else copyInline(btn);
+  return true;
+}
+
 // Строка клавиш внизу перечисляет то, что работает, — и обещание должно быть
 // правдой: C копирует, только когда в панели есть блок кода, поэтому и в
 // подсказке она появляется только тогда. Пустое обещание клавиши офис уже
@@ -850,10 +987,13 @@ export function bindCopyButtons() {
   if (!el.viewer || !el.viewer.addEventListener || el.viewer._copyBound) return;
   el.viewer._copyBound = true;
   el.viewer.addEventListener('click', (e) => {
-    const btn = e.target && e.target.closest && e.target.closest('.mdcopy');
-    if (!btn) return;
-    e.preventDefault();
-    copyBlock(btn);
+    if (!e.target || !e.target.closest) return;
+    const block = e.target.closest('.mdcopy');
+    if (block) { e.preventDefault(); copyBlock(block); return; }
+    // The inline button sits inside the link's wrapper, so the check has to run
+    // before the browser follows the link — hence preventDefault here too.
+    const inline = e.target.closest('.mdcopy-in');
+    if (inline) { e.preventDefault(); e.stopPropagation(); copyInline(inline); }
   });
 }
 
@@ -937,7 +1077,7 @@ export async function openFile(p, items = null, index = -1, title = '') {
   if (isImg) {
     inner = `<div class="zoomwrap"><img class="full" id="zimg" src="${url}"></div>`;
   } else {
-    const txt = await fetch(url).then((r) => r.ok ? r.text() : tr('gal.notServed') + r.status).catch((e) => e.message);
+    const txt = await fetch(url, { headers: owned() }).then((r) => r.ok ? r.text() : tr('gal.notServed') + r.status).catch((e) => e.message);
     if (mine !== viewToken) return;   // arrows moved on while this one was loading
     docKind = isMd ? 'md' : isHtml ? 'html' : null;
     mdSource = docKind ? txt : null;
@@ -1002,12 +1142,32 @@ function paintHeadFocus() {
 export function viewerKey(raw, big = false) {
   if (el.viewer.hidden) return false;
   const key = raw.toLowerCase();
-  // C копирует верхний блок кода — и в транскрипте, и в файле. Снаружи эта
-  // буква открывает инвентарь на «на себе», и до 4 сентября 2026 она делала
-  // это прямо поверх открытого просмотра: буквы проваливались сюда сквозь
-  // панель. Внутри просмотра переодеваться незачем, а копировать — постоянно;
-  // инвентарь остаётся на I, одним нажатием.
-  if ((key === 'c' || key === 'с') && el.viewer.querySelector('.mdblock')) return copyTopBlock();
+  // While the numbers are up they own the digits, ESC and C; anything else
+  // takes them down and goes on to do its usual job, so scrolling away from
+  // what you numbered cannot leave stale badges behind.
+  if (pickOn()) {
+    if (/^[1-9]$/.test(key)) return pickTake(Number(key));
+    if (key === 'escape' || key === 'c' || key === 'с') { pickClose(); return true; }
+    pickClose();
+  }
+
+  // C copies the block you are reading — in the transcript and in a file alike.
+  // Outside the viewer this letter opens the inventory on «on you», and until
+  // 4 September 2026 it did that on top of an open viewer: letters fell through
+  // the panel into the office. Inside the viewer there is nothing to change
+  // into and plenty to copy; the inventory stays one press away on I.
+  //
+  // Pressed a second time — or where the screen holds no code block — it hands
+  // the page to the digits instead.
+  if (key === 'c' || key === 'с') {
+    if (!copiedByC && el.viewer.querySelector('.mdblock') && copyTopBlock()) {
+      copiedByC = true;
+      return true;
+    }
+    copiedByC = false;
+    return pickOpen() || true;
+  }
+  copiedByC = false;
   if (transcriptKey(key, big)) return true;
   const n = gallery.items.length;
 
@@ -1208,7 +1368,7 @@ const bodyRow = (f) => `<div class="drow"><button data-f="${f.key}" data-d="-1">
 const selfHtml = () => `<div class="dbody">
       <canvas id="me" width="72" height="86"></canvas>
       <div class="rows">
-        <label class="namerow">${tr('dress.name')} <input id="myname" maxlength="14" value="${S.me.name || tr('label.me')}"></label>
+        <label class="namerow">${tr('dress.name')} <input id="myname" maxlength="14" value="${esc(S.me.name || '')}" placeholder="${tr('label.me')}"></label>
         <p class="tally">${tr('dress.tally', { water: S.me.drinks || 0, coffee: S.me.coffees || 0 })}</p>
         <p class="dcap">${tr('dress.colors')}</p>
         ${colorFields().map(colorRow).join('')}
@@ -1307,10 +1467,107 @@ const treeCard = (n) => {
     </div>`;
 };
 
+// Two views of the same tab. The flat columns are the default and stay it: a
+// person opening the tree wants one glance — what I have, what I do not, what
+// it becomes. The detailed view is for the one who asks for a harder tree, and
+// it is entered on purpose, with V.
+//
+// While it is up, the digits belong to it: 1–6 pick a direction, the way the
+// numbers in the transcript own the digits while they are lit. Tabs come back
+// with the digits as soon as V returns the flat view, and the bottom line says
+// so — a mode may take the keys, but it has to admit that it did.
+//
+// Design: Figma, WIP «Дерево модулей: варианты представления», six direction
+// frames plus the two switch frames.
+let treeWide = false;
+let treeDir = 'work';
+
+const dirSub = (t) => (t.free ? tr('tree.dir.free') : tr('tree.dir.count', { n: t.own, m: t.total }));
+
+// The view switch lives in the tree's own header, not in the row of tabs. That
+// row is shared by all four tabs and holds the key hint; a fifth thing that
+// belongs to one tab pushed the hint onto a second line at 700 CSS px — before
+// any scaling. Here the switch sits with what it switches.
+const treeHeadHtml = () => {
+  const dir = treeWide ? DIRS.find((d) => d.id === treeDir) : null;
+  return `<div class="thead2">
+      <b>${tr('tree.title')}${dir ? ' · ' + esc(L(dir.name)) : ''}</b>
+      <span class="vsw">${tr('tree.view')}
+        <button class="vbtn${treeWide ? '' : ' on'}" data-view="flat">${tr('tree.view.flat')}</button>
+        <button class="vbtn${treeWide ? ' on' : ''}" data-view="wide">${tr('tree.view.wide')}</button>
+        <kbd>V</kbd></span>
+    </div>`;
+};
+
+const dirsHtml = () => `<div class="tdirs">${DIRS.map((d, i) => {
+  const t = dirTally(d.id, treeOwn);
+  return `<button class="tdir${d.id === treeDir ? ' on' : ''}${t.free ? ' free' : ''}" data-dir="${d.id}">
+      <b>${i + 1} ${esc(L(d.name))}</b><span>${dirSub(t)}</span>
+      ${t.free ? `<em>${tr('tree.dir.noTiers')}</em>`
+        : `<i class="tbar"><u style="width:${Math.round(100 * t.own / Math.max(1, t.total))}%"></u></i>`}
+    </button>`;
+}).join('')}</div>`;
+
+// A keystone with its own switches beside it. The chain is drawn only where the
+// panel is wide enough — below that CSS hides it and the card carries the same
+// list in one line, because a label over a neighbour is worse than no label.
+const wideNode = (n, sel) => {
+  const st = treeState(n), subs = SUBS[n.id] || [];
+  return `<div class="wkey">
+      <button class="tnode ${st}${n.id === sel.id ? ' on' : ''}" data-id="${n.id}">
+        ${st === 'ghost' ? '' : `<i class="tico" style="--c:${TONE[n.id] || '#8c7660'}"></i>`}
+        <span>${esc(L(n.name))}</span>
+        ${st === 'own' || st === 'ghost' ? '' : `<em>${tr('tree.tag.' + n.tier)}</em>`}
+      </button>
+      ${subs.length ? `<div class="wsubs">${subs.map((x) => `<i class="wsub">${esc(L(x))}</i>`).join('')}</div>` : ''}
+    </div>`;
+};
+
+const wideHtml = () => {
+  const sel = treeCur();
+  const here = inDir(treeDir);
+  const tierRow = (tier) => {
+    // The ghost «+ whatever ships this year» belongs to the flat view: it is a
+    // promise about the tier as a whole, and a branch has nothing to hang it on.
+    const list = here.filter((n) => n.tier === tier);
+    if (!list.length) {
+      return `<p class="wempty">${tr(tier === 'floor' ? 'tree.wide.noFloor'
+        : treeDir === 'you' ? 'tree.wide.noSale' : 'tree.wide.noOffice')}</p>`;
+    }
+    return `<div class="wtier">${list.map((n) => wideNode(n, sel)).join('')}</div>`;
+  };
+  const gate = (tier) => {
+    const list = here.filter((n) => n.tier === tier);
+    const own = list.filter(treeOwn).length;
+    return `<div class="wgate"><b>${tr('tree.tier.' + tier)}</b><span>${
+      list.length ? tr('tree.gate.' + tier, { n: own, m: list.length }) : tr('tree.gate.' + tier + 'None')}</span></div>`;
+  };
+  return `<div class="bbody tbody wide">
+      ${treeHeadHtml()}
+      ${dirsHtml()}
+      <div class="tscroll">
+      <div class="wbody">
+        <div class="wtree" id="wtree"><svg class="tedges"></svg>
+          ${tierRow('floor')}
+          ${gate('floor')}
+          ${tierRow('office')}
+          ${gate('office')}
+          ${tierRow('room')}
+          <p class="wroom">${tr('tree.wide.room')}</p>
+        </div>
+        ${treeCard(sel)}
+      </div>
+      <p class="hint dim">${tr('tree.wide.keys')}</p>
+      </div>
+    </div>`;
+};
+
 const treeHtml = () => {
   const sel = treeCur();
   const cols = TIERS.map(treeCount);
   return `<div class="bbody tbody">
+      ${treeHeadHtml()}
+      <div class="tscroll">
       <div class="tcols">${cols.map((c) => `<div class="tcol${c.n === c.m ? ' own' : ''}">
         <b>${tr('tree.col.' + c.t, { n: c.n, m: c.m })}</b><span>${treeSub(c)}</span></div>`).join('')}</div>
       <div class="tree" id="tree"><svg class="tedges"></svg>
@@ -1321,6 +1578,7 @@ const treeHtml = () => {
       </div>
       ${treeCard(sel)}
       <p class="hint dim">${tr('tree.note')} ${tr('tree.keys')}</p>
+      </div>
     </div>`;
 };
 
@@ -1345,11 +1603,100 @@ function treeEdges() {
   svg.innerHTML = out;
 }
 
+// Edges in the detailed view join a paid node to the free one it grows out of,
+// across the gate between them. Same measuring as the flat view: real geometry,
+// because the panel width moves between 700 and 1000 and the rows do not.
+function wideEdges() {
+  const box = el.bag.querySelector('#wtree'), svg = box && box.querySelector('.tedges');
+  if (!svg || !box.getBoundingClientRect) return;
+  const o = box.getBoundingClientRect();
+  const at = (b) => {
+    const r = b.getBoundingClientRect();
+    return { x: r.left - o.left + r.width / 2, top: r.top - o.top, bottom: r.bottom - o.top };
+  };
+  const nodes = new Map([...box.querySelectorAll('.tnode')].map((b) => [b.dataset.id, b]));
+  let out = '';
+  for (const n of inDir(treeDir)) {
+    const p = n.parent && nodes.get(n.parent), c = nodes.get(n.id);
+    if (!p || !c) continue;
+    const a = at(p), z = at(c), my = (z.bottom + a.top) / 2;
+    const d = `M${a.x},${a.top} V${my} H${z.x} V${z.bottom}`;
+    out += `<path d="${d}"${c.classList.contains('own') ? ' class="lit"' : ''}/>`;
+  }
+  svg.setAttribute('viewBox', `0 0 ${o.width} ${o.height}`);
+  svg.innerHTML = out;
+}
+
+// Entering the detailed view opens the branch of what was being read, rather
+// than whatever direction was open last time: the card and the tree have to be
+// about the same thing, or the view reads as two panels stuck together.
+function toggleWide(to) {
+  const want = to === undefined ? !treeWide : to;
+  if (want === treeWide) return;
+  treeWide = want;
+  if (treeWide) {
+    const cur = treeCur();
+    if (cur && cur.dir) treeDir = cur.dir;
+  }
+  renderBag();
+}
+
+// Thresholds are measured off the panel, not the window: inside `zoom` a media
+// query still asks the window, and at 175% it answers about a panel twice the
+// size of the real one. The panel's own width in CSS pixels is the rect divided
+// by the scale, and that is the number the frames were drawn against.
+const uiScale = () => Number(getComputedStyle(document.documentElement).getPropertyValue('--ui')) || 1;
+
+function sizeWide() {
+  const wrap = el.bag.querySelector('.bagwrap');
+  const body = el.bag.querySelector('.wbody');
+  if (!wrap || !body || !wrap.getBoundingClientRect) return;
+  const w = wrap.getBoundingClientRect().width / uiScale();
+  body.classList.toggle('stack', w < 860);
+  body.classList.toggle('nosubs', w < 1000);
+}
+
+function bindTreeView() {
+  el.bag.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => toggleWide(b.dataset.view === 'wide'));
+  el.bag.querySelectorAll('[data-dir]').forEach((b) => b.onclick = () => pickDir(b.dataset.dir));
+  if (treeWide) { sizeWide(); wideEdges(); }
+}
+
+// Choosing a direction moves the card too: the node you were reading may live in
+// another branch, and a card about something off screen is a card about nothing.
+function pickDir(dir) {
+  if (!DIRS.some((d) => d.id === dir)) return;
+  treeDir = dir;
+  const here = inDir(dir);
+  if (!here.some((n) => n.id === treeSel)) {
+    treeSel = (here.find((n) => !treeOwn(n)) || here[0] || {}).id || treeSel;
+  }
+  renderBag();
+}
+
 function bindTree() {
   el.bag.querySelectorAll('.tnode').forEach((b) => b.onclick = () => { treeSel = b.dataset.id; renderBag(); });
+  if (treeWide) return;
   treeEdges();
   const on = el.bag.querySelector('.tnode.on');
   if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+}
+
+// Walking a direction: up and down cross the tiers, left and right step along a
+// tier. The tree here is small — five nodes at most — so the whole direction is
+// one list in reading order, and the arrows never leave it.
+function wideKey(key, cur) {
+  const here = inDir(treeDir);
+  const rank = (n) => TIERS.indexOf(n.tier === 'more' ? 'office' : n.tier);
+  const list = here.slice().sort((a, b) => rank(b) - rank(a) || a.row - b.row);
+  const i = Math.max(0, list.indexOf(cur));
+  let next = null;
+  if (key === 'arrowdown' || key === 'arrowright') next = list[(i + 1) % list.length];
+  else if (key === 'arrowup' || key === 'arrowleft') next = list[(i - 1 + list.length) % list.length];
+  else if (key === 'enter' || key === ' ') return true;
+  else return false;
+  if (next && next.id !== cur.id) { treeSel = next.id; renderBag(); }
+  return true;
 }
 
 // Ближайший по строке узел соседней колонки — когда ребра нет: «за год» не
@@ -1359,6 +1706,14 @@ const treeNear = (col, row) => LIBRARY.filter((n) => colOf(n) === col)
 
 function treeKey(key) {
   const cur = treeCur();
+  // V switches the view either way; in the detailed one the digits pick a
+  // direction, and the tiles carry those numbers so the promise is on screen.
+  if (key === 'v' || key === 'м') { toggleWide(); return true; }
+  if (treeWide) {
+    const n = Number(key);
+    if (Number.isInteger(n) && n >= 1 && n <= DIRS.length) { pickDir(DIRS[n - 1].id); return true; }
+    return wideKey(key, cur);
+  }
   let next = null;
   if (key === 'arrowup' || key === 'arrowdown') {
     const col = LIBRARY.filter((n) => colOf(n) === colOf(cur)).sort((a, b) => a.row - b.row);
@@ -1380,20 +1735,22 @@ export function renderBag(tab) {
   if (tab && tabs().includes(tab)) bagTab = tab;
   if (!tabs().includes(bagTab)) bagTab = 'self';
   el.bag.hidden = false;
-  el.bag.innerHTML = `<div class="rwrap bagwrap">
+  // The detailed view is the only place in the inventory that is wider than 700.
+  // That is the price of the mode, and it is paid only while the mode is on.
+  el.bag.innerHTML = `<div class="rwrap bagwrap${bagTab === 'tree' ? ' steady' : ''}${bagTab === 'tree' && treeWide ? ' wide' : ''}">
     <div class="vhead">${tr('bag.title')} · ${tr('bag.tab.' + bagTab)}<button id="bx">✕</button></div>
     <div class="btabs">
       ${tabs().map((t, i) => `<button class="btab${t === bagTab ? ' on' : ''}" data-tab="${t}">${tr('bag.tab.' + t)}<kbd>${i + 1}</kbd></button>`).join('')}
       <span class="bhint">${tr('bag.tabHint')}</span>
     </div>
-    ${bagTab === 'self' ? selfHtml() : bagTab === 'things' ? thingsHtml() : bagTab === 'tree' ? treeHtml() : officeHtml()}
+    ${bagTab === 'self' ? selfHtml() : bagTab === 'things' ? thingsHtml() : bagTab === 'tree' ? (treeWide ? wideHtml() : treeHtml()) : officeHtml()}
   </div>`;
 
   $('#bx').onclick = closeBag;
   el.bag.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => openTab(b.dataset.tab));
   if (bagTab === 'self') bindSelf();
   else if (bagTab === 'things') bindThings();
-  else if (bagTab === 'tree') bindTree();
+  else if (bagTab === 'tree') { bindTree(); bindTreeView(); }
   else bindOffice();
 }
 
@@ -1441,7 +1798,9 @@ function bindSelf() {
     paint();
   };
   paint();
-  $('#myname').oninput = (e) => { S.me.name = e.target.value.toUpperCase().slice(0, 14) || tr('label.me'); api.saveMe(); };
+  // An empty field is an empty name, not the word «ТЫ» stored as one: that
+  // string used to travel outward and label a stranger YOU.
+  $('#myname').oninput = (e) => { S.me.name = e.target.value.toUpperCase().slice(0, 14); api.saveMe(); };
   paintBagFocus();
   const rowFields = () => [...colorFields(), ...BODY, bottomCut];
   el.bag.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => {
@@ -1532,8 +1891,14 @@ export function bagKey(raw) {
 
   // Цифра — вкладка. Клавиши 1..9 в офисе больше ничем не заняты: масштаб
   // сидит на +, − и 0.
+  //
+  // The one exception is the detailed tree: while that view is up the digits
+  // pick a direction, because the tiles carry those numbers and a number on
+  // screen has to do what it says. Tabs get the digits back the moment V
+  // returns the flat view, and the line under the tree says so. The precedent
+  // is the transcript, where lit numbers own the digits until they go down.
   const n = Number(key);
-  if (Number.isInteger(n) && n >= 1 && n <= tabs().length) {
+  if (Number.isInteger(n) && n >= 1 && n <= tabs().length && !(bagTab === 'tree' && treeWide)) {
     openTab(tabs()[n - 1]);
     return true;
   }
@@ -1720,6 +2085,10 @@ export function focusRing(nodeOf, selector, opts = {}) {
     idx = Math.max(0, Math.min(l.length - 1, idx));
     l.forEach((b, i) => b.classList.toggle('focus', i === idx));
     l[idx].scrollIntoView({ block: 'nearest' });
+    // Панель, которой мало подсветить кнопку: у языка под кнопками стоит
+    // строка «что будет, если нажать», и она обязана меняться вместе с фокусом,
+    // а не по нажатию. Без этого цена показывалась бы уже уплаченной.
+    if (opts.onMove) opts.onMove(l[idx]);
   };
   return {
     paint,
@@ -1757,6 +2126,32 @@ export function focusRing(nodeOf, selector, opts = {}) {
         }
       }
 
+      // Панель со строками: ↑↓ переносят между строками, ←→ ходят внутри одной.
+      // Плоский обход тут врёт руке — «интерфейс» и «имена агентов» это два
+      // разных вопроса, и стрелка вниз должна отвечать на второй, а не
+      // доводить до конца первый.
+      if (opts.rows) {
+        const rows = [...nodeOf().querySelectorAll(opts.rows)]
+          .map((r) => l.filter((b) => r.contains(b)))
+          .filter((r) => r.length);
+        const at = rows.findIndex((r) => r.includes(cur));
+        if (at >= 0) {
+          const pos = rows[at].indexOf(cur);
+          const side = { arrowleft: -1, arrowright: 1 }[key];
+          if (side !== undefined) {
+            const row = rows[at];
+            idx = l.indexOf(row[(pos + side + row.length) % row.length]);
+            paint(); return true;
+          }
+          const down = { arrowup: -1, arrowdown: 1 }[key];
+          if (down !== undefined) {
+            const row = rows[(at + down + rows.length) % rows.length];
+            idx = l.indexOf(row[Math.min(pos, row.length - 1)]);
+            paint(); return true;
+          }
+        }
+      }
+
       const step = { arrowup: -1, arrowdown: 1, arrowleft: -1, arrowright: 1 }[key];
       if (step !== undefined) { idx = (idx + step + l.length) % l.length; paint(); return true; }
       if (key === 'enter' || key === ' ') {
@@ -1770,6 +2165,147 @@ export function focusRing(nodeOf, selector, opts = {}) {
     },
   };
 }
+
+// ------------------------------------------------------------ язык и имена
+//
+// Человечек в коридоре до 4 сентября 2026 щёлкал язык одним нажатием. Паков
+// имён стало два, а со временем будет больше — щелчком по кругу растущий
+// список не выбирают, поэтому ПРОБЕЛ открывает панель. Цена названа вслух:
+// вместо одного нажатия стало три.
+let packs = null;   // ответ /api/names, живёт пока панель открыта
+
+export async function openLang() {
+  el.lang.hidden = false;
+  langRing.reset();
+  renderLang();
+  // Цена нажатия приезжает отдельно и может опоздать: сервер однопоточный, и
+  // запрос, попавший в обход транскриптов, ждёт вместе со всеми. Панель к тому
+  // времени уже нарисована и читается — ждёт только строка про переименование.
+  packs = await api.names().catch((e) => ({ error: String(e && e.message), packs: [] }));
+  if (!el.lang.hidden) renderLang();
+}
+
+export function closeLang() { el.lang.hidden = true; packs = null; langRing.reset(); }
+
+// Что офис получит, нажав на этот пак: сколько имён сменится и пара примеров.
+// Считается по живым агентам, а не по всему реестру на диске: обещание «всех
+// 12» проверяется глазами по этажу, и число обязано сойтись именно с ним.
+function packChange(id) {
+  const p = packs && packs.packs.find((x) => x.id === id);
+  if (!p) return null;
+  const pairs = (S.agents || [])
+    .filter((a) => p.names[a.id] && p.names[a.id] !== a.name)
+    .map((a) => [a.name, p.names[a.id]]);
+  return { n: pairs.length, pairs };
+}
+
+// Пак, который получится, если выбрать это значение: «как язык офиса» —
+// не пак, а обещание идти за языком.
+const packUnder = (choice, lng) => (choice === 'auto' ? lng : choice);
+
+function renderLang() {
+  const lng = lang();
+  const choice = (packs && packs.choice) || (S.settings && S.settings.namePack) || 'auto';
+  const now = packUnder(choice, lng);
+  // Кнопки берутся из описи, а не из ответа про цену: список паков должен
+  // стоять на месте с первого кадра, иначе панель перерисовывается под рукой.
+  const ids = (S.packs || []).map((p) => p.id);
+  const mark = (on, text) => (on ? `● ${text}` : text);
+
+  const btn = (cls, attr, val, on, text) =>
+    `<button class="${cls}${on ? ' on' : ''}" ${attr}="${val}">${mark(on, text)}</button>`;
+
+  el.lang.innerHTML = `<div class="rwrap langwrap">
+    <div class="vhead">${tr('lang.title')}<button id="langx">✕</button></div>
+    <div class="langbody">
+      <p class="langlabel">${tr('lang.interface')}</p>
+      <div class="langrow">
+        ${btn('langbtn', 'data-lang', 'ru', lng === 'ru', 'Русский')}
+        ${btn('langbtn', 'data-lang', 'en', lng === 'en', 'English')}
+      </div>
+      <p class="langlabel">${tr('lang.names')}</p>
+      <div class="langrow">
+        ${btn('packbtn', 'data-pack', 'auto', choice === 'auto', tr('lang.auto'))}
+        ${ids.map((id) => btn('packbtn', 'data-pack', id, choice === id, tr('lang.pack.' + id))).join('')}
+      </div>
+      <p class="langwarn" hidden></p>
+      <p class="langstatus">${langStatus(now)}</p>
+      <p class="hint">${tr('lang.hint')}</p>
+    </div></div>`;
+
+  $('#langx').onclick = closeLang;
+  for (const b of el.lang.querySelectorAll('.langbtn')) {
+    b.onclick = () => api.setLang(b.dataset.lang);
+  }
+  for (const b of el.lang.querySelectorAll('.packbtn')) {
+    b.onclick = () => applyPack(b.dataset.pack);
+  }
+  langRing.paint();
+}
+
+// Размер и образец берутся из описи, приехавшей с настройками: она статична,
+// и ждать её незачем. Круга до сервера ждёт только цена нажатия.
+function langStatus(id) {
+  const p = (S.packs || []).find((x) => x.id === id);
+  if (!p) return tr('lang.counting');
+  return tr('lang.status', {
+    pack: tr('lang.pack.' + id),
+    names: p.sample.join(', '),
+    n: p.size - p.sample.length,
+  });
+}
+
+// Строка «что будет, если нажать» — она же цена. Показывается только у пака,
+// который сейчас не работает: у включённого нажимать нечего.
+function langWarn(node) {
+  const warn = el.lang && el.lang.querySelector('.langwarn');
+  const status = el.lang && el.lang.querySelector('.langstatus');
+  if (!warn || !status) return;
+  const pick = node && node.dataset ? node.dataset.pack : null;
+  const choice = (packs && packs.choice) || 'auto';
+  const target = pick ? packUnder(pick, lang()) : null;
+  const change = target && pick !== choice ? packChange(target) : null;
+
+  // Строка состояния идёт за фокусом: стоишь на «English» — она про английский
+  // словарь, а не про включённый. Иначе панель отвечает не на тот вопрос,
+  // который человек только что задал стрелкой.
+  status.innerHTML = langStatus(target || packUnder(choice, lang()));
+
+  if (!change || !change.n) { warn.hidden = true; warn.textContent = ''; return; }
+  const [first, second] = change.pairs;
+  const parts = [tr('lang.becomes', { from: first[0], to: first[1] })];
+  if (second) parts.push(tr('lang.also', { from: second[0], to: second[1] }));
+  warn.hidden = false;
+  warn.textContent = tr('lang.warn', { n: change.n, pairs: parts.join(', ') });
+}
+
+async function applyPack(pick) {
+  // Порядок здесь важнее красоты: сначала действие, потом рассказ о нём.
+  //
+  // Раньше тост ждал предпросмотр, и если тот не успел приехать, применение
+  // висело на его ожидании — офис переименовывался молча, а панель делала вид,
+  // что ничего не произошло. Круга до сервера тут два, и второй не должен
+  // задерживать первый: страница в этот момент рисует офис каждый кадр, и
+  // разбор ответа встаёт в очередь за отрисовкой — 3.6 секунды на стенде
+  // 4 сентября 2026 против 2 миллисекунд у curl по тому же адресу.
+  const before = packChange(packUnder(pick, lang()));
+  await api.saveSettings({ namePack: pick });
+  if (packs) packs.choice = pick;
+  renderLang();
+
+  // Цену знаем — называем число и пример, как на кадре. Не знаем — говорим
+  // хотя бы что переключили: молчание тут читается как «кнопка не сработала».
+  const name = tr('lang.pack.' + packUnder(pick, lang()));
+  if (!before || !before.n) return toast(tr('toast.namePackPlain', { pack: name }));
+  const [from, to] = before.pairs[0];
+  toast(tr('toast.namePack', { pack: name, n: before.n, from, to }));
+}
+
+const langRing = focusRing(() => el.lang, '.langbtn, .packbtn', {
+  rows: '.langrow', onMove: langWarn,
+});
+export function langKey(raw) { return langRing.key(raw, el.lang && !el.lang.hidden); }
+export function langOpen() { return el.lang && !el.lang.hidden; }
 
 const skyRing = focusRing(() => el.sky, '#skytoggle, #skyq, .skyhit, #skygeo');
 export function closeSky() { el.sky.hidden = true; skyRing.reset(); clearTimeout(geoTimer); }
@@ -1827,7 +2363,43 @@ export function closeInvite() { if (el.invite) el.invite.hidden = true; }
 
 export async function openInvite() {
   el.invite.hidden = false;
+  inviteSig = accessSig();
   await renderInvite();
+}
+
+// What the panel is showing right now, as one string. The snapshot arrives every
+// couple of seconds; redrawing on each of them would be honest and unusable —
+// the caret would jump out of «кого зовём» mid-word.
+const accessSig = () => {
+  const a = S.access || {};
+  return JSON.stringify([
+    (a.requests || []).map((r) => [r.id, r.state, r.who, r.agentId]),
+    (a.open || []).map((o) => [o.guestId, o.agentId]),
+  ]);
+};
+let inviteSig = '';
+
+// A request that arrives while the panel is open used to be invisible: the panel
+// was drawn when it opened and after every button in it, and by nothing else. It
+// sat in the snapshot, the owner sat looking at the panel, and the two never met
+// — found on a live build on 5 September 2026. Nothing was lost: the request
+// waits on the server until it is answered. It simply could not be seen without
+// closing the panel and opening it again.
+export async function syncInvite() {
+  if (!el.invite || el.invite.hidden) return;
+  const sig = accessSig();
+  if (sig === inviteSig) return;
+  inviteSig = sig;
+  // Whatever is being typed survives the redraw, caret included: the name is
+  // usually half-written exactly when somebody knocks.
+  const input = $('#invWho');
+  const typed = input ? { value: input.value, at: input.selectionStart, focused: document.activeElement === input } : null;
+  await renderInvite();
+  if (!typed) return;
+  const back = $('#invWho');
+  if (!back) return;
+  back.value = typed.value;
+  if (typed.focused) { back.focus(); try { back.setSelectionRange(typed.at, typed.at); } catch { /* поле могло сменить тип */ } }
 }
 
 async function renderInvite() {
@@ -1862,7 +2434,7 @@ async function renderInvite() {
   // Ответ сервера несёт свежий список — берём его сразу, не дожидаясь снимка:
   // тот приходит раз в 2.5 секунды, и всё это время нажатая кнопка выглядела
   // бы ненажатой.
-  const took = async (r) => { if (r && r.access) S.access = r.access; await renderInvite(); };
+  const took = async (r) => { if (r && r.access) S.access = r.access; inviteSig = accessSig(); await renderInvite(); };
   el.invite.querySelectorAll('[data-yes]').forEach((b) => {
     b.onclick = async () => took(await api.answerAccess(b.dataset.yes, true));
   });
@@ -2051,8 +2623,13 @@ export async function openTranscript(a, focusTs = null) {
   el.viewer.hidden = false;
   gallery = { items: [], title: '', sel: 0, mode: 'grid' };   // Esc отсюда закрывает, а не возвращает в чужую галерею
   chatView = { agent: a, msgs: [], token: 0, editing: null, pending: null, focusTs };
-  el.viewer.innerHTML = `<div class="vwrap"><div class="vhead">${tr('chat.title', { name: esc(a.name) })}
-      <span class="zhint" id="chatst">${esc(a.title || '')}</span><button id="vx">✕</button></div>
+  // The header in two rows: who is talking — what he is working on. The session
+  // name stays in the top right corner at the size it had, and service lines such
+  // as a postponed re-read appear in the same place.
+  el.viewer.innerHTML = `<div class="vwrap"><div class="vhead vhead2">
+      <span class="vrow">${tr('chat.title', { name: esc(a.name) })}
+        <span class="zhint" id="chatst">${esc(a.title || '')}</span><button id="vx">✕</button></span>
+      <span class="vrow vtask" id="chattask">${chatTask(a)}</span></div>
     <div class="single chatlog" id="chatlog"><p class="hint">${tr('chat.reading')}</p></div>
     <div class="vpath">${tr('chat.keys')}<span class="ncount" id="ncount"></span></div></div>`;
   $('#vx').onclick = closeViewer;
@@ -2089,6 +2666,11 @@ function paintChat(msgs, fresh = 0, force = false) {
   // Пока человек пишет заметку, лог не трогаем: перерисовка сотрёт недописанное.
   // Свежие данные ждут в pending и лягут, как только редактор закроется.
   if (chatView.editing && !force) { chatView.pending = { msgs, fresh }; return; }
+  // The same holds while the numbers are up: a repaint rebuilds the log and the
+  // badges vanish under the hand that was choosing. Found on 5 September 2026 —
+  // the numbers appeared and were gone a second later, and it read as the key
+  // not working at all.
+  if (pickOn() && !force) { chatView.pending = { msgs, fresh }; return; }
   const a = chatView.agent;
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
   const keep = box.scrollTop;
@@ -2113,6 +2695,15 @@ function paintChat(msgs, fresh = 0, force = false) {
         + (ed && !ed.id && ed.ts === m.ts ? noteEditor(m.ts, ed.text) : '')).join('')
     : loose + `<p class="empty">${tr('chat.empty')}</p>`;
   chatView.msgs = msgs;
+  // The conversation was opened with a snapshot of the agent, while the task is
+  // rewritten by every new answer: take the fresh one from the list, or the head
+  // freezes on whatever he was doing when the panel was opened.
+  const head = $('#chattask');
+  const live = (S.agents || []).find((x) => x.id === a.id) || a;
+  if (head) {
+    const html = chatTask(live);
+    if (head.innerHTML !== html) head.innerHTML = html;
+  }
   paintNoteCount();
   bindNoteControls();
   // Пришли из панели заметок — встаём на ту реплику, к которой она привязана,
@@ -2228,7 +2819,7 @@ const chatStatus = (text) => { const st = $('#chatst'); if (st) st.textContent =
 async function loadChat(fresh) {
   const a = chatView.agent;
   const mine = ++chatView.token;
-  const r = await fetch('/api/chat?id=' + encodeURIComponent(a.id))
+  const r = await fetch('/api/chat?id=' + encodeURIComponent(a.id), { headers: owned() })
     .then((x) => x.json()).catch((e) => ({ error: e.message }));
   if (!chatView || chatView.token !== mine || el.viewer.hidden) return;
   const box = $('#chatlog');
@@ -2300,17 +2891,42 @@ export function renderNotes() {
   const alive = new Set(S.agents.map((a) => a.id));
   const stamp = (ms) => new Date(ms).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
+  // A note whose address is not a session belongs to somebody else, and the
+  // core does not read it: it shows the address to every module and takes the
+  // first that answers. The answer carries a label for the button and what to
+  // do on a press. Nobody answered — the row says so, as it does for a closed
+  // chat, and the note still reads, because its line of context is stored.
+  const claims = new Map();
+  for (const n of hit) {
+    if (!n.anchor || n.anchor.kind === 'agent') continue;
+    const claim = first('note', n.key, n.ctx || {});
+    if (claim && typeof claim.open === 'function') claims.set(n.id, claim);
+  }
+
   const rows = [...groups.entries()].map(([project, list]) => `
     <div class="ngroup"><h4>${project ? '▣ ' + esc(project) : tr('notes.noProject')}</h4>
       ${list.map((n) => {
-        const live = alive.has(n.agentId);
+        const a = n.anchor || { kind: 'agent' };
+        const foreign = a.kind !== 'agent';
+        const live = !foreign && alive.has(n.agentId);
         const who = n.ctx && n.ctx.agent
           ? esc(n.ctx.agent) + (n.ctx.title ? ' · ' + esc(n.ctx.title) : '')
           : '';
-        const tail = live
-          ? `<button class="ngo" data-go="${n.agentId}" data-ts="${n.ts == null ? '' : n.ts}">${tr('notes.open')}</button>`
-          : `<span class="ndead">${tr('notes.closed')}</span>`;
-        const under = live ? who : (n.ctx && n.ctx.quote ? '«' + esc(n.ctx.quote) + '»' + (who ? ' · ' + who : '') : tr('notes.noCtx'));
+        const claim = claims.get(n.id);
+        const tail = foreign
+          ? (claim
+            ? `<button class="ngo" data-open="${n.id}">${esc(claim.label || tr('notes.open'))}</button>`
+            : `<span class="ndead">${tr('notes.noOpener')}</span>`)
+          : live
+            ? `<button class="ngo" data-go="${n.agentId}" data-ts="${n.ts == null ? '' : n.ts}">${tr('notes.open')}</button>`
+            : `<span class="ndead">${tr('notes.closed')}</span>`;
+        // Under the text goes what the note hangs on. For a foreign address it
+        // is the line its owner wrote when the note was made — the core has no
+        // words of its own for something it does not interpret, and a made-up
+        // phrasing would be a second truth about somebody else's anchor.
+        const under = foreign
+          ? (n.ctx && n.ctx.line ? esc(n.ctx.line) : tr('notes.noCtx'))
+          : live ? who : (n.ctx && n.ctx.quote ? '«' + esc(n.ctx.quote) + '»' + (who ? ' · ' + who : '') : tr('notes.noCtx'));
         return `<div class="nrow" data-note="${n.id}" data-agent="${n.agentId}">
           <div class="nline"><span class="ntext">${esc(n.text)}</span><i>${stamp(n.at)}</i></div>
           <div class="nmeta"><span>${under}</span>${tail}
@@ -2339,6 +2955,12 @@ export function renderNotes() {
     input.blur();
     notesRing.at(0);
   };
+  el.notes.querySelectorAll('[data-open]').forEach((b) => b.onclick = () => {
+    const claim = claims.get(b.dataset.open);
+    if (!claim) { renderNotes(); return; }     // the module left while the panel was open
+    closeNotes();
+    claim.open();
+  });
   el.notes.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => {
     const agent = S.agents.find((a) => a.id === b.dataset.go);
     if (!agent) { renderNotes(); return; }      // успел закрыться, пока смотрел

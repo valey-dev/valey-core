@@ -1,11 +1,11 @@
-// Версия проекта и его стек — то, что дописывается второй строкой на табличке
-// над дверью комнаты. Читаются только манифесты в корне репозитория: обход
-// дерева ради этого не нужен, а на большом проекте он стоил бы секунды.
+// A project's version and its stack — the second line on the sign above the
+// room's door. Only the manifests in the repository root are read: walking the
+// tree for this is unnecessary, and on a large project it would cost seconds.
 //
-// Ловушка тут одна, и она стоит всего остального модуля: у Next-проекта тоже
-// есть package.json, и наивная проверка «есть package.json → Node» объявляет
-// «Node» весь мир. Поэтому сначала фреймворк по зависимостям, и только потом
-// язык по самому манифесту.
+// There is one trap here, and it is worth the rest of the module: a Next
+// project has a package.json too, and the naive "package.json is here → Node"
+// declares the whole world to be "Node". So the framework comes first, from the
+// dependencies, and only then the language, from the manifest itself.
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -14,26 +14,26 @@ import { promisify } from 'node:util';
 
 const run = promisify(execFile);
 
-const roots = new Map();          // каталог сессии -> { at, root }
+const roots = new Map();          // session directory -> { at, root }
 const ROOT_TTL = 60_000;
 
-// Имя комнаты из ответа git. `--git-common-dir` показывает на служебный каталог
-// репозитория — и на «/путь/проект/.git», и на голый «/путь/проект.git»;
-// комната называется по тому, что лежит вокруг него.
+// The room's name out of git's answer. `--git-common-dir` points at the
+// repository's own directory — both "/path/project/.git" and a bare
+// "/path/project.git"; the room is named after what sits around it.
 export function rootFromCommonDir(commonDir, dir) {
   if (!commonDir) return dir;
   const g = commonDir.replace(/\/+$/, '');
   return path.basename(g) === '.git' ? path.dirname(g) : g.replace(/\.git$/, '');
 }
 
-// Корень репозитория для рабочего каталога сессии. Комната в офисе — это
-// проект, а не рабочая копия: агент, ушедший в git worktree, сидит в каталоге
-// со своим именем (.claude/worktrees/<тема>), и по basename ему доставалась
-// отдельная комната. 30 августа 2026 на этаже стояло девять комнат на четыре
-// проекта, и два агента одного репозитория оказывались в разных его концах.
-// `--git-common-dir` отвечает одинаково из основного чекаута и из любого
-// worktree, в том числе созданного вне репозитория, — он и есть признак «тот
-// же проект». Не репозиторий — остаётся сам каталог, как было.
+// The repository root for a session's working directory. A room in the office
+// is a project, not a working copy: an agent who moved into a git worktree sits
+// in a directory with its own name (.claude/worktrees/<topic>), and by basename
+// it got a room of its own. On 30 August 2026 the floor held nine rooms for
+// four projects, and two agents of one repository ended up at opposite ends of
+// it. `--git-common-dir` answers the same from the main checkout and from any
+// worktree, including one created outside the repository — that is the mark of
+// "the same project". Not a repository — the directory itself stays, as before.
 export async function repoRoot(dir) {
   if (!dir) return dir;
   const hit = roots.get(dir);
@@ -43,28 +43,28 @@ export async function repoRoot(dir) {
     const { stdout } = await run('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'],
       { cwd: dir, timeout: 2000 });
     root = rootFromCommonDir(stdout.trim(), dir);
-  } catch { /* не репозиторий — комната по каталогу */ }
+  } catch { /* not a repository — the room is named after the directory */ }
   roots.set(dir, { at: Date.now(), root });
   return root;
 }
 
-// Синхронное чтение того же кэша. Нужно затем, что имя комнаты спрашивают из
-// синхронного кода в трёх местах, а git — вызов асинхронный: кэш греется один
-// раз за снимок, читается мгновенно, и до первого прогрева комната зовётся по
-// каталогу — как до этой правки.
+// A synchronous read of the same cache. Needed because the room name is asked
+// for from synchronous code in three places while git is an async call: the
+// cache warms once per snapshot, reads instantly, and until the first warm-up
+// the room is named after the directory — as it was before this change.
 export const repoRootCached = (dir) => (roots.get(dir) || {}).root || dir;
 
-// Порядок здесь — это и есть приоритет: первый манифест, который смог назвать
-// стек, отвечает и за версию. Файл, лежащий выше в списке, выигрывает у всех,
-// что ниже, — иначе монорепа с package.json и pyproject.toml отвечает по
-// настроению файловой системы.
+// The order here is the priority: the first manifest that could name the stack
+// answers for the version too. A file higher in the list beats everything below
+// it — otherwise a monorepo with a package.json and a pyproject.toml answers
+// according to the filesystem's mood.
 export const MANIFESTS = [
   'package.json', 'pubspec.yaml', 'Cargo.toml', 'pyproject.toml',
   'go.mod', 'Gemfile', 'composer.json', 'Package.swift', 'build.gradle.kts',
 ];
 
-// Зависимость → как это называется на табличке. Проверяется по порядку, потому
-// что next тянет за собой react, а nuxt — vue: побеждает тот, кто конкретнее.
+// Dependency → what it is called on the sign. Checked in order, because next
+// drags react along and nuxt drags vue: the more specific one wins.
 const JS_FRAMEWORKS = [
   ['next', 'Next'], ['nuxt', 'Nuxt'], ['@remix-run/react', 'Remix'],
   ['@angular/core', 'Angular'], ['astro', 'Astro'], ['@sveltejs/kit', 'SvelteKit'],
@@ -77,43 +77,44 @@ const PY_FRAMEWORKS = [
   ['django', 'Django'], ['fastapi', 'FastAPI'], ['flask', 'Flask'], ['torch', 'PyTorch'],
 ];
 
-// Мажор фреймворка — «Next 16» говорит больше, чем «Next». Диапазоны и
-// префиксы (^16.1.2, ~2.0, >=4) сводятся к первому числу; workspace:*, link: и
-// git-ссылки числа не содержат вовсе, и тогда остаётся голое имя.
+// The framework's major — "Next 16" says more than "Next". Ranges and prefixes
+// (^16.1.2, ~2.0, >=4) reduce to the first number; workspace:*, link: and git
+// references contain no number at all, and then the bare name is what is left.
 const major = (spec) => {
   const m = /(\d+)/.exec(String(spec || ''));
   return m ? ` ${m[1]}` : '';
 };
 
-// Проверка через `in`, а не по истинности значения: у питоньих зависимостей
-// версия не разбирается и значение пустое, но сам факт зависимости есть.
+// Checked with `in` rather than by truthiness: for Python dependencies the
+// version is not parsed and the value is empty, but the dependency is there.
 const firstDep = (deps, table) => {
   for (const [dep, label] of table) if (dep in deps) return label + major(deps[dep]);
   return null;
 };
 
-// Версия из манифеста бывает пустой строкой, нулём и «0.0.0» — последнее пишут
-// генераторы проектов, и на табличке оно выглядит как настоящая версия, хотя
-// значит ровно «никто не проставил».
-// «v» приписывается только числу. Тег `ios/1.0.0-build21` — тоже версия, и
-// «vios/1.0.0-build21» на табличке читается как опечатка: увиденное 29 августа
-// 2026 на первом же прогоне по живым проектам.
+// A manifest version comes as an empty string, as zero and as "0.0.0" — the
+// last one is what project generators write, and on the sign it looks like a
+// real version while it means exactly "nobody filled this in".
+// The "v" is prepended to a number only. The tag `ios/1.0.0-build21` is a
+// version too, and "vios/1.0.0-build21" on the sign reads as a typo: seen on
+// 29 August 2026 on the first run against live projects.
 const usableVersion = (v) => {
   const s = String(v ?? '').trim().replace(/^v(?=\d)/, '');
   if (!s || s === '0.0.0' || s === '0.0.0-0') return null;
   return /^\d/.test(s) ? 'v' + s : s;
 };
 
-// Ключ = значение из toml/yaml верхнего уровня, без разбора всего формата:
-// нужна одна строка, а тянуть парсер ради неё в проект без зависимостей нельзя.
+// A key = value from top-level toml/yaml, without parsing the whole format:
+// one line is needed, and pulling a parser into a dependency-free project for
+// it is not on.
 const topLevel = (text, key) => {
   const re = new RegExp(`^${key}\\s*[:=]\\s*["']?([^"'\\n#]+)`, 'm');
   const m = re.exec(text);
   return m ? m[1].trim() : null;
 };
 
-// Разбор одного манифеста. Чистая функция от текста — из-за неё модуль и
-// тестируется без файловой системы.
+// Parsing one manifest. A pure function of the text — which is why this module
+// is testable without a filesystem.
 export function readManifest(file, text) {
   try {
     if (file === 'package.json') {
@@ -122,7 +123,7 @@ export function readManifest(file, text) {
       return { version: usableVersion(p.version), stack: firstDep(deps, JS_FRAMEWORKS) || 'Node' };
     }
     if (file === 'pubspec.yaml') {
-      // 1.2.3+45 — «+45» это номер сборки для сторов, на табличке он лишний
+      // 1.2.3+45 — the "+45" is a store build number, and the sign does not need it
       const v = usableVersion((topLevel(text, 'version') || '').split('+')[0]);
       return { version: v, stack: /^\s*flutter\s*:/m.test(text) ? 'Flutter' : 'Dart' };
     }
@@ -130,10 +131,11 @@ export function readManifest(file, text) {
       return { version: usableVersion(topLevel(text, 'version')), stack: /tauri/.test(text) ? 'Tauri' : 'Rust' };
     }
     if (file === 'pyproject.toml') {
-      // Зависимости в pyproject лежат тремя способами (PEP 621, poetry, pdm) и
-      // все три пишут имя пакета первым словом строки или первым в кавычках.
-      // Ищем именно имена, а не подстроку: «django» встречается и в описании
-      // проекта, и в url репозитория, и в имени самого пакета.
+      // Dependencies in a pyproject sit in three shapes (PEP 621, poetry, pdm)
+      // and all three write the package name as the first word of the line or
+      // the first in quotes. We look for names, not for a substring: "django"
+      // also turns up in the project description, in the repository url and in
+      // the package's own name.
       const deps = {};
       for (const m of text.matchAll(/(?:^\s*|["'])([a-zA-Z][a-zA-Z0-9_.-]*)\s*(?:[=><~^!]|["']\s*[:=])/gm)) {
         deps[m[1].toLowerCase()] = '';
@@ -149,12 +151,12 @@ export function readManifest(file, text) {
     }
     if (file === 'Package.swift') return { version: null, stack: 'Swift' };
     if (file === 'build.gradle.kts') return { version: usableVersion(topLevel(text, 'version')), stack: 'Kotlin' };
-  } catch { /* битый манифест — та же пустота, что и отсутствующий */ }
+  } catch { /* a broken manifest is the same emptiness as a missing one */ }
   return null;
 }
 
-// Первый манифест из MANIFESTS, который вообще прочитался. Версии в нём может
-// не быть — это отдельный случай, и её добирает git.
+// The first manifest from MANIFESTS that could be read at all. It may hold no
+// version — that is a separate case, and git fills it in.
 export function pickManifest(found) {
   for (const file of MANIFESTS) {
     if (found[file] == null) continue;
@@ -164,7 +166,7 @@ export function pickManifest(found) {
   return null;
 }
 
-// ------------------------------------------------------------------ с диска
+// ------------------------------------------------------------- from the disk
 
 const TTL = 5 * 60_000;
 const cache = new Map(); // dir -> { at, info }
@@ -172,14 +174,15 @@ const cache = new Map(); // dir -> { at, info }
 async function readRoot(dir) {
   const found = {};
   await Promise.all(MANIFESTS.map(async (f) => {
-    try { found[f] = await fsp.readFile(path.join(dir, f), 'utf8'); } catch { /* нет так нет */ }
+    try { found[f] = await fsp.readFile(path.join(dir, f), 'utf8'); } catch { /* not there, fine */ }
   }));
   return found;
 }
 
-// Запасной вариант, когда манифест есть, а версии в нём нет (go.mod, Gemfile) —
-// или манифеста нет вовсе. Тег без коммитов сверху, поэтому --abbrev=0: длинный
-// «v1.2.3-14-gdeadbee» на табличке шириной в тридцать пикселей не помещается.
+// The fallback for when there is a manifest but no version in it (go.mod,
+// Gemfile) — or no manifest at all. The tag without the commits on top of it,
+// hence --abbrev=0: a long "v1.2.3-14-gdeadbee" does not fit on a sign thirty
+// pixels wide.
 async function gitTag(dir) {
   try {
     const { stdout } = await run('git', ['describe', '--tags', '--abbrev=0'], { cwd: dir, timeout: 2000 });
@@ -189,10 +192,10 @@ async function gitTag(dir) {
   }
 }
 
-// { version, stack } для корня репозитория. Обе половины независимы: нашлась
-// версия без стека — вернётся только версия. Не нашлось ничего — вернётся
-// пустой объект, и табличка останется ровно такой, как была: выдуманный v0.0.0
-// хуже пустоты, он выглядит как правда.
+// { version, stack } for a repository root. The two halves are independent: a
+// version found without a stack returns just the version. Nothing found returns
+// an empty object, and the sign stays exactly as it was: an invented v0.0.0 is
+// worse than nothing, because it looks like the truth.
 export async function projectInfo(dir) {
   if (!dir) return {};
   const hit = cache.get(dir);
@@ -200,9 +203,10 @@ export async function projectInfo(dir) {
 
   const picked = pickManifest(await readRoot(dir));
   const info = {};
-  // Репозиторий ли это — вопрос той же цены и того же кэша, что стек: один
-  // запрос на каталог раз в пять минут. От ответа зависит, вырастет ли в
-  // комнате дерево, а комната без гита остаётся с обычным цветком.
+  // Whether this is a repository costs the same as the stack and shares its
+  // cache: one call per directory every five minutes. The answer decides
+  // whether a tree grows in the room; a room without git keeps its ordinary
+  // plant.
   info.git = await hasRepo(dir);
   if (picked?.stack) info.stack = picked.stack;
   const version = picked?.version || await gitTag(dir);

@@ -1,27 +1,28 @@
-// node tools/test-settings-move.mjs — переезд настроек из каталога кода в
-// пользовательский конфиг.
+// node tools/test-settings-move.mjs — settings moving from the code directory
+// into the user's config.
 //
-// Настройки лежали рядом с кодом до 30 августа 2026. Пока офис ставился через
-// git clone, это было незаметно; с доставкой приложением каталог кода
-// становится сменным — обновление версии заменяет его целиком. А внутри имена
-// агентов (в живом файле их было 157), рассадка и токен Figma. Обновление
-// молча переименовало бы весь офис, и это ровно тот сорт поломки, который
-// никто не заметит до следующего входа.
+// The settings sat next to the code until 30 August 2026. While the office was
+// installed by git clone that went unnoticed; with delivery as an app the code
+// directory becomes replaceable — a version update swaps it whole. And inside are
+// the agents' names (157 of them in the live file), the seating and the Figma
+// token. An update would silently rename the whole office, and that is exactly
+// the sort of breakage nobody notices until the next visit.
 //
-// Проверяется здесь одно: что переезд НИЧЕГО не теряет. Старый файл остаётся
-// на месте, новый не перезаписывается, а когда есть оба — не выбирается
-// молча ни один.
+// One thing is checked here: that the move loses NOTHING. The old file stays
+// where it was, the new one is not overwritten, and when both exist neither is
+// chosen in silence.
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-// VALEY_SETTINGS перебивает и VALEY_CONFIG_DIR, и всё остальное: это «весь файл
-// в сторону» одной переменной. Стенд заводит себе временный каталог, но если
-// переменная досталась ему из окружения — а она достаётся, когда в соседнем
-// ворктри поднимали офис своей командой, — тест проверяет чужой файл и падает
-// на ровном месте. Найдено 2 сентября 2026: переезд «не состоялся», потому что
-// на новом месте лежал файл другой ветки.
+// VALEY_SETTINGS overrides VALEY_CONFIG_DIR and everything else: it is "the
+// whole file aside" in one variable. The stand makes itself a temp directory,
+// but if the variable came in from the environment — and it does, when an office
+// was raised in a neighbouring worktree by its own command — the test checks
+// somebody else's file and fails over nothing. Found on 2 September 2026: the
+// move "did not happen", because the file at the new place belonged to another
+// branch.
 delete process.env.VALEY_SETTINGS;
 
 let bad = 0;
@@ -30,17 +31,18 @@ const ok = (name, cond, got) => {
   else { bad++; console.log('УПАЛ  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
 };
 
-// fileURLToPath, а не url.pathname: в пути проекта есть пробел, и pathname
-// оставляет его как %20 — файл тогда ищется рядом с несуществующим каталогом.
+// fileURLToPath rather than url.pathname: the project path contains a space, and
+// pathname leaves it as %20 — the file is then looked for next to a directory
+// that does not exist.
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const LEGACY = path.join(ROOT, '.settings.json');
 const legacyExisted = await fsp.readFile(LEGACY, 'utf8').catch(() => null);
 
-// VALEY_SETTINGS уводит файл настроек целиком в сторону — и AGENTS.md прямо
-// велит ставить его каждому воркtree. Со включённой переменной этот стенд
-// проверял чужой файл и падал так, будто сломан переезд: 1 сентября 2026 на
-// этом потерялось время, хотя код был ни при чём. Стенд отвечает за свои
-// временные каталоги, поэтому переменную снимает с себя сам.
+// VALEY_SETTINGS moves the settings file aside whole — and AGENTS.md explicitly
+// tells every worktree to set it. With the variable on, this stand checked
+// somebody else's file and failed as if the move were broken: on 1 September 2026
+// that cost time while the code had nothing to do with it. The stand answers for
+// its own temp directories, so it takes the variable off itself.
 delete process.env.VALEY_SETTINGS;
 
 const fresh = async () => {
@@ -53,7 +55,7 @@ const writeLegacy = (o) => fsp.writeFile(LEGACY, JSON.stringify(o, null, 2));
 
 const SAMPLE = { lang: 'en', names: { 's1': 'Петя', 's2': 'Лиза' }, secrets: { token: 'СЕКРЕТ' } };
 
-// ---------------------------------------------- переезд со старого места
+// ---------------------------------------------- the move from the old place
 {
   await writeLegacy(SAMPLE);
   const { dir, mod } = await fresh();
@@ -68,7 +70,7 @@ const SAMPLE = { lang: 'en', names: { 's1': 'Петя', 's2': 'Лиза' }, secr
   ok('офис читает перенесённые имена', s.names.s1 === 'Петя', s.names);
 }
 
-// ------------------------------------- на новом месте уже есть свои данные
+// ------------------------------------- there is already data at the new place
 {
   await writeLegacy(SAMPLE);
   const { dir, mod } = await fresh();
@@ -82,7 +84,7 @@ const SAMPLE = { lang: 'en', names: { 's1': 'Петя', 's2': 'Лиза' }, secr
   ok('и его имена целы', after.names.s9 === 'Марк', after.names);
 }
 
-// ------------------------------------------------- переносить нечего
+// ------------------------------------------------- nothing to move
 {
   await fsp.rm(LEGACY, { force: true });
   const { mod } = await fresh();
@@ -92,7 +94,7 @@ const SAMPLE = { lang: 'en', names: { 's1': 'Петя', 's2': 'Лиза' }, secr
   ok('и настройки берутся по умолчанию', s.lang === 'ru' && Object.keys(s.names).length === 0, s.lang);
 }
 
-// ------------------------------------------------------- битый старый файл
+// ------------------------------------------------------- a broken old file
 {
   await fsp.writeFile(LEGACY, '{ это не json');
   const { dir, mod } = await fresh();
@@ -105,7 +107,7 @@ const SAMPLE = { lang: 'en', names: { 's1': 'Петя', 's2': 'Лиза' }, secr
   ok('офис при этом поднимается на умолчаниях', s.lang === 'ru');
 }
 
-// вернуть дерево ровно в то состояние, в каком тест его застал
+// put the tree back exactly as the test found it
 await fsp.rm(LEGACY, { force: true });
 if (legacyExisted !== null) await fsp.writeFile(LEGACY, legacyExisted);
 

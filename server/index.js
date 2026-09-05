@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { snapshot, fileOwners, conversation } from './agents.js';
+import { snapshot, fileOwners, conversation, PACK_IDS, namePool, nameSample, effectivePack, previewPack } from './agents.js';
 import { realWeather, forgetWeather, geocode } from './weather.js';
 import { getSettings, patchSettings, publicSettings, ownerToken } from './settings.js';
 import { deliver, deliveryStatus, isBusy, MODES } from './deliver.js';
@@ -22,21 +22,27 @@ const MODS = path.join(ROOT, 'modules');
 const PORT = Number(process.env.PORT || 5177);
 const POLL_MS = 2500;
 
-// Версия офиса — из своего package.json, а не строкой в интерфейсе: её
-// показывает табличка на титульном экране, и в релизном ролике она должна
-// совпадать с тегом.
+// The office version comes from its own package.json rather than a string in
+// the interface: the sign on the title screen shows it, and in a release video
+// it has to match the tag.
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 
 let last = { now: 0, agents: [], version: VERSION };
 
-// Страховка от одной пропущенной ошибки. Обработчик ниже завёрнут в try, но
-// промис, брошенный без await, туда не попадает — а без этой строки Node
-// гасит процесс, и офис, к которому подключены вкладки, просто исчезает.
+// The dictionaries as a list: how many names a pack holds and four samples. It
+// never changes, so it is computed once and rides out with the settings — the
+// panel draws its dictionary line at once, without waiting for a round trip.
+const PACK_LIST = PACK_IDS.map((id) => ({ id, size: namePool(id).length, sample: nameSample(id) }));
+
+// The backstop for one missed error. The handler below is wrapped in a try, but
+// a promise thrown without an await never reaches it — and without this line
+// Node kills the process, and the office the tabs are connected to simply
+// disappears.
 process.on('unhandledRejection', (err) => {
   console.error('[unhandled]', (err && err.stack) || err);
 });
-// Комната -> каталог на диске. Единственный способ назвать каталог для /api/git:
-// клиент присылает ключ комнаты, который офис и так показывает на двери.
+// Room -> directory on disk. The only way to name a directory for /api/git: the
+// client sends the room key that the office already shows on the door.
 const cwdOfProject = (project) => {
   const a = (last.agents || []).find((x) => x.project === project && x.cwd);
   return a ? a.cwd : null;
@@ -46,35 +52,36 @@ const clients = new Set();
 const outbox = [];
 let taskSeq = 0;
 
-// --------------------------------------------------------------- проекция
-// Что гость видит об агенте. Ровно то, что видно всякому, кто стоит рядом с
-// его столом: имя, роль, комната, состояние, давность. И ничего из того, что
-// агент делает: ни последней реплики, ни запроса, ни файлов, ни ветки, ни пути
-// проекта — путь тут вообще чужой домашний каталог.
+// ------------------------------------------------------------- the projection
+// What a guest sees about an agent. Exactly what is visible to anyone standing
+// by his desk: the name, the trade, the room, the state, how long ago. And
+// nothing of what the agent does: not the last thing said, not the prompt, not
+// the files, not the branch, not the project path — that path is somebody
+// else's home directory.
 //
-// Список белый, а не чёрный, и это не вкусовщина: снимок собирается из
-// транскрипта, и следующее добавленное туда поле по чёрному списку уехало бы
-// наружу молча.
+// The list is an allowlist rather than a denylist, and that is not taste: the
+// snapshot is assembled from a transcript, and with a denylist the next field
+// added there would go out in silence.
 const SHOWN = [
   'id', 'name', 'gender', 'project', 'seat', 'role', 'roleKey',
   'status', 'act', 'activity', 'mood', 'idleFor', 'startedAt',
   'limited', 'version', 'stack',
 ];
 
-// Кому что открыли: id гостя -> Set id агентов. Живёт в памяти и только в ней —
-// разрешение не должно переживать перезапуск офиса, как не переживает его
-// присутствие. Хозяин, ушедший и вернувшийся, никому ничего не должен.
+// Who was granted what: guest id -> Set of agent ids. Lives in memory and only
+// there — a grant must not survive an office restart, just as presence does
+// not. An owner who left and came back owes nobody anything.
 const grants = new Map();
 
 const granted = (guestId, agentId) => !!(guestId && grants.get(guestId)?.has(agentId));
 
-// Запросы доступа. Ключ — пара «гость и агент»: второй запрос от того же
-// человека про того же агента заменяет первый, а не ложится рядом. Так
-// «попросить снова» не превращается в способ давить.
+// Access requests. The key is the pair of guest and agent: a second request
+// from the same person about the same agent replaces the first rather than
+// piling up next to it. That way "ask again" does not become a way to push.
 const asks = new Map();
 const askKey = (guestId, agentId) => `${guestId}:${agentId}`;
 
-// Что видит о доступе сам гость: о чём попросил, что открыто, где отказали.
+// What the guest sees of access: what he asked for, what is open, where he was refused.
 function accessForGuest(guestId) {
   const mine = [...asks.values()].filter((a) => a.guestId === guestId);
   return {
@@ -84,8 +91,9 @@ function accessForGuest(guestId) {
   };
 }
 
-// Что видит хозяин: кто просит и кому уже открыто. Имя гостя берётся из
-// присутствия — оно там и так есть, а второй раз спрашивать его незачем.
+// What the owner sees: who is asking and who already has access. The guest's
+// name comes from presence — it is there anyway, and there is no point asking
+// for it twice.
 function accessForOwner() {
   const nameOf = (id) => (people.get(id) || {}).name || '';
   const open = [];
@@ -104,16 +112,16 @@ function project(snapshot, guestId) {
   return {
     ...snapshot,
     access: accessForGuest(guestId),
-    // Запрос разрешения — это команда с машины хозяина: пути, ветки, ключи в
-    // аргументах. Гостю не показываем ни пейджера, ни счётчика: нечего решать
-    // и не по чему судить.
+    // A permission request is a command from the owner's machine: paths,
+    // branches, keys in the arguments. A guest is shown neither the pager nor
+    // the count: nothing to decide and nothing to judge by.
     permits: [],
     agents: (snapshot.agents || []).map((a) => {
       if (granted(guestId, a.id)) return a;
       const out = {};
       for (const k of SHOWN) if (a[k] !== undefined) out[k] = a[k];
-      // outbox — записки на столе: их оставляет и сам гость, и они про него же.
-      // Ответ агента из них вырезан тем же правилом.
+      // outbox is the notes on the desk: a guest leaves them himself and they
+      // are about him. The agent's reply is cut out of them by the same rule.
       out.outbox = (a.outbox || []).map((t) => ({
         id: t.id, agentId: t.agentId, at: t.at, state: t.state, text: t.text,
       }));
@@ -122,53 +130,55 @@ function project(snapshot, guestId) {
   };
 }
 
-// ------------------------------------------------------------------- хозяин
-// Смотреть может кто угодно, командовать — только хозяин. Право живёт в токене
-// из .settings.json; страница предъявляет его заголовком.
+// ------------------------------------------------------------------ the owner
+// Anyone may watch; only the owner may command. The right lives in the token in
+// .settings.json, and the page presents it in a header.
 //
-// Пока офис не объявлен общим, всё, что пришло с этой же машины, считается
-// хозяйским: так офис работал всегда, и локальная работа не должна меняться
-// от появления гостей. Сокращение опасное ровно в одном месте — туннель
-// запускается здесь же, и его гость приходит с петли. Поэтому режим 'shared'
-// надо включать ДО того, как офис станет виден снаружи, и это переключатель
-// человека, а не догадка сервера.
-// Наружу у приглашения нет ни кода, ни гостевого токена: панель показывает,
-// кого звали и вошёл ли он, а ссылку хозяин получил в момент создания.
+// Until the office is declared shared, everything from this same machine counts
+// as the owner's: that is how the office always worked, and local work must not
+// change because guests appeared. The shortcut is dangerous in exactly one
+// place — a tunnel is started here too, and its guest arrives over loopback. So
+// 'shared' has to be switched on BEFORE the office becomes visible from
+// outside, and it is a person's switch, not the server's guess.
+// An invitation carries neither its code nor the guest token outward: the panel
+// shows who was invited and whether they came in, and the owner got the link at
+// the moment it was made.
 const safeInvite = (i) => ({
   id: i.id, name: i.name, from: i.from, at: i.at, usedAt: i.usedAt, used: !!i.usedAt,
 });
 
 async function isOwner(req) {
   const s = await getSettings();
-  // Заголовок для обычных запросов, параметр — для потока. EventSource
-  // заголовки ставить не умеет, и без этого хозяин в общем режиме терял
-  // собственный офис: страница жива, а поток ей отказывают. Найдено 30 августа
-  // 2026 первой же перезагрузкой после переключения в shared.
+  // A header for ordinary requests, a query parameter for the stream.
+  // EventSource cannot set headers, and without this the owner in shared mode
+  // lost his own office: the page is alive and the stream is refused to it.
+  // Found on 30 August 2026 by the first reload after switching to shared.
   //
-  // Токен в строке запроса хуже, чем в заголовке, — но кука здесь хуже обоих:
-  // офис живёт на одном порту с чужими вкладками того же localhost, и куку они
-  // делят. Гостевой пропуск ходит тем же путём по той же причине.
+  // A token in the query string is worse than one in a header — but a cookie
+  // here is worse than both: the office shares a port with other tabs of the
+  // same localhost, and they share the cookie. The guest pass travels the same
+  // way for the same reason.
   const given = req.headers['x-valey-owner']
     || new URL(req.url, 'http://localhost').searchParams.get('owner');
   if (s.access.token && given && given === s.access.token) return true;
   if (s.access.mode === 'shared') return false;
-  // Пришло через посредника — значит не «с этой машины», чей бы адрес ни был в
-  // сокете. Туннель (cloudflared, ngrok, любой обратный прокси) соединяется с
-  // офисом с петли, и без этой проверки его гость в режиме private оказывался
-  // бы хозяином: адрес совпал. Заголовки ставит сам посредник, подделать их
-  // может только тот, кто и так уже внутри.
+  // Arrived through a middleman — so not "from this machine", whatever address
+  // the socket shows. A tunnel (cloudflared, ngrok, any reverse proxy) connects
+  // to the office over loopback, and without this check its guest in private
+  // mode came out as the owner: the address matched. The middleman sets those
+  // headers itself, and only somebody already inside can forge them.
   //
-  // Это не замена переключателю в shared, а страховка от того, что о нём
-  // забудут: правильный порядок — сначала shared, потом туннель.
+  // This does not replace the shared switch; it is the backstop for forgetting
+  // it: the right order is shared first, tunnel second.
   if (proxied(req)) return false;
   return isLocal(req);
 }
 
-// Гость — тот, кто вошёл по приглашению и держит выданный ему токен. От
-// хозяина отличается всем: смотреть может, командовать нет.
+// A guest is whoever came in by an invitation and holds the token issued to
+// them. Different from the owner in everything: may watch, may not command.
 async function guestOf(req) {
-  // Заголовок для обычных запросов, параметр — для потока: EventSource
-  // заголовки ставить не умеет, а поток нужен гостю первым делом.
+  // A header for ordinary requests, a parameter for the stream: EventSource
+  // cannot set headers, and the stream is the first thing a guest needs.
   const given = req.headers['x-valey-guest']
     || new URL(req.url, 'http://localhost').searchParams.get('guest');
   if (!given) return null;
@@ -176,9 +186,10 @@ async function guestOf(req) {
   return (s.access.invites || []).find((i) => i.guest && i.guest === given) || null;
 }
 
-// Кого вообще пускать на порог. В private офис открыт, как и был: он на вашей
-// машине, и коллега в той же Wi-Fi заходит просто по адресу. В shared офис
-// виден снаружи, и тогда смотреть может только тот, кого позвали.
+// Who to let over the threshold at all. In private the office is open as it
+// always was: it is on your machine, and a colleague on the same Wi-Fi walks in
+// by the address. In shared the office is visible from outside, and then only
+// somebody invited may watch.
 async function admitted(req) {
   const s = await getSettings();
   if (s.access.mode !== 'shared') return true;
@@ -191,24 +202,26 @@ const forbidden = (res) => send(res, 403, {
   errorKey: 'err.guest',
 });
 
-// -------------------------------------------------------------------- люди
-// Кто сейчас ходит по офису. Живёт в памяти и только в ней: присутствие не
-// переживает перезапуск сервера, и это правильно — человек, которого нет,
-// не должен оставаться стоять.
+// ----------------------------------------------------------------- the people
+// Who is walking the office right now. Lives in memory and only there: presence
+// does not survive a server restart, and that is right — a person who is not
+// here should not stay standing.
 //
-// У людей свой такт, потому что общий снимок ходит раз в POLL_MS = 2.5 с. За
-// это время человек проходит через полкоридора, и чужая ходьба выглядела бы
-// телепортацией. Снимок тяжёлый — сессии, погода, настройки; присутствие
-// лёгкое, и гонять его чаще стоит буквально ничего.
+// The people have a tick of their own, because the shared snapshot goes out
+// every POLL_MS = 2.5 s. In that time a person crosses half the corridor, and
+// somebody else's walk would look like teleporting. The snapshot is heavy —
+// sessions, weather, settings; presence is light, and running it more often
+// costs practically nothing.
 const people = new Map();
 const PEOPLE_MS = 120;
 const PEOPLE_TTL = 8000;
 
-// Внешность приходит с чужой машины, поэтому просеивается здесь, а не в
-// отрисовке. 30 августа 2026 человек с половиной полей уронил drawPerson на
-// shade(look.shirt) — undefined вместо цвета, — и вместе с кадром пропали все,
-// кто стоял в очереди ниже. Пропускаем только известные ключи и только годные
-// значения: чего нет, то клиент достроит своими умолчаниями.
+// A look arrives from somebody else's machine, so it is sieved here rather than
+// at drawing time. On 30 August 2026 a person with half the fields brought
+// drawPerson down on shade(look.shirt) — undefined instead of a colour — and
+// everyone queued below vanished along with the frame. Only known keys and only
+// sane values get through: what is missing the client fills in with its own
+// defaults.
 const HEX = /^#[0-9a-fA-F]{3,8}$/;
 const LOOK_COLOURS = ['skin', 'hair', 'shirt', 'pants', 'boots'];
 const LOOK_WORDS = ['head', 'face', 'hands'];
@@ -232,7 +245,7 @@ function livePeople(now = Date.now()) {
 
 function peopleTick() {
   const list = livePeople();
-  // Одному человеку рассылать некому: он и так знает, где стоит.
+  // With one person there is nobody to broadcast to: he knows where he stands.
   if (list.length > 1) {
     const payload = `event: people\ndata: ${JSON.stringify(list)}\n\n`;
     for (const res of clients) res.write(payload);
@@ -240,13 +253,13 @@ function peopleTick() {
   setTimeout(peopleTick, PEOPLE_MS);
 }
 
-// Кому вообще есть смысл задавать вопрос. Гость не считается: пейджер до него
-// не доходит, и держать ради него вопрос значит держать его ни для кого.
+// Whether there is anybody worth asking. A guest does not count: the pager does
+// not reach him, and holding a question for him means holding it for nobody.
 const audience = () => [...clients].some((res) => !res.valeyGuest);
 
-// Пейджер должен пищать сразу, а не в такте снимка: 2.5 секунды — это разница
-// между «мне звонят» и «мне звонили». Событие идёт только хозяевам, потому что
-// в проекции гостя запросов нет вовсе.
+// The pager has to ring at once rather than on the snapshot tick: 2.5 seconds
+// is the difference between "I am being called" and "I was called". The event
+// goes to owners only, because a guest's projection holds no requests at all.
 function broadcastPermits() {
   if (!last) return;
   last.permits = permits();
@@ -256,8 +269,8 @@ function broadcastPermits() {
 
 async function tick() {
   try {
-    // Предыдущий снимок нужен наблюдателям: событие — это разница, а не
-    // состояние. Ядро само её не считает, оно только отдаёт обе стороны.
+    // Observers need the previous snapshot: an event is a difference, not a
+    // state. The core does not compute it — it only hands over both sides.
     const prev = last;
     last = await snapshot();
     last.version = VERSION;
@@ -268,15 +281,16 @@ async function tick() {
     last.delivery = await deliveryStatus();
     last.people = livePeople();
     last.access = accessForOwner();
-    // Вопрос, заданный сессией, которой в офисе больше нет, отпускаем: отвечать
-    // на него некому, а ждать его девять минут — держать чужой терминал.
+    // A question asked by a session the office no longer has is released: there
+    // is nobody to answer it, and waiting nine minutes holds someone's terminal.
     forgetGone(last.agents.map((a) => a.id));
     last.permits = permits();
-    // Наблюдатели — до рассылки: модуль может дописать своё в снимок, и
-    // клиент должен получить его в том же такте, а не через 2.5 секунды.
+    // Observers run before the broadcast: a module may add its own to the
+    // snapshot, and the client should get it on this tick, not 2.5 seconds
+    // later.
     await moduleObserve(last, prev);
     const full = `data: ${JSON.stringify(last)}\n\n`;
-    // Гостям — по своей проекции: у каждого свой набор открытого.
+    // Guests get their own projection: each has his own set of what is open.
     for (const res of clients) {
       res.write(res.valeyGuest ? `data: ${JSON.stringify(project(last, res.valeyGuest))}\n\n` : full);
     }
@@ -291,16 +305,17 @@ function send(res, code, body, type = 'application/json; charset=utf-8', extra =
   res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
 }
 
-// Ошибка тела — это ответ, а не падение: код и ключ уходят клиенту из
-// обёртки обработчика, и она же закрывает соединение, чтобы недочитанное тело
-// не висело в сокете.
+// A body error is an answer, not a crash: the code and the key go to the client
+// from the handler wrapper, and it closes the connection so an unread body does
+// not hang in the socket.
 class BodyError extends Error {
   constructor(code, key, message) { super(message); this.code = code; this.key = key; }
 }
 
-// Потолок на тело. До 3 сентября 2026 его не было ни у одной ручки, включая
-// открытые до входа: гигабайт в /api/enter копился в памяти до конца.
-// Кадру со стенда нужно больше — он один и его шлёт только хозяин.
+// A ceiling on the body. Until 3 September 2026 no route had one, the ones open
+// before login included: a gigabyte into /api/enter piled up in memory to the
+// end. A stand frame needs more — there is one of it and only the owner sends
+// it.
 const BODY_MAX = 64 * 1024;
 const SHOT_MAX = 16 * 1024 * 1024;
 
@@ -315,9 +330,10 @@ async function readBody(req, max = BODY_MAX) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-// JSON-тело — только с заголовком application/json. Это не педантизм: запрос
-// с таким заголовком браузер не пошлёт с чужого сайта без preflight, а на
-// preflight офис не отвечает. Пустое тело — пустой объект, как и было.
+// A JSON body only with an application/json header. This is not pedantry: a
+// browser will not send a request with that header from another site without a
+// preflight, and the office does not answer preflights. An empty body is an
+// empty object, as before.
 async function readJson(req, max = BODY_MAX) {
   const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
   if (type !== 'application/json') throw new BodyError(415, 'err.notJson', 'нужен application/json');
@@ -329,24 +345,26 @@ async function readJson(req, max = BODY_MAX) {
   return b;
 }
 
-// ------------------------------------------------------------ чужая вкладка
-// Всё с петли считается хозяйским (см. isOwner), и это доверие достаётся любой
-// вкладке в том же браузере: страница чужого сайта шлёт POST на 127.0.0.1:5177,
-// и сокет — петля. До 3 сентября 2026 такой POST в /api/settings менял токен
-// хозяина и режим доставки, а /api/task с deliver запускал claude --resume
-// с bypassPermissions. Два признака, оба ставит браузер и ни один нельзя
-// подделать из скрипта:
-//  - Origin и Sec-Fetch-Site: откуда пришёл запрос. Своя страница — тот же хост.
-//  - Host: к кому обращались. DNS rebinding резолвит чужое имя в 127.0.0.1, и
-//    тогда Origin совпадает с Host, зато Host — не наш.
-// Без Origin и без Sec-Fetch-Site приходят curl, тесты и EventSource: это не
-// браузерная вкладка, и здесь им верят.
+// -------------------------------------------------------------- a foreign tab
+// Everything from loopback counts as the owner's (see isOwner), and that trust
+// is inherited by every tab in the same browser: a page on another site sends a
+// POST to 127.0.0.1:5177 and the socket is loopback. Until 3 September 2026
+// such a POST to /api/settings changed the owner token and the delivery mode,
+// and /api/task with deliver started claude --resume with bypassPermissions.
+// Two marks, both set by the browser and neither forgeable from a script:
+//  - Origin and Sec-Fetch-Site: where the request came from. Our own page is the
+//    same host.
+//  - Host: who was addressed. DNS rebinding resolves a foreign name to
+//    127.0.0.1, and then Origin matches Host while Host is not ours.
+// curl, the stands and EventSource arrive with neither Origin nor
+// Sec-Fetch-Site: that is not a browser tab, and they are trusted here.
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?$/i;
 
 function hostOk(req) {
-  // Через посредника имя хоста чужое по определению — туннель приходит со
-  // своим публичным именем, и его запросы уже спросил о токене сетевой гейт.
-  // Снаружи хост — адрес этой машины в чьей-то сети, его не перечислить.
+  // Through a middleman the host name is foreign by definition — a tunnel
+  // arrives with its own public name, and the network gate has already asked its
+  // requests for a token. From outside the host is this machine's address in
+  // somebody's network, and there is no listing that.
   if (!isLocal(req)) return true;
   return LOCAL_HOST.test(req.headers.host || '');
 }
@@ -358,31 +376,32 @@ function crossSite(req) {
   if (origin === 'null') return true;
   let from;
   try { from = new URL(origin).host; } catch { return true; }
-  // Посредник, переписывающий Host, обязан оставить настоящий в
-  // X-Forwarded-Host — иначе своя же страница из туннеля окажется чужой.
+  // A middleman that rewrites Host must leave the real one in X-Forwarded-Host
+  // — otherwise our own page coming through the tunnel counts as foreign.
   const host = req.headers['x-forwarded-host'] || req.headers.host || '';
   return from.toLowerCase() !== String(host).split(',')[0].trim().toLowerCase();
 }
 
-// Через эти две двери входят, поэтому они открыты всегда: иначе гость не
-// сможет ни предъявить код, ни узнать, что код вообще нужен.
-// /api/stand открыт вместе с ними: табличку стенда надо показать до входа,
-// иначе на пустом экране непонятно, чей это офис и что на нём проверяют.
+// These are the doors people come in through, so they are always open:
+// otherwise a guest can neither present a code nor learn that a code is needed
+// at all. /api/stand is open alongside them: the stand sign has to be shown
+// before entry, or an empty screen leaves it unclear whose office this is and
+// what is being checked on it.
 const OPEN = new Set(['/api/enter', '/api/whoami', '/api/stand']);
 
 /**
- * Обработчик запросов — отдельно от запуска.
+ * The request handler, separate from the start-up.
  *
- * До 4 сентября 2026 файл слушал порт прямо на импорте, и стенду, чтобы
- * спросить у маршрута один статус, приходилось поднимать процесс: спавн,
- * ожидание порта, гашение. Пять таких стендов стоили полторы секунды прогона
- * и умели проверять только то, что переживает HTTP. Теперь `npm start`
- * зовёт start() внизу файла, а стенд берёт обработчик и вешает его на свой
- * сервер в том же процессе.
+ * Until 4 September 2026 this file listened on a port at import time, and for a
+ * stand to ask one route for one status it had to raise a process: spawn, wait
+ * for the port, kill. Five such stands cost a second and a half of the run and
+ * could only check what survives HTTP. Now `npm start` calls start() at the
+ * bottom of the file, while a stand takes the handler and hangs it on a server
+ * of its own in the same process.
  *
- * Одна ошибка — один ответ 500, а не мёртвый офис. До 3 сентября 2026 битый
- * JSON в /api/enter — ручке, открытой до входа, — ронял процесс вместе со
- * всеми вкладками, которые его слушали.
+ * One error, one 500 answer, rather than a dead office. Until 3 September 2026
+ * broken JSON in /api/enter — a route open before login — killed the process
+ * together with every tab listening to it.
  */
 export function createHandler() {
   return async (req, res) => {
@@ -400,14 +419,14 @@ export function createHandler() {
       try {
         if (!res.headersSent) send(res, 500, { error: 'внутренняя ошибка', errorKey: 'err.internal' });
         else res.end();
-      } catch { /* сокет уже закрыт */ }
+      } catch { /* the socket is already closed */ }
     }
   };
 }
 
-// Снимок офиса стенду взять неоткуда: он собирается из живых сессий этой
-// машины. Поэтому его можно положить руками — только для стендов, и только
-// пока такты не запущены.
+// A stand has nowhere to get an office snapshot from: it is assembled out of
+// this machine's live sessions. So it can be put in by hand — for the stands
+// only, and only while the ticks are not running.
 export function setSnapshot(s) {
   last = { ...last, ...s };
   return last;
@@ -416,20 +435,22 @@ export function setSnapshot(s) {
 async function handle(req, res) {
   const url = new URL(req.url, 'http://localhost');
 
-  // Первый вопрос — не «кто вы», а «откуда». Гейт ниже решает, пускать ли
-  // человека; этот решает, отвечать ли адресу вообще. Он стоит выше статики,
-  // потому что дыра была именно в ней: без него офис отдавал страницу, поток
-  // и /api/file всей сети Wi-Fi.
+  // The first question is not "who are you" but "where from". The gate below
+  // decides whether to admit a person; this one decides whether to answer the
+  // address at all. It stands above the static files, because the hole was
+  // exactly there: without it the office served the page, the stream and
+  // /api/file to the whole Wi-Fi.
   const net = checkNetwork(req, url, (await getSettings()).network);
   if (!net.ok) {
-    // Закрытый офис отвечает 404, а не 403: сканеру незачем знать, что по
-    // этому адресу что-то живёт и просто не пускает.
+    // A closed office answers 404 rather than 403: a scanner has no business
+    // learning that something lives at this address and merely refuses entry.
     return send(res, net.reason === 'closed' ? 404 : 401, net.reason === 'closed'
       ? { error: 'not found', errorKey: 'err.notFound' }
       : { error: 'нужен токен', errorKey: 'err.needToken' });
   }
-  // Токен приехал строкой в адресе — запоминаем кукой и уводим из URL, чтобы
-  // секрет не остался в истории браузера и в заголовке Referer.
+  // The token arrived in the address — remember it in a cookie and take it out
+  // of the URL, so the secret does not stay in browser history and in the
+  // Referer header.
   if (net.setCookie) {
     res.setHeader('set-cookie', net.setCookie);
     if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
@@ -439,18 +460,18 @@ async function handle(req, res) {
     }
   }
 
-  // Чужое имя хоста на петле — rebinding. Отвечаем как закрытый офис: 404,
-  // сканеру незачем знать, что тут кто-то живёт.
+  // A foreign host name over loopback is rebinding. We answer as a closed
+  // office would: 404, a scanner has no business learning anyone lives here.
   if (!hostOk(req)) return send(res, 404, { error: 'not found', errorKey: 'err.notFound' });
-  // Чужая вкладка меняет состояние только через не-GET: GET она и так не
-  // прочитает, тот же origin ей не отдаст ответ.
+  // A foreign tab changes state only through a non-GET: it cannot read a GET
+  // anyway, the same-origin rule keeps the answer from it.
   if (req.method !== 'GET' && req.method !== 'HEAD' && crossSite(req)) {
     return send(res, 403, { error: 'запрос с чужой страницы', errorKey: 'err.crossSite' });
   }
 
-  // Гейт стоит до всех обработчиков, а не в каждом: так новый эндпоинт
-  // закрыт по умолчанию, а не забыт. Статика не гейтится — страницу надо
-  // показать хотя бы затем, чтобы сказать «нужен код».
+  // The gate stands before every handler rather than inside each: that way a
+  // new endpoint is closed by default rather than forgotten. Static files are
+  // not gated — the page has to be shown if only to say "a code is needed".
   if (url.pathname.startsWith('/api/') && !OPEN.has(url.pathname) && !(await admitted(req))) {
     return send(res, 403, { error: 'нужно приглашение', errorKey: 'err.needCode' });
   }
@@ -459,20 +480,21 @@ async function handle(req, res) {
     res.writeHead(200, {
       'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive',
     });
-    // Поток помнит, кто его слушает: снимок один, а видят его по-разному.
+    // The stream remembers who is listening: there is one snapshot, and it is
+    // seen differently.
     const guest = await guestOf(req);
     const who = guest ? guest.guest : null;
     res.valeyGuest = who;
     res.write(`data: ${JSON.stringify(who ? project(last, who) : last)}\n\n`);
-    // Вошедший видит тех, кто уже в офисе, сразу, а не через такт присутствия.
+    // Whoever just came in sees who is already in the office at once, not a presence tick later.
     res.write(`event: people\ndata: ${JSON.stringify(livePeople())}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
     return;
   }
 
-  // Кто спрашивает. Страница узнаёт это раньше, чем нарисует хоть одну кнопку,
-  // которой у гостя быть не должно.
+  // Who is asking. The page learns this before it draws a single button a guest
+  // should not have.
   if (url.pathname === '/api/whoami') {
     const s = await getSettings();
     const guest = await guestOf(req);
@@ -481,14 +503,14 @@ async function handle(req, res) {
       mode: s.access.mode,
       guest: !!guest,
       from: guest ? guest.from : '',
-      // нужен ли код прямо сейчас: страница по этому решает, показывать ли
-      // карточку «тебя позвали» или «код не годится»
+      // whether a code is needed right now: the page decides by this whether to
+      // show the "you were invited" card or the "this code is no good" one
       needsCode: !(await admitted(req)),
     });
   }
 
-  // Гость просит доступ к одному агенту. Не «ко всему» и не «на время»:
-  // просят про конкретного, и это же видит хозяин.
+  // A guest asks for access to one agent. Not "to everything" and not "for a
+  // while": the request names one, and that is what the owner sees.
   if (url.pathname === '/api/access' && req.method === 'POST') {
     const guest = await guestOf(req);
     if (!guest) return send(res, 403, { error: 'просить может гость', errorKey: 'err.guestOnly' });
@@ -504,8 +526,8 @@ async function handle(req, res) {
     return send(res, 200, { ok: true });
   }
 
-  // Хозяин отвечает. Отказ не стирает запрос: гость должен увидеть «нет», а не
-  // тишину, — иначе он будет думать, что не дошло.
+  // The owner answers. A refusal does not erase the request: the guest has to
+  // see a "no" rather than silence, or he will think it never arrived.
   if (url.pathname === '/api/access/answer' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
     const b = await readJson(req);
@@ -521,8 +543,8 @@ async function handle(req, res) {
     return send(res, 200, { ok: true, access: accessForOwner() });
   }
 
-  // Закрыть открытое. Одной кнопкой и без подтверждения: отзыв должен быть не
-  // длиннее выдачи, иначе им не пользуются.
+  // Close what was opened. One button, no confirmation: revoking must not take
+  // longer than granting, or nobody uses it.
   if (url.pathname === '/api/access/revoke' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
     const b = await readJson(req);
@@ -530,46 +552,49 @@ async function handle(req, res) {
     return send(res, 200, { ok: true, access: accessForOwner() });
   }
 
-  // Хозяин зовёт гостя. Код длиннее, чем на макете: там в подписи стоял
-  // 7f3a9c — шесть знаков, 24 бита, которые скрипт перебирает за минуты,
-  // как только офис виден снаружи. Двенадцать знаков — те же полстроки в
-  // ссылке и 48 бит, по которым перебором не ходят.
+  // The owner invites a guest. The code is longer than on the frame: the
+  // caption there read 7f3a9c — six characters, 24 bits, which a script walks
+  // through in minutes once the office is visible from outside. Twelve
+  // characters are the same half-line in a link and 48 bits, which nobody
+  // brute-forces.
   if (url.pathname === '/api/invite' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
     const b = await readJson(req);
     const s = await getSettings();
     const code = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
     const invite = {
-      // id — чтобы панель могла погасить приглашение, не зная кода: код
-      // уходит в ссылку один раз и наружу больше не показывается.
+      // the id lets the panel revoke an invitation without knowing the code:
+      // the code goes into the link once and is never shown again.
       id: crypto.randomUUID().slice(0, 8),
       code,
       name: String(b.name || '').slice(0, 24),
       from: String(b.from || '').slice(0, 24),
       at: Date.now(), usedAt: null, guest: null,
     };
-    // Приглашение и общий режим — одно действие. Пока офис private, хозяином
-    // считается всё, что пришло с этой машины, а туннель работает с неё же:
-    // приглашённый через туннель оказался бы хозяином. Звать, не открываясь,
-    // нельзя, поэтому это не отдельный переключатель, а следствие.
+    // Inviting and going shared are one action. While the office is private,
+    // everything from this machine counts as the owner's, and a tunnel runs
+    // from it too: somebody invited through a tunnel would come out as the
+    // owner. Inviting without opening up is not possible, so this is not a
+    // separate switch but a consequence.
     await patchSettings({
       access: { ...s.access, mode: 'shared', invites: [...(s.access.invites || []), invite] },
     });
     const host = req.headers.host || `localhost:${PORT}`;
-    // Токен хозяина возвращается вместе со ссылкой — и это не послабление, а
-    // условие того, чтобы приглашение вообще работало. Переход в shared гасит
-    // сокращение «пришло с этой машины», и страница, которая только что была
-    // хозяином по петле, следующим же запросом оказывалась гостем: человек
-    // запирал себя, нажав «создать ссылку». Запрос сюда пропускает только
-    // хозяин, так что отдать ему его же токен нечем не рискуем.
+    // The owner token comes back together with the link — not a relaxation but
+    // the condition for an invitation working at all. Going shared kills the
+    // "came from this machine" shortcut, and a page that was the owner over
+    // loopback a moment ago turned into a guest on its very next request: a
+    // person locked himself out by pressing "create a link". Only the owner
+    // gets this far, so handing him his own token risks nothing.
     return send(res, 200, {
       ok: true, invite, owner: (await getSettings()).access.token,
       url: `http://${host}/#code=${code}`,
     });
   }
 
-  // Погасить: и невостребованную ссылку, и уже вошедшего по ней гостя. Разницы
-  // в действии нет — исчезает приглашение, а с ним и выданный по нему токен.
+  // Revoke: both an unclaimed link and a guest who already came in through it.
+  // There is no difference in the action — the invitation disappears, and with
+  // it the token issued by it.
   if (url.pathname === '/api/invite/revoke' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
     const b = await readJson(req);
@@ -579,17 +604,17 @@ async function handle(req, res) {
     return send(res, 200, { ok: true, invites: left.map(safeInvite) });
   }
 
-  // Список для панели хозяина. Коды наружу не отдаются даже ему: ссылку он
-  // получил один раз при создании, а список — чтобы видеть, кто вошёл.
+  // The list for the owner's panel. Codes are not handed out even to him: he
+  // got the link once, at creation, and the list is for seeing who came in.
   if (url.pathname === '/api/invites') {
     if (!(await isOwner(req))) return forbidden(res);
     const s = await getSettings();
     return send(res, 200, { invites: (s.access.invites || []).map(safeInvite) });
   }
 
-  // Вход по коду. Одноразовый: сработал — погас, и второй раз по той же ссылке
-  // не войти. Взамен выдаётся токен гостя, чтобы перезагрузка страницы не
-  // выставляла человека за дверь.
+  // Entry by code. One use: it worked, it is spent, and the same link does not
+  // let anyone in twice. In exchange a guest token is issued, so a page reload
+  // does not put the person back outside the door.
   if (url.pathname === '/api/enter' && req.method === 'POST') {
     const b = await readJson(req);
     const s = await getSettings();
@@ -603,9 +628,9 @@ async function handle(req, res) {
     return send(res, 200, { ok: true, guest: invite.guest, from: invite.from });
   }
 
-  // Человек говорит, что он здесь и где именно. Наружу уходит только это:
-  // имя, внешность, место и комната — то же, что видно любому, кто стоит
-  // рядом. Ни транскриптов, ни путей, ни файлов тут нет и быть не может.
+  // A person says they are here and where exactly. Only this goes out: the
+  // name, the look, the position and the room — the same as anyone standing
+  // nearby sees. No transcripts, no paths, no files are here, and none can be.
   if (url.pathname === '/api/here' && req.method === 'POST') {
     const raw = await readBody(req);
     if (raw.length > 2000) return send(res, 413, { error: 'слишком длинно' });
@@ -625,32 +650,32 @@ async function handle(req, res) {
     return send(res, 200, { ok: true, people: people.size });
   }
 
-  // Ушёл честно, а не по таймауту: вкладка закрывается — место освобождается
-  // сразу, без восьми секунд призрака в коридоре.
+  // Left properly rather than by timeout: the tab closes, the spot is freed at
+  // once, without eight seconds of a ghost in the corridor.
   if (url.pathname === '/api/gone' && req.method === 'POST') {
     const raw = await readBody(req);
     let b = null;
-    try { b = JSON.parse(raw); } catch { /* пустое тело — тоже ответ */ }
+    try { b = JSON.parse(raw); } catch { /* an empty body is an answer too */ }
     if (b && typeof b.id === 'string') people.delete(b.id.slice(0, 64));
     return send(res, 200, { ok: true });
   }
 
-  // Присутствие считается на месте, а не берётся из последнего такта: снимок
-  // собирается раз в 2.5 с, и за это время человек успевает войти и выйти.
-  // Точечный запрос не должен врать о том, кто сейчас в комнате.
+  // Presence is computed on the spot rather than taken from the last tick: the
+  // snapshot is built every 2.5 s, and a person manages to come and go in that
+  // time. A point request must not lie about who is in the room now.
   if (url.pathname === '/api/state') {
     const guest = await guestOf(req);
     const seen = guest ? project(last, guest.guest) : last;
-    // Присутствие и доступ считаются на месте: и то и другое меняется чаще,
-    // чем собирается снимок, а точечный запрос не должен врать про то, кто
-    // сейчас в комнате и кто чего попросил.
+    // Presence and access are computed on the spot: both change more often than
+    // the snapshot is built, and a point request must not lie about who is in
+    // the room and who asked for what.
     return send(res, 200, {
       ...seen,
       people: livePeople(),
       access: guest ? accessForGuest(guest.guest) : accessForOwner(),
-      // По той же причине, что присутствие и доступ: запрос разрешения живёт
-      // секунды и приходит между тактами. Вкладка, открытая только что, обязана
-      // увидеть тот, что висит прямо сейчас, — а не пустоту до первого такта.
+      // For the same reason as presence and access: a permission request lives
+      // seconds and arrives between ticks. A tab opened a moment ago has to see
+      // the one hanging right now, not emptiness until the first tick.
       permits: guest ? [] : permits(),
     });
   }
@@ -658,8 +683,8 @@ async function handle(req, res) {
   // the full recent conversation of one agent, for reading in the office
   if (url.pathname === '/api/chat') {
     const id = url.searchParams.get('id') || '';
-    // Разговор агента — не проекция. Гостю он открыт только по согласию, и
-    // только с тем агентом, на которого согласие дали.
+    // An agent's conversation is not a projection. It opens for a guest only by
+    // consent, and only for the agent the consent was given about.
     const guest = await guestOf(req);
     if (guest && !granted(guest.guest, id)) {
       return send(res, 403, { error: 'этот разговор не открыт', errorKey: 'err.notGranted' });
@@ -673,10 +698,10 @@ async function handle(req, res) {
   if (url.pathname === '/api/task' && req.method === 'POST') {
     try {
       const { agentId, text, deliver: wantsDelivery, mode: wantedMode, resend } = await readJson(req);
-      // Записку на стол может оставить кто угодно: её увидит хозяин, когда
-      // вернётся, и сам решит. Отправка в чат — другое: она запускает
-      // claude --resume в живой сессии, а с bypassPermissions это терминал.
-      // Смотреть можно, командовать нельзя.
+      // Anyone may leave a note on the desk: the owner sees it when he comes
+      // back and decides himself. Sending into the chat is another matter: it
+      // starts claude --resume in a live session, and with bypassPermissions
+      // that is the terminal. Watching is allowed, commanding is not.
       if ((wantsDelivery || resend) && !(await isOwner(req))) return forbidden(res);
       // A note already lying on the desk can be handed over to the chat as it is:
       // it moves rather than multiplies, so the desk does not keep a stale twin.
@@ -716,26 +741,29 @@ async function handle(req, res) {
     }
   }
 
-  // Запрос разрешения из Claude Code. Приходит от хука на этой же машине и
-  // ВИСИТ здесь, пока хозяин не ответит: пока висит — в терминале диалога нет.
-  // Отвечать может только хозяин, поэтому и спрашивать пускаем только его:
-  // чужой запрос сюда — это способ нарисовать в офисе поддельную команду и
-  // получить на неё настоящее «разрешить».
+  // A permission request from Claude Code. It comes from the hook on this same
+  // machine and HANGS here until the owner answers: while it hangs there is no
+  // dialog in the terminal. Only the owner can answer, so only he is let in to
+  // ask: somebody else's request here is a way to draw a fake command in the
+  // office and collect a real "allow" for it.
   if (url.pathname === '/api/permit' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
-    // tool_input у Write — это целый файл, и 64 КБ ему мало. Предел всё равно
-    // нужен: тело читается в память, а запросов может быть много.
+    // tool_input for Write is a whole file, and 64 KB is not enough for it. A
+    // limit is still needed: the body is read into memory, and there can be many
+    // requests.
     const body = await readJson(req, SHOT_MAX);
     const { held, verdict, entry } = askPermit(body, { audience: audience() });
-    // Никого нет — офис отходит в сторону немедленно. Пустой ответ возвращает
-    // хуку штатный путь, и человек видит родной диалог, не подождав ни секунды.
+    // Nobody is here — the office steps aside immediately. An empty answer
+    // returns the hook to its normal path, and the person sees the native dialog
+    // without waiting a second.
     if (!held) return send(res, 200, {});
-    // Девять минут — это дольше любого таймаута по умолчанию, который мог бы
-    // закрыть сокет за нас.
+    // Nine minutes is longer than any default timeout that might close the
+    // socket for us.
     res.setTimeout(0);
     if (req.socket) req.socket.setTimeout(0);
-    // Хук убили или терминал закрыли — вопроса больше нет. Без этого карточка
-    // висела бы в офисе до таймера, и хозяин отвечал бы в пустоту.
+    // The hook was killed or the terminal was closed — there is no question any
+    // more. Without this the card would hang in the office until the timer, and
+    // the owner would be answering into the void.
     req.on('close', () => { if (!res.writableEnded) answerPermit(entry.id, { decision: 'terminal' }); broadcastPermits(); });
     broadcastPermits();
     const v = await verdict;
@@ -743,7 +771,7 @@ async function handle(req, res) {
     return send(res, 200, v || {});
   }
 
-  // Ответ хозяина. Гостю сюда нельзя даже посмотреть: запросов он не видит.
+  // The owner's answer. A guest may not even look in here: he sees no requests.
   if (url.pathname === '/api/permit/answer' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
     const b = await readJson(req);
@@ -758,8 +786,9 @@ async function handle(req, res) {
   // Where the office looks out of the window, and whether it looks at all.
   if (url.pathname === '/api/settings') {
     if (req.method === 'POST') {
-      // Настройки — это погода, язык, режим доставки и ключи сервисов: они общие
-      // на весь офис, и менять их гостю нечего.
+      // The settings are the weather, the language, the delivery mode and
+      // service keys: they are shared across the whole office, and a guest has
+      // no business changing them.
       if (!(await isOwner(req))) return forbidden(res);
       try {
         const patch = await readJson(req);
@@ -767,13 +796,13 @@ async function handle(req, res) {
         forgetWeather();
         moduleOnPatch(patch);
         last.weather = await realWeather({ force: true });
-        return send(res, 200, { ok: true, settings: publicSettings(saved), weather: last.weather });
+        return send(res, 200, { ok: true, settings: publicSettings(saved), weather: last.weather, packs: PACK_LIST });
       } catch (e) {
         if (e instanceof BodyError) throw e;
         return send(res, 400, { error: e.message });
       }
     }
-    return send(res, 200, { settings: publicSettings(await getSettings()), weather: last.weather });
+    return send(res, 200, { settings: publicSettings(await getSettings()), weather: last.weather, packs: PACK_LIST });
   }
 
   // City search, proxied so the page itself never talks to the outside.
@@ -790,8 +819,9 @@ async function handle(req, res) {
 
   // Dev helper: the game posts a rendered frame, we drop it on disk to look at.
   if (url.pathname === '/api/shot' && req.method === 'POST') {
-    // Кадр пишется файлом на диск хозяина. Гость может снять экран своим
-    // браузером — но не класть картинки в чужую папку.
+    // The frame is written as a file to the owner's disk. A guest may take a
+    // screenshot with his own browser — but not put pictures in someone else's
+    // folder.
     if (!(await isOwner(req))) return forbidden(res);
     const body = await readBody(req, SHOT_MAX);
     const b64 = body.replace(/^data:image\/png;base64,/, '');
@@ -807,10 +837,11 @@ async function handle(req, res) {
     const p = url.searchParams.get('path') || '';
     const owners = fileOwners(p, last);
     if (!owners.length) return send(res, 403, { error: 'not an agent artifact' });
-    // Файл принадлежит разговору: гостю он открыт ровно тогда, когда открыт
-    // разговор, — тем же согласием, что и /api/chat. До 3 сентября 2026 тут
-    // проверялся только сам список, и гость с любым пропуском читал всё, что
-    // агент когда-либо открывал — включая Read по .env, если угадать путь.
+    // A file belongs to a conversation: it opens for a guest exactly when the
+    // conversation does, by the same consent as /api/chat. Until 3 September
+    // 2026 only the list itself was checked here, and a guest with any pass read
+    // everything the agent had ever opened — a Read of an .env included, if the
+    // path was guessed.
     const guest = await guestOf(req);
     if (guest && !owners.some((id) => granted(guest.guest, id))) {
       return send(res, 403, { error: 'этот разговор не открыт', errorKey: 'err.notGranted' });
@@ -818,27 +849,44 @@ async function handle(req, res) {
     try {
       const st = await fsp.stat(p);
       if (st.size > 8 * 1024 * 1024) return send(res, 413, { error: 'too big' });
-      // Показать, но не исполнить: html и svg уходят вложением, см. files.js.
+      // Show but do not run: html and svg go out as an attachment, see files.js.
       return send(res, 200, await fsp.readFile(p), fileType(p), fileHeaders(p));
     } catch {
       return send(res, 404, { error: 'gone' });
     }
   }
 
-  // Что из модулей доехало до этой сборки. Клиент по этому списку строит
-  // импорты, поэтому список — единственное, что ядро о модулях знает.
+  // What the office would be called on each pack. The panel has to show the
+  // price of a keypress BEFORE the keypress, and there is nothing on the page to
+  // compute it with — the dictionaries live here.
+  //
+  // Asked only when the panel is opened. The route itself costs two
+  // milliseconds, but the server is single-threaded, and a request that lands
+  // during a walk over the transcripts waits with everybody else — 4 seconds on
+  // this stand on 4 September 2026. So the list of dictionaries (size and
+  // sample) is not part of it: that is static and rides out with the settings,
+  // so the line in the panel stands at once and only the price waits.
+  if (url.pathname === '/api/names') {
+    const s = await getSettings();
+    const packs = [];
+    for (const id of PACK_IDS) packs.push({ id, names: await previewPack(id) });
+    return send(res, 200, { choice: s.namePack || 'auto', pack: effectivePack(s), packs });
+  }
+
+  // Which modules made it into this build. The client builds its imports from
+  // this list, so the list is the only thing the core knows about modules.
   if (url.pathname === '/api/modules') return send(res, 200, moduleList());
 
-  // Тестовый стенд. Пустой text значит «это обычный офис» — тогда клиент
-  // ничего не рисует. Ветку спрашиваем у git только здесь: в обычном запуске
-  // этой ручки нет смысла, и лишний вызов наружу ни к чему.
+  // The test stand. An empty text means "this is an ordinary office" and the
+  // client draws nothing. git is asked for the branch only here: in a normal run
+  // this route makes no sense, and an extra call out serves nothing.
   if (url.pathname === '/api/stand') {
     const text = process.env.VALEY_STAND || '';
     if (!text) return send(res, 200, { text: null });
     let branch = '';
     try {
       branch = execFileSync('git', ['-C', ROOT, 'rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8' }).trim();
-    } catch { /* не репозиторий — переживём без ветки */ }
+    } catch { /* not a repository — we manage without the branch */ }
     return send(res, 200, {
       text, branch, port: PORT,
       modules: moduleList().map((m) => m.id),
@@ -847,8 +895,9 @@ async function handle(req, res) {
     });
   }
 
-  // Переключатель модуля на стенде. Не в OPEN и только для хозяина: гость
-  // офиса не должен уметь выключать чужие фичи. Живёт, пока жив сервер.
+  // The module switch on the stand. Not in OPEN and owner-only: a guest of the
+  // office must not be able to switch off other people's features. It lives as
+  // long as the server does.
   if (url.pathname === '/api/stand/toggle') {
     if (!process.env.VALEY_STAND) return send(res, 404, { error: 'стенда нет' });
     if (!(await isOwner(req))) return forbidden(res);
@@ -857,9 +906,9 @@ async function handle(req, res) {
     return send(res, 200, { ok: true, all: moduleAll() });
   }
 
-  // Файлы модуля. Отдельная ветка, а не WEB: папки modules/ в бесплатной
-  // сборке нет вовсе, и путать её со статикой ядра значит однажды отдать
-  // наружу то, чего не клали.
+  // A module's files. A branch of its own rather than WEB: in the free build
+  // there is no modules/ folder at all, and confusing it with the core's static
+  // files means serving one day what was never put there.
   if (url.pathname.startsWith('/modules/')) {
     const file = path.join(MODS, url.pathname.slice('/modules/'.length));
     if (!file.startsWith(MODS)) return send(res, 403, { error: 'nope' });
@@ -871,13 +920,14 @@ async function handle(req, res) {
     }
   }
 
-  // Собственные ручки модулей. Идут после всех ручек ядра: модуль дополняет
-  // офис, а не переопределяет его.
+  // The modules' own routes. They come after every core route: a module extends
+  // the office, it does not redefine it.
   if (await moduleRoute(url, req, res, send)) return;
 
-  // static; /callback — возврат OAuth: отдаём тот же офис, разбирает его модуль,
-  // который эту авторизацию затеял. Ветка остаётся в ядре, потому что модуль
-  // не может добавить себе статический адрес — и это честная дырка в шве.
+  // static; /callback is an OAuth return address: we serve the same office, and
+  // the module that started that authorisation parses it. The branch stays in
+  // the core because a module cannot add a static address of its own — an honest
+  // hole in the seam.
   const rel = url.pathname === '/' || url.pathname === '/callback'
     ? 'index.html' : url.pathname.slice(1);
   const file = path.join(WEB, rel);
@@ -891,18 +941,19 @@ async function handle(req, res) {
 }
 
 /**
- * Поднять офис: модули, настройки, порт и такты.
+ * Raise the office: modules, settings, the port and the ticks.
  *
- * Куда слушать — по умолчанию петля: до 30 августа 2026 хост не указывался
- * вообще, а это `0.0.0.0` — офис отвечал всей сети Wi-Fi без единой проверки.
- * Открыть наружу можно, но только вместе с токеном: одно без другого и есть
- * та самая дыра.
+ * Where to listen — loopback by default: until 30 August 2026 no host was given
+ * at all, and that is `0.0.0.0` — the office answered the whole Wi-Fi without a
+ * single check. It can be opened to the outside, but only together with a token:
+ * one without the other is that very hole.
  */
 export async function start({ port = PORT, host = process.env.HOST } = {}) {
-  // Модули — раньше первого чтения настроек: их умолчания входят в кэш при
-  // сборке, а кэш собирается один раз. До 4 сентября 2026 порядок был обратный,
-  // и секция модуля появлялась в настройках только после первого сохранения —
-  // клиент радио маскировал это через `|| {}`.
+  // Modules come before the first read of the settings: their defaults go into
+  // the cache as it is built, and the cache is built once. Until 4 September
+  // 2026 the order was the other way round, and a module's section appeared in
+  // the settings only after the first save — the radio client masked that with
+  // `|| {}`.
   const mods = await loadModules(ROOT);
   let boot = await getSettings();
   const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
@@ -923,13 +974,12 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
     console.log(`  http://<адрес-этой-машины>:${port}/?token=${t || '<см. настройки>'}`);
   }
   if (mods.length) console.log(`  модули: ${mods.map(m => m.id).join(', ')}`);
-  // Модуль, который не завёлся, обязан сказать это здесь: иначе пропавшая
-  // фича расследуется глазами вместо одной строки в логе.
+  // A module that failed to load must say so here: otherwise a missing feature
+  // gets investigated by eye instead of by one line in the log.
   for (const e of moduleErrors()) console.log(`  модуль не встал: ${e.id} — ${e.error}`);
-  // Ссылка хозяина печатается всегда, а не только в общем режиме: открыв её
-  // один раз, вы остаётесь хозяином в этом браузере и после того, как офис
-  // станет общим. Искать её потом в .settings.json — лишний шаг в неудачный
-  // момент.
+  // The owner link is printed every time, not only in shared mode: open it once
+  // and you stay the owner in this browser even after the office becomes shared.
+  // Looking it up in .settings.json later is an extra step at a bad moment.
   console.log(`  хозяин: http://localhost:${port}/#owner=${token}`);
   if (s.access.mode === 'private') {
     console.log('  режим: private — всё с этой машины считается хозяйским.');
@@ -942,9 +992,10 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   return server;
 }
 
-// Запустили файл — поднимаем офис; импортировали — отдаём только обработчик.
-// Проверка по argv, а не по флагу: `npm start` и `node server/index.js` — это
-// одно и то же, а стенд ничего специального делать не должен.
+// Run the file and the office comes up; import it and only the handler comes
+// out. Checked by argv rather than by a flag: `npm start` and
+// `node server/index.js` are the same thing, and a stand should not have to do
+// anything special.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await start();
 }

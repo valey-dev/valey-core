@@ -9,11 +9,22 @@ const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ESC[c]);
 const SAFE_LINK = /^(https?:\/\/|mailto:|#)/i;
 const HOLD = '@@mdhold@@';   // placeholder fence, never present in real text
 
+// The button is empty on purpose: its glyph comes from CSS, so the markup holds
+// no second copy of anything. `data-copy` is set only where the text on screen
+// is not what should land in the clipboard — a titled link.
+const copyBtn = (value) => `<button class="mdcopy-in" type="button" tabindex="-1"`
+  + (value ? ` data-copy="${escapeHtml(value)}"` : '') + `></button>`;
+
 function inline(s) {
   // `code` is pulled out first: nothing inside it should be formatted afterwards
   const code = [];
   let out = s.replace(/`([^`]+)`/g, (_, c) => {
-    code.push(`<code>${c}</code>`);
+    // The wrapper carries the copy button. It has to be a real <button> rather
+    // than a ::after glyph: a pseudo-element passes its click to the parent, and
+    // on a link the parent must keep opening the link. Both the wrapper and the
+    // button are laid out absolutely, so nothing appears or disappears in the
+    // flow — a paragraph must not re-wrap under the cursor.
+    code.push(`<span class="mdcopyable">${copyBtn()}<code>${c}</code></span>`);
     return `${HOLD}c${code.length - 1}${HOLD}`;
   });
 
@@ -22,10 +33,12 @@ function inline(s) {
       `<span class="mdimg">🖼 ${alt || src.split('/').pop()}</span>`)
     .replace(/\[([^\]]+)\]\(([^)\s]+)[^)]*\)/g, (_, text, href) =>
       (SAFE_LINK.test(href)
-        ? `<a href="${href}" target="_blank" rel="noreferrer">${text}</a>`
+        // A link copies its address, not its text: nobody needs «the frame it
+        // was promoted to» in the clipboard, everybody needs the URL.
+        ? `<span class="mdcopyable">${copyBtn(href)}<a href="${href}" target="_blank" rel="noreferrer">${text}</a></span>`
         : `<span class="mdlink">${text}</span>`))
     .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (_, pre, href) =>
-      `${pre}<a href="${href}" target="_blank" rel="noreferrer">${href}</a>`)
+      `${pre}<span class="mdcopyable">${copyBtn()}<a href="${href}" target="_blank" rel="noreferrer">${href}</a></span>`)
     // содержимое не может начинаться или кончаться пробелом, иначе «2 * 3 * 4»
     // превращается в курсив
     .replace(/\*\*(\S(?:[^*]*\S)?)\*\*/g, '<b>$1</b>')
@@ -52,10 +65,12 @@ export function renderMarkdown(src) {
     const code = body.replace(/\n$/, '');
     const kind = normaliseLang(lang);
     // highlight() escapes as it goes, so known languages skip escapeHtml here
-    // Кнопка стоит СНАРУЖИ <pre>, в обёртке: у самого блока `overflow-x: auto`,
-    // и кнопка внутри него уезжала бы влево вместе с длинной строкой — ровно
-    // тогда, когда её и хотят нажать. Текст она берёт из `textContent` блока,
-    // поэтому копируется код, а не подсветка, и второй копии в разметке нет.
+    // Design: Figma, Prod, section «20 · Кнопка копирования у блоков кода».
+    // The button sits OUTSIDE <pre>, in a wrapper: the block itself scrolls
+    // horizontally, and a button inside would slide out of reach along with the
+    // long line — exactly when somebody wants to press it. Its text comes from
+    // the block's textContent, so the code is copied rather than the
+    // highlighting, and the markup holds no second copy of it.
     fences.push('<div class="mdblock">'
       + `<pre class="mdcode"${lang ? ` data-lang="${escapeHtml(lang)}"` : ''}>`
       + `<code>${kind ? highlight(code, kind) : escapeHtml(code)}</code></pre>`

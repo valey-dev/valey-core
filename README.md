@@ -15,10 +15,7 @@ npm start
 Then open <http://localhost:5177>.
 
 The server binds `127.0.0.1`, so the office answers this machine and nothing
-else. That is worth saying out loud because it was not true until 30 August
-2026: `server.listen(PORT)` with no host is `0.0.0.0`, and with no checks of
-any kind anyone on the same Wi-Fi who knew the port read every session
-transcript through `/api/chat` and opened files through `/api/file`.
+else. 
 
 ### Reaching it from another device
 
@@ -45,7 +42,7 @@ VALEY_EXTERNAL=1 npm start
 
 **There is no install step.** Not a missing instruction — the project has no dependencies, so there is no `npm install` to run and no `node_modules` to appear. The only foreign thing the office itself carries is the JetBrains Mono font in `web/fonts/`, shipped as files under the OFL, because the office works without internet.
 
-One file in here is not the office: `web/landing.html` is the project's public page, and it does reach out — Google Fonts for its typefaces, and a form. The office does not, and that difference is the point of the section below.
+Everything in here is the office. The public page used to sit next to it — `web/landing.html`, which reached out to Google Fonts and to a form — and it moved to the site's own repository on 5 September 2026, along with the holding page for the domain. The office reaches out to nothing, and that is the point of the section below; the exception that blurred it is gone.
 
 ### If you do not have Node
 
@@ -67,7 +64,7 @@ npm comes with Node, so there is nothing else to fetch. If `node -v` works and `
 
 * **Who is in** — from `~/.claude/sessions/*.json`: pid, working directory, session name. Alive is checked with `process.kill(pid, 0)`.
 * **What they are doing** — the transcript is read incrementally: the last tool call, the last thing said, whether the turn ended and they are waiting on you, which files they touched, which git branch they are on.
-* **Their trade** — from the tools they reach for. Edits code, so: developer. Opens design files: designer. Searches the web: researcher.
+* **Their role** — from the tools they reach for. Edits code, so: developer. Opens design files: designer. Searches the web: researcher, etc. 
 * **Their face and name** — a deterministic hash of the session id, so the same session is the same person every time you look.
 * **The floor** — rebuilt whenever the cast changes, but a project keeps its slot, so somebody else starting work never shuffles your rooms.
 

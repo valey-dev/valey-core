@@ -1,9 +1,10 @@
-// node modules/radio/test-keys.mjs — клавиши приёмника.
+// node modules/radio/test-keys.mjs — the keys of the receiver.
 //
-// Уехал сюда из tools/test-panel-keys.mjs вместе с радио: тест панели живёт
-// рядом с панелью, иначе ядро продолжает знать про модуль хотя бы тестом.
-// DOM подставной, как и в остальных клавиатурных стендах: проверяется не
-// вёрстка, а состояние фокуса — куда он встаёт, как ходит и что нажимает.
+// It moved here out of tools/test-panel-keys.mjs together with the radio: the test of
+// a panel lives next to the panel, or the core goes on knowing about the module at
+// least through a test. The DOM is a stand-in, as in the other keyboard stands: what
+// is checked is not the layout but the focus state — where it lands, how it moves and
+// what it presses.
 
 import { node, proxy, installDom } from '../../tools/lib/dom.mjs';
 
@@ -23,7 +24,7 @@ function makeRoster(n) {
   };
 }
 
-// Порядок такой же, как в разметке панели: ручки, волны, громкость, своя волна.
+// The order is the same as in the markup of the panel: the knobs, the waves, the volume, your own wave.
 function makeRadio(waves = 2) {
   const ctl = [
     node('', { id: 'radioprev' }), node('big', { id: 'radiotoggle' }), node('', { id: 'radionext' }),
@@ -33,9 +34,9 @@ function makeRadio(waves = 2) {
   ctl.push(node('', { id: 'radiovol', tagName: 'INPUT', type: 'range', value: '50' }));
   ctl.push(node('', { id: 'radiouri', tagName: 'INPUT', type: 'text' }));
   const classes = new Set(['open']);
-  // Стекло над пластинкой ищут по классу, и до дерева гита этот запрос никогда
-  // не доходил: probeDrm отвечает через промис, а ждать его в стенде было
-  // некому — падение ждало первого же await в файле.
+  // The glass over the record is looked up by class, and until the git tree this query
+  // never got through: probeDrm answers through a promise, and there was nobody in the
+  // stand to wait for it — the fall waited for the first await in the file.
   const glass = node('radioglass');
   return {
     ctl, glass, stations, innerHTML: '',
@@ -49,8 +50,8 @@ function makeRadio(waves = 2) {
   };
 }
 
-// Слот одежды — строка с ◀ и ▶ внутри, а не кнопка. Стрелки в стороны должны
-// жать эти кнопки, а не перескакивать на соседний слот.
+// A clothing slot is a row with ◀ and ▶ inside, not a button. The sideways arrows have
+// to press those buttons rather than jump to the neighbouring slot.
 function makeDress(slots) {
   const rows = [];
   const name = node('namerow');
@@ -72,7 +73,7 @@ function makeDress(slots) {
   };
 }
 
-// Плоское кольцо: окно в мир и цвет офиса устроены одинаково.
+// A flat ring: the window on the world and the office colour are built the same way.
 function makeRing(items) {
   const btns = items.map((it) => node('', it));
   return {
@@ -96,8 +97,8 @@ function makeNotes(n) {
   };
 }
 
-// initUI запоминает узлы один раз, поэтому за ним стоит постоянная обёртка, а
-// свежий подставной DOM подсовывается уже за ней
+// initUI remembers its nodes once, so a permanent wrapper stands in front of it, and
+// the fresh stand-in DOM is slipped in behind that
 const notesProxy = proxy(() => notes);
 const dressProxy = proxy(() => dress);
 const skyProxy = proxy(() => sky);
@@ -141,28 +142,28 @@ const check = (name, ok, got) => {
   else { failed++; console.log('ПЛОХО |', name, '→', got); }
 };
 
-// Кто из кнопок держит фокус — тот же помощник, что и в тесте панелей ядра.
+// Which of the buttons holds the focus — the same helper as in the core panels test.
 const at = (list) => list.findIndex((b) => b.has('focus'));
 
-// ------------------------------------------------------------------- радио
-// el.radio ставится внутри buildRadio, поэтому подсовываем его тем же путём,
-// каким его достаёт код панели.
+// ------------------------------------------------------------------- the radio
+// el.radio is set inside buildRadio, so we slip it in by the same path the panel code
+// takes it out by.
 //
-// Добавляем к карте, а не затираем её. Затирающий вариант приехал сюда вместе с
-// переносом теста и в ядре успел стоить получаса: всё, что идёт ниже, получало
-// общую заглушку вместо своих узлов, и «PgUp/PgDn не крутят панель» означало,
-// что панелью оказалась заглушка нулевой высоты. Исправлено в main 2 сентября
-// 2026, перенесено сюда следом.
+// We add to the map rather than overwrite it. The overwriting variant arrived here
+// together with the move of the test and had already cost half an hour in the core:
+// everything below got the shared stub instead of its own nodes, and "PgUp/PgDn do not
+// scroll the panel" meant that the panel turned out to be a stub of zero height. Fixed
+// in main on 2 September 2026, moved here after it.
 const baseQuery = document.querySelector;
 document.querySelector = (sel) => (sel === '#radio' ? radioBox : baseQuery(sel));
 radioBox = makeRadio(2);
-// openRadio по пути трогает живой плеер и DRM браузера — на голом node это
-// падает. Но el.radio и класс open проставляются в самом начале, до этого
-// места, поэтому разбор клавиш к моменту падения уже рабочий. Ловим и идём
-// дальше: проверяем именно клавиши, а не сборку разметки.
-try { UI.openRadio(); } catch { /* плеера здесь нет и не должно быть */ }
-// Падение случается до конца openRadio, поэтому подсветку кладём тем же вызовом,
-// каким её кладёт живая панель на каждую перерисовку.
+// openRadio touches the live player and the browser's DRM on the way — on bare node
+// that falls over. But el.radio and the open class are set at the very beginning, before
+// this place, so by the moment of the fall the key handling already works. We catch it
+// and go on: what is being checked is the keys, not the assembly of the markup.
+try { UI.openRadio(); } catch { /* there is no player here and there must not be */ }
+// The fall happens before the end of openRadio, so we lay the highlight down with the
+// same call the live panel lays it with on every repaint.
 UI.repaintRadioFocus();
 
 const ctl = radioBox.ctl;
@@ -172,11 +173,11 @@ check('и переводит на «включить»', ctl[1].id === 'radiotog
 UI.radioKey('Enter');
 check('Enter нажимает «включить»', ctl[1].clicked === 1, ctl[1].clicked);
 
-// волны и их крестики стоят в том же кольце: удалить волну без мыши тоже надо
+// the waves and their crosses stand in the same ring: deleting a wave without a mouse has to work too
 UI.radioKey('ArrowRight'); UI.radioKey('ArrowRight');
 check('фокус доходит до списка волн', ctl[at(ctl)].has('rst'), at(ctl));
 
-// громкость: в стороны крутится сама, вверх-вниз уводят с неё
+// the volume: sideways it turns itself, up and down lead away from it
 const vol = ctl.find((b) => b.id === 'radiovol');
 let volSet = 0;
 vol.oninput = () => { volSet += 1; };
@@ -189,15 +190,15 @@ check('влево крутит обратно и не уходит ниже ну
 UI.radioKey('ArrowDown');
 check('вниз с громкости всё-таки уводит', ctl[at(ctl)] !== vol, 'застряли');
 
-// своя волна — поле ввода: Enter должен отдать ему настоящий фокус, а не
-// «нажать» его, иначе печатать в него с клавиатуры по-прежнему нельзя
+// your own wave is an input field: Enter has to give it real focus rather than "press"
+// it, or typing into it from the keyboard is still impossible
 const uri = ctl.find((b) => b.id === 'radiouri');
 while (ctl[at(ctl)] !== uri) UI.radioKey('ArrowDown');
 UI.radioKey('Enter');
 check('Enter на своей волне отдаёт полю фокус', uri.focused === 1, uri.focused);
 check('и не жмёт его как кнопку', uri.clicked === 0, uri.clicked);
 
-// закрытая панель клавиши не забирает
+// a closed panel does not take the keys
 UI.closeRadio();
 check('закрытое радио стрелки не ест', UI.radioKey('ArrowDown') === false, 'съело');
 

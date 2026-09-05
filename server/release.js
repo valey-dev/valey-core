@@ -1,40 +1,45 @@
-// Пинок про релизный ролик: вышел минор, а ролика нет. Считается из
-// репозитория и файла черновика — руками это состояние не выставляется, иначе
-// оно врало бы ровно тогда, когда должно давить.
+// The nudge about the release video: a minor went out and there is no video.
+// It is computed from the repository and the draft file — this state is never
+// set by hand, or it would lie exactly when it is supposed to push.
 //
-// Кадр: WIP — Пинок про релизный ролик, утверждён 1 сентября 2026.
+// Frame: WIP — the release-video nudge, approved 1 September 2026.
 import { execFile } from 'node:child_process';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { SCRIPTS_DIR } from './settings.js';
 
 const run = promisify(execFile);
 const DAY = 86400000;
 
-// Чистая часть отдельно: она решает, показывать ли карточку, и её можно
-// проверить стендом без git и без файловой системы.
+// The pure part on its own: it decides whether to show the card, and a stand
+// can check it without git and without a filesystem.
 export function nudgeFrom(info, now = Date.now()) {
   if (!info || !info.tag) return null;
-  // Чек-лист закрыт целиком — работа сделана, пинать не за что.
+  // The checklist is fully closed — the work is done, nothing to nudge about.
   if (info.draft && info.draft.exists && info.draft.open === 0) return null;
   const days = info.taggedAt ? Math.max(0, Math.floor((now - info.taggedAt) / DAY)) : null;
   return {
     tag: info.tag,
     days,
-    draft: `media/${info.tag}.md`,
-    // Черновика может не быть: релиз старше генератора или файл удалили.
-    // Это не повод молчать — наоборот, шагов до ролика на один больше.
+    // The path comes with the info: the draft lives next to the settings now,
+    // and this function is pure — it must not go looking for it.
+    draft: info.draftPath || null,
+    // There may be no draft: the release is older than the generator, or the
+    // file was deleted. Not a reason to stay quiet — the opposite, it is one
+    // more step to the video.
     hasDraft: !!(info.draft && info.draft.exists),
     open: info.draft && info.draft.exists ? info.draft.open : null,
   };
 }
 
-// Разбор чек-листа: считаем только пункты списка задач, а не любые скобки в
-// тексте — в сценарии их полно.
+// Parsing the checklist: only task-list items count, not every bracket in the
+// text — a script is full of those.
 export function parseChecklist(md) {
-  // Пробелов между маркером и скобкой может быть сколько угодно, и маркер
-  // бывает `*`: это законный markdown, и черновик правит человек. Строгий
-  // шаблон молча терял пункт и делал вид, что работы меньше.
+  // Any number of spaces can sit between the bullet and the bracket, and the
+  // bullet is sometimes `*`: that is legal markdown, and a person edits the
+  // draft. A strict pattern silently lost an item and pretended there was less
+  // work.
   const open = (md.match(/^[ \t]*[-*][ \t]+\[ \][ \t]+/gm) || []).length;
   const done = (md.match(/^[ \t]*[-*][ \t]+\[[xX]\][ \t]+/gm) || []).length;
   return { open, done, total: open + done };
@@ -47,20 +52,29 @@ export async function releaseNudge(root, now = Date.now()) {
   if (now - cache.at < TTL) return cache.value;
   let info = null;
   try {
-    // Только версии: репозиторий растит и другие теги, и ближайший из них
-    // легко оказывается журнальным.
+    // Versions only: the repository grows other tags too, and the nearest one
+    // is easily a journal tag.
     const { stdout } = await run('git', ['tag', '-l', 'v[0-9]*.[0-9]*.0', '--sort=-creatordate'], { cwd: root });
     const tag = stdout.split('\n').map((s) => s.trim()).filter(Boolean)[0];
     if (tag) {
       const { stdout: at } = await run('git', ['log', '-1', '--format=%cI', tag], { cwd: root });
       info = { tag, taggedAt: Date.parse(at.trim()) || null, draft: null };
-      const file = path.join(root, 'media', `${tag}.md`);
-      try {
-        const md = await fsp.readFile(file, 'utf8');
-        info.draft = { exists: true, ...parseChecklist(md) };
-      } catch { info.draft = { exists: false, open: null, done: null, total: 0 }; }
+      // Where the drafts live now, and where they lived until 5 September 2026:
+      // a draft written before the move still counts, or the office would nudge
+      // about a video whose checklist is closed on disk.
+      const places = [path.join(SCRIPTS_DIR, `${tag}.md`), path.join(root, 'media', `${tag}.md`)];
+      info.draft = { exists: false, open: null, done: null, total: 0 };
+      info.draftPath = places[0];
+      for (const file of places) {
+        try {
+          const md = await fsp.readFile(file, 'utf8');
+          info.draft = { exists: true, ...parseChecklist(md) };
+          info.draftPath = file;
+          break;
+        } catch { /* not here — try the old place */ }
+      }
     }
-  } catch { /* не репозиторий или git недоступен — молчим, это не ошибка офиса */ }
+  } catch { /* not a repository, or git is unavailable — stay quiet, this is not the office failing */ }
   cache = { at: now, value: nudgeFrom(info, now) };
   return cache.value;
 }

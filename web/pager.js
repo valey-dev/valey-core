@@ -1,48 +1,51 @@
-// Пейджер: входящий вопрос от своего же агента.
+// The pager: an incoming question from one of your own agents.
 //
-// Почему не строка в шапке (так было в v1): шапка — самое тихое место экрана,
-// рядом с погодой и счётчиками, а на том конце стоит живой агент с поднятой
-// рукой и ждёт. Уведомление должно прийти к человеку, а не ждать, пока он
-// поднимет глаза.
+// Why not a line in the header (which is how it was in v1): the header is the
+// quietest place on the screen, next to the weather and the counters, while at
+// the other end there is a live agent with a raised hand, waiting. A notification
+// has to come to the person rather than wait for them to raise their eyes.
 //
-// Три ответа и все три — ответы:
-//  - Enter открывает карточку разрешения там, где стоишь: ходить к столу не надо;
-//  - Esc — «перезвоню»: агенту не уходит ничего, вопрос продолжает висеть,
-//    в шапке остаётся счётчик, H возвращает пейджер;
-//  - ничего — через девять минут сервер сам отпустит вопрос в терминал.
+// Three answers, and all three are answers:
+//  - Enter opens the permission card where you stand: no need to walk to the desk;
+//  - Esc is "I will call back": nothing goes to the agent, the question keeps
+//    hanging, the counter stays in the header, H brings the pager back;
+//  - nothing — in nine minutes the server itself releases the question into the
+//    terminal.
 //
-// Макет: [Пейджер · входящий](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=958-2)
-// Очередь: [Пейджер · очередь из двух](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=958-66)
-// Чип в шапке: [HUD · пейджер отложен](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=958-20)
+// The mock-up: [«Пейджер · входящий»](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=958-2)
+// The queue: [«Пейджер · очередь из двух»](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=958-66)
+// The chip in the header: [«HUD · пейджер отложен»](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=958-20)
 import { t as tr } from './i18n.js';
 import { sound } from './sound.js';
 
 const $ = (s) => document.querySelector(s);
 let el = null, S = null, api = null;
 
-// Отложенные — «перезвоню» по этому id. Живёт в памяти вкладки и умирает с
-// ней: отложенный вопрос не должен пережить перезагрузку страницы молча, а
-// сервер о нём и так помнит — после F5 пейджер зазвонит снова.
+// The deferred ones — "I will call back" on this id. It lives in the memory of
+// the tab and dies with it: a deferred question must not silently outlive a reload
+// of the page, and the server remembers it anyway — after F5 the pager rings again.
 const deferred = new Set();
-// Отданные карточке. Пейджер их не показывает — вопрос уже на экране целиком,
-// и держать его ещё и в углу значит спрашивать дважды. В счётчик отложенных не
-// идут: они не ждут, на них смотрят.
+// The ones given to the card. The pager does not show them — the question is
+// already on the screen whole, and holding it in the corner as well means asking
+// twice. They do not go into the counter of deferred ones: they are not waiting,
+// they are being looked at.
 const opened = new Set();
-// Кому уже звонили. Один сигнал на запрос: пейджер, зовущий повторно, — это
-// будильник, а не уведомление.
+// Who has already been called. One signal per request: a pager that rings again
+// is an alarm clock, not a notification.
 const rung = new Set();
 
 export function initPager(state, callbacks) {
   el = $('#pager'); S = state; api = callbacks;
 }
 
-// Что показывать прямо сейчас: первый по времени неотложенный запрос.
+// What to show right now: the earliest request that has not been deferred.
 const current = () => (S.permits || []).find((p) => !deferred.has(p.id) && !opened.has(p.id)) || null;
 export const waitingCount = () => (S.permits || []).filter((p) => deferred.has(p.id)).length;
 export const pagerOpen = () => !!el && !el.hidden;
 
-// Имя агента для экрана пейджера. Сессия могла ещё не доехать в снимке —
-// тогда честнее сказать «агент», чем нарисовать пустое место.
+// The agent's name for the pager screen. The session may not have reached the
+// snapshot yet — then it is more honest to say "an agent" than to draw an empty
+// space.
 const whoOf = (p) => {
   const a = (S.agents || []).find((x) => x.id === p.agentId);
   return a ? a.name : tr('pager.someone');
@@ -51,8 +54,8 @@ const whoOf = (p) => {
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-// Секунды ожидания. Не «12:34», а «12 с»: важно не время суток, а сколько
-// человек уже держит агента.
+// The seconds of waiting. Not "12:34" but "12 s": what matters is not the time of
+// day but how long the person has been holding the agent up.
 const held = (p) => {
   const sec = Math.max(0, Math.round((Date.now() - p.at) / 1000));
   return sec < 60 ? tr('pager.sec', { n: sec }) : tr('pager.min', { n: Math.round(sec / 60) });
@@ -81,8 +84,8 @@ export function renderPager() {
   $('#pLater').onclick = () => later();
 }
 
-// Пришёл новый снимок запросов. Звоним ровно на новых — и только если этот
-// вопрос ещё никто не откладывал.
+// A new snapshot of the requests has arrived. We ring on exactly the new ones —
+// and only if nobody has deferred this question yet.
 export function seePermits(list) {
   S.permits = list || [];
   const live = new Set(S.permits.map((p) => p.id));
@@ -93,34 +96,36 @@ export function seePermits(list) {
   renderPager();
 }
 
-// Звонок — на то, что сейчас на экране, и один раз за вопрос. Зовётся отовсюду,
-// где очередь может сдвинуться, а не только из снимка: «перезвоню» первому
-// выводит вперёд второго, и он такой же новый, как если бы пришёл сам.
-// Разная громкость у одного и того же события, смотря откуда оно пришло, —
-// это то, что читается как «иногда пищит, иногда нет».
+// The ring is for what is on the screen right now, and once per question. It is
+// called from everywhere the queue can move, not only from the snapshot:
+// "I will call back" to the first one brings the second forward, and it is as new
+// as if it had come by itself. A different loudness for one and the same event
+// depending on where it came from is what reads as "it beeps sometimes, sometimes
+// not".
 function ring() {
   const p = current();
   if (!p || rung.has(p.id)) return;
   rung.add(p.id);
-  // Звук по умолчанию: включён, пока человек сам не выключил его на M. Это
-  // единственное в офисе, что зовёт к экрану, а не сопровождает то, что на
-  // нём и так видно.
+  // The sound is on by default, until the person switches it off on M. This is the
+  // only thing in the office that calls you to the screen rather than accompanying
+  // what is visible on it anyway.
   sound.pager();
 }
 
-// Enter: карточка разрешения у того агента, который спросил. Пейджер уезжает —
-// вопрос теперь на экране целиком, и держать его ещё и в углу незачем.
+// Enter: the permission card of the agent that asked. The pager leaves — the
+// question is now on the screen whole, and there is no point holding it in the
+// corner as well.
 function answer() {
   const p = current();
   if (!p) return;
   opened.add(p.id);
-  renderPager();                       // следующий в очереди выйдет сам
+  renderPager();                       // the next in the queue comes out by itself
   api.openPermit(p);
 }
 
-// Карточку закрыли, ничего не ответив. Вопрос никуда не делся, поэтому он
-// возвращается в отложенные: иначе он исчезает с экрана целиком — ни пейджера,
-// ни счётчика, — и агент ждёт девять минут молча.
+// The card was closed without an answer. The question has not gone anywhere, so
+// it goes back to the deferred ones: otherwise it disappears from the screen
+// entirely — no pager, no counter — and the agent waits nine minutes in silence.
 export function cardClosed() {
   if (!opened.size) return;
   for (const id of opened) deferred.add(id);
@@ -129,7 +134,7 @@ export function cardClosed() {
   api.hudChanged();
 }
 
-// Esc: «перезвоню». Не отказ и не ответ — агенту не уходит ничего.
+// Esc: "I will call back". Neither a refusal nor an answer — nothing goes to the agent.
 function later() {
   const p = current();
   if (!p) return;
@@ -140,7 +145,7 @@ function later() {
   api.toast(tr('toast.pagerLater', { who: whoOf(p) }), 'wait');
 }
 
-// H: вернуть отложенное. Не E — она в офисе равна ПРОБЕЛу.
+// H: bring back what was deferred. Not E — in the office that one is the same as SPACE.
 export function recall() {
   if (!deferred.size) return false;
   deferred.clear();
@@ -149,9 +154,10 @@ export function recall() {
   return true;
 }
 
-// Клавиши пейджера идут выше офисных: пока он на экране, Esc принадлежит ему,
-// а не «закрыть всё». Enter в остальном офисе не занят ничем, кроме диалога, а
-// диалог поверх пейджера не открыт — пейджер уезжает, когда тот открывается.
+// The pager's keys go above the office ones: while it is on the screen, Esc
+// belongs to it rather than to "close everything". Enter in the rest of the office
+// is taken by nothing except the dialog, and the dialog is not open over the pager
+// — the pager leaves when it opens.
 export function pagerKey(raw) {
   if (!pagerOpen()) return false;
   const k = String(raw || '').toLowerCase();
@@ -160,7 +166,7 @@ export function pagerKey(raw) {
   return false;
 }
 
-// Запрос ответили или он ушёл сам — убрать со стола, не дожидаясь снимка.
+// The request was answered or left by itself — take it off the desk without waiting for a snapshot.
 export function forgetPermit(id) {
   S.permits = (S.permits || []).filter((p) => p.id !== id);
   deferred.delete(id); opened.delete(id);

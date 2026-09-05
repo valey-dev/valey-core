@@ -15,7 +15,7 @@
 //
 // **Physical keys, not characters.** A binding is `KeyN` — the key in the N
 // position — not the character it produces. This is why the twenty hand-written
-// pairs like `k === 'n' || k === 'т'` are gone: on ЙЦУКЕН that same physical key
+// pairs like `k === 'n' || k === 'т'` are gone: on "ЙЦУКЕН" that same physical key
 // produces `т`, and `event.code` says `KeyN` under both layouts. It fixes every
 // other layout at the same time, not just Russian, and it closes a leak in the
 // held-key set: press a key under one layout, switch, release, and the old
@@ -69,13 +69,13 @@ const CORE = [
   { id: 'zoom.in', codes: ['Equal', 'NumpadAdd'], group: 'zoom', hint: 'hint.zoom' },
   { id: 'zoom.out', codes: ['Minus', 'NumpadSubtract'], group: 'zoom' },
   { id: 'zoom.reset', codes: ['Digit0', 'Numpad0'], group: 'zoom', hint: 'hint.zoom' },
-  // The keys panel sits on the key where QWERTY prints «?». Under ЙЦУКЕН that
+  // The keys panel sits on the key where QWERTY prints «?». Under "ЙЦУКЕН" that
   // same key prints a full stop, which is the honest cost of a physical
   // binding — the panel shows the engraving when the browser knows it.
   { id: 'service.keys', codes: ['Slash'], group: 'service', hint: 'hint.keys' },
-  // `more` — то, что не влезает на колпачок и живёт в подсказке под курсором.
-  // Колпачок в 52 пикселя держит около десяти символов, а «с SHIFT — ×4» это
-  // подробность, а не название действия.
+  // `more` is what does not fit on a cap and lives in the tooltip instead. A cap
+  // holds about ten characters, and "с SHIFT — ×4" is a footnote rather than the
+  // name of the action.
   { id: 'service.shot', codes: ['F9'], group: 'service', hint: 'hint.shot', more: 'hint.shotMore' },
 ];
 
