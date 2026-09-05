@@ -319,6 +319,8 @@ function buildDialog(a) {
         : ''}`;
   }
 
+  // Макет: [Диалог · Разрешение · Bash](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=947-2)
+  // Отказ с запиской: [Диалог · Разрешение · отказ](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=947-230)
   else if (S.page === 'permit') {
     const p = permitOf(a.id);
     // Запрос могли ответить с другой вкладки или он истёк, пока карточка была
