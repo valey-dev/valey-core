@@ -242,7 +242,14 @@ UI.initUI(state, {
 
 // We knock first and ask who we are after: with a code in hand the answer to the second
 // question depends on the first.
-knock().then((entered) => {
+//
+// The whole chain is kept, because the modules have to wait for it. A guest who
+// arrives by an invitation link is nobody until the code is exchanged, and
+// `/api/modules` answers a refusal rather than a list to nobody: on 6 September
+// 2026 a guest coming through a tunnel got an office with no modules at all —
+// no voice, no microphone, an empty floor — while the owner on the same machine
+// saw everything, because he needed no code and won the race by accident.
+const admission = knock().then((entered) => {
   if (entered && entered.errorKey) state.entry = { refused: entered.errorKey };
   else if (entered && entered.ok) state.entry = { from: entered.from || '' };
   return fetch('/api/whoami', { headers: owned() }).then((r) => r.json());
@@ -1942,6 +1949,10 @@ renderTitle();
 
 // The modules come up before the first frame: their things have to get into the plan at
 // once, or the first pass will draw the office without them and it will flicker.
+// Nothing is asked of the office before it knows who is asking. For the owner
+// this changes nothing; for a guest it is the difference between an office and
+// an empty room.
+await admission;
 await loadModules();
 // The modules arrive later than the first stream, so their listeners are hung on
 // the open one now. Without this their events would be silently lost until the
