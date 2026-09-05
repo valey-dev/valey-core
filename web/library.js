@@ -169,9 +169,9 @@ export const SUBS = {
 
 export const dirOf = (id) => DIRS.find((d) => d.id === id);
 export const inDir = (dir) => LIBRARY.filter((n) => n.dir === dir);
-// «Своё» здесь — то же, что горит в плоском виде: бесплатное и установленное.
-// Направление без платного — не пустое, а бесплатное целиком, и счёт ему не
-// нужен: он бы читался как «осталось купить».
+// «Own» here means what lights up in the flat view: free, or installed. A
+// direction with nothing paid in it is not empty but free all the way through,
+// and it needs no count — a count would read as «this much left to buy».
 export const dirTally = (dir, lit) => {
   const all = inDir(dir).filter((n) => n.tier !== 'more');
   const paid = all.filter((n) => n.tier !== 'room');
