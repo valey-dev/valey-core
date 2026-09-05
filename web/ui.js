@@ -1336,7 +1336,7 @@ const bodyRow = (f) => `<div class="drow"><button data-f="${f.key}" data-d="-1">
 const selfHtml = () => `<div class="dbody">
       <canvas id="me" width="72" height="86"></canvas>
       <div class="rows">
-        <label class="namerow">${tr('dress.name')} <input id="myname" maxlength="14" value="${S.me.name || tr('label.me')}"></label>
+        <label class="namerow">${tr('dress.name')} <input id="myname" maxlength="14" value="${esc(S.me.name || '')}" placeholder="${tr('label.me')}"></label>
         <p class="tally">${tr('dress.tally', { water: S.me.drinks || 0, coffee: S.me.coffees || 0 })}</p>
         <p class="dcap">${tr('dress.colors')}</p>
         ${colorFields().map(colorRow).join('')}
@@ -1734,7 +1734,9 @@ function bindSelf() {
     paint();
   };
   paint();
-  $('#myname').oninput = (e) => { S.me.name = e.target.value.toUpperCase().slice(0, 14) || tr('label.me'); api.saveMe(); };
+  // An empty field is an empty name, not the word «ТЫ» stored as one: that
+  // string used to travel outward and label a stranger YOU.
+  $('#myname').oninput = (e) => { S.me.name = e.target.value.toUpperCase().slice(0, 14); api.saveMe(); };
   paintBagFocus();
   const rowFields = () => [...colorFields(), ...BODY, bottomCut];
   el.bag.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => {

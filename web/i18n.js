@@ -71,6 +71,11 @@ const DICT = {
     'hint.lang': '[ ПРОБЕЛ ] язык и имена',
     'hint.kicker': '[ ПРОБЕЛ ] сыграть',
     'label.me': 'ТЫ',
+    // «ТЫ» is how the office addresses you, and it never travels outward: over
+    // a stranger's head it states something untrue. These two are how a person
+    // is seen by everyone else until they type a name of their own.
+    'label.guest': 'ГОСТЬ',
+    'label.host': 'ХОЗЯИН',
     'label.gulp': 'буль',
     'label.ah': 'ах',
     'label.limited': 'лимит кончился — дремлет',
@@ -654,6 +659,8 @@ const DICT = {
     'hint.lang': '[ SPACE ] language and names',
     'hint.kicker': '[ SPACE ] play a round',
     'label.me': 'YOU',
+    'label.guest': 'GUEST',
+    'label.host': 'HOST',
     'label.gulp': 'glug',
     'label.ah': 'ah',
     'label.limited': 'out of quota — dozing',

@@ -28,7 +28,9 @@ ctx.imageSmoothingEnabled = false;
 
 const DEFAULT_ME = {
   skin: '#ffdcb8', hair: '#3a2a20', shirt: '#4fa89a', pants: '#3f4a63', boots: '#2a2118',
-  style: 0, head: 'none', glasses: false, face: 'none', tall: 1, hands: 'none', name: tr('label.me'),
+  // No name of one's own until somebody types one: «ТЫ» is how the office
+  // addresses you, not how it introduces you to anybody else.
+  style: 0, head: 'none', glasses: false, face: 'none', tall: 1, hands: 'none', name: '',
 };
 
 // What lies in localStorage was written by us — but not necessarily by this version
@@ -405,7 +407,12 @@ function tellWhereIAm(now) {
     method: 'POST',
     headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({
-      id: MY_ID, name: state.me.name || tr('label.me'), look: myLook(),
+      // Outward the office sends a third-person name. Until 5 September 2026 it
+      // sent «ТЫ», so everyone who had not renamed themselves stood in somebody
+      // else's office labelled YOU — the one word that cannot be true of another
+      // person. Named yourself and the name goes as it is.
+      id: MY_ID, name: state.me.name || tr(state.owner === false ? 'label.guest' : 'label.host'),
+      look: myLook(),
       x: p.x, y: p.y, dir: p.dir || 1, moving: !!p.moving,
       room: room ? room.key : null,
     }),
