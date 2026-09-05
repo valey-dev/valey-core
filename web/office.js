@@ -230,6 +230,50 @@ export function drawSwitcher(ctx, p, t, facing = 0) {
 // is told.
 export const kickerBusy = { since: 0 };
 
+// The bear skin in front of the sofa. Seen from above like everything else on the
+// floor: the hide spread wide, four paws splayed to the corners, the head toward
+// the room so that whoever sits on the sofa looks at the back of it and whoever
+// walks past meets the teeth.
+//
+// The head is the whole point of the thing, so it gets more pixels than the body:
+// at this scale a bear and a brown puddle differ by the muzzle, two eyes and the
+// white of the teeth, and nothing else.
+function drawBearRug(ctx, x, y) {
+  const FUR = '#6b4a30', DARK = '#4a3220', BELLY = '#8a6242';
+  // the hide: bars widening to the middle and narrowing to the hips
+  const rows = [[-12, 14], [-10, 20], [-8, 24], [-6, 28], [-4, 30], [-2, 30], [0, 28], [2, 24], [4, 18]];
+  for (const [dy, w] of rows) px(ctx, x - w / 2, y + dy, w, 2, FUR);
+  // the lighter belly down the middle, so the hide is not one flat spot
+  px(ctx, x - 7, y - 8, 14, 10, BELLY);
+  px(ctx, x - 5, y - 10, 10, 2, BELLY);
+  // four paws, splayed as a skin on the floor is: a limb out to the corner and a
+  // pad at the end of it, or at this size the legs read as dirt on the floor
+  for (const [lx, ly, px0, py0] of [[-20, -9, -26, -11], [12, -9, 20, -11], [-18, 0, -24, 0], [12, 0, 20, 0]]) {
+    px(ctx, x + lx, y + ly, 9, 5, FUR);        // the limb
+    px(ctx, x + px0, y + py0, 7, 6, FUR);      // the pad
+    px(ctx, x + px0, y + py0 + 6, 7, 1, DARK);
+    for (let i = 0; i < 3; i++) px(ctx, x + px0 + 1 + i * 2, y + py0, 1, 2, '#d8cbb8');
+  }
+  // the head, toward the room
+  const hy = y + 6;
+  px(ctx, x - 9, hy, 18, 12, FUR);          // the skull
+  px(ctx, x - 10, hy + 2, 1, 8, FUR);
+  px(ctx, x + 9, hy + 2, 1, 8, FUR);
+  px(ctx, x - 8, hy - 2, 4, 3, FUR);        // the ears
+  px(ctx, x + 4, hy - 2, 4, 3, FUR);
+  px(ctx, x - 7, hy - 1, 2, 1, '#3a2a1e');
+  px(ctx, x + 5, hy - 1, 2, 1, '#3a2a1e');
+  px(ctx, x - 6, hy + 2, 2, 2, '#120c08');  // the eyes
+  px(ctx, x + 4, hy + 2, 2, 2, '#120c08');
+  px(ctx, x - 5, hy + 6, 10, 6, '#3a2a1e'); // the muzzle
+  px(ctx, x - 2, hy + 5, 4, 2, '#231810');  // the nose
+  // the open mouth: the teeth are what makes it a bear and not a rug
+  px(ctx, x - 4, hy + 9, 8, 3, '#1a1008');
+  for (let i = 0; i < 4; i++) px(ctx, x - 4 + i * 2, hy + 9, 1, 2, '#efe6d8');
+  px(ctx, x - 3, hy + 11, 1, 1, '#efe6d8');
+  px(ctx, x + 2, hy + 11, 1, 1, '#efe6d8');
+}
+
 function drawKicker(ctx, x, y, t) {
   const live = kickerBusy.since && t - kickerBusy.since < 400;
   px(ctx, x - 20, y, 3, 6, '#3a2a1e');                 // the legs
@@ -295,6 +339,7 @@ function drawCorridorProp(ctx, p, t) {
     px(ctx, x - 19, y - 14, 7, 2, '#8a749c');
     return;
   }
+  if (kind === 'bearrug') { drawBearRug(ctx, x, y); return; }
   if (kind === 'kicker') { drawKicker(ctx, x, y, t); return; }
   if (kind === 'ashtray') {
     // the sand bin: a wisp of smoke always curls above it
