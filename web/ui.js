@@ -826,6 +826,103 @@ function copyTopBlock() {
   return true;
 }
 
+// A path or a link is copied by the fragment itself: the button beside it takes
+// the click, the fragment answers with a flash. Its text is never swapped —
+// «copied» is two characters longer than «copy» in Russian and would move the
+// sentence it sits in.
+async function copyInline(btn) {
+  const wrap = btn.closest('.mdcopyable');
+  if (!wrap) return false;
+  const body = wrap.querySelector('code, a');
+  const text = btn.dataset.copy || (body ? body.textContent : '');
+  if (!text) return false;
+  const ok = await copyText(text);
+  wrap.classList.remove('done', 'fail');
+  wrap.classList.add(ok ? 'done' : 'fail');
+  clearTimeout(wrap._back);
+  wrap._back = setTimeout(() => wrap.classList.remove('done', 'fail'), ok ? 1200 : 4000);
+  return ok;
+}
+
+// ------------------------------------------------------------- digit picking
+// The office is keyboard-first, and a button reachable only by mouse is a
+// half-built one. C copies the block you are reading; pressed again — or where
+// there is no block — it numbers everything copyable on screen, and a digit
+// takes it. Digits already pick in this office: inventory tabs, lift floors,
+// radio waves, so the gesture is not a new one.
+let picked = [];
+let copiedByC = false;
+
+const pickBox = () => el.viewer.querySelector('#chatlog') || el.viewer.querySelector('.single') || el.viewer;
+
+// Only what is on screen: nine badges are a promise about the visible page, not
+// about a transcript of four hundred messages.
+function pickTargets() {
+  const box = pickBox();
+  if (!box.getBoundingClientRect) return [];
+  const r = box.getBoundingClientRect();
+  return [...el.viewer.querySelectorAll('.mdblock, .mdcopyable')]
+    .filter((n) => {
+      const b = n.getBoundingClientRect();
+      return b.bottom > r.top + 2 && b.top < r.bottom - 2;
+    })
+    .slice(0, 9);
+}
+
+// A key that answers with silence is the kind this project keeps paying for, so
+// an empty page says so in the header instead of swallowing the press.
+function pickNothing() {
+  const head = el.viewer.querySelector('.vhead');
+  if (!head || el.viewer.querySelector('.pickhint')) return;
+  const hint = document.createElement('span');
+  hint.className = 'pickhint';
+  hint.textContent = tr('md.nothing');
+  head.appendChild(hint);
+  setTimeout(() => hint.remove(), 1500);
+}
+
+export function pickOpen() {
+  pickClose();
+  picked = pickTargets();
+  if (!picked.length) { pickNothing(); return false; }
+  picked.forEach((n, i) => { n.classList.add('picked'); n.dataset.pick = String(i + 1); });
+  const head = el.viewer.querySelector('.vhead');
+  if (head && !el.viewer.querySelector('.pickhint')) {
+    const hint = document.createElement('span');
+    hint.className = 'pickhint';
+    hint.textContent = tr('md.pick');
+    head.appendChild(hint);
+  }
+  return true;
+}
+
+export function pickClose() {
+  if (!picked.length) return;
+  for (const n of picked) { n.classList.remove('picked'); delete n.dataset.pick; }
+  picked = [];
+  const hint = el.viewer.querySelector('.pickhint');
+  if (hint) hint.remove();
+  // Whatever the server sent while the numbers were up has been waiting; put it
+  // in now, the same way the note editor does when it closes.
+  if (chatView && chatView.pending) {
+    const waiting = chatView.pending;
+    chatView.pending = null;
+    paintChat(waiting.msgs, waiting.fresh, true);
+  }
+}
+
+export const pickOn = () => picked.length > 0;
+
+function pickTake(n) {
+  const node = picked[n - 1];
+  pickClose();
+  if (!node) return true;
+  const btn = node.querySelector('.mdcopy') || node.querySelector('.mdcopy-in');
+  if (!btn) return true;
+  if (node.classList.contains('mdblock')) copyBlock(btn); else copyInline(btn);
+  return true;
+}
+
 // Строка клавиш внизу перечисляет то, что работает, — и обещание должно быть
 // правдой: C копирует, только когда в панели есть блок кода, поэтому и в
 // подсказке она появляется только тогда. Пустое обещание клавиши офис уже
@@ -850,10 +947,13 @@ export function bindCopyButtons() {
   if (!el.viewer || !el.viewer.addEventListener || el.viewer._copyBound) return;
   el.viewer._copyBound = true;
   el.viewer.addEventListener('click', (e) => {
-    const btn = e.target && e.target.closest && e.target.closest('.mdcopy');
-    if (!btn) return;
-    e.preventDefault();
-    copyBlock(btn);
+    if (!e.target || !e.target.closest) return;
+    const block = e.target.closest('.mdcopy');
+    if (block) { e.preventDefault(); copyBlock(block); return; }
+    // The inline button sits inside the link's wrapper, so the check has to run
+    // before the browser follows the link — hence preventDefault here too.
+    const inline = e.target.closest('.mdcopy-in');
+    if (inline) { e.preventDefault(); e.stopPropagation(); copyInline(inline); }
   });
 }
 
@@ -1002,12 +1102,32 @@ function paintHeadFocus() {
 export function viewerKey(raw, big = false) {
   if (el.viewer.hidden) return false;
   const key = raw.toLowerCase();
-  // C копирует верхний блок кода — и в транскрипте, и в файле. Снаружи эта
-  // буква открывает инвентарь на «на себе», и до 4 сентября 2026 она делала
-  // это прямо поверх открытого просмотра: буквы проваливались сюда сквозь
-  // панель. Внутри просмотра переодеваться незачем, а копировать — постоянно;
-  // инвентарь остаётся на I, одним нажатием.
-  if ((key === 'c' || key === 'с') && el.viewer.querySelector('.mdblock')) return copyTopBlock();
+  // While the numbers are up they own the digits, ESC and C; anything else
+  // takes them down and goes on to do its usual job, so scrolling away from
+  // what you numbered cannot leave stale badges behind.
+  if (pickOn()) {
+    if (/^[1-9]$/.test(key)) return pickTake(Number(key));
+    if (key === 'escape' || key === 'c' || key === 'с') { pickClose(); return true; }
+    pickClose();
+  }
+
+  // C copies the block you are reading — in the transcript and in a file alike.
+  // Outside the viewer this letter opens the inventory on «on you», and until
+  // 4 September 2026 it did that on top of an open viewer: letters fell through
+  // the panel into the office. Inside the viewer there is nothing to change
+  // into and plenty to copy; the inventory stays one press away on I.
+  //
+  // Pressed a second time — or where the screen holds no code block — it hands
+  // the page to the digits instead.
+  if (key === 'c' || key === 'с') {
+    if (!copiedByC && el.viewer.querySelector('.mdblock') && copyTopBlock()) {
+      copiedByC = true;
+      return true;
+    }
+    copiedByC = false;
+    return pickOpen() || true;
+  }
+  copiedByC = false;
   if (transcriptKey(key, big)) return true;
   const n = gallery.items.length;
 
@@ -2089,6 +2209,11 @@ function paintChat(msgs, fresh = 0, force = false) {
   // Пока человек пишет заметку, лог не трогаем: перерисовка сотрёт недописанное.
   // Свежие данные ждут в pending и лягут, как только редактор закроется.
   if (chatView.editing && !force) { chatView.pending = { msgs, fresh }; return; }
+  // The same holds while the numbers are up: a repaint rebuilds the log and the
+  // badges vanish under the hand that was choosing. Found on 5 September 2026 —
+  // the numbers appeared and were gone a second later, and it read as the key
+  // not working at all.
+  if (pickOn() && !force) { chatView.pending = { msgs, fresh }; return; }
   const a = chatView.agent;
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
   const keep = box.scrollTop;

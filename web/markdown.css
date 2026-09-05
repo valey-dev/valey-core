@@ -35,6 +35,47 @@
 .md .mdblock:hover .mdcopy{background:var(--bg-deep); color:var(--ink); border-color:var(--frame)}
 .md .mdcopy.done{background:var(--bg-deep); color:var(--accent); border-color:var(--accent)}
 .md .mdcopy.fail{background:var(--bg-deep); color:var(--warn); border-color:var(--warn)}
+
+/* A path or a command in backticks is the thing people copy most — 41 of them
+   against two links in one real transcript. The button lives beside the
+   fragment and is positioned absolutely, so it costs the paragraph no width:
+   showing it in the flow would re-wrap the line under the cursor, which is the
+   one thing a hover must never do. */
+.md .mdcopyable{position:relative}
+.md .mdcopy-in{position:absolute; left:100%; top:50%; transform:translateY(-50%);
+  margin-left:3px; width:15px; height:15px; padding:0; display:none; cursor:pointer;
+  background:var(--bg-deep); color:var(--muted); border:1px solid var(--frame-dim);
+  font:9px/1 "JetBrains Mono", monospace}
+.md .mdcopy-in::before{content:"⧉"}
+.md .mdcopyable:hover .mdcopy-in, .md .mdcopy-in:hover{display:block}
+.md .mdcopy-in:hover{color:var(--ink); border-color:var(--frame)}
+/* The answer is a flash on the fragment itself: its text is never swapped,
+   because swapping «copy» for «copied» inside a sentence moves the sentence. */
+.md .mdcopyable.done code, .md .mdcopyable.done a{color:var(--accent)}
+.md .mdcopyable.done code{background:var(--bg-deep); border-color:var(--accent)}
+.md .mdcopyable.done .mdcopy-in{display:block; color:var(--accent); border-color:var(--accent)}
+.md .mdcopyable.done .mdcopy-in::before{content:"✓"}
+.md .mdcopyable.fail code, .md .mdcopyable.fail a{color:var(--warn)}
+.md .mdcopyable.fail .mdcopy-in{display:block; color:var(--warn); border-color:var(--warn)}
+.md .mdcopyable.fail .mdcopy-in::before{content:"!"}
+
+/* Digit mode: C lights a number on everything copyable on screen. The badge
+   takes the button's place — one thing at a time in one spot.
+
+   Here the fragment does make room for it, unlike on hover. A badge that hangs
+   over the next word is fine for the moment a cursor points at something, and
+   not fine while the eye is hunting for a number among nine: the number would
+   sit on top of the word it has to be told apart from. Picking is a mode you
+   entered on purpose, so the line may shift once on the way in and back on the
+   way out. */
+.md .mdcopyable.picked{padding-right:18px}
+.md .mdcopyable.picked .mdcopy-in, .mdblock.picked .mdcopy{display:none}
+.md .mdcopyable.picked::after, .mdblock.picked::after{content:attr(data-pick);
+  position:absolute; right:1px; top:50%; transform:translateY(-50%);
+  width:15px; height:15px; line-height:15px; text-align:center;
+  background:var(--accent); color:var(--bg-deep); font:bold 9px "JetBrains Mono", monospace}
+.mdblock.picked{position:relative}
+.mdblock.picked::after{left:auto; right:8px; top:8px; transform:none}
 .md blockquote{margin:10px 0; padding:2px 0 2px 12px; border-left:3px solid var(--frame);
   color:var(--ink-dim)}
 .md hr{border:none; border-top:2px solid #3a2a1e; margin:14px 0}

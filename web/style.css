@@ -141,14 +141,18 @@ kbd{color:var(--muted); font-size:10px}
 .thumb img{max-width:100%; max-height:100%; image-rendering:auto}
 figcaption{font-size:11px; margin-top:6px; color:var(--ink); word-break:break-all}
 figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2px}
-/* Читаемое выделяется мышью. У `body` стоит `user-select:none` — для холста
-   это правильно: перетаскивание не должно подсвечивать интерфейс. Но панель,
-   которую читают, холстом не является, а запрет наследовался и туда, и в
-   транскрипте нельзя было выделить ни ссылку, ни путь, ни обычную строку.
-   Найдено 5 сентября 2026, когда искали, почему ссылку из ответа агента
-   нельзя скопировать: кнопка у блоков кода появилась ровно из-за этого
-   запрета, а не потому, что блок особенный. */
+/* What is read is selectable with the mouse. `body` carries user-select:none,
+   which is right for the canvas — dragging must not highlight the interface —
+   and wrong for a panel, which is not a canvas. The ban was inherited all the
+   same, and in the transcript neither a link nor a path nor an ordinary line
+   could be selected. Found on 5 September 2026 while asking why a link from an
+   agent's answer cannot be copied: the button on code blocks exists because of
+   this ban, not because a block is special. */
 .single, .chatlog, .md, .notes, .lcard, .tcard{user-select:text}
+/* The prompt for digit mode goes in the panel header, next to the file name:
+   the bottom line already carries the key list, and the top line is where the
+   panel says what it is doing right now. */
+.pickhint{margin-left:auto; padding-left:10px; color:var(--accent); font-size:11px}
 .single{overflow:auto; padding:14px}
 .single .full{max-width:100%; display:block; margin:0 auto}
 .single pre{white-space:pre-wrap; font-size:12px; color:var(--ink-dim); margin:0}
