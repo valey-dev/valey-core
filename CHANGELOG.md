@@ -4,6 +4,15 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.8.1 — 5 September 2026
+
+### Fixed
+
+- **guest:** a stranger is «ГОСТЬ», not «ТЫ» — the office stops calling everyone you (7c13d9d)
+- **office:** nobody was in a shared office, because presence went out without the pass (30a15e4)
+- **guest:** the focus on «попросить доступ» is yellow, like the rest of a card's body (7cd8d4a)
+- **invite:** a request that arrives while the panel is open shows up in it (40670da)
+- **office:** in a shared office the owner was refused his own transcript (7e12ceb)
 ## v0.8.0 — 5 September 2026
 
 ### Added
