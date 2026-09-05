@@ -87,6 +87,34 @@ export const ago = (sec) => sec == null || !Number.isFinite(sec) ? ''
 const metaLine = (a) => `${esc(a.project)}${a.branch ? ' · ' + esc(a.branch) : ''} · ${statusWord(a)}`
   + (a.status !== 'working' && a.idleFor > 300 ? tr('meta.spoke', { ago: ago(a.idleFor) }) : '');
 const chatLine = (a) => (a.title ? `<span class="chatname">💬 ${esc(a.title)}</span>` : '');
+// Хвост отчёта в шапке. Задача — основным цветом, во всю ширину; статус тускло
+// под ней, и туда же хвостом уезжает имя сессии: различать две сессии одного
+// проекта оно умеет и оттуда. Хвоста нет — шапка выглядит как раньше, потому что
+// отчёт заканчивает ответы по правилу этого репозитория, а не Claude Code.
+const COLD_TASK = 3600;   // секунд молчания, после которых задача уже не «сейчас»
+const taskRow = (a) => {
+  const t = a.task;
+  if (!t || !t.what) return chatLine(a);
+  const cold = a.status !== 'working' && (a.idleFor || 0) > COLD_TASK;
+  // Имя сессии здесь не своей голубой строкой, как без задачи, а хвостом статуса:
+  // оно перестаёт быть первым, что читают, и не исчезает. Стоит оно отдельной
+  // ячейкой, потому что статус режется по месту, а имя резать нечем — оно
+  // короткое и служит опознанием, когда сессий у проекта две.
+  const stat = t.status ? `<span class="tval">${tr('task.status', { s: esc(t.status) })}</span>` : '';
+  const sess = a.title ? `<span class="tsess">${stat ? '· ' : ''}💬 ${esc(a.title)}</span>` : '';
+  return `<p class="task${cold ? ' cold' : ''}">${esc(t.what)}</p>`
+    + (stat || sess ? `<p class="tstat">${stat}${sess}</p>` : '')
+    + (t.need ? `<p class="need">⚑ ${tr('task.need', { s: esc(t.need) })}</p>` : '');
+};
+
+// Та же задача в шапке разговора: слева она, справа статус. Имя сессии здесь
+// не дублируется — оно строкой выше, в своём углу.
+const chatTask = (a) => {
+  const t = a && a.task;
+  if (!t || !t.what) return '';
+  return `<span class="task">${esc(t.what)}</span>`
+    + (t.status ? `<span class="tstat">${tr('task.status', { s: esc(t.status) })}</span>` : '');
+};
 // Сервер присылает ключ занятия, а готовую русскую фразу оставляет для
 // совместимости: если ключа нет — показываем её как есть.
 const FALLBACK_ARG = { edit: 'act.someCode', read: 'act.someFile' };
@@ -172,8 +200,10 @@ function patchDialog(a) {
   const set = (sel, html) => { const n = el.dialog.querySelector(sel); if (n && n.innerHTML !== html) n.innerHTML = html; };
   set('.meta', metaLine(a));
   set('.act', actLine(a));
-  const chat = el.dialog.querySelector('.chatname');
-  if (chat && a.title && chat.textContent !== `💬 ${a.title}`) chat.textContent = `💬 ${a.title}`;
+  // Задача дописывается каждым ответом, поэтому её строка переезжает целиком, а
+  // не подправляется по кусочкам: между «нужен ты» и его отсутствием меняется
+  // состав, а не текст.
+  set('.taskrow', taskRow(a));
 
   if (S.page === 'talk') {
     const said = clean(a.lastSaid) || tr('dlg.silent');
@@ -288,7 +318,7 @@ function buildDialog(a) {
     <div class="portrait"><canvas width="48" height="48" id="pf"></canvas></div>
     <div class="content">
       <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${esc(roleText(a))}</span>
-        <span class="meta">${metaLine(a)}</span>${chatLine(a)}</div>
+        <span class="meta">${metaLine(a)}</span><div class="taskrow">${taskRow(a)}</div></div>
       <div class="act">${actLine(a)}</div>
       <div class="body">${body}</div>
       <div class="acts">
@@ -1676,8 +1706,13 @@ export async function openTranscript(a, focusTs = null) {
   el.viewer.hidden = false;
   gallery = { items: [], title: '', sel: 0, mode: 'grid' };   // Esc отсюда закрывает, а не возвращает в чужую галерею
   chatView = { agent: a, msgs: [], token: 0, editing: null, pending: null, focusTs };
-  el.viewer.innerHTML = `<div class="vwrap"><div class="vhead">${tr('chat.title', { name: esc(a.name) })}
-      <span class="zhint" id="chatst">${esc(a.title || '')}</span><button id="vx">✕</button></div>
+  // Шапка в две строки: кто говорит — над чем работает. Имя сессии остаётся в
+  // правом верхнем углу тем же кеглем, каким было, и там же появляются
+  // служебные строки вроде отложенного перечитывания.
+  el.viewer.innerHTML = `<div class="vwrap"><div class="vhead vhead2">
+      <span class="vrow">${tr('chat.title', { name: esc(a.name) })}
+        <span class="zhint" id="chatst">${esc(a.title || '')}</span><button id="vx">✕</button></span>
+      <span class="vrow vtask" id="chattask">${chatTask(a)}</span></div>
     <div class="single chatlog" id="chatlog"><p class="hint">${tr('chat.reading')}</p></div>
     <div class="vpath">${tr('chat.keys')}<span class="ncount" id="ncount"></span></div></div>`;
   $('#vx').onclick = closeViewer;
@@ -1738,6 +1773,15 @@ function paintChat(msgs, fresh = 0, force = false) {
         + (ed && !ed.id && ed.ts === m.ts ? noteEditor(m.ts, ed.text) : '')).join('')
     : loose + `<p class="empty">${tr('chat.empty')}</p>`;
   chatView.msgs = msgs;
+  // Разговор открыт со снимком агента, а задача дописывается новым ответом:
+  // берём свежего из списка, иначе шапка застывает на том, чем он был занят,
+  // когда панель открыли.
+  const head = $('#chattask');
+  const live = (S.agents || []).find((x) => x.id === a.id) || a;
+  if (head) {
+    const html = chatTask(live);
+    if (head.innerHTML !== html) head.innerHTML = html;
+  }
   paintNoteCount();
   bindNoteControls();
   // Пришли из панели заметок — встаём на ту реплику, к которой она привязана,
