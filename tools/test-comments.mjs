@@ -27,9 +27,7 @@ const TODO = new Set([
   'modules/radio/spotify.js',
   'modules/radio/test-cover.mjs',
   'modules/radio/test-keys.mjs',
-  'web/layout.js',
   'web/main.js',
-  'web/office.js',
 ]);
 
 let bad = 0;
