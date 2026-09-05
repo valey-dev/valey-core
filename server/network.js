@@ -36,15 +36,43 @@ export function isLocal(req) {
 export const PROXIED = ['x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'forwarded'];
 export const proxied = (req) => PROXIED.some((h) => req.headers && req.headers[h]);
 
+// Crockford base32: no I, no L, no O, no U. This token exists to be carried to
+// another machine by hand — the office prints it at startup for exactly that —
+// and base64url was the wrong alphabet for the job: it puts O next to 0 and l
+// next to I and 1. On 4 September 2026 a two-machine test lost the same
+// character twice, once in the owner link and once in the network token, and
+// both times the office answered «нужен токен», which reads as a broken office
+// rather than a misread letter.
+//
+// 20 bytes are 160 bits and exactly 32 characters at five bits each — no
+// padding, and no less entropy than the 24 bytes it replaces would give a
+// guesser.
+const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
 export function newToken() {
-  return crypto.randomBytes(24).toString('base64url');
+  let bits = 0, value = 0, out = '';
+  for (const byte of crypto.randomBytes(20)) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) { out += ALPHABET[(value >>> (bits - 5)) & 31]; bits -= 5; }
+  }
+  return out;
 }
+
+// The other half of the same decision: what the alphabet cannot produce, it
+// forgives on the way in. O reads as 0, I and L read as 1, and case does not
+// matter — a hand-copied token with those swapped still opens the office
+// instead of refusing with no hint at which character went wrong. Nothing is
+// weakened: these characters never occur in a token we generate, so the merge
+// costs no entropy. Old base64url tokens still work — both sides are folded
+// the same way before the compare.
+const fold = (s) => String(s).toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1');
 
 // Constant-time comparison: the token is checked on every request, static
 // files included, and a byte-by-byte compare tells its own story in timings.
 function same(a, b) {
-  const x = Buffer.from(String(a));
-  const y = Buffer.from(String(b));
+  const x = Buffer.from(fold(a));
+  const y = Buffer.from(fold(b));
   return x.length === y.length && crypto.timingSafeEqual(x, y);
 }
 
