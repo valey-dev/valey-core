@@ -976,7 +976,12 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   // standing where, and how to say one thing to one of them — because that is
   // what the floor tier is built out of. A module that wants neither simply
   // does not export `setup`.
-  const mods = await loadModules(ROOT, { people: livePeople, toPerson });
+  // `settings` comes along because a module route gets none: `defaults` and
+  // `publicView` are handed the settings, and `route` was not — so a module
+  // holding a secret in settings had nowhere to read it at request time. The
+  // voice needs it for temporary relay credentials, which must be computed per
+  // request and must never be written into the page.
+  const mods = await loadModules(ROOT, { people: livePeople, toPerson, settings: getSettings });
   let boot = await getSettings();
   const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
   if (external && !(boot.network || {}).token) {
