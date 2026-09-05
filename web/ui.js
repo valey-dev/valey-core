@@ -605,8 +605,12 @@ const readLink = () => el.dialog.querySelector('#readAll');
 // «Дать задание» — это одно и то же место в карточке: список под текстом, в
 // который уводит стрелка вверх. Вкладки не открыты одновременно, поэтому
 // достаточно объединить селекторы и не разводить их по страницам.
+// «попросить доступ» belongs here too: until 5 September 2026 it was in no
+// focus list at all, and a guest could press it with a mouse and by no other
+// means — the one button in the office the keyboard could not reach. The tabs
+// are never open at the same time, so the selectors can share one list.
 const bodyRows = () => [...el.dialog.querySelectorAll(
-  '.files li, .notes [data-retry], .notes [data-send], .notes [data-edit], .notes [data-del], .prow button')];
+  '.files li, .notes [data-retry], .notes [data-send], .notes [data-edit], .notes [data-del], .prow button, #askAccess')];
 
 // Стрелка вверх на оборванном ответе уводит фокус на «дочитать»: длинную реплику
 // всё равно читают целиком, и тянуться за ней мышью — лишний шаг.

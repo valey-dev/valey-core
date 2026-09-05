@@ -122,6 +122,26 @@ try {
     shut.agents.find((x) => x.id === agentId).lastSaid === undefined, null);
   const chatShut = await call('/api/chat?id=' + agentId, { as: 'guest', method: 'GET' });
   ok('и разговор закрылся обратно', chatShut.status === 403, chatShut.status);
+
+  // ------------------------------ the projection has to survive being drawn
+  // Handing a guest a trimmed agent is only half of it — the office must be
+  // able to draw one. On 5 September 2026 it could not: syncActors read
+  // a.artifacts.length and artifacts is not in SHOWN, so a guest on a second
+  // laptop got a floor with rooms and no people. The plan is built a line
+  // before the actors are placed, which is why the crash looked like an empty
+  // office rather than an error. The stand feeds the placement a REAL guest
+  // snapshot from the server rather than a hand-made object: a hand-made one
+  // does not know which field is missing.
+  const { syncActors } = await import('../web/actors.js');
+  const seen = await stateAs('guest');
+  const layout = { byAgent: new Map((seen.agents || []).map((a, i) =>
+    [a.id, { room: { key: 'r' + i, x: 0, y: 0 }, desk: { i, x: 10, y: 10 } }])) };
+  const actors = new Map();
+  let drew = null;
+  try { syncActors(actors, seen.agents || [], layout); } catch (e) { drew = e.message; }
+  ok('гостевой снимок переживает расстановку актёров', drew === null, drew);
+  ok('и все агенты расставлены', actors.size === (seen.agents || []).length,
+    [actors.size, (seen.agents || []).length]);
 } catch (e) {
   bad += 1;
   console.log('УПАЛ  | стенд не доехал →', e.message);

@@ -199,6 +199,23 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 #denyNote{width:100%; box-sizing:border-box; margin:8px 0 0; padding:6px;
   background:var(--field); border:2px solid var(--frame); color:var(--ink); font:inherit; font-size:13px}
 
+/* «попросить доступ» is the one button in the office with no row to stand in,
+   and in this sheet a button is painted by its container — .acts, .prow,
+   .sendrow. With no rule of its own it fell through to the browser default and
+   came out a grey system button, the only one in the office; a guest on a
+   second laptop saw it on 5 September 2026. The frames drew it wooden like
+   every other button from the start (378:3, 423:18) — the paint is what was
+   missing, not the design.
+   The .acts row is not an option for it: ui.js binds every .acts button to
+   switching the card's tab, and this one asks the owner for access. */
+#askAccess{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
+  font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 10px; cursor:pointer;
+  margin:10px 0 0; white-space:nowrap}
+#askAccess:hover{background:var(--wood-lit); color:#fff}
+/* The same focus ring the bottom row and the note buttons wear: the arrows walk
+   onto this button too, and a focus you cannot see is a focus you cannot use. */
+#askAccess.focus{outline:2px solid var(--ink); outline-offset:2px; color:#fff}
+
 /* ---- пейджер ---- */
 /* Свой угол: тосты слева внизу, диалог по центру, пейджер справа — три вещи
    поверх холста и ни одна не перекрывает другую. Выезжает снизу: входящее
@@ -619,7 +636,12 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 /* ---- экран входа ---- */
 /* Оверлей привязан к прямоугольнику холста (координаты ставит layoutTitle),
    поэтому меню стоит у двери на любом размере окна, а не уезжает по вьюпорту. */
-#title{position:fixed; z-index:26; pointer-events:none}
+/* It fades in out of the dark rather than appearing: until the menu stands on
+   the canvas it is not visible at all, and the screen holds only the scene with
+   its lamp. The hinge is the ready class, hung by layoutTitle once the canvas
+   box is finally not zero. */
+#title{position:fixed; z-index:26; pointer-events:none; opacity:0; transition:opacity .5s ease}
+#title.ready{opacity:1}
 #title[hidden]{display:none}
 #title > *{pointer-events:auto}
 

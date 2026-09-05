@@ -152,6 +152,11 @@ export function installDom({ byId = {}, find = null, storage = null, location = 
   globalThis.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
   globalThis.addEventListener = () => {};
   globalThis.removeEventListener = () => {};
-  if (location) globalThis.location = { origin: 'http://localhost:5177', hash: '', search: '', ...location };
+  // Location is installed unconditionally, not on request: a page in a browser
+  // always has one, and a stand that forgot to ask for it died on the first
+  // read instead of checking the markup it came for. `host` is in the defaults
+  // because the entrance prints the office address, and it must print the real
+  // one.
+  globalThis.location = { origin: 'http://localhost:5177', host: 'localhost:5177', hash: '', search: '', ...(location || {}) };
   return { stub, lookup };
 }

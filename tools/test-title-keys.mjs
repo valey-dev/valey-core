@@ -33,6 +33,14 @@ const overlay = {
   hidden: true,
   innerHTML: '',
   style: {},
+  // The overlay wears a class of its own now: layoutTitle marks it ready once
+  // the canvas has a real box, and the fade lives on that class. Without a
+  // classList here the stand died inside layoutTitle instead of checking keys.
+  classList: (() => {
+    const set = new Set();
+    return { add: (c) => set.add(c), remove: (c) => set.delete(c), contains: (c) => set.has(c),
+      toggle: (c, on) => (on ? set.add(c) : set.delete(c)), has: (c) => set.has(c) };
+  })(),
   querySelectorAll(sel) {
     if (sel === '.tbtn') {
       return (this.innerHTML.match(/class="tbtn/g) || []).map(() => fakeNode());
@@ -51,6 +59,10 @@ const overlay = {
 };
 
 const canvas = { getBoundingClientRect: () => ({ left: 40, top: 30, width: 1200, height: 675 }) };
+// The entrance prints the office address straight from the browser, so the fake
+// page needs one. This stand builds its DOM by hand rather than through the
+// shared shim, which means it installs location itself.
+globalThis.location = { origin: 'http://localhost:5177', host: 'localhost:5177', hash: '', search: '' };
 globalThis.document = {
   querySelector: (s) => (s === '#title' ? overlay : null),
   getElementById: (id) => (id === 'game' ? canvas : null),
@@ -107,6 +119,13 @@ const walk = (key, steps) => {
 // ------------------------------------------------------- arrived, standing at the door
 renderTitle();
 ok('экран открыт при старте', titleOpen(), titleOpen());
+// The menu is shown only once it stands on the canvas: until 5 September 2026
+// it flashed in the middle of the screen and jumped into the corner, because
+// the first layout ran against a canvas nobody had measured yet. The stand-in
+// canvas has a real box, so the ready class must be on by now.
+ok('меню помечено готовым, когда холст измерен', overlay.classList.has('ready'), null);
+ok('и раскладка встала по рамке холста', overlay.style.left === '40px' && overlay.style.width === '1200px',
+  [overlay.style.left, overlay.style.width]);
 ok('в меню четыре кнопки', overlay.querySelectorAll('.tbtn').length === 4, overlay.querySelectorAll('.tbtn').length);
 ok('карточка показывает всех агентов', overlay.innerHTML.includes('6 агентов'), null);
 ok('и сколько ждут ответа', overlay.innerHTML.includes('3 ждут ответа'), null);
