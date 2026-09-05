@@ -21,12 +21,6 @@ const TODO = new Set([
   'modules/plan/client.js',
   'modules/plan/test-keys.mjs',
   'modules/radio/client.js',
-  'modules/radio/covers.js',
-  'modules/radio/radio.js',
-  'modules/radio/server.js',
-  'modules/radio/spotify.js',
-  'modules/radio/test-cover.mjs',
-  'modules/radio/test-keys.mjs',
 ]);
 
 let bad = 0;
