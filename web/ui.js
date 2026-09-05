@@ -80,15 +80,15 @@ export function renderHud() {
   const room = S.currentRoom ? `<span class="chip room">▣ ${esc(S.currentRoom.title)}</span>` : `<span class="chip room">${tr('hud.corridor')}</span>`;
   const w = S.weather || { kind: 'clear' };
   const temp = w.temp != null ? ` ${Math.round(w.temp)}°` : '';
-  const z = S.zoom || { dev: 1, auto: true, clamped: false };
+  const z = S.zoom || { dev: 1, auto: true, tight: false };
   const place = w.label ? ` · ${esc(w.label)}` : '';
   el.hud.innerHTML = `<b>VALEY</b> · ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}
     <span class="chip sky" title="${tr('hud.skyTitle', { source: w.source === 'выдумана' ? tr('sky.made') : esc(w.source || '') })}">${WEATHER_ICON[w.kind] || '·'} ${tr('sky.' + w.kind)}${temp}${place}</span>
     ${room}<span class="chip work">⌨ ${working}</span><span class="chip wait">! ${waiting}</span>
     <span class="chip">👥 ${S.agents.length}</span>
     <span class="chip zoom${z.tight ? ' wait' : ''}" title="${tr('hud.zoomTitle')}${
-      z.tight ? tr('hud.zoomTitleTight') : z.clamped ? tr('hud.zoomTitleClamped', { n: z.dev }) : ''
-    }">⛶ ×${z.dev}${z.auto ? tr('hud.zoomAuto') : ''}${z.tight ? tr('hud.zoomTight') : z.clamped ? tr('hud.zoomMax') : ''}</span>
+      z.tight ? tr('hud.zoomTitleTight') : ''
+    }">⛶ ×${z.dev}${z.auto ? tr('hud.zoomAuto') : ''}${z.tight ? tr('hud.zoomTight') : ''}</span>
     ${S.pagerWaiting ? `<span class="chip wait" title="${tr('hud.pagerTitle')}">📟 ${S.pagerWaiting}</span>` : ''}
     <span class="chip dim">${S.soundOn ? '🔊' : '🔇'} M</span>
     ${collect('hud', S).map((c) => `<span class="chip ${esc(c.kind || 'dim')}" title="${esc(c.title || '')}">${esc(c.text || '')}</span>`).join('')}

@@ -15,6 +15,10 @@ import { titleOf } from './paintings.js';
 import { drawBubble } from './badges.js';
 import { skateStep, rolling, drawSkateboard, ollieStep, canOllie, OLLIE_POP } from './skate.js';
 import { readPad, edges as padEdges } from './pad.js';
+import { viewport, stepScale, SCALE_MIN, SCALE_MAX } from './viewport.js';
+// ui.scale is the interface size: the HUD and hint strips are stretched by it,
+// and fit() must account for that when it measures their height.
+import { ui } from './theme.js';
 import { actionOf, codeOf, codesOf, hints } from './keymap.js';
 import { renderKeys, closeKeys, keysOpen, readLayout } from './keys.js';
 // t was renamed to tr: in main.js `t` is the frame time in draw(t), and the import
@@ -22,7 +26,8 @@ import { renderKeys, closeKeys, keysOpen, readLayout } from './keys.js';
 import { t as tr, lang, setLang, onLang } from './i18n.js';
 import { initTitle, drawTitle, renderTitle, titleKey, titleOpen, closeTitle, layoutTitle, tickTitle } from './title.js';
 
-const VW = 400, VH = 225;
+// Changed by fit(): the canvas takes the window instead of standing in letterbox bars.
+let VW = 400, VH = 225;
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 canvas.width = VW; canvas.height = VH;
@@ -88,7 +93,7 @@ const state = {
   permits: [], pagerWaiting: 0,
   soundOn: sound.on,
   // physical pixels per game pixel; filled in by the very first fit()
-  zoom: { dev: 3, max: 3, auto: true, clamped: false },
+  zoom: { dev: 3, max: 3, auto: true, tight: false },
 };
 
 const keys = new Set();
@@ -823,17 +828,6 @@ function paintSign() {
 }
 
 function renderStatic() {
-  const help = document.getElementById('help');
-  // The strip is squeezed down to one hint: the full list lives in the keys panel. While
-  // the list stood here it took two lines, grew with every module, and still showed only
-  // one binding out of two — a keyboard shows what a sentence cannot: what is next to
-  // what, and what is still free.
-  //
-  // `collect('help')` stays for modules that have not declared their keys through
-  // api.keys() yet: their line is the only thing they say about themselves.
-  const keysHint = hints().find((h) => h.hint === 'hint.keys');
-  const opener = keysHint ? `${keysHint.caps[0]} — ${tr('hint.keys')}` : '';
-  if (help) help.textContent = [opener, ...collect('help'), tr('help.tail')].filter(Boolean).join(' · ');
   document.title = tr('doc.title');
   document.documentElement.lang = lang();
   paintSign();
@@ -1843,14 +1837,11 @@ document.addEventListener('visibilitychange', () => {
 // and the seven-pixel font above the heads turns into soap. We count the scale in dots —
 // then every pixel takes exactly N.
 // The scale is counted in PHYSICAL pixels per game pixel — only a whole number gives a
-// crisp picture. The steps are fixed, ×2…×8; a zero means "fit the window".
+// crisp picture. The steps are ×2…×8; a zero means "count it from the width".
+// All the arithmetic lives in web/viewport.js and is covered by a stand; this is canvas only.
 const ZOOM_KEY = 'valey-zoom';
-// We do not go below ×6: at that step the hint at the bottom fits whole, and smaller than
-// that the office reads badly. Shrinking is left only as an emergency exit, for when the
-// window physically does not hold ×6 — then the step is clamped by itself.
-const ZOOM_MIN = 6, ZOOM_MAX = 8;
 let zoomWanted = Math.max(0, Number(localStorage.getItem(ZOOM_KEY)) || 0);
-if (zoomWanted && zoomWanted < ZOOM_MIN) zoomWanted = ZOOM_MIN;
+if (zoomWanted) zoomWanted = Math.max(SCALE_MIN, Math.min(SCALE_MAX, zoomWanted));
 
 function setZoom(next) {
   zoomWanted = next;
@@ -1858,47 +1849,48 @@ function setZoom(next) {
   else localStorage.removeItem(ZOOM_KEY);
   refit();
   UI.renderHud();
-  UI.toast(next ? `Масштаб ×${state.zoom.dev}` : `Масштаб по окну — ×${state.zoom.dev}`);
+  UI.toast(next ? tr('toast.zoomSet', { n: state.zoom.dev }) : tr('toast.zoomAuto', { n: state.zoom.dev }));
 }
 
 function stepZoom(dir) {
-  const from = zoomWanted || state.zoom.dev;
-  const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, from + dir));
-  if (dir < 0 && from <= ZOOM_MIN) {
-    UI.toast(tr('toast.zoomFloor', { n: ZOOM_MIN }));
+  const next = stepScale(zoomWanted || state.zoom.dev, dir);
+  if (next === null) {
+    UI.toast(dir < 0 ? tr('toast.zoomFloor', { n: SCALE_MIN }) : tr('toast.zoomCeil', { n: SCALE_MAX }));
     return;
   }
-  if (next === zoomWanted) return;
   setZoom(next);
 }
 
 function fit() {
   const dpr = window.devicePixelRatio || 1;
   const hud = document.getElementById('hud');
-  const help = document.getElementById('help');
-  // how much the strips at the top and bottom have eaten — we measure rather than guess:
-  // the hint wraps onto three or four lines the moment the window is narrowed or zoomed
-  const top = (hud ? hud.offsetHeight : 0) + 20;
-  const bottom = (help ? help.offsetHeight : 0) + 16;
+  // The strips measure in their own pixels while zoom:var(--ui) stretches them on
+  // screen, and offsetHeight knows nothing about it. Without the multiplier the hint
+  // at 175% lies on top of the office — visible on the "интерфейс 175%" frame.
+  const k = ui.scale || 1;
+  const top = (hud ? hud.offsetHeight * k : 0) + 20;
+  // Nothing sits along the bottom any more — the key list moved into the ? panel — so the
+  // office only keeps a gap the size of the one above it, and takes the rest.
+  const bottom = 20;
   document.body.style.paddingTop = top + 'px';
   document.body.style.paddingBottom = bottom + 'px';
   // the toasts stand above the hint rather than over it: it can be three lines tall
   const toasts = document.getElementById('toasts');
   if (toasts) toasts.style.bottom = (bottom + 8) + 'px';
 
-  const availW = Math.max(VW, innerWidth - 16);
-  const availH = Math.max(VH, innerHeight - top - bottom);
-  const max = Math.max(1, Math.floor(Math.min(availW * dpr / VW, availH * dpr / VH)));
-  // the chosen step cannot be larger than what fits into the window
-  // "fit the window" does not go small either: we take ×6, even if the window allows more to be seen
-  const dev = Math.max(1, Math.min(zoomWanted || Math.max(ZOOM_MIN, max), max));
-  canvas.style.width = VW * dev / dpr + 'px';
-  canvas.style.height = VH * dev / dpr + 'px';
-  state.zoom = {
-    dev, max, auto: !zoomWanted,
-    clamped: !!zoomWanted && dev < zoomWanted,
-    tight: dev < ZOOM_MIN,   // the window is smaller than ×6 needs — that is visible in the bar
-  };
+  const availW = Math.max(160, innerWidth - 16);
+  const availH = Math.max(90, innerHeight - top - bottom);
+  // The entrance is drawn in 400×225 and its composition is approved by its own
+  // frames: it does not stretch — the office behind its door does.
+  const v = viewport(availW, availH, dpr, zoomWanted, titleOpen());
+  if (canvas.width !== v.vw || canvas.height !== v.vh) {
+    canvas.width = v.vw; canvas.height = v.vh;
+    ctx.imageSmoothingEnabled = false;   // resizing the canvas resets the context
+  }
+  VW = v.vw; VH = v.vh;
+  canvas.style.width = VW * v.scale / dpr + 'px';
+  canvas.style.height = VH * v.scale / dpr + 'px';
+  state.zoom = { dev: v.scale, max: SCALE_MAX, auto: v.auto, tight: v.tight };
   layoutTitle();   // the entrance menu is tied to the canvas rather than to the window
   return top + bottom;
 }
@@ -1955,6 +1947,10 @@ initTitle(state, {
     }
     closeTitle();
     document.body.classList.remove('titling');
+    // The entrance is drawn in a fixed 400×225 and the office is not: the canvas has to
+    // be recounted the moment the door closes behind us, or the office keeps the
+    // entrance's size and sits in bars.
+    refit();
     UI.renderHud();
     sound.init();
     sound.door(0.8);
