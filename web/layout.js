@@ -271,6 +271,9 @@ export function buildLayout(agents, opts = {}) {
 
   props.push({ kind: 'lounge', x: lounge.x, y: lounge.y + 5 });
   props.push({ kind: 'ashtray', x: lounge.x + 36, y: lounge.y + 6 });
+  // The bear skin lies in front of the sofa, where a rug belongs: the sofa is the
+  // fireplace this office does not have.
+  props.push({ kind: 'bearrug', x: lounge.x, y: lounge.y + 22 });
   props.push({ kind: 'kicker', x: kicker.x, y: kicker.y });
 
   // The landing in front of the conservatory is an ordinary corridor, only the top
