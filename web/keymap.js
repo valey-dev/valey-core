@@ -51,13 +51,13 @@ const CORE = [
   // office is used by people working with agents, not by people holding a
   // gaming grip. The thumb finds the space bar without being told, and a letter
   // spent on a duplicate is a letter a panel cannot have.
-  { id: 'act.interact', codes: ['Space'], group: 'act', hint: 'hint.interact' },
+  { id: 'act.interact', codes: ['Space'], group: 'act', hint: 'hint.interact', more: 'hint.interactMore' },
   { id: 'act.skate', codes: ['KeyB'], group: 'act', hint: 'hint.skate' },
   { id: 'act.sound', codes: ['KeyM'], group: 'act', hint: 'hint.sound' },
   { id: 'panel.round', codes: ['Tab'], group: 'panel', hint: 'hint.round' },
   { id: 'panel.notes', codes: ['KeyN'], group: 'panel', hint: 'hint.notes' },
   { id: 'panel.bag', codes: ['KeyC'], group: 'panel', hint: 'hint.bag' },
-  { id: 'panel.invite', codes: ['KeyI'], group: 'panel', hint: 'hint.invite' },
+  { id: 'panel.invite', codes: ['KeyI'], group: 'panel', hint: 'hint.invite', more: 'hint.inviteMore' },
   { id: 'panel.sky', codes: ['KeyP'], group: 'panel', hint: 'hint.sky' },
   { id: 'panel.skin', codes: ['KeyU'], group: 'panel', hint: 'hint.skin' },
   { id: 'panel.pager', codes: ['KeyH'], group: 'panel', hint: 'hint.pager' },
@@ -66,9 +66,9 @@ const CORE = [
   // another key expects the cameras to follow. Only the cycling switch is the
   // control room's own.
   { id: 'cams.auto', codes: ['KeyT'], group: 'panel', hint: 'hint.cams', more: 'hint.camsMore' },
-  { id: 'zoom.in', codes: ['Equal', 'NumpadAdd'], group: 'zoom', hint: 'hint.zoom' },
-  { id: 'zoom.out', codes: ['Minus', 'NumpadSubtract'], group: 'zoom' },
-  { id: 'zoom.reset', codes: ['Digit0', 'Numpad0'], group: 'zoom', hint: 'hint.zoom' },
+  { id: 'zoom.in', codes: ['Equal', 'NumpadAdd'], group: 'zoom', hint: 'hint.zoomIn' },
+  { id: 'zoom.out', codes: ['Minus', 'NumpadSubtract'], group: 'zoom', hint: 'hint.zoomOut' },
+  { id: 'zoom.reset', codes: ['Digit0', 'Numpad0'], group: 'zoom', hint: 'hint.zoomFit' },
   // The keys panel sits on the key where QWERTY prints «?». Under "ЙЦУКЕН" that
   // same key prints a full stop, which is the honest cost of a physical
   // binding — the panel shows the engraving when the browser knows it.

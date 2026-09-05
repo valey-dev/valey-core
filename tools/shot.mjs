@@ -93,7 +93,9 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // C the wardrobe, P the window on the world, U the office colour, R the radio,
 // M the sound, T the camera round, Z the loupe in the viewer. Without them the
 // strict check below rejects half of what this tool exists for.
-const VK = { Enter: 13, ' ': 32, Escape: 27, Tab: 9, F9: 120,
+// «/» opens the keys panel, and without it that panel could not be photographed
+// at all — the one screen this tool is most often pointed at since 5 September 2026.
+const VK = { Enter: 13, ' ': 32, Escape: 27, Tab: 9, F9: 120, '/': 191, '=': 187, '-': 189,
   w: 87, a: 65, s: 83, d: 68, e: 69, b: 66, c: 67, i: 73, k: 75, m: 77, n: 78, o: 79, p: 80, r: 82, t: 84, u: 85, z: 90,
   ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39 };
 // The digits: since 31 August 2026 they pick an item in an open panel — a tab
@@ -102,6 +104,7 @@ const VK = { Enter: 13, ' ': 32, Escape: 27, Tab: 9, F9: 120,
 // reached, but nothing in it can be switched.
 for (let d = 0; d <= 9; d++) VK[String(d)] = 48 + d;
 const CODE = { Enter: 'Enter', ' ': 'Space', Escape: 'Escape', Tab: 'Tab', F9: 'F9',
+  '/': 'Slash', '=': 'Equal', '-': 'Minus',
   ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight' };
 // The letters are listed once: a key in VK without a code here arrives at the page
 // with an empty code, and a panel that reads event.code — the office plan does —
@@ -116,7 +119,7 @@ for (let d = 0; d <= 9; d++) CODE[String(d)] = 'Digit' + d;
 // four frames and the wrong conclusion "the press switched the cameras on and
 // off" — neither had worked. The synonyms exist so that missing the name is a
 // typo rather than silence.
-const ALIAS = { Space: ' ', Spacebar: ' ', Esc: 'Escape', Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight' };
+const ALIAS = { Space: ' ', Spacebar: ' ', Esc: 'Escape', Slash: '/', Equal: '=', Minus: '-', Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight' };
 const alias = (k) => (Object.prototype.hasOwnProperty.call(ALIAS, k) ? ALIAS[k] : k);
 
 const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'valey-shot-'));
