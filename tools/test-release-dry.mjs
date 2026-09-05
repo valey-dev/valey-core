@@ -24,14 +24,19 @@ const ok = (name, cond, got) => {
 // supposed to do.
 const r = spawnSync(process.execPath, [path.join(ROOT, 'tools/release.mjs'), '--dry'],
   { cwd: os.tmpdir(), encoding: 'utf8' });
-// Three answers are correct here, and all three prove the same thing: the script
+// Four answers are correct here, and all four prove the same thing: the script
 // looked at THIS repository and not at the temp directory it was called from.
-// A section means the range had something; «нет коммитов» is right after a
-// release; «выпускать нечего» is a range of refactors and chores only. The first
-// of those used to fail the stand for a reason that had nothing to do with its
-// subject — found 5 September 2026, when v0.4.0 was cut and main went red on the
-// spot.
-const empty = /нет коммитов|выпускать нечего/.test(r.stderr + r.stdout);
+// A section means the range had something to say.
+// «нет коммитов» is the answer right after a release.
+// «выпускать нечего» is a range of refactors and chores only.
+// «тег уже есть» is a feature branch whose main has been released past it: the
+// digit the range asks for is a version somebody has already cut.
+//
+// The first of those used to fail the stand for a reason that had nothing to do
+// with its subject — found 5 September 2026, when v0.4.0 was cut and main went
+// red on the spot. The last was found the same day, on a branch sitting at
+// 0.8.1 while main had reached v0.9.0.
+const empty = /нет коммитов|выпускать нечего|уже есть/.test(r.stderr + r.stdout);
 const spoke = /^## v\d+\.\d+\.\d+/m.test(r.stdout) || empty;
 ok('сухой прогон из чужой папки не падает', r.status === 0 || empty, r.stderr || r.stdout);
 ok('и говорит о своём репозитории, а не о чужой папке', spoke, r.stdout + r.stderr);
