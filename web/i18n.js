@@ -593,6 +593,9 @@ const DICT = {
     'dlg.sendConfirm': 'точно отправить?',
     'dlg.send': 'Отправить в чат →',
     'task.failed': 'Не вышло: {err}',
+    // The report tail in the head: what the agent is doing, and what he waits for
+    'task.status': 'статус · {s}',
+    'task.need': 'нужен ты: {s}',
     'task.onDeskToast': '📋 Лежит у него на столе — в чат не ушло.',
     'task.onDeskTitle': 'Записка на столе у {name}',
     'task.notSent': 'Не отправилось: {err}',
@@ -1167,6 +1170,8 @@ const DICT = {
     'dlg.sendConfirm': 'really send?',
     'dlg.send': 'Send to chat →',
     'task.failed': 'Did not work: {err}',
+    'task.status': 'status · {s}',
+    'task.need': 'you are needed: {s}',
     'task.onDeskToast': '📋 On the desk — it did not go to chat.',
     'task.onDeskTitle': 'A note on {name}’s desk',
     'task.notSent': 'Not sent: {err}',
