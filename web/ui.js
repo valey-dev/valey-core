@@ -1139,6 +1139,20 @@ function paintHeadFocus() {
 }
 
 // true means the key belonged to the viewer and the office should ignore it
+// Which screen is up, for the keys panel. It asks rather than guesses: only this
+// file knows that the viewer has two states — a wall of thumbnails and one open
+// file — and they are not the same place. ESC leaves the file for the gallery and
+// the gallery for the room, so one caption cannot serve both.
+export function viewerOpen() {
+  if (!el.viewer || el.viewer.hidden) return null;
+  return gallery.mode === 'single' ? 'single' : 'gallery';
+}
+export function rosterOpen() { return !!(el.roster && !el.roster.hidden); }
+export function liftOpen() { return !!(el.lift && !el.lift.hidden); }
+// The tab the card is reading. In «поговорить» the cursor sits in the field, and
+// that is a different place from the card itself: there the letters type.
+export function cardPage() { return S.page; }
+
 export function viewerKey(raw, big = false) {
   if (el.viewer.hidden) return false;
   const key = raw.toLowerCase();

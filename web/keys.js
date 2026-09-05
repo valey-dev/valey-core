@@ -14,6 +14,7 @@
 // on it, so a key that moves moves here too. That is the whole reason the
 // registry came first.
 import { all, actionOf, groupOf, labelFor } from './keymap.js';
+import { get as placeOf, keyIn } from './places.js';
 import { t as tr } from './i18n.js';
 import { esc } from './esc.js';
 
@@ -29,8 +30,13 @@ const COLOUR = {
 
 // Keys the office answers to only while a panel is open. They are deliberately
 // absent from the registry — one way to walk a panel is the rule here, and
-// making them configurable would buy a second office — but they are not free
-// either, and a keyboard that showed them blank would be lying.
+// making them configurable would buy a second office.
+//
+// They used to be captioned «внутри панели» on every board. Places say it better
+// and per screen: in the lift a digit is a floor, in the card it is a tab, and on
+// the floor it is nothing at all. What the set is still for is the count of free
+// letters and the test for one — Z is taken by the loupe, and without this line
+// it would be offered to the next module as free.
 const IN_PANEL = new Set([
   'Escape', 'Enter',
   'PageUp', 'PageDown', 'Home', 'End',
@@ -116,7 +122,11 @@ function capSize(available) {
 }
 
 let el = null;
+// The place the board is drawn for. The office reports it when the panel opens;
+// it is never guessed here, because only main.js knows what is on top of what.
+let current = 'floor';
 export function keysOpen() { return !!el && !el.hidden; }
+export function keysPlace() { return current; }
 
 // Recomputed on opening and on every window change: the panel is full-screen, and
 // its width moves with the window.
@@ -131,32 +141,49 @@ addEventListener('resize', fit);
 
 function capHtml(code, units) {
   const id = actionOf({ code });
-  const group = id ? groupOf(id) : (IN_PANEL.has(code) ? 'inpanel' : null);
   const action = id ? all().find((a) => a.id === id) : null;
+  // What this key means where you are standing. On the floor this is the
+  // registry, unchanged; inside a panel it is the panel's own word for the key,
+  // and everything the panel does not use comes back unlit.
+  const here = keyIn(current, code);
+  const place = placeOf(current);
+  const group = here.lit
+    ? (id ? groupOf(id) : 'inpanel')
+    : null;
   // A free letter is captioned as free, exactly as on the frame. Modifiers,
   // brackets and the F row get no caption: they are not free, the browser and the
-  // system take them, and the legend carries that as a line of its own.
-  const freeLetter = !id && !IN_PANEL.has(code) && /^Key/.test(code);
+  // system take them, and the legend carries that as a line of its own. Only a
+  // place that carries the registry has free letters at all — inside a panel an
+  // unused letter is not free, it is simply not listening.
+  const freeLetter = place && place.registry && !id && !IN_PANEL.has(code) && /^Key/.test(code);
   // The second key of an action points at the first instead of repeating the
   // caption: that is what the frame prints, and a long phrase would not fit a
   // narrow cap anyway. Except when both caps print the same thing — the right
   // SHIFT used to say it was the same as SHIFT.
-  const secondary = action && action.codes[0] !== code
-    && printed(action.codes[0]) !== printed(code);
+  const secondary = here.lit && action && action.codes[0] !== code
+    && printed(action.codes[0]) !== printed(code)
+    && here.caption === action.hint;
   const caption = secondary ? tr('keys.sameAs', { key: named(action.codes[0]) })
-    : action && action.hint ? tr(action.hint)
-    : IN_PANEL.has(code) ? tr('keys.inPanel')
+    : here.caption ? tr(here.caption)
     : freeLetter ? tr('keys.lgFree')
     : '';
-  // Under the cursor: the caption in full plus the footnote, when the action has one.
-  const full = caption + (action && action.more ? ` · ${tr(action.more)}` : '');
+  // Under the cursor: the caption in full plus the footnote. The footnote is the
+  // registry's, so it belongs only where the registry is what lit the key —
+  // «с F9 — кадр ×4» under SHIFT is a lie in a conversation, where SHIFT makes a
+  // new line and nothing else.
+  const registryHere = here.lit && action && here.caption === action.hint;
+  const full = caption + (registryHere && action.more ? ` · ${tr(action.more)}` : '');
   const outline = group ? COLOUR[group] : '';
   const face = printed(code);
   // The second label is what this key is really engraved with, when the browser
   // knows the layout. For Latin it matches the first and is not drawn.
   const real = engraved.get(code);
   const twin = real && real.toUpperCase() !== face ? real.toUpperCase() : '';
-  return `<div class="kcap${outline ? '' : ' free'}" style="--u:${units}${outline ? `;--edge:${outline}` : ''}"
+  // «off» is a key that exists but not here. It is drawn faint rather than left
+  // out: a keyboard with holes in it stops being a keyboard, and the point is to
+  // show that the key is real and simply belongs somewhere else.
+  const cls = ['kcap', outline ? '' : 'free', here.lit ? '' : 'off'].filter(Boolean).join(' ');
+  return `<div class="${cls}" style="--u:${units}${outline ? `;--edge:${outline}` : ''}"
     data-code="${esc(code)}"${id ? ` data-action="${esc(id)}"` : ''}>
     <span class="kface">${esc(face)}</span>${twin ? `<i class="ktwin">${esc(twin)}</i>` : ''}
     ${caption ? `<span class="kwhat" title="${esc(full)}">${esc(caption)}</span>` : ''}
@@ -175,19 +202,27 @@ function legendHtml() {
     ['move', 'keys.lgMove'], ['act', 'keys.lgAct'], ['panel', 'keys.lgPanel'],
     ['zoom', 'keys.lgZoom'], ['inpanel', 'keys.lgInPanel'], ['service', 'keys.lgService'],
   ].map(([g, k]) => `<span><s style="--edge:${COLOUR[g]}"></s>${tr(k)}</span>`).join('');
-  return `${items}<span><s class="free"></s>${tr('keys.lgFree')}</span>`;
+  return `${items}<span><s class="free"></s>${tr('keys.lgFree')}</span>`
+    + `<span><s class="off" style="--edge:${COLOUR.panel}"></s>${tr('keys.lgOff')}</span>`;
 }
 
-export function renderKeys() {
+export function renderKeys(place) {
   if (!el) {
     el = document.createElement('div');
     el.id = 'keys';
     document.body.appendChild(el);
   }
+  if (place && placeOf(place)) current = place;
+  const here = placeOf(current);
+  // The count of free letters answers "what can a module still take?", which is
+  // a question about the floor. Inside a panel there are no free letters to
+  // count, so the header names the place instead.
   const free = ROWS.flat().filter(([c]) => !actionOf({ code: c }) && !IN_PANEL.has(c) && /^Key/.test(c)).length;
+  const note = here && here.registry ? tr('keys.free', { n: free }) : tr('keys.onlyHere');
   el.hidden = false;
   el.innerHTML = `<div class="rwrap keyswrap">
-    <div class="vhead"><span>${tr('keys.title')} <i>${tr('keys.free', { n: free })}</i></span><button id="keysx">✕</button></div>
+    <div class="vhead"><span>${tr('keys.title')} · ${esc(tr(here ? here.title : 'place.floor'))}
+      <i>${note}</i></span><button id="keysx">✕</button></div>
     <div class="keysbody">${boardHtml()}</div>
     <div class="keyslegend">${legendHtml()}<span class="k">${tr('keys.hint')}</span></div>
   </div>`;
