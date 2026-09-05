@@ -1,16 +1,18 @@
-// node tools/test-switcher.mjs — предметы человечка-переключателя на записывающем
-// холсте: сигарета и стакан кофе.
+// node tools/test-switcher.mjs — the switcher person's props on a recording
+// canvas: a cigarette and a cup of coffee.
 //
-// Зачем: сигарету видно только на кадре, а кадром её видно не всю. 1 сентября
-// 2026 зеркальную сторону (человек смотрит влево) удалось снять в офисе, а
-// прямую — нет: в коридоре переключатель стоит на bands[0], то есть на верхнем
-// ряду, а со входа попадаешь на нижний, и увести туда снималку клавишами не
-// вышло. Ветка dir === 0 осталась непроверенной глазами вовсе — этот стенд
-// закрывает её числами.
+// Why: a cigarette is only visible on a frame, and a frame does not show all of
+// it. On 1 September 2026 the mirrored side (the person looks left) could be
+// captured in the office and the straight one could not: in the corridor the
+// switcher stands on bands[0], that is on the top row, while entry puts you on
+// the bottom one, and walking the camera there by keys did not work. The
+// dir === 0 branch went unchecked by eye entirely — this stand closes it with
+// numbers.
 //
-// Холст записывающий, а не подставной: fillRect складывается в список, и по
-// нему видно, куда лёг каждый пиксель. Проверяется геометрия относительно
-// центра, а не цвет: цвет — вкус, а вот сигарета, вылезшая из затылка, — ошибка.
+// The canvas records rather than stands in: fillRect accumulates into a list,
+// and by it one can see where every pixel landed. The geometry is checked
+// relative to the centre, not the colour: colour is taste, while a cigarette
+// sticking out of the back of a head is a mistake.
 
 const rects = [];
 const ctx = {
@@ -39,8 +41,8 @@ const stick = (list) => has(list, '#efe7d8')[0];
 const smoke = (list) => has(list, '#d8d2c4');
 const steam = (list) => has(list, '#e4dfd4');
 
-// Голова занимает x-4..x+3. Сигарета обязана торчать НАРУЖУ от неё и с той
-// стороны, куда человек смотрит.
+// The head takes x-4..x+3. The cigarette must stick OUT of it, and on the side
+// the person is looking at.
 {
   const r = draw(RU, { dir: 0, ms: 0 });
   ok('dir 0 · сигарета есть', !!stick(r));
@@ -57,8 +59,8 @@ const steam = (list) => has(list, '#e4dfd4');
   ok('dir -1 · сигарета целиком левее головы', stick(r) && stick(r).x - X === -5, stick(r) && stick(r).x - X);
 }
 
-// Дым: три точки, поднимаются со временем и гаснут. Проверяется движение, а не
-// конкретная высота — иначе тест ломается от любой правки скорости.
+// The smoke: three dots that rise over time and fade. Movement is checked rather
+// than a particular height — otherwise the test breaks on any change of speed.
 {
   const first = draw(RU, { dir: 0, ms: 0 });
   const a = smoke(first), tip = ember(first).y;
@@ -69,16 +71,16 @@ const steam = (list) => has(list, '#e4dfd4');
   ok('дым · не опускается ниже уголька', a.every((r) => r.y <= tip), [a.map((r) => r.y), tip]);
 }
 
-// Прозрачность восстанавливается: дым рисуется через globalAlpha, и если её не
-// вернуть, всё нарисованное после человека поедет полупрозрачным.
+// Transparency is restored: the smoke is drawn through globalAlpha, and if it is
+// not put back everything drawn after the person comes out semi-transparent.
 {
   ctx.globalAlpha = 1;
   draw(RU, { dir: 0, ms: 300 });
   ok('дым · globalAlpha возвращена', ctx.globalAlpha === 1, ctx.globalAlpha);
 }
 
-// Стакан: крышка сверху, картонка ниже неё, ручки нет — ручка есть у кружки, и
-// перепутать их значит выдать одному предмету чужой силуэт.
+// The cup: a lid on top, the cardboard sleeve below it, and no handle — a handle
+// belongs to a mug, and confusing them gives one object another's silhouette.
 {
   const r = draw(US, { dir: 0, ms: 0 });
   const lid = has(r, '#8a6247')[0], body = has(r, '#f0ece0')[0], band = has(r, '#b8845a')[0];
@@ -88,8 +90,9 @@ const steam = (list) => has(list, '#e4dfd4');
   ok('стакан · шириной в три пикселя', body && body.w === 3, body && body.w);
   ok('стакан · без сигареты', !stick(r));
 
-  // Пар. Столбец важен не меньше высоты: туловище кончается на x+4, рука на
-  // x+6, и пар левее x+7 пошёл бы по светлой рубашке, где его не видно.
+  // The steam. The column matters no less than the height: the body ends at x+4,
+  // the arm at x+6, and steam to the left of x+7 would run over the light shirt,
+  // where it is invisible.
   const st = steam(r);
   ok('пар · две струйки', st.length === 2, st.length);
   ok('пар · мимо туловища', st.every((q) => q.x - X >= 7), st.map((q) => q.x - X));
@@ -99,9 +102,10 @@ const steam = (list) => has(list, '#e4dfd4');
   ok('пар · за 600 мс поднялся', Math.min(...st2.map((q) => q.y)) < Math.min(...st.map((q) => q.y)));
 }
 
-// Пар и дым — разные периоды, иначе две струйки пульсировали бы в такт. Живьём
-// рядом они не встречаются (переключатель на экране один), но период — это то,
-// что легко случайно свести в одно число при следующей правке.
+// The steam and the smoke have different periods, or the two wisps would pulse in
+// time with each other. In the flesh they never meet (there is one switcher on
+// screen), but a period is the sort of thing easily collapsed into one number at
+// the next edit.
 {
   const cupAt = (ms) => Math.min(...steam(draw(US, { dir: 0, ms })).map((q) => q.y));
   const cigAt = (ms) => Math.min(...smoke(draw(RU, { dir: 0, ms })).map((q) => q.y));
@@ -109,8 +113,8 @@ const steam = (list) => has(list, '#e4dfd4');
   ok('пар и дым идут не в такт', !same);
 }
 
-// Ни у кого, кроме переключателей, этого нет: пустой look не должен рисовать ни
-// сигареты, ни стакана.
+// Nobody but the switchers has any of this: an empty look must draw neither a
+// cigarette nor a cup.
 {
   const r = draw({ ...RU, cig: false, hands: 'none' }, { dir: 0, ms: 0 });
   ok('без флагов · ни сигареты, ни дыма, ни пара', !stick(r) && smoke(r).length === 0 && steam(r).length === 0);

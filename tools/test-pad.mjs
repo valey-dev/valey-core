@@ -1,9 +1,10 @@
-// node tools/test-pad.mjs — геймпад, без браузера.
+// node tools/test-pad.mjs — the gamepad, without a browser.
 //
-// Ломается тихо: мёртвая зона чуть меньше — и человек «плывёт» по коридору с
-// отпущенным стиком; порог стрелки чуть выше — и меню не листается; кнопка,
-// которую держат, повторяется — и «A» открывает и тут же закрывает карточку.
-// Всё это арифметика над снимком, и проверять её лучше здесь, чем глазами.
+// It breaks quietly: a slightly smaller dead zone and the person "floats" down
+// the corridor with the stick released; a slightly higher arrow threshold and
+// the menu will not scroll; a held button that repeats and "A" opens the card
+// and closes it again. All of it is arithmetic over a snapshot, and checking it
+// here beats checking it by eye.
 import { readPad, edges, stick, DEADZONE, DIGITAL, BUTTONS } from '../web/pad.js';
 
 let bad = 0;
@@ -13,20 +14,20 @@ const ok = (what, cond, got) => {
 };
 const near = (a, b) => Math.abs(a - b) < 1e-9;
 
-// Снимок геймпада: axes и 16 кнопок стандартной раскладки
+// A gamepad snapshot: axes and the 16 buttons of the standard layout
 const pad = ({ axes = [0, 0, 0, 0], held = [] } = {}) => ({
   mapping: 'standard', axes,
   buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: held.includes(i), value: held.includes(i) ? 1 : 0 })),
 });
 const has = (r, k) => r.down.has(k);
 
-// ------------------------------------------------------------ без геймпада
+// ------------------------------------------------------------ no gamepad
 
 const none = readPad(null);
 ok('без геймпада — покой, не исключение', none.x === 0 && none.y === 0 && none.down.size === 0);
 ok('дырка из getGamepads() — тоже покой', readPad(undefined).down.size === 0);
 
-// ------------------------------------------------------------- мёртвая зона
+// ------------------------------------------------------------ the dead zone
 
 ok('дрожь стика в покое не двигает', stick(0.1, -0.15).x === 0 && stick(0.1, -0.15).y === 0);
 ok('зона радиальная: вбок на 0.19 при дрожи по второй оси — стоим', stick(0.19, 0.05).x === 0);
@@ -36,7 +37,7 @@ ok('полный наклон — полная скорость', near(stick(1, 
 ok('и по диагонали не быстрее, чем прямо', Math.hypot(stick(1, 1).x, stick(1, 1).y) <= 1 + 1e-9);
 ok('полнаклона — примерно полскорости', Math.abs(stick(0.6, 0).x - 0.5) < 0.01, stick(0.6, 0).x);
 
-// -------------------------------------------------------------------- стик
+// ------------------------------------------------------------- the stick
 
 const right = readPad(pad({ axes: [1, 0] }));
 ok('стик вправо — идём вправо', near(right.x, 1) && right.y === 0, right);
@@ -50,7 +51,7 @@ const up = readPad(pad({ axes: [0, -1] }));
 ok('стик вверх — ArrowUp, и только он', has(up, 'ArrowUp') && !has(up, 'ArrowDown') && !has(up, 'ArrowLeft') && !has(up, 'ArrowRight'));
 ok('ось Y экрана: вверх — отрицательная', up.y < 0);
 
-// ------------------------------------------------------------- крестовина
+// --------------------------------------------------------------- the d-pad
 
 const dpad = readPad(pad({ held: [13, 14] }));
 ok('крестовина ходит целым шагом', dpad.x === -1 && dpad.y === 1, dpad);
@@ -58,7 +59,7 @@ ok('и стрелками же', has(dpad, 'ArrowDown') && has(dpad, 'ArrowLeft'
 const both = readPad(pad({ axes: [0.6, 0], held: [14] }));
 ok('стик и крестовина в разные стороны — стик главнее', both.x > 0, both.x);
 
-// ----------------------------------------------------------------- кнопки
+// ------------------------------------------------------------- the buttons
 
 const face = readPad(pad({ held: [0, 1, 2, 3] }));
 ok('A — пробел', has(face, ' '));
@@ -69,7 +70,7 @@ const trig = readPad(pad({ held: [6] }));
 ok('курок — Shift', has(trig, 'Shift'));
 ok('оба курка — один Shift, не два', readPad(pad({ held: [6, 7] })).down.size === 1);
 ok('bumpers — масштаб', has(readPad(pad({ held: [4, 5] })), '-') && has(readPad(pad({ held: [4, 5] })), '+'));
-// триггер у Xbox — аналоговый: pressed может не встать, а value уже за порогом
+// an Xbox trigger is analogue: pressed may not be set while value is already past the threshold
 const analog = pad();
 analog.buttons[7] = { pressed: false, value: 0.8 };
 ok('полунажатый курок уже держит Shift', has(readPad(analog), 'Shift'));
@@ -77,7 +78,7 @@ analog.buttons[7] = { pressed: false, value: 0.3 };
 ok('а едва тронутый — нет', !has(readPad(analog), 'Shift'));
 ok('все кнопки раскладки существуют в стандартных 16', Object.keys(BUTTONS).every((i) => +i >= 0 && +i < 16));
 
-// ------------------------------------------------------------------- кромки
+// ------------------------------------------------------------- the edges
 
 const idle = readPad(null);
 const a = readPad(pad({ held: [0] }));
@@ -86,8 +87,8 @@ ok('удержание не повторяется', edges(a, a).pressed.length 
 ok('отпускание видно один раз', edges(a, idle).released.join() === ' ' && edges(a, idle).pressed.length === 0);
 const ab = readPad(pad({ held: [0, 1] }));
 ok('вторая кнопка при зажатой первой — только она', edges(a, ab).pressed.join() === 'Escape');
-// стик, переведённый через центр слева направо, за один кадр отпускает одну
-// стрелку и нажимает другую
+// a stick swung through the centre from left to right releases one arrow and
+// presses the other within a single frame
 const l = readPad(pad({ axes: [-1, 0] })), r = readPad(pad({ axes: [1, 0] }));
 const flip = edges(l, r);
 ok('переброс стика: ArrowLeft отпущена, ArrowRight нажата', flip.released.join() === 'ArrowLeft' && flip.pressed.join() === 'ArrowRight', flip);

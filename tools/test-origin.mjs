@@ -1,15 +1,17 @@
-// node tools/test-origin.mjs — кто говорит с офисом с этой же машины.
+// node tools/test-origin.mjs — who talks to the office from this same machine.
 //
-// Всё с петли считается хозяйским, и это доверие достаётся любой вкладке того
-// же браузера. 3 сентября 2026 ревью показало, чего это стоило: чужая страница
-// POST-ом в /api/settings меняла токен хозяина и режим доставки, а через DNS
-// rebinding читала снимок и слала /api/task с deliver — то есть запускала
-// claude --resume с bypassPermissions. Стенд проверяет три признака, которые
-// ставит браузер и не подделать скриптом: Origin, Sec-Fetch-Site и Host.
+// Everything from loopback counts as the owner's, and that trust is inherited by
+// every tab of the same browser. On 3 September 2026 the review showed what that
+// cost: a foreign page POSTing to /api/settings changed the owner token and the
+// delivery mode, and through DNS rebinding it read the snapshot and sent
+// /api/task with deliver — that is, it started claude --resume with
+// bypassPermissions. The stand checks the three marks a browser sets and a script
+// cannot forge: Origin, Sec-Fetch-Site and Host.
 //
-// Здесь же — то, от чего офис падал: битый JSON в открытую до входа ручку,
-// тело без конца, массив вместо объекта. Каждая проверка заканчивается
-// вопросом «жив ли сервер», потому что ответ 400 на мёртвом офисе не бывает.
+// Here too is what the office used to fall over: broken JSON into a route open
+// before login, a body with no end, an array instead of an object. Every check
+// ends with the question "is the server alive", because a 400 from a dead office
+// does not happen.
 import http from 'node:http';
 import { fileOwners } from '../server/agents.js';
 import { startOffice } from './lib/office.mjs';
@@ -22,7 +24,7 @@ const ok = (name, cond, got) => {
   else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
 };
 
-// ------------------------------------------------ чьи файлы: без сервера
+// ------------------------------------------------ whose files: without a server
 {
   const snap = { agents: [
     { id: 'a', files: [{ path: '/p/a.md' }], artifacts: [] },
@@ -34,23 +36,24 @@ const ok = (name, cond, got) => {
   ok('чужой путь ничей', fileOwners('/etc/hosts', snap).length === 0, fileOwners('/etc/hosts', snap));
 }
 
-// private — режим, в котором петля и есть хозяин; именно тут дыра и жила.
+// private — the mode where loopback is the owner; this is where the hole lived.
 const { base, port: PORT, stop } = await startOffice({
   settings: { access: { mode: 'private', token: OWNER, invites: [] } },
   claudeDir: '/nonexistent-claude-dir',
 });
 
-// Не fetch, а node:http: fetch в Node молча выбрасывает заголовок Host, и
-// первый прогон этого стенда 3 сентября 2026 слал своё имя вместо чужого —
-// три «провала» сервера, который отвечал правильно. Origin и Sec-Fetch-Site
-// оба клиента ставят как есть; это и позволяет сыграть за чужую страницу.
+// node:http rather than fetch: fetch in Node silently drops the Host header, and
+// the first run of this stand on 3 September 2026 sent our own name instead of a
+// foreign one — three "failures" of a server that was answering correctly. Both
+// clients set Origin and Sec-Fetch-Site as given; that is what lets us play the
+// foreign page.
 const req = (p, { method = 'GET', headers = {}, body } = {}) => new Promise((resolve, reject) => {
   const r = http.request(base + p, { method, headers }, (res) => {
     const chunks = [];
     res.on('data', (c) => chunks.push(c));
     res.on('end', () => {
       let j = null;
-      try { j = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { /* не JSON */ }
+      try { j = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { /* not JSON */ }
       resolve({ status: res.statusCode, j, h: res.headers });
     });
   });
@@ -75,7 +78,7 @@ try {
     ok(`своё имя (${h}) — как и было`, own.status === 200, own.status);
   }
 
-  // ---------------------------------------------------------- чужая вкладка
+  // ---------------------------------------------------------- a foreign tab
   const foreign = await json('/api/settings', { lang: 'en' }, { origin: 'http://evil.example' });
   ok('POST с чужого Origin — отказ', foreign.status === 403 && foreign.j.errorKey === 'err.crossSite', foreign);
   const sfs = await json('/api/settings', { lang: 'en' }, { 'sec-fetch-site': 'cross-site' });
@@ -95,7 +98,7 @@ try {
   const foreignBeacon = await json('/api/gone', { id: 'nobody' }, { 'sec-fetch-site': 'cross-site' });
   ok('а чужой маячок — нет', foreignBeacon.status === 403, foreignBeacon.status);
 
-  // -------------------------------------------------------------- тип тела
+  // -------------------------------------------------------------- the body type
   const plain = await req('/api/settings', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{"lang":"en"}' });
   ok('JSON под видом text/plain — не принимают', plain.status === 415 && plain.j.errorKey === 'err.notJson', plain);
   const bare = await req('/api/enter', { method: 'POST', body: '{"code":"x"}' });
@@ -103,7 +106,7 @@ try {
   const charset = await req('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8' }, body: '{"lang":"ru"}' });
   ok('application/json с charset — это всё ещё JSON', charset.status === 200, charset.status);
 
-  // ---------------------------------------------------- от чего офис падал
+  // ---------------------------------------------------- what the office fell over
   const broken = await req('/api/enter', { method: 'POST', headers: { 'content-type': 'application/json' }, body: 'not json' });
   ok('битый JSON в /api/enter — 400, а не смерть', broken.status === 400 && broken.j.errorKey === 'err.badJson', broken);
   await alive('после битого JSON');
@@ -122,10 +125,11 @@ try {
   ok('чужой метод в ручку входа — не 500', method.status !== 500, method.status);
   await alive('после чужого метода');
 
-  // ------------------------------------------------------------ модули
-  // Проверка привязана к тому, какие модули доехали до сборки, а не к радио:
-  // без папки modules/ (бесплатная сборка) спрашивать про spotify не у кого,
-  // и стенд, требующий его всегда, красный ровно там, где всё правильно.
+  // ------------------------------------------------------------ modules
+  // The check is tied to which modules made it into the build rather than to the
+  // radio: without a modules/ folder (the free build) there is nobody to ask
+  // about spotify, and a stand that demands it always is red exactly where
+  // everything is right.
   const mods = (await req('/api/modules')).j || [];
   if (mods.some((m) => m.id === 'radio')) {
     const boot = await req('/api/settings');
@@ -135,7 +139,7 @@ try {
     ok('модулей в сборке нет — про их настройки и не спрашиваем', true, mods.length);
   }
 
-  // --------------------------------------------------------------- файлы
+  // --------------------------------------------------------------- the files
   const file = await req('/api/file?path=' + encodeURIComponent('/etc/hosts'));
   ok('файл не из транскрипта не отдают', file.status === 403, file.status);
 } catch (e) {

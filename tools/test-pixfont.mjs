@@ -1,9 +1,7 @@
-// node tools/test-pixfont.mjs — пиксельный шрифт 3×5 и табличка над дверью.
-//
-// Шрифт заводился ровно ради одного: чтобы номер версии читался верно. Поэтому
-// первое, что здесь проверяется, — не «рисуется ли что-нибудь», а что знаки,
-// которые легко спутать, действительно разные картинки. 0/O/8 — тот самый
-// случай: «v0.1.0» на снимке из офиса читалось как «v8.1.8».
+// The font was made for exactly one thing: so that the version number reads
+// correctly. So the first thing checked here is not "does anything draw" but that
+// the glyphs which are easy to confuse really are different pictures. 0/O/8 is
+// that very case: "v0.1.0" on a frame from the office read as "v8.1.8".
 import * as PF from '../web/pixfont.js';
 import { drawNameplate } from '../web/office.js';
 
@@ -13,7 +11,7 @@ const ok = (what, cond, got) => {
   bad++; console.log('УПАЛ  | ' + what + (got === undefined ? '' : ' → ' + JSON.stringify(got)));
 };
 
-// ------------------------------------------------------------------- шрифт
+// ------------------------------------------------------------------- the font
 
 const glyph = (c) => PF.FONT[c].join('/');
 ok('ноль не равен букве O', glyph('0') !== glyph('O'), [glyph('0'), glyph('O')]);
@@ -23,7 +21,7 @@ ok('N не равна M', glyph('N') !== glyph('M'));
 ok('U не равна V', glyph('U') !== glyph('V'));
 ok('S не равна 5', glyph('S') !== glyph('5'));
 
-// Все знаки одного размера — иначе строка поедет на первом же нестандартном
+// Every glyph is the same size — otherwise a line slides on the first unusual one
 const wrong = Object.entries(PF.FONT).filter(([, g]) =>
   g.length !== PF.GLYPH_H || g.some((row) => row.length !== PF.GLYPH_W || /[^#.]/.test(row)));
 ok('каждый знак ровно 3×5 и только из # и .', wrong.length === 0, wrong.map(([c]) => c));
@@ -38,12 +36,12 @@ ok('ширина строки по шагу 4 без хвоста', PF.textWidth
 ok('ширина пустой строки нулевая', PF.textWidth('') === 0);
 ok('версия и стек умещаются в 63', PF.textWidth('V0.1.0 · NODE') === 51, PF.textWidth('V0.1.0 · NODE'));
 
-// ------------------------------------------------- вторая гарнитура 5×5
+// ------------------------------------------------- the second face, 5×5
 //
-// Заведена ради подписи на табличке над дверью. Проверяется не «рисуется ли
-// что-нибудь», а то, ради чего она вообще есть: что кириллица берётся, что
-// узкое лицо от этого не изменилось ни на знак и что пары букв, которые в трёх
-// столбцах слипались, здесь разные картинки.
+// Made for the caption on the sign above the door. What is checked is not "does
+// anything draw" but what it exists for: that Cyrillic is taken, that the narrow
+// face did not change by a single glyph because of it, and that the letter pairs
+// which merged in three columns are different pictures here.
 
 const w = (c) => PF.FONT_WIDE[c].join('/');
 ok('И не равна Н — ради этого и заводилось лицо', w('И') !== w('Н'), [w('И'), w('Н')]);
@@ -63,36 +61,36 @@ ok('Ё и Й складываются в Е и И', PF.canDraw('ЁЖ ЙОД', PF
 ok('подпись таблички рисуема', PF.canDraw('офис агентов', PF.WIDE));
 ok('латиницы в широком лице только на VALEY', PF.canDraw('VALEY', PF.WIDE) && !PF.canDraw('OFFICE', PF.WIDE));
 
-// Узкое лицо — то же самое, что было. Если эта проверка упала, поехали все
-// таблички комнат разом, а заметно это станет только на кадре.
+// The narrow face is the same as it was. If this check fails, every room sign
+// moved at once, and that only becomes visible on a frame.
 ok('узкое лицо осталось без кириллицы', !PF.canDraw('Проект') && !PF.canDraw('Проект', PF.SMALL));
 ok('узкое лицо по умолчанию', PF.textWidth('AI VALEY') === PF.textWidth('AI VALEY', PF.SMALL));
 ok('шаг узкого лица прежний', PF.SMALL.ADVANCE === 4 && PF.SMALL.W === 3);
 
-// Геометрия таблички над дверью: поле внутри рамки 100 пикселей шириной, и обе
-// строки обязаны в него влезть — в обоих языках.
+// The geometry of the sign above the door: the field inside the frame is 100
+// pixels wide, and both lines have to fit into it — in both languages.
 ok('ОФИС АГЕНТОВ влезает в поле таблички', PF.textWidth('ОФИС АГЕНТОВ', PF.WIDE) === 71, PF.textWidth('ОФИС АГЕНТОВ', PF.WIDE));
 ok('AN OFFICE OF AGENTS влезает в поле таблички', PF.textWidth('AN OFFICE OF AGENTS') === 75, PF.textWidth('AN OFFICE OF AGENTS'));
 ok('обе подписи уже поля в 100', Math.max(PF.textWidth('ОФИС АГЕНТОВ', PF.WIDE), PF.textWidth('AN OFFICE OF AGENTS')) <= 100);
 ok('VALEY в двойном размере уже поля', PF.textWidth('VALEY', PF.WIDE, 2) === 58, PF.textWidth('VALEY', PF.WIDE, 2));
 
-// Масштаб множит и ширину, и высоту, и шаг: если он множит только шрифт,
-// строка расползается на буквы.
+// The scale multiplies the width, the height and the step: if it multiplies only
+// the font, the line spreads out into separate letters.
 {
   const hits = [];
   const ctx = { fillStyle: '', fillRect: (x, y, ww, hh) => hits.push({ x, y, w: ww, h: hh }) };
   PF.drawText(ctx, 'ВВ', 0, 0, '#fff', PF.WIDE, 2);
   const right = Math.max(...hits.map((r) => r.x + r.w));
   const low = Math.max(...hits.map((r) => r.y + r.h));
-  // «В» заполняет свой последний столбец, поэтому правый край нарисованного
-  // совпадает с textWidth ровно: у буквы с пустым последним столбцом он был бы
-  // левее, и сравнивать с шириной строки было бы нельзя.
+  // "В" fills its last column, so the right edge of what was drawn matches
+  // textWidth exactly: for a letter with an empty last column it would be further
+  // left, and comparing with the line width would not be possible.
   ok('в двойном размере строка вдвое шире', right === PF.textWidth('ВВ', PF.WIDE, 2), [right, PF.textWidth('ВВ', PF.WIDE, 2)]);
   ok('в двойном размере строка вдвое выше', low === 10, low);
   ok('пиксели кратны масштабу', hits.every((r) => r.h === 2 && r.w % 2 === 0), hits.filter((r) => r.h !== 2 || r.w % 2));
 }
 
-// ---- рисование: сколько прямоугольников и где
+// ---- drawing: how many rectangles and where
 const fakeCtx = () => {
   const c = { font: '', fillStyle: '', rects: [], texts: [],
     measureText: (s) => ({ width: s.length * (parseInt(c.font, 10) || 7) * 0.6 }),
@@ -103,7 +101,7 @@ const fakeCtx = () => {
 
 const one = fakeCtx();
 PF.drawText(one, 'I', 10, 20, '#fff');
-// I — это ###, .#., .#., .#., ###: две перекладины по три пикселя и три по одному
+// I is ###, .#., .#., .#., ### — two bars of three pixels and three of one
 ok('буква рисуется прямоугольниками, а не текстом', one.texts.length === 0 && one.rects.length === 5, one.rects.length);
 ok('соседние пиксели слиты в один прямоугольник', one.rects.some((r) => r.w === 3), one.rects);
 ok('буква стоит там, куда положили', one.rects[0].x === 10 && one.rects[0].y === 20, one.rects[0]);
@@ -121,7 +119,7 @@ const skip = fakeCtx();
 PF.drawText(skip, 'Ъ', 0, 0, '#fff');
 ok('незнакомый знак просто пропускается, без падения', skip.rects.length === 0);
 
-// ---------------------------------------------------------------- табличка
+// ---------------------------------------------------------------- the sign
 
 const plate = (title, sub) => {
   const ctx = fakeCtx();
@@ -143,16 +141,16 @@ ok('обе строки нарисованы пикселями', p2.ctx.texts.l
 ok('линейка между строками только у двустрочной',
   p2.ctx.rects.some((r) => r.h === 1 && r.c === '#74502f') && !p1.ctx.rects.some((r) => r.c === '#74502f'));
 
-// ---- откат на fillText: кириллическое имя рисовать нечем, но показать надо
+// ---- falling back to fillText: there is nothing to draw a Cyrillic name with, but it has to be shown
 const ru = plate('Проект', 'v1.0.0 · Node');
 ok('кириллическое имя уходит в fillText', ru.ctx.texts.some((t) => t.s === 'Проект'), ru.ctx.texts.map((t) => t.s));
 ok('вторая строка при этом всё равно пиксельная', !ru.ctx.texts.some((t) => t.s.includes('Node')), ru.ctx.texts.map((t) => t.s));
 ok('табличка с откатом всё равно по центру двери', ru.box.x + ru.box.w / 2 === 118, ru.box);
 
-// ---- обрезка длинных строк
+// ---- trimming long lines
 const long = plate('web-ios-identity-1de862', 'v1.0.0-rc.1 · React Native 0');
 const drawn = long.ctx.rects.length;
-// 18 знаков по шагу 4 = 71, плюс поля 10, плюс округление ширины до чётной
+// 18 glyphs at a step of 4 = 71, plus 10 of padding, plus rounding the width up to even
 ok('длинное имя обрезано до 18 знаков', long.box.w === 82, long.box.w);
 ok('что-то всё же нарисовано', drawn > 50, drawn);
 

@@ -1,11 +1,12 @@
-// node tools/test-guest.mjs — кого пускают и что ему можно.
+// node tools/test-guest.mjs — who is let in and what they may do.
 //
-// Поднимает офис в режиме shared со своим файлом настроек: трогать настоящий
-// нельзя, там живёт токен рабочего офиса, а стенду нужно и режим переключить,
-// и токен знать заранее.
+// It raises an office in shared mode with a settings file of its own: the real
+// one must not be touched, the working office's token lives there, and the stand
+// needs both to switch the mode and to know the token in advance.
 //
-// Проверяется граница, а не кнопка. Кнопку у гостя мы прячем, но прятать — не
-// значит запрещать: страница чужая, и всё, что она может послать, она пошлёт.
+// The boundary is what is checked, not the button. We hide the button from a
+// guest, but hiding is not forbidding: the page is theirs, and everything it can
+// send, it will send.
 import { startOffice } from './lib/office.mjs';
 
 const TOKEN = 'test-owner-token-0001';
@@ -16,7 +17,7 @@ const ok = (name, cond, got) => {
   else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
 };
 
-// Каталог сессий свой и пустой: стенд про порог и права, агенты ему не нужны.
+// The sessions directory is its own and empty: the stand is about the threshold and the rights, it needs no agents.
 const { base, stop } = await startOffice({
   settings: { access: { mode: 'shared', token: TOKEN, invites: [] } },
   claudeDir: '/nonexistent-claude-dir',
@@ -32,7 +33,7 @@ const call = (p, { as = 'nobody', method = 'POST', body = {} } = {}) => {
 };
 
 try {
-  // ------------------------------------------------- без приглашения никак
+  // ------------------------------------------------- no entry without an invitation
   const cold = await call('/api/state', { method: 'GET' });
   ok('без приглашения офис не показывают вовсе', cold.status === 403, cold.status);
   ok('и отказ объясняет, чего не хватает', cold.j && cold.j.errorKey === 'err.needCode', cold.j);
@@ -40,7 +41,7 @@ try {
   ok('но спросить, кто ты, можно всегда', whoCold.status === 200, whoCold.status);
   ok('и офис признаётся, что нужен код', whoCold.j.needsCode === true, whoCold.j);
 
-  // ------------------------------------------------------------ дверь
+  // ------------------------------------------------------------ the door
   const made = await call('/api/invite', { as: 'owner', body: { name: 'Костя', from: 'Сергей' } });
   ok('хозяин делает приглашение', made.status === 200 && !!made.j.invite.code, made.status);
   ok('и в ссылке есть код', (made.j.url || '').includes(made.j.invite.code), made.j.url);
@@ -61,7 +62,7 @@ try {
   const junkCode = await call('/api/enter', { body: { code: 'нет-такого' } });
   ok('чужой код не подходит', junkCode.j.errorKey === 'err.codeUnknown', junkCode.j);
 
-  // -------------------------------------------------------- что гостю можно
+  // -------------------------------------------------------- what a guest may do
   const look = await call('/api/state', { as: 'guest', method: 'GET' });
   ok('вошедший смотрит офис', look.status === 200, look.status);
   const here = await call('/api/here', { as: 'guest', body: { id: 'g1', name: 'Костя', x: 10, y: 10 } });
@@ -70,14 +71,14 @@ try {
   ok('и оставляет записку на столе', note.status !== 403, note.status);
   const stream = await fetch(base + '/api/stream?guest=' + encodeURIComponent(GUEST)).then((r) => r.status);
   ok('поток пускает по тому же пропуску в строке запроса', stream === 200, stream);
-  // EventSource не умеет заголовки, поэтому в общем режиме хозяин без этого
-  // терял собственный офис: страница жива, а поток ей отказывают.
+  // EventSource cannot set headers, so without this the owner in shared mode
+  // lost his own office: the page is alive and the stream is refused to it.
   const ownerStream = await fetch(base + '/api/stream?owner=' + encodeURIComponent(TOKEN)).then((r) => r.status);
   ok('и хозяина в его собственный поток — тоже', ownerStream === 200, ownerStream);
   const noPass = await fetch(base + '/api/stream').then((r) => r.status);
   ok('а без пропуска поток закрыт', noPass === 403, noPass);
 
-  // ------------------------------------------------------- что гостю нельзя
+  // ------------------------------------------------------- what a guest may not do
   const deliver = await call('/api/task', { as: 'guest', body: { agentId: 'x', text: 'y', deliver: true } });
   ok('отправить в чат нельзя', deliver.status === 403, deliver);
   ok('и отказ про право, а не про пропуск', deliver.j.errorKey === 'err.guest', deliver.j);
@@ -88,7 +89,7 @@ try {
   }).then((r) => r.status);
   ok('писать кадры на чужой диск нельзя', shot === 403, shot);
 
-  // ------------------------------------------------------- токен не течёт
+  // ------------------------------------------------------- the token does not leak
   const seen = await fetch(base + '/api/settings', { headers: { 'x-valey-guest': GUEST } }).then((r) => r.text());
   ok('токена хозяина в настройках нет', !seen.includes(TOKEN), null);
   ok('и кода приглашения тоже', !seen.includes(made.j.invite.code), null);
@@ -99,7 +100,7 @@ try {
   ok('но видно, кого звали и вошёл ли он',
     list.j.invites[0].name === 'Костя' && list.j.invites[0].used === true, list.j.invites[0]);
 
-  // ------------------------------------------------------------- выгнать
+  // ------------------------------------------------------------- evicting
   const out = await call('/api/invite/revoke', { as: 'owner', body: { id: list.j.invites[0].id } });
   ok('хозяин гасит приглашение', out.status === 200, out.status);
   const after = await call('/api/state', { as: 'guest', method: 'GET' });

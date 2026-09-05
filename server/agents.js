@@ -359,15 +359,20 @@ function applyLine(st, line) {
 
 // The names. Gender is stored next to the name rather than guessed from the
 // last letter: on diminutives that heuristic is wrong more often than right —
-// Гоша, Кузя, Савва, Никита and a dozen more end in а/я and are all male. On
+// «Гоша, Кузя, Савва, Никита» and a dozen more end in «а/я» and are all male. On
 // 30 August 2026 the office wrote "Гоша освободилась" for fourteen names out of
 // fifty.
 //
-// Names that go either way — Саша, Женя, Слава, Валя, Шура — are pinned to one
+// Names that go either way — «Саша, Женя, Слава, Валя, Шура» — are pinned to one
 // gender by decision, not by truth: there is nowhere to learn a session's
 // gender from, and a coin flipped once is better than a coin flipped in every
 // sentence.
-const MALE = [
+//
+// Since 4 September 2026 there is more than one dictionary: packs are chosen in
+// the panel at the switcher in the corridor. A pack is a pair of lists with
+// gender, and everything else — handing names out, freeing them, the numbers
+// when the pool runs dry — never learns which pack it is on.
+const RU_MALE = [
   'Гоша', 'Тимка', 'Борис', 'Федя', 'Рома', 'Клим', 'Сеня', 'Гриша', 'Лёва', 'Пётр',
   'Юра', 'Стёпа', 'Кузя', 'Матвей', 'Игнат', 'Савва', 'Захар', 'Митя', 'Прохор', 'Ося',
   'Никита', 'Артём', 'Слава', 'Тихон', 'Costa', 'Ваня', 'Вова', 'Дима', 'Коля', 'Миша',
@@ -378,7 +383,7 @@ const MALE = [
   'Валера', 'Демид', 'Ерёма', 'Жора', 'Кеша', 'Лёня', 'Наум', 'Осип', 'Радик', 'Тёма',
   'Филя', 'Шурик', 'Ярик', 'Афоня', 'Ефрем', 'Трофим', 'Женя', 'Гаврик', 'Луша', 'Юзик',
 ];
-const FEMALE = [
+const RU_FEMALE = [
   'Марта', 'Люся', 'Ася', 'Нина', 'Дуся', 'Вера', 'Тоня', 'Зоя', 'Майя', 'Софа',
   'Рита', 'Ева', 'Лиза', 'Поля', 'Дина', 'Оля', 'Настя', 'Галя', 'Валя', 'Катя',
   'Юля', 'Инна', 'Мила', 'Аля', 'Аня', 'Даша', 'Маша', 'Наташа', 'Света', 'Таня',
@@ -389,23 +394,85 @@ const FEMALE = [
   'Феня', 'Циля', 'Клава', 'Броня', 'Веста', 'Дося', 'Ляля', 'Нюся', 'Рэя', 'Тина',
 ];
 
-// The pool is exported for the stand, so it checks what was handed out rather than its own copy of the list.
-export const NAME_POOL = [...MALE, ...FEMALE];
+// The English pack. The same register as the Russian one: not passport Robert
+// and Elizabeth but what people are called at the desk — Bob and Betty. An
+// office that reads as two different offices in two languages is the thing this
+// was meant to avoid.
+//
+// The either-way ones — Sam, Alex, Charlie, Pat, Quinn — are pinned to male by
+// the same decision and for the same reason as «Женя» and «Слава» in Russian.
+const EN_MALE = [
+  'Pete', 'Gus', 'Sam', 'Max', 'Ed', 'Joe', 'Nick', 'Tom', 'Bill', 'Dave',
+  'Frank', 'Charlie', 'Andy', 'Bob', 'Mike', 'Steve', 'Jack', 'Harry', 'Alfie', 'Ollie',
+  'Archie', 'Freddie', 'Georgie', 'Bertie', 'Monty', 'Reggie', 'Stan', 'Wally', 'Rex', 'Hank',
+  'Chuck', 'Buddy', 'Duke', 'Earl', 'Jed', 'Cody', 'Wes', 'Chip', 'Skip', 'Buck',
+  'Dean', 'Kirk', 'Lance', 'Marty', 'Neil', 'Otis', 'Percy', 'Quinn', 'Rudy', 'Silas',
+  'Toby', 'Vince', 'Wade', 'Zeke', 'Abe', 'Barney', 'Cliff', 'Dexter', 'Elmer', 'Floyd',
+  'Gil', 'Hugo', 'Ike', 'Jasper', 'Karl', 'Leo', 'Milo', 'Ned', 'Oscar', 'Pat',
+  'Ralph', 'Roy', 'Seth', 'Theo', 'Vic', 'Walt', 'Ziggy', 'Angus', 'Boone', 'Caleb',
+  'Dale', 'Emmett', 'Finn', 'Grady', 'Homer', 'Ivan', 'Jonah', 'Lyle', 'Moe', 'Rusty',
+];
+const EN_FEMALE = [
+  'Sally', 'Ruby', 'Betty', 'Daisy', 'Ella', 'Flo', 'Gracie', 'Hattie', 'Ivy', 'June',
+  'Kitty', 'Lucy', 'Maggie', 'Nell', 'Opal', 'Pearl', 'Queenie', 'Rosie', 'Sadie', 'Tess',
+  'Una', 'Vera', 'Wanda', 'Winnie', 'Zelda', 'Abby', 'Bonnie', 'Cora', 'Dolly', 'Edie',
+  'Fern', 'Gwen', 'Hazel', 'Iris', 'Josie', 'Katie', 'Lottie', 'Mabel', 'Nora', 'Olive',
+  'Peggy', 'Polly', 'Rita', 'Susie', 'Trixie', 'Willa', 'Cleo', 'Dot', 'Elsie', 'Fay',
+  'Ginny', 'Hetty', 'Jenny', 'Lena', 'Milly', 'Ada', 'Birdie', 'Cissy', 'Della', 'Effie',
+  'Greta', 'Hilda', 'Isla', 'Janie', 'Lulu', 'Marge', 'Nan', 'Prue', 'Rhoda', 'Stella',
+  'Tilly', 'Wilma', 'Bess', 'Clara', 'Dixie', 'Etta', 'Nina', 'Vi', 'Fanny', 'Minnie',
+];
 
-const GENDER = new Map([...MALE.map((n) => [n, 'm']), ...FEMALE.map((n) => [n, 'f'])]);
 // Interleaved rather than concatenated: otherwise the first fifty agents on a
 // fresh machine would all be men — a name is picked from a hash, but neighbours
 // in the list are taken in order once the hash lands in an occupied stretch.
-const NAMES = MALE.flatMap((m, i) => (FEMALE[i] ? [m, FEMALE[i]] : [m]))
-  .concat(FEMALE.slice(MALE.length));
+const weave = (male, female) => male
+  .flatMap((m, i) => (female[i] ? [m, female[i]] : [m]))
+  .concat(female.slice(male.length));
+
+const pack = (male, female) => ({
+  pool: [...male, ...female],
+  names: weave(male, female),
+  gender: new Map([...male.map((n) => [n, 'm']), ...female.map((n) => [n, 'f'])]),
+});
+
+export const PACKS = {
+  ru: pack(RU_MALE, RU_FEMALE),
+  en: pack(EN_MALE, EN_FEMALE),
+};
+export const PACK_IDS = Object.keys(PACKS);
+const packOf = (id) => PACKS[id] || PACKS.ru;
+
+// The pool is exported for the stand, so it checks what was handed out rather than its own copy of the list.
+export const namePool = (id = 'ru') => packOf(id).pool.slice();
+// The sample for the panel comes from the handing-out order, not from the pool:
+// the pool is male and female concatenated, so its first four names are four
+// men, which lies about the dictionary.
+export const nameSample = (id = 'ru', n = 4) => packOf(id).names.slice(0, n);
+
+// Which pack is actually in force. 'auto' follows the office language: a fresh
+// office in English gets English names, and nobody has to be taught that.
+export const effectivePack = ({ namePack = 'auto', lang = 'ru' } = {}) =>
+  (PACKS[namePack] ? namePack : (PACKS[lang] ? lang : 'ru'));
 
 // "Ося 51" is the same name as "Ося": the number was appended when the pool ran
 // out. Names from earlier versions of the pool are not in the map, and for them
 // the old guess by the last letter remains — it will be wrong in exactly the
 // places it was always wrong.
-export function genderOf(name = '') {
+//
+// The pack is asked first but not last: names issued by the previous pack sit
+// on disk until the next snapshot, and «Пётр» has to stay a man for those
+// seconds — otherwise half the floor changes gender between the keypress and
+// the redraw.
+export function genderOf(name = '', id = 'ru') {
   const base = String(name).replace(/\s+\d+$/, '');
-  return GENDER.get(base) || (/[ая]$/.test(base) ? 'f' : 'm');
+  const here = packOf(id).gender.get(base);
+  if (here) return here;
+  for (const p of Object.values(PACKS)) {
+    const g = p.gender.get(base);
+    if (g) return g;
+  }
+  return /[ая]$/.test(base) ? 'f' : 'm';
 }
 
 export function hash(str) {
@@ -420,9 +487,10 @@ export function hash(str) {
 // The pure part of the allocator: `saved` is what lies on disk, `order` is the
 // sessions that need a name, in start order, and `keep` is those that keep
 // theirs. Everything else lives in nameRegistry so this can be run by a stand.
-export function assignNames(saved, order, keep) {
+export function assignNames(saved, order, keep, packId = 'ru') {
+  const NAMES = packOf(packId).names;
   const names = {};
-  for (const [id, n] of Object.entries(saved)) if (keep.has(id)) names[id] = n;
+  for (const [sid, n] of Object.entries(saved)) if (keep.has(sid)) names[sid] = n;
   const taken = new Set(Object.values(names));
 
   // "Клим 97" is not a name but the mark of an exhausted pool: that is what
@@ -463,8 +531,29 @@ const sameNames = (a, b) => {
   return ka.length === kb.length && ka.every((k) => a[k] === b[k]);
 };
 
-async function nameRegistry(sessions) {
+// The order in which the office is renamed wholesale: first everyone who
+// already has a name, by ascending id, then the live ones without one — and
+// only that way, because the preview in the panel walks the same order. Let the
+// two diverge and the panel promises «Пётр станет Gus» while Pete is what he
+// becomes: the one line it is shown for would be the line that lies.
+const renameOrder = (names, order, keep) => [
+  ...Object.keys(names).filter((id) => keep.has(id)).sort(),
+  ...order.filter((id) => !names[id]),
+];
+
+// What the office would be called on this pack. Computed from what lies on
+// disk, so live sessions without a name yet do not appear — and this line is
+// asked about exactly those who already stand on the floor.
+export async function previewPack(packId) {
   const { names } = await getSettings();
+  const keep = new Set(Object.keys(names));
+  return assignNames({}, renameOrder(names, [], keep), keep, packId);
+}
+
+async function nameRegistry(sessions) {
+  const settings = await getSettings();
+  const { names } = settings;
+  const packId = effectivePack(settings);
 
   // A name is held by a session for as long as its transcript lives on disk:
   // `claude --resume` returns the same sessionId, and the agent has to come back
@@ -489,9 +578,22 @@ async function nameRegistry(sessions) {
   const order = [...sessions]
     .sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0))
     .map((s) => s.sessionId);
-  const next = assignNames(names, order, keep);
 
-  if (!sameNames(next, names)) await patchSettings({ names: next });
+  // The pack changed — the office is renamed at once, from a clean slate: old
+  // names are not carried over, or half the floor would stay in the previous
+  // dictionary, and that reads as a bug rather than as a setting. Going back is
+  // free: the same sessionId under the same pack yields the same name.
+  //
+  // The namesPack mark on disk answers "which pack were the names sitting here
+  // issued with". Without it the server cannot tell "the pack was never
+  // touched" from "the pack changed while the office was down".
+  const renaming = settings.namesPack !== packId;
+  const next = renaming
+    ? assignNames({}, renameOrder(names, order, keep), keep, packId)
+    : assignNames(names, order, keep, packId);
+
+  if (renaming) await patchSettings({ names: next, namesPack: packId });
+  else if (!sameNames(next, names)) await patchSettings({ names: next });
   return next;
 }
 
@@ -555,6 +657,7 @@ export async function snapshot() {
   await Promise.all(sessions.map((s) => repoRoot(s.cwd)));
   await indexTranscripts();
   const names = await nameRegistry(sessions);
+  const namesPack = effectivePack(await getSettings());
   const seats = await seatRegistry(sessions);
   const agents = [];
 
@@ -579,7 +682,7 @@ export async function snapshot() {
       name: names[s.sessionId] || s.sessionId.slice(0, 6),
       // gender travels with the snapshot: on the page the name is one line,
       // while "освободилась" and "повесила" are needed in two places
-      gender: genderOf(names[s.sessionId] || ''),
+      gender: genderOf(names[s.sessionId] || '', namesPack),
       project: projectOf(s),
       seat: seats[s.sessionId].i,
       cwd: s.cwd,

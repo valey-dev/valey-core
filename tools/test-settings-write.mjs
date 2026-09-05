@@ -1,11 +1,12 @@
-// node tools/test-settings-write.mjs — настройки не теряются ни в гонке, ни в
-// битом файле.
+// node tools/test-settings-write.mjs — settings are lost neither in a race nor
+// in a broken file.
 //
-// Такт офиса и обработчики запросов сохраняют настройки независимо; до
-// 4 сентября 2026 две записи в один файл напрямую перемешивали байты, а битый
-// JSON при следующем старте молча становился умолчаниями — вместе с именами
-// агентов, токеном хозяина и приглашениями. Файл здесь свой, во временной
-// папке: настоящий трогать нельзя, там живёт токен рабочего офиса.
+// The office tick and the request handlers save settings independently; until
+// 4 September 2026 two writes into one file directly interleaved bytes, and
+// broken JSON quietly became defaults at the next start — together with the
+// agents' names, the owner token and the invitations. The file here is its own,
+// in a temp directory: the real one must not be touched, the working office's
+// token lives in it.
 import { spawnSync } from 'node:child_process';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
@@ -21,8 +22,8 @@ const ok = (name, cond, got) => {
 
 const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-settings-'));
 try {
-  // ------------------------------------------------------------- гонка
-  // Модуль читает VALEY_SETTINGS на импорте, поэтому переменная — до импорта.
+  // ------------------------------------------------------------- the race
+  // The module reads VALEY_SETTINGS on import, so the variable comes first.
   const file = path.join(dir, 'race.json');
   process.env.VALEY_SETTINGS = file;
   const { getSettings, patchSettings } = await import('../server/settings.js');
@@ -36,8 +37,8 @@ try {
   ok('временных файлов не осталось', left.length === 0, left);
   ok('кэш совпадает с диском', (await getSettings()).lang === onDisk.lang, null);
 
-  // --------------------------------------------------------- битый файл
-  // Отдельный процесс: кэш настроек живёт в модуле и второй раз не читается.
+  // ---------------------------------------------------- the broken file
+  // A separate process: the settings cache lives in the module and is not read twice.
   const broken = path.join(dir, 'broken.json');
   await fsp.writeFile(broken, '{"access":{"token":"precious"},"names":{"s1":"Костя"}, oops');
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', `
@@ -49,7 +50,7 @@ try {
   `], { cwd: ROOT, env: { ...process.env, VALEY_SETTINGS: broken }, encoding: 'utf8' });
   ok('битый файл не роняет старт', r.status === 0, r.stderr || r.stdout);
   let out = null;
-  try { out = JSON.parse(r.stdout.trim().split('\n').pop()); } catch { /* ниже */ }
+  try { out = JSON.parse(r.stdout.trim().split('\n').pop()); } catch { /* below */ }
   ok('офис стартует с умолчаний, а не с половины файла', out && out.token === '' , out);
   ok('до первого сохранения файл не тронут', out && out.untouchedUntilSave === true, out);
   ok('и об этом сказано вслух, с путём копии', /отложен в .*broken\.json\.broken-/.test(r.stderr), r.stderr);

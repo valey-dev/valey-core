@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Выпуск релиза: поднять версию, собрать раздел changelog из коммитов после
-// прошлого тега, закоммитить, поставить тег. Пуш — отдельным шагом и руками:
-// ушедшее в origin уже не переписать, и решает это пользователь, а не скрипт.
+// Cutting a release: bump the version, assemble the changelog section from the
+// commits since the previous tag, commit, put the tag on. Pushing is a separate
+// step and a manual one: what has gone to origin cannot be rewritten, and that is
+// the user's call rather than the script's.
 //
 //   node tools/release.mjs minor
 //   node tools/release.mjs patch --dry
@@ -10,15 +11,16 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-// Корень — от этого файла, а не от cwd: git и файлы обязаны смотреть в один
-// репозиторий. До 4 сентября 2026 git ходил в cwd, а package.json и CHANGELOG
-// брались отсюда: запуск из подкаталога переписывал файлы, а `git add` падал
-// на pathspec — версия поднята, раздел вписан, коммита нет, отката тоже.
+// The root comes from this file rather than from the cwd: git and the files have
+// to look at one repository. Until 4 September 2026 git went to the cwd while
+// package.json and CHANGELOG were taken from here: a run from a subdirectory
+// rewrote the files and `git add` failed on the pathspec — the version bumped,
+// the section written, no commit and no way back.
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 const git = (...a) => execFileSync('git', ['-C', ROOT, ...a], { encoding: 'utf8' }).trim();
-// То же, но молча: до первого тега `git describe` кричит в stderr, и этот крик
-// не про ошибку, а про «тегов ещё нет».
+// The same, but quietly: before the first tag `git describe` shouts into stderr,
+// and that shout is not about an error but about "there are no tags yet".
 const gitQuiet = (...a) =>
   execFileSync('git', ['-C', ROOT, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
 const die = (m) => { console.error('release: ' + m); process.exit(1); };
@@ -28,7 +30,7 @@ const dry = process.argv.includes('--dry');
 if (!['major', 'minor', 'patch'].includes(kind))
   die('первым аргументом major, minor или patch');
 
-// Грязное дерево — это чужие правки, попавшие в релизный коммит. Уж лучше стоп.
+// A dirty tree is somebody else's edits landing in the release commit. Better to stop.
 if (!dry && git('status', '--porcelain')) die('дерево грязное, сначала закоммить или спрячь');
 
 const pkgPath = new URL('../package.json', import.meta.url);
@@ -41,11 +43,11 @@ const tag = 'v' + next;
 
 if (git('tag', '-l', tag)) die(`тег ${tag} уже есть`);
 
-// Прошлый тег может отсутствовать только до самого первого релиза.
-// `--match` обязателен: в репозитории живут не только версии. Рутина repo-log
-// вешает `logseq-log/<дата>` на текущий HEAD, и 30 августа 2026 `describe` без
-// фильтра вернул именно его — диапазон вышел пустым, и релиз упал на «нет
-// коммитов» при двадцати четырёх накопленных.
+// The previous tag can only be missing before the very first release.
+// `--match` is mandatory: the repository grows more than versions. The repo-log
+// routine hangs `logseq-log/<date>` on the current HEAD, and on 30 August 2026
+// `describe` without a filter returned exactly that — the range came out empty,
+// and the release failed on "no commits" with twenty-four of them accumulated.
 let range = 'HEAD';
 try { range = gitQuiet('describe', '--tags', '--abbrev=0', '--match', 'v[0-9]*') + '..HEAD'; } catch {}
 
@@ -55,10 +57,10 @@ const commits = git('log', range, '--no-merges', '--format=%h%x00%s')
 if (!commits.length) die(`после ${range.split('..')[0]} нет коммитов`);
 
 const TYPES = [
-  // Заголовки английские с 2 сентября 2026: сами записи — это темы коммитов,
-  // а они английские с 29 августа, и русская шапка над английским списком
-  // читалась половиной перевода. Разделы выше этой даты остаются русскими —
-  // тот же раскол, что и в истории, и по той же причине.
+  // The headings are English from 2 September 2026: the entries themselves are
+  // commit subjects, and those are English from 29 August, so a Russian heading
+  // over an English list read as half a translation. Sections above that date
+  // stay Russian — the same split as in the history, and for the same reason.
   ['feat', 'Added'], ['fix', 'Fixed'], ['perf', 'Faster'],
 ];
 const RE = /^(\w+)(?:\(([^)]*)\))?!?:\s*(.+)$/;
@@ -66,8 +68,9 @@ const groups = new Map(TYPES.map(([t]) => [t, []]));
 const other = [];
 for (const c of commits) {
   const m = RE.exec(c.subject);
-  // Всё, что не разобралось или не из трёх видимых типов, идёт в Other.
-  // Молча терять коммит нельзя: раздел тогда врёт про объём релиза.
+  // Anything that did not parse, or is not one of the three visible types, goes
+  // into Other. Losing a commit in silence is not on: the section would then lie
+  // about the size of the release.
   if (m && groups.has(m[1])) groups.get(m[1]).push({ ...c, scope: m[2], text: m[3] });
   else other.push(c);
 }
@@ -113,10 +116,10 @@ git('tag', '-a', tag, '-m', tag);
 console.log(`\nготово: ${tag} на ${git('rev-parse', '--short', 'HEAD')}`);
 console.log(`пуш — отдельно и по твоему решению:\n  git push origin main ${tag}`);
 
-// Минор без ролика — сломанное правило, а не мелочь: так вышел v0.2.0. Поэтому
-// черновик сценария появляется сам, вместе с тегом. Пустой лист — главная
-// причина, по которой выпуск откладывается, и убрать его дешевле, чем потом
-// уговаривать себя сесть.
+// A minor with no video is a broken rule rather than a detail: that is how
+// v0.2.0 went out. So the draft script appears by itself, together with the tag.
+// A blank page is the main reason a release gets put off, and removing it is
+// cheaper than talking yourself into sitting down later.
 if (next.endsWith('.0')) {
   try {
     const out = execFileSync(process.execPath, [fileURLToPath(new URL('script.mjs', import.meta.url)), tag],

@@ -23,6 +23,7 @@ export function initUI(state, callbacks) {
   el.lift = $('#lift');
   el.invite = $('#invite');
   el.notes = $('#notes');
+  el.lang = $('#lang');
   // Один обработчик на всю панель просмотра, поставленный на входе: разметка
   // внутри неё перерисовывается постоянно, а он это переживает.
   bindCopyButtons();
@@ -1840,6 +1841,10 @@ export function focusRing(nodeOf, selector, opts = {}) {
     idx = Math.max(0, Math.min(l.length - 1, idx));
     l.forEach((b, i) => b.classList.toggle('focus', i === idx));
     l[idx].scrollIntoView({ block: 'nearest' });
+    // Панель, которой мало подсветить кнопку: у языка под кнопками стоит
+    // строка «что будет, если нажать», и она обязана меняться вместе с фокусом,
+    // а не по нажатию. Без этого цена показывалась бы уже уплаченной.
+    if (opts.onMove) opts.onMove(l[idx]);
   };
   return {
     paint,
@@ -1877,6 +1882,32 @@ export function focusRing(nodeOf, selector, opts = {}) {
         }
       }
 
+      // Панель со строками: ↑↓ переносят между строками, ←→ ходят внутри одной.
+      // Плоский обход тут врёт руке — «интерфейс» и «имена агентов» это два
+      // разных вопроса, и стрелка вниз должна отвечать на второй, а не
+      // доводить до конца первый.
+      if (opts.rows) {
+        const rows = [...nodeOf().querySelectorAll(opts.rows)]
+          .map((r) => l.filter((b) => r.contains(b)))
+          .filter((r) => r.length);
+        const at = rows.findIndex((r) => r.includes(cur));
+        if (at >= 0) {
+          const pos = rows[at].indexOf(cur);
+          const side = { arrowleft: -1, arrowright: 1 }[key];
+          if (side !== undefined) {
+            const row = rows[at];
+            idx = l.indexOf(row[(pos + side + row.length) % row.length]);
+            paint(); return true;
+          }
+          const down = { arrowup: -1, arrowdown: 1 }[key];
+          if (down !== undefined) {
+            const row = rows[(at + down + rows.length) % rows.length];
+            idx = l.indexOf(row[Math.min(pos, row.length - 1)]);
+            paint(); return true;
+          }
+        }
+      }
+
       const step = { arrowup: -1, arrowdown: 1, arrowleft: -1, arrowright: 1 }[key];
       if (step !== undefined) { idx = (idx + step + l.length) % l.length; paint(); return true; }
       if (key === 'enter' || key === ' ') {
@@ -1890,6 +1921,147 @@ export function focusRing(nodeOf, selector, opts = {}) {
     },
   };
 }
+
+// ------------------------------------------------------------ язык и имена
+//
+// Человечек в коридоре до 4 сентября 2026 щёлкал язык одним нажатием. Паков
+// имён стало два, а со временем будет больше — щелчком по кругу растущий
+// список не выбирают, поэтому ПРОБЕЛ открывает панель. Цена названа вслух:
+// вместо одного нажатия стало три.
+let packs = null;   // ответ /api/names, живёт пока панель открыта
+
+export async function openLang() {
+  el.lang.hidden = false;
+  langRing.reset();
+  renderLang();
+  // Цена нажатия приезжает отдельно и может опоздать: сервер однопоточный, и
+  // запрос, попавший в обход транскриптов, ждёт вместе со всеми. Панель к тому
+  // времени уже нарисована и читается — ждёт только строка про переименование.
+  packs = await api.names().catch((e) => ({ error: String(e && e.message), packs: [] }));
+  if (!el.lang.hidden) renderLang();
+}
+
+export function closeLang() { el.lang.hidden = true; packs = null; langRing.reset(); }
+
+// Что офис получит, нажав на этот пак: сколько имён сменится и пара примеров.
+// Считается по живым агентам, а не по всему реестру на диске: обещание «всех
+// 12» проверяется глазами по этажу, и число обязано сойтись именно с ним.
+function packChange(id) {
+  const p = packs && packs.packs.find((x) => x.id === id);
+  if (!p) return null;
+  const pairs = (S.agents || [])
+    .filter((a) => p.names[a.id] && p.names[a.id] !== a.name)
+    .map((a) => [a.name, p.names[a.id]]);
+  return { n: pairs.length, pairs };
+}
+
+// Пак, который получится, если выбрать это значение: «как язык офиса» —
+// не пак, а обещание идти за языком.
+const packUnder = (choice, lng) => (choice === 'auto' ? lng : choice);
+
+function renderLang() {
+  const lng = lang();
+  const choice = (packs && packs.choice) || (S.settings && S.settings.namePack) || 'auto';
+  const now = packUnder(choice, lng);
+  // Кнопки берутся из описи, а не из ответа про цену: список паков должен
+  // стоять на месте с первого кадра, иначе панель перерисовывается под рукой.
+  const ids = (S.packs || []).map((p) => p.id);
+  const mark = (on, text) => (on ? `● ${text}` : text);
+
+  const btn = (cls, attr, val, on, text) =>
+    `<button class="${cls}${on ? ' on' : ''}" ${attr}="${val}">${mark(on, text)}</button>`;
+
+  el.lang.innerHTML = `<div class="rwrap langwrap">
+    <div class="vhead">${tr('lang.title')}<button id="langx">✕</button></div>
+    <div class="langbody">
+      <p class="langlabel">${tr('lang.interface')}</p>
+      <div class="langrow">
+        ${btn('langbtn', 'data-lang', 'ru', lng === 'ru', 'Русский')}
+        ${btn('langbtn', 'data-lang', 'en', lng === 'en', 'English')}
+      </div>
+      <p class="langlabel">${tr('lang.names')}</p>
+      <div class="langrow">
+        ${btn('packbtn', 'data-pack', 'auto', choice === 'auto', tr('lang.auto'))}
+        ${ids.map((id) => btn('packbtn', 'data-pack', id, choice === id, tr('lang.pack.' + id))).join('')}
+      </div>
+      <p class="langwarn" hidden></p>
+      <p class="langstatus">${langStatus(now)}</p>
+      <p class="hint">${tr('lang.hint')}</p>
+    </div></div>`;
+
+  $('#langx').onclick = closeLang;
+  for (const b of el.lang.querySelectorAll('.langbtn')) {
+    b.onclick = () => api.setLang(b.dataset.lang);
+  }
+  for (const b of el.lang.querySelectorAll('.packbtn')) {
+    b.onclick = () => applyPack(b.dataset.pack);
+  }
+  langRing.paint();
+}
+
+// Размер и образец берутся из описи, приехавшей с настройками: она статична,
+// и ждать её незачем. Круга до сервера ждёт только цена нажатия.
+function langStatus(id) {
+  const p = (S.packs || []).find((x) => x.id === id);
+  if (!p) return tr('lang.counting');
+  return tr('lang.status', {
+    pack: tr('lang.pack.' + id),
+    names: p.sample.join(', '),
+    n: p.size - p.sample.length,
+  });
+}
+
+// Строка «что будет, если нажать» — она же цена. Показывается только у пака,
+// который сейчас не работает: у включённого нажимать нечего.
+function langWarn(node) {
+  const warn = el.lang && el.lang.querySelector('.langwarn');
+  const status = el.lang && el.lang.querySelector('.langstatus');
+  if (!warn || !status) return;
+  const pick = node && node.dataset ? node.dataset.pack : null;
+  const choice = (packs && packs.choice) || 'auto';
+  const target = pick ? packUnder(pick, lang()) : null;
+  const change = target && pick !== choice ? packChange(target) : null;
+
+  // Строка состояния идёт за фокусом: стоишь на «English» — она про английский
+  // словарь, а не про включённый. Иначе панель отвечает не на тот вопрос,
+  // который человек только что задал стрелкой.
+  status.innerHTML = langStatus(target || packUnder(choice, lang()));
+
+  if (!change || !change.n) { warn.hidden = true; warn.textContent = ''; return; }
+  const [first, second] = change.pairs;
+  const parts = [tr('lang.becomes', { from: first[0], to: first[1] })];
+  if (second) parts.push(tr('lang.also', { from: second[0], to: second[1] }));
+  warn.hidden = false;
+  warn.textContent = tr('lang.warn', { n: change.n, pairs: parts.join(', ') });
+}
+
+async function applyPack(pick) {
+  // Порядок здесь важнее красоты: сначала действие, потом рассказ о нём.
+  //
+  // Раньше тост ждал предпросмотр, и если тот не успел приехать, применение
+  // висело на его ожидании — офис переименовывался молча, а панель делала вид,
+  // что ничего не произошло. Круга до сервера тут два, и второй не должен
+  // задерживать первый: страница в этот момент рисует офис каждый кадр, и
+  // разбор ответа встаёт в очередь за отрисовкой — 3.6 секунды на стенде
+  // 4 сентября 2026 против 2 миллисекунд у curl по тому же адресу.
+  const before = packChange(packUnder(pick, lang()));
+  await api.saveSettings({ namePack: pick });
+  if (packs) packs.choice = pick;
+  renderLang();
+
+  // Цену знаем — называем число и пример, как на кадре. Не знаем — говорим
+  // хотя бы что переключили: молчание тут читается как «кнопка не сработала».
+  const name = tr('lang.pack.' + packUnder(pick, lang()));
+  if (!before || !before.n) return toast(tr('toast.namePackPlain', { pack: name }));
+  const [from, to] = before.pairs[0];
+  toast(tr('toast.namePack', { pack: name, n: before.n, from, to }));
+}
+
+const langRing = focusRing(() => el.lang, '.langbtn, .packbtn', {
+  rows: '.langrow', onMove: langWarn,
+});
+export function langKey(raw) { return langRing.key(raw, el.lang && !el.lang.hidden); }
+export function langOpen() { return el.lang && !el.lang.hidden; }
 
 const skyRing = focusRing(() => el.sky, '#skytoggle, #skyq, .skyhit, #skygeo');
 export function closeSky() { el.sky.hidden = true; skyRing.reset(); clearTimeout(geoTimer); }

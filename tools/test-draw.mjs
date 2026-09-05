@@ -1,15 +1,17 @@
-// node tools/test-draw.mjs — отрисовка этажа на подставном холсте.
+// node tools/test-draw.mjs — drawing the floor on a stand-in canvas.
 //
-// Зачем: 30 августа 2026 человек пропал с экрана, стоило подойти к курилке на
-// сервисном ярусе. Причина — drawBoard звалась для каждой комнаты в кадре, а у
-// сервисных доски нет: `r.board.x` у undefined роняло кадр, а падение рвало
-// очередь draws, и всё, что стояло в ней ниже, — агенты, кот, сам игрок —
-// переставало рисоваться. Ни один тест этого не видел, потому что все они
-// считают числа и ни один не рисует.
+// Why: on 30 August 2026 the person vanished from the screen the moment you
+// walked up to the smoking spot on the service tier. The cause: drawBoard was
+// called for every room in the frame, and the service ones have no board —
+// `r.board.x` on undefined brought the frame down, and the crash tore the draws
+// queue apart, so everything below it — the agents, the cat, the player himself —
+// stopped being drawn. Not one test saw this, because they all count numbers and
+// none of them draws.
 //
-// Холст подставной: проверяется не картинка, а то, что функции доживают до
-// конца на всех комнатах этажа, включая те, у которых половины полей нет.
-// Это стенд того же рода, что клавиатурные, — там подставной DOM, здесь ctx.
+// The canvas is a stand-in: what is checked is not the picture but that the
+// functions survive to the end on every room of the floor, including those
+// missing half their fields. This is a stand of the same kind as the keyboard
+// ones — there the DOM is a stand-in, here the ctx is.
 
 const noop = () => {};
 const grad = { addColorStop: noop };
@@ -54,9 +56,10 @@ const agents = Array.from({ length: 7 }, (_, i) => ({
 const L = buildLayout(agents);
 const t = 1000;
 
-// ------------------------------------------------------- контракт комнат
-// Доска — примета проектной комнаты. Если появится комната без доски и без
-// флага service, цикл отрисовки в main.js обойдёт её молча и неправильно.
+// ------------------------------------------------------- the rooms' contract
+// A board is the mark of a project room. Should a room appear with no board and
+// no service flag, the drawing loop in main.js would pass it by silently and
+// wrongly.
 const boardless = L.rooms.filter((r) => !r.board);
 ok('комната без доски — только сервисная',
   boardless.every((r) => r.service), boardless.map((r) => r.title));
@@ -69,7 +72,7 @@ ok('и art, пусть и пустой',
 ok('у каждой есть дверь и точка у двери',
   L.rooms.every((r) => r.door && r.doorPoint), null);
 
-// --------------------------------------------------------- сама отрисовка
+// --------------------------------------------------------- the drawing itself
 survives('коридор рисуется', () => office.drawCorridor(ctx, L, t, 0.5, { kind: 'clear', intensity: 0.5, wind: 0 }));
 survives('свет по всему этажу', () => office.drawLight(ctx, L, t, 0.5));
 survives('лифт', () => office.drawLift(ctx, L, t, { floor: 1, open: 0, phase: 'idle' }));
@@ -85,10 +88,11 @@ for (const r of L.rooms) {
   for (const d of r.desks) survives(`стол ${who}#${d.i}`, () => office.drawDesk(ctx, d, null, t));
 }
 
-// Ловушка записана прямо здесь: drawBoard на сервисной комнате обязана падать,
-// а не рисовать пустоту. Звать её без проверки нельзя — и это не вкусовщина,
-// а то, из-за чего 30 августа 2026 с экрана пропал человек. Тест не может
-// проверить сам main.js: тот привязан к браузеру и в node не поднимается.
+// The trap is written down right here: drawBoard on a service room must throw
+// rather than draw emptiness. Calling it without a check is not on — and that is
+// not taste but the reason a person vanished from the screen on 30 August 2026.
+// The test cannot check main.js itself: that one is tied to a browser and does
+// not come up in node.
 {
   const svc = L.rooms.find((r) => r.service);
   let threw = false;
@@ -97,14 +101,15 @@ for (const r of L.rooms) {
     threw, 'не упала: молчаливая доска у комнаты, где её нет');
 }
 
-// --------------------------------------------------- чужая внешность
-// Второй случай той же болезни: 30 августа 2026 человек, пришедший с чужой
-// машины с половиной полей внешности, уронил drawPerson на shade(look.shirt) —
-// и снова унёс с собой всю очередь отрисовки. Сервер теперь просеивает мусор,
-// но недостающего не выдумывает: достраивать до полного обязан клиент.
+// --------------------------------------------------- a foreign look
+// The second case of the same illness: on 30 August 2026 a person who arrived
+// from another machine with half their look fields brought drawPerson down on
+// shade(look.shirt) — and again took the whole drawing queue with them. The
+// server now sieves the rubbish, but does not invent what is missing: filling it
+// out is the client's job.
 {
   const sprites = await import('../web/sprites.js');
-  // те же умолчания, что в main.js — там они живут рядом с state.me
+  // the same defaults as in main.js — there they live next to state.me
   const DEFAULT_ME = {
     skin: '#ffdcb8', hair: '#3a2a20', shirt: '#4fa89a', pants: '#3f4a63', boots: '#2a2118',
     style: 0, head: 'none', glasses: false, face: 'none', tall: 1, hands: 'none',
@@ -120,8 +125,8 @@ for (const r of L.rooms) {
   survives('и пустая, достроенная до умолчаний, тоже', () => sprites.drawPerson(ctx, 10, 10, sprites.normalizeLook({ ...DEFAULT_ME }), { pose: 'stand', frame: 0, dir: 1, bob: 0 }));
 }
 
-// Тот же обход, каким его делает main.js: доску просит только у того, у кого
-// она есть. Если guard там когда-нибудь снимут, упадёт вот это.
+// The same walk main.js makes: the board is asked for only from those that have
+// one. If the guard there is ever removed, this is what falls over.
 survives('обход всех комнат так, как ходит main.js', () => {
   for (const r of L.rooms) {
     if (r.board) office.drawBoard(ctx, r, [], t, false);

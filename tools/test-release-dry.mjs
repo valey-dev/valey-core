@@ -1,8 +1,9 @@
-// node tools/test-release-dry.mjs — release.mjs смотрит в свой репозиторий, а
-// не в cwd. До 4 сентября 2026 git ходил туда, откуда позвали, а package.json и
-// CHANGELOG брались от файла скрипта: из подкаталога или чужой папки выпуск
-// применялся наполовину. Прогон из системной временной папки — самый чужой cwd,
-// какой есть: там нет ни репозитория, ни package.json.
+// node tools/test-release-dry.mjs — release.mjs looks at its own repository
+// rather than at the cwd. Until 4 September 2026 git went wherever it was called
+// from while package.json and CHANGELOG were taken relative to the script file:
+// from a subdirectory, or from someone else's folder, a release was applied by
+// halves. A run from the system temp directory is the most foreign cwd there is:
+// no repository and no package.json in it.
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';

@@ -1,15 +1,15 @@
-// node tools/test-landing.mjs — демо-этаж лендинга стоит на настоящем офисе.
+// node tools/test-landing.mjs — the landing page's demo floor stands on the real office.
 //
-// До 30 августа 2026 у лендинга был свой движок, нарисованный «по мотивам», и
-// в нём игрок застревал в дверях: проём 18, коробка 8, окно прохода 10, а
-// столкновения по осям раздельно намертво клинили на диагонали. Движок снесли
-// и посадили демку на buildLayout/blocked из web/ — те же, которыми ходит
-// приложение.
+// Until 30 August 2026 the landing had an engine of its own, drawn "after the
+// motifs", and in it the player got stuck in the doorways: an opening of 18, a
+// box of 8, a passage window of 10, and collisions resolved per axis separately
+// jammed dead on a diagonal. The engine was torn out and the demo seated on
+// buildLayout/blocked from web/ — the same ones the application walks with.
 //
-// Здесь проверяется не рисование, а два условия, на которых демка вообще имеет
-// смысл: каждому выдуманному агенту достался стол, и точка, куда ставится
-// игрок, проходима. Второе — прямой наследник того самого бага: посадить
-// человека в стену значит встретить посетителя словами «я застрял».
+// What is checked here is not the drawing but the two conditions on which the
+// demo makes any sense at all: every invented agent got a desk, and the point
+// where the player is placed is passable. The second is the direct heir of that
+// very bug: seating a person in a wall means greeting a visitor with "I am stuck".
 import { AGENTS, BOARD } from '../web/landing.js';
 import { buildLayout, blocked, WALL } from '../web/layout.js';
 import fs from 'node:fs';
@@ -25,10 +25,11 @@ const ok = (name, cond, got) => {
 const L = buildLayout(AGENTS);
 
 ok('этаж построился', !!L && Array.isArray(L.rooms) && L.rooms.length > 0, L && L.rooms && L.rooms.length);
-// Считаем только комнаты проектов: пультовая и переговорка тоже лежат в
-// L.rooms и помечены service. Первая версия этой проверки сравнивала со всей
-// длиной списка и упала при слиянии с main, когда в офисе появилась
-// переговорка, — то есть увидела ровно то, ради чего написана.
+// Only the project rooms are counted: the control room and the meeting room lie
+// in L.rooms too and are marked service. The first version of this check compared
+// against the whole length of the list and fell over on a merge with main, when
+// the meeting room appeared in the office — that is, it saw exactly what it was
+// written for.
 const projectRooms = L.rooms.filter((r) => !r.service);
 ok('комнат столько же, сколько проектов',
   projectRooms.length === new Set(AGENTS.map((a) => a.project)).size,
@@ -36,7 +37,7 @@ ok('комнат столько же, сколько проектов',
 ok('служебные комнаты на месте', L.rooms.some((r) => r.draw === 'security') && L.rooms.some((r) => r.draw === 'meeting'),
   L.rooms.filter((r) => r.service).map((r) => r.key));
 
-// каждому агенту — свой стол, иначе кто-то сидит в воздухе
+// a desk each, or somebody is sitting in mid-air
 const seated = new Map();
 for (const r of L.rooms) {
   r.agents.forEach((id, i) => { if (r.desks[i]) seated.set(id, { room: r.key, desk: i }); });
@@ -44,24 +45,25 @@ for (const r of L.rooms) {
 ok('у каждого агента есть стол', AGENTS.every((a) => seated.has(a.id)),
   AGENTS.filter((a) => !seated.has(a.id)).map((a) => a.id));
 
-// пультовая — та самая, про которую на странице отдельный раздел
-// точка появления игрока: она считается в landing.js как первый стол + 44 вниз
+// the control room — the one the page has its own section about
+// the player's spawn point: landing.js counts it as the first desk + 44 down
 const first = L.rooms[0];
 const seat0 = first.desks[0];
 const start = { x: seat0.x, y: seat0.y + 44 };
 ok('игрок появляется не в стене', !blocked(L, start.x, start.y), start);
 
-// и может сделать шаг в любую сторону — иначе он «застрял» уже на старте
+// and can take a step in any direction — otherwise he is "stuck" at the start already
 const step = 4;
 const dirs = [[step, 0], [-step, 0], [0, step], [0, -step]];
 const free = dirs.filter(([dx, dy]) => !blocked(L, start.x + dx, start.y + dy));
 ok('со старта есть куда шагнуть', free.length >= 2, { свободно: free.length });
 
-// У комнаты есть проходимая дверь. Две предыдущие версии этой проверки падали
-// не на этаже, а на моём представлении о нём: сначала я шёл вниз по прямой от
-// стола (дверь стоит в другом месте стены), потом щупал нижнюю стену — а
-// главная дверь в офисе прорезана в ВЕРХНЕЙ, `r.door`, и ведёт в коридор над
-// комнатой. Задняя дверь при этом может оказаться слева или справа.
+// The room has a passable door. The two previous versions of this check fell not
+// on the floor but on my idea of it: first I went straight down from the desk
+// (the door stands elsewhere in the wall), then I felt along the bottom wall —
+// while the main door in the office is cut into the TOP one, `r.door`, and leads
+// into the corridor above the room. The back door, meanwhile, can turn out to be
+// on the left or on the right.
 for (const r of projectRooms) {
   const cx = r.door.x + r.door.w / 2;
   const снаружи = !blocked(L, cx, r.y - 6);
@@ -70,15 +72,16 @@ for (const r of projectRooms) {
   ok('в комнату ' + r.key + ' можно войти с коридора', снаружи && вПроёме && внутри,
     { снаружи, вПроёме, внутри });
 
-  // косяк рядом с проёмом обязан быть стеной, иначе «дверь» — это дыра во всю стену
+  // the jamb next to the opening has to be a wall, or the "door" is a hole across the whole wall
   const косяк = blocked(L, r.door.x - 8, r.y + 4);
   ok('у двери ' + r.key + ' есть косяк', косяк, { косяк });
 }
 
-// Числа в HUD — это не подпись к картинке, а обещание: тем же числам верит
-// заголовок раздела «зачем» («Восемь сессий. Три ждут ответа»). До 30 августа
-// 2026 демка показывала пятерых, и страница спорила сама с собой в двух
-// экранах прокрутки. Держим строки и состав агентов вместе.
+// The numbers in the HUD are not a caption to a picture but a promise: the same
+// numbers are trusted by the heading of the "why" section ("Eight sessions. Three
+// are waiting for an answer"). Until 30 August 2026 the demo showed five, and the
+// page argued with itself two screens of scrolling apart. We keep the lines and
+// the cast of agents together.
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const html = fs.readFileSync(path.join(ROOT, 'web', 'landing.html'), 'utf8');
 const count = (status) => AGENTS.filter((a) => a.status === status).length;
@@ -93,7 +96,7 @@ ok('HUD: ждут ответа', hud(/hudWait: '(\d+) waiting on you'/) === coun
 ok('HUD: в лимите', hud(/hudLimit: '(\d+) out of quota'/) === count('idle'),
   { вHUD: hud(/hudLimit: '(\d+) out of quota'/), вСписке: count('idle') });
 
-// русский HUD обязан говорить то же самое, что английский
+// the Russian HUD has to say the same thing as the English one
 ok('русский HUD совпадает с английским', [
   [/hudAgents: '(\d+) агентов'/, AGENTS.length],
   [/hudWork: '(\d+) работают'/, count('working')],
@@ -101,23 +104,24 @@ ok('русский HUD совпадает с английским', [
   [/hudLimit: '(\d+) в лимите'/, count('idle')],
 ].every(([re, n]) => hud(re) === n));
 
-// Значок над головой рисует общий drawBubble из badges.js, и он читает
-// agent.status и agent.limited. Свой `state` здесь уже был и молча не совпадал
-// ни с чем — из-за него все восемь сидящих рисовались как работающие.
+// The badge above the head is drawn by the shared drawBubble from badges.js, and
+// it reads agent.status and agent.limited. A `state` of its own was already here
+// and quietly matched nothing — because of it all eight sitting agents were drawn
+// as working.
 ok('поля агентов названы как в офисе',
   AGENTS.every((a) => ['working', 'awaiting', 'idle'].includes(a.status)),
   AGENTS.filter((a) => !['working','awaiting','idle'].includes(a.status)).map((a) => a.id));
 ok('ровно один в лимите', AGENTS.filter((a) => a.limited).length === 1,
   AGENTS.filter((a) => a.limited).map((a) => a.id));
 
-// и заголовок раздела «зачем» называет те же восемь и три
+// and the heading of the "why" section names the same eight and three
 ok('заголовок «зачем» согласован с этажом',
   html.includes('Eight sessions. Three are waiting') && AGENTS.length === 8 && count('awaiting') === 3,
   { всего: AGENTS.length, ждут: count('awaiting') });
 
-// Доска: страница обещает «готовое висит на стене, клик — просмотр». Пока
-// карточки рисовались, а открыть было нечего, это обещание было обмануто.
-// Здесь держим данные в форме, которую просмотр умеет показать.
+// The board: the page promises "what is done hangs on the wall, click to view".
+// While the cards were drawn and there was nothing to open, that promise was
+// broken. Here we keep the data in the shape the viewer can show.
 const files = Object.values(BOARD).flat();
 ok('на доске есть работы', files.length >= 5, files.length);
 ok('у каждой работы есть автор', files.every((f) => f.who), files.filter((f) => !f.who).map((f) => f.path));
@@ -128,8 +132,8 @@ ok('доска есть у каждой комнаты проекта',
   projectRooms.every((r) => (BOARD[r.key] || []).length > 0),
   projectRooms.filter((r) => !(BOARD[r.key] || []).length).map((r) => r.key));
 
-// Слово «демо» до 31 августа 2026 жило только в aria-label: его слышали
-// скринридеры и не видел никто. Теперь оно на экране, и на обоих языках.
+// The word "demo" lived only in an aria-label until 31 August 2026: screen
+// readers heard it and nobody saw it. Now it is on the screen, and in both languages.
 ok('подпись «демо» есть в разметке', /data-t="demoNote"/.test(html));
 ok('подпись «демо» переведена на оба языка',
   /demoNote: 'A demo floor/.test(html) && /demoNote: 'Демо-этаж/.test(html));

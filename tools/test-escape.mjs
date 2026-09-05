@@ -1,12 +1,13 @@
-// node tools/test-escape.mjs — чужой текст в панелях остаётся текстом.
+// node tools/test-escape.mjs — foreign text in the panels stays text.
 //
-// Имена файлов приходят из tool-call агента, названия проектов — из его cwd,
-// ветка — из транскрипта, метки места — из геокодера, текст ошибки — с
-// сервера. Ревью 3 сентября 2026 нашло с десяток мест, где всё это шло в
-// innerHTML как есть или через esc, знавший только `<` и `&`. Стенд кормит
-// панели одной и той же враждебной строкой и смотрит, не осталось ли в
-// разметке ни тега, ни обработчика. DOM подставной, как в клавиатурных
-// стендах: проверяется строка, которую панель положила бы в документ.
+// File names come from an agent's tool calls, project names from its cwd, the
+// branch from the transcript, place labels from the geocoder, error text from
+// the server. The review on 3 September 2026 found a dozen places where all of
+// that went into innerHTML as it was, or through an esc that knew only `<` and
+// `&`. The stand feeds the panels one and the same hostile string and looks for
+// a tag or a handler left in the markup. The DOM is a stand-in, as in the
+// keyboard stands: what is checked is the string the panel would put into the
+// document.
 import { fileHeaders, fileType } from '../server/files.js';
 import { esc } from '../web/esc.js';
 import { node, installDom } from './lib/dom.mjs';
@@ -17,29 +18,29 @@ const ok = (name, cond, got) => {
   else { bad += 1; console.log('УПАЛ  |', name, '→', typeof got === 'string' ? got.slice(0, 200) : JSON.stringify(got)); }
 };
 
-// ------------------------------------------------------------- сама функция
+// ------------------------------------------------------------- the function itself
 ok('esc закрывает все пять символов', esc(`<>&"'`) === '&lt;&gt;&amp;&quot;&#39;', esc(`<>&"'`));
 ok('esc переживает undefined и числа', esc(undefined) === '' && esc(0) === '0', [esc(undefined), esc(0)]);
 
-// -------------------------------------------------------- заголовки файлов
+// -------------------------------------------------------- the file headers
 ok('html из /api/file — вложение, не страница', fileHeaders('/x/a.html')['content-disposition'] === 'attachment', fileHeaders('/x/a.html'));
 ok('svg — тоже: он исполняет скрипты', fileHeaders('/x/a.SVG')['content-disposition'] === 'attachment', fileHeaders('/x/a.SVG'));
 ok('png — нет, картинку показывают как есть', !fileHeaders('/x/a.png')['content-disposition'], fileHeaders('/x/a.png'));
 ok('nosniff на всём', ['/a.png', '/a.html', '/a.weird'].every((p) => fileHeaders(p)['x-content-type-options'] === 'nosniff'), null);
 ok('неизвестное расширение — текст', fileType('/a.weird').startsWith('text/plain'), fileType('/a.weird'));
 
-// --------------------------------------------------------------- панели
-// Строка, которая закрывает атрибут в двойных кавычках, открывает тег и вешает
-// обработчик — всё, что панель могла бы выполнить.
+// --------------------------------------------------------------- the panels
+// A string that closes an attribute in double quotes, opens a tag and hangs a
+// handler — everything a panel could execute.
 const EVIL = `"><img src=x onerror=alert(1)><script>alert(2)</script>'`;
-// Смотрим на настоящие теги, а не на подстроки: экранированный текст всё ещё
-// содержит буквы «onerror=», и первая версия этой проверки ловила саму себя.
-// Тег — то, что начинается с неэкранированного «<»; в нём не должно быть ни
-// script, ни обработчика on*=. Своя картинка на доске — тег законный.
-// Значения атрибутов в кавычках вырезаются до проверки: экранированный текст
-// внутри title="…" тоже содержит «onerror=», но закрыть кавычку он не может —
-// в этом и смысл экранирования. Обработчик считается настоящим, только если
-// стоит в теге вне кавычек.
+// We look at real tags rather than substrings: escaped text still contains the
+// letters "onerror=", and the first version of this check caught itself. A tag
+// is what starts with an unescaped "<"; it must hold neither a script nor an on*=
+// handler. Our own picture on the board is a legitimate tag.
+// Attribute values in quotes are cut out before the check: escaped text inside
+// title="…" also contains "onerror=", but it cannot close the quote — which is
+// the whole point of escaping. A handler counts as real only if it stands in a
+// tag outside quotes.
 const tags = (html) => html.match(/<[a-zA-Z][^>]*>/g) || [];
 const bare = (t) => t.replace(/"[^"]*"|'[^']*'/g, '""');
 const clean = (html) => !tags(html).some((t) => /^<script\b/i.test(t) || /\son\w+\s*=/i.test(bare(t)))

@@ -66,6 +66,15 @@ const DEFAULTS = {
   // the interface language. Lives here rather than in the browser: the switch
   // stands in the corridor, and one click of it must reach every open tab
   lang: 'ru',
+  // The name pack: 'auto' follows the office language, otherwise a pack id
+  // ('ru', 'en'). One picked by hand survives switching the interface — that is
+  // what "the names are unpinned from the language" means.
+  namePack: 'auto',
+  // Which pack the names sitting in `names` were issued with. Not a setting but
+  // a mark: without it the server cannot tell "the pack was never touched" from
+  // "the pack changed while the office was down", and the office would either
+  // never rename or rename on every snapshot.
+  namesPack: '',
   // how much a delivered task is allowed to do on its own
   delivery: { mode: 'acceptEdits' },
   // Who owns the office and whether it is open to the outside.
@@ -195,6 +204,10 @@ export async function patchSettings(patch) {
     // recovered.
     names: patch.names || s.names,
     seats: patch.seats || s.seats,
+    // The pack mark travels beside the names and is replaced the same way: it
+    // describes them. An empty string is a legal value here ("nobody has been
+    // handed a name yet"), so || will not do.
+    namesPack: patch.namesPack !== undefined ? patch.namesPack : s.namesPack,
     // Modules last: their fragment goes on top, because they know things about
     // their own keys that the core does not.
     ...moduleMerge(s, patch),

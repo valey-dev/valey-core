@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { snapshot, fileOwners, conversation } from './agents.js';
+import { snapshot, fileOwners, conversation, PACK_IDS, namePool, nameSample, effectivePack, previewPack } from './agents.js';
 import { realWeather, forgetWeather, geocode } from './weather.js';
 import { getSettings, patchSettings, publicSettings, ownerToken } from './settings.js';
 import { deliver, deliveryStatus, isBusy, MODES } from './deliver.js';
@@ -28,6 +28,11 @@ const POLL_MS = 2500;
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 
 let last = { now: 0, agents: [], version: VERSION };
+
+// The dictionaries as a list: how many names a pack holds and four samples. It
+// never changes, so it is computed once and rides out with the settings — the
+// panel draws its dictionary line at once, without waiting for a round trip.
+const PACK_LIST = PACK_IDS.map((id) => ({ id, size: namePool(id).length, sample: nameSample(id) }));
 
 // The backstop for one missed error. The handler below is wrapped in a try, but
 // a promise thrown without an await never reaches it — and without this line
@@ -791,13 +796,13 @@ async function handle(req, res) {
         forgetWeather();
         moduleOnPatch(patch);
         last.weather = await realWeather({ force: true });
-        return send(res, 200, { ok: true, settings: publicSettings(saved), weather: last.weather });
+        return send(res, 200, { ok: true, settings: publicSettings(saved), weather: last.weather, packs: PACK_LIST });
       } catch (e) {
         if (e instanceof BodyError) throw e;
         return send(res, 400, { error: e.message });
       }
     }
-    return send(res, 200, { settings: publicSettings(await getSettings()), weather: last.weather });
+    return send(res, 200, { settings: publicSettings(await getSettings()), weather: last.weather, packs: PACK_LIST });
   }
 
   // City search, proxied so the page itself never talks to the outside.
@@ -849,6 +854,23 @@ async function handle(req, res) {
     } catch {
       return send(res, 404, { error: 'gone' });
     }
+  }
+
+  // What the office would be called on each pack. The panel has to show the
+  // price of a keypress BEFORE the keypress, and there is nothing on the page to
+  // compute it with — the dictionaries live here.
+  //
+  // Asked only when the panel is opened. The route itself costs two
+  // milliseconds, but the server is single-threaded, and a request that lands
+  // during a walk over the transcripts waits with everybody else — 4 seconds on
+  // this stand on 4 September 2026. So the list of dictionaries (size and
+  // sample) is not part of it: that is static and rides out with the settings,
+  // so the line in the panel stands at once and only the price waits.
+  if (url.pathname === '/api/names') {
+    const s = await getSettings();
+    const packs = [];
+    for (const id of PACK_IDS) packs.push({ id, names: await previewPack(id) });
+    return send(res, 200, { choice: s.namePack || 'auto', pack: effectivePack(s), packs });
   }
 
   // Which modules made it into this build. The client builds its imports from

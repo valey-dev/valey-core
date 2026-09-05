@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-// Заготовка сценария выпуска из того, что влито в main. Смысл один: убрать
-// чистый лист. Сценарий пишется по фичам релиза, а фичи уже перечислены в
-// коммитах — значит черновик можно собрать, и править его куда легче, чем
-// начинать с пустого файла.
+// A draft of the release script out of what has landed in main. The point is
+// one: remove the blank page. A script is written from the release's features,
+// and the features are already listed in the commits — so a draft can be
+// assembled, and editing it is far easier than starting from an empty file.
 //
-//   node tools/script.mjs              # для версии из package.json
-//   node tools/script.mjs v0.3.0       # для конкретной
+//   node tools/script.mjs              # for the version in package.json
+//   node tools/script.mjs v0.3.0       # for a particular one
 //
-// Файл не перезаписывается: черновик, который ты уже правил, дороже свежего.
+// The file is never overwritten: a draft you have already edited is worth more
+// than a fresh one.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -23,17 +24,18 @@ const pkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const tag = process.argv[2] || 'v' + pkg.version;
 if (!/^v\d+\.\d+\.\d+$/.test(tag)) die(`не похоже на версию: ${tag}`);
 
-// Патчи не снимаются — правило из media/README.md, и напомнить о нём дешевле,
-// чем потом объяснять, почему ролика к v0.2.1 никто не ждал.
+// Patches get no video — the rule from media/README.md, and reminding of it is
+// cheaper than explaining later why nobody expected a video for v0.2.1.
 const patch = Number(tag.split('.')[2]);
 if (patch !== 0) console.warn(`внимание: ${tag} — патч, а ролики снимаются на миноры`);
 
-// Диапазон: от прошлой версии до этой. Ищем только теги вида v*, иначе
-// ближайшим окажется тег журнала и диапазон выйдет пустым.
+// The range: from the previous version to this one. Only v* tags are looked
+// for, or the nearest one turns out to be a journal tag and the range comes out
+// empty.
 const known = git('tag', '-l', 'v[0-9]*').split('\n').filter(Boolean);
 const here = known.includes(tag) ? tag : 'HEAD';
 let from = '';
-try { from = gitQuiet('describe', '--tags', '--match', 'v[0-9]*', '--abbrev=0', `${here}^`); } catch { /* первый релиз */ }
+try { from = gitQuiet('describe', '--tags', '--match', 'v[0-9]*', '--abbrev=0', `${here}^`); } catch { /* the first release */ }
 const range = from ? `${from}..${here}` : here;
 
 const commits = git('log', range, '--no-merges', '--format=%h%x00%s')

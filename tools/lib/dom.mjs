@@ -1,19 +1,19 @@
-// Подставной DOM для стендов, которые проверяют панели без браузера.
+// A stand-in DOM for the stands that check panels without a browser.
 //
-// Копий этой машинки было шесть, и они разъехались: где-то у узла был `focus`,
-// где-то нет, где-то `id`, где-то класс первым аргументом. Хуже другое — они
-// разъехались по СМЫСЛУ. В карточке `scrollTop` не имел дна, и две проверки
-// требовали от него отрицательного значения; в настоящем браузере он
-// прижимается к нулю, то есть стенд закреплял состояние, которого не бывает.
-// Одна машинка на всех потому и заведена: расхождение в ней — это расхождение
-// в том, что стенды считают правдой.
+// There were six copies of this little machine, and they had drifted: one node
+// had `focus` and another did not, one took an `id` first and another a class.
+// Worse, they had drifted in MEANING. In the card `scrollTop` had no floor, and
+// two checks required a negative value from it; a real browser clamps it at
+// zero, so the stand was pinning a state that cannot occur. One machine for all
+// exists for exactly that reason: a difference in it is a difference in what
+// the stands believe to be true.
 //
-// Здесь только то, чего касается код панелей. Это не jsdom и не должен им
-// стать: панель, которой понадобится настоящая вёрстка, проверяется глазами и
-// tools/shot.mjs, а не подставным деревом на две тысячи строк.
+// Only what the panel code touches is here. This is not jsdom and must not
+// become it: a panel that needs real layout is judged by eye and by
+// tools/shot.mjs, not by a stand-in tree two thousand lines long.
 
-// Канвас: портрет в карточке и человечек в «переодеться» рисуются на нём, и
-// стенду достаточно, чтобы вызовы не падали.
+// The canvas: the portrait in the card and the little person in the wardrobe are
+// drawn on it, and it is enough for a stand that the calls do not throw.
 export const noopCtx = () => ({
   imageSmoothingEnabled: false, fillStyle: '', font: '', textAlign: '', globalAlpha: 1,
   fillRect() {}, clearRect() {}, strokeRect() {},
@@ -28,15 +28,17 @@ export const noopCtx = () => ({
 const CTX = noopCtx();
 
 /**
- * Узел. `cls` — классы через пробел, `props` — что дописать или переопределить.
+ * A node. `cls` is classes separated by spaces, `props` is what to add or
+ * override.
  *
- * `scrollTop` с дном на нуле, как в браузере: прокрутка вверх из начала
- * никуда не уводит. `has(c)` — короткий способ спросить про класс в проверке.
+ * `scrollTop` has a floor at zero, as in a browser: scrolling up from the start
+ * leads nowhere. `has(c)` is the short way to ask about a class in a check.
  */
 export function node(cls = '', props = {}) {
-  // Второй аргумент — свойства, а не второй класс. У трёх прежних копий
-  // подпись была своя, и перенос стенда на общую машинку падал бы глубоко
-  // внутри, на `in`; лучше сказать сразу и по-русски.
+  // The second argument is the properties, not a second class. Three of the old
+  // copies had signatures of their own, and moving a stand onto the shared
+  // machine would fail deep inside, on an `in`; better to say so at once and in
+  // plain words.
   if (typeof props !== 'object' || props === null) {
     throw new TypeError(`node(cls, props): вторым аргументом объект свойств, пришло ${JSON.stringify(props)}`);
   }
@@ -68,9 +70,9 @@ export function node(cls = '', props = {}) {
     querySelectorAll: () => [],
     ...props,
   };
-  // Дно у прокрутки — не придирка: до 4 сентября 2026 две проверки карточки
-  // требовали scrollTop < 0, и проходили они только потому, что подставной
-  // узел позволял то, чего браузер не позволяет.
+  // The floor under the scroll is not pedantry: until 4 September 2026 two
+  // checks of the card required scrollTop < 0, and they passed only because the
+  // stand-in node allowed what a browser does not.
   if (!('scrollTop' in props)) {
     Object.defineProperty(n, 'scrollTop', {
       get: () => scroll,
@@ -81,15 +83,15 @@ export function node(cls = '', props = {}) {
   return n;
 }
 
-// Узлу, который красит :root, нужен свой style с методами.
+// A node that paints :root needs a style of its own, with methods.
 export const withStyle = (n) => Object.assign(n, {
   style: { setProperty: () => {}, removeProperty: () => {}, getPropertyValue: () => '' },
 });
 
 /**
- * Обёртка над узлом, который стенд пересобирает между проверками. initUI
- * запоминает узлы один раз, поэтому за ним стоит постоянный объект, а свежий
- * подставной DOM подсовывается уже за ним.
+ * A wrapper over a node the stand rebuilds between checks. initUI remembers its
+ * nodes once, so a permanent object stands in front of it and the fresh stand-in
+ * DOM is slipped in behind that.
  */
 export const proxy = (get) => ({
   get hidden() { return get().hidden; },
@@ -102,8 +104,8 @@ export const proxy = (get) => ({
   querySelectorAll: (s) => get().querySelectorAll(s),
 });
 
-// localStorage, который правда помнит: стендам про заметки и внешность нужно
-// поведение, а не заглушка.
+// A localStorage that really remembers: the stands for the notes and the look
+// need behaviour rather than a stub.
 export function memoryStorage(seed = {}) {
   const store = { ...seed };
   return {
@@ -116,12 +118,12 @@ export function memoryStorage(seed = {}) {
 }
 
 /**
- * Ставит глобальные document, window, localStorage и прочее, чего код панелей
- * касается при импорте.
+ * Installs the global document, window, localStorage and everything else the
+ * panel code touches on import.
  *
- * `byId` — что отдавать на `#id`: объект вида { dialog: узелИлиОбёртка }.
- * `find` — свой поиск, если селекторы не сводятся к идентификаторам; вызывается
- * первым, и `null` от него означает «смотри дальше».
+ * `byId` is what to answer `#id` with: an object like { dialog: nodeOrWrapper }.
+ * `find` is a lookup of your own, for selectors that do not reduce to ids; it is
+ * called first, and a `null` from it means "keep looking".
  */
 export function installDom({ byId = {}, find = null, storage = null, location = null } = {}) {
   const stub = node();
