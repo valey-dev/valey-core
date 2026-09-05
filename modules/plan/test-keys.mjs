@@ -48,11 +48,20 @@ installDom({
 
 const { buildLayout } = await import('../../web/layout.js');
 const { addDict } = await import('../../web/i18n.js');
+const { define: defineKeys, reset: resetKeys, actionOf } = await import('../../web/keymap.js');
 const CORE = await import('../../web/ui.js');
 const P = await import('./client.js');
 
 const hooks = {};
-P.register({ id: 'plan', on: (n, f) => (hooks[n] = f), i18n: (d) => addDict(d) });
+// Подставной api повторяет настоящий загрузчик: точка `keys` объявляет клавиши
+// модуля в общем реестре, приписывая его id спереди.
+resetKeys();
+P.register({
+  id: 'plan',
+  on: (n, f) => (hooks[n] = f),
+  i18n: (d) => addDict(d),
+  keys: (list) => defineKeys([].concat(list).map((a) => ({ ...a, id: `plan.${a.id}` }))),
+});
 
 let failed = 0;
 const check = (name, ok, got) => {
@@ -83,8 +92,13 @@ hooks.tick(state, 16);
 
 // ------------------------------------------------------------ вход и выход
 check('строка подсказки называет клавишу', /K/.test(hooks.help()), hooks.help());
+// Клавиша объявлена в реестре, а не зашита в обработчике: буквы модуль больше
+// не сравнивает, и русская «Л» — это та же физическая KeyK, что проверено в
+// tools/test-keymap.mjs.
+check('модуль объявил свою клавишу в реестре', actionOf({ code: 'KeyK' }) === 'plan.toggle', actionOf({ code: 'KeyK' }));
 check('закрытый план стрелки не ест', P.planKey('ArrowDown') === false, 'съел');
-check('K открывает план', hooks.key('k') === true && P.planOpen(), P.planOpen());
+check('чужое действие модуль не берёт', hooks.action('radio.toggle') === false, 'взял');
+check('действие открывает план', hooks.action('plan.toggle') === true && P.planOpen(), P.planOpen());
 check('и он держит экран', hooks.busy() === true, hooks.busy());
 check('фокус встаёт на ближайшую дверь — первую комнату', P.planFocus() === r0.key, P.planFocus());
 check('на каждую комнату положена своя кнопка', map.cells.length === L.rooms.length, `${map.cells.length} на ${L.rooms.length}`);
@@ -111,8 +125,8 @@ check('под нижним рядом — сервисный ярус', ['__secu
 // ----------------------------------------------------------- вести туда
 hooks.esc();
 check('ESC закрывает план', !P.planOpen(), P.planOpen());
-hooks.key('л');
-check('русская Л открывает так же', P.planOpen(), P.planOpen());
+hooks.action('plan.toggle');
+check('и оно же открывает снова', P.planOpen(), P.planOpen());
 check('и фокус снова у своей двери', P.planFocus() === r0.key, P.planFocus());
 P.planKey('Enter');
 check('Enter ведёт к тому, кто ждёт, а не к первому за столом', state.waypoint === 'a1', state.waypoint);
@@ -120,7 +134,7 @@ check('и закрывает план', !P.planOpen(), P.planOpen());
 
 // Комната без людей: стрелке не к кому вести, план остаётся открытым.
 state.waypoint = null;
-hooks.key('k');
+hooks.action('plan.toggle');
 P.planKey('ArrowDown'); P.planKey('ArrowDown');
 const empty = P.planFocus();
 P.planKey('Enter');
@@ -129,7 +143,7 @@ hooks.esc();
 
 // Экран входа: под ним плана нет, там ещё нечему быть «здесь».
 document.body.classList.add('titling');
-check('на экране входа K не открывает план', hooks.key('k') === false && !P.planOpen(), P.planOpen());
+check('на экране входа план не открывается', hooks.action('plan.toggle') === false && !P.planOpen(), P.planOpen());
 document.body.classList.remove('titling');
 
 console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');

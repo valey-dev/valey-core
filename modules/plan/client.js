@@ -498,13 +498,19 @@ export function planKey(raw) {
 export function register(api) {
   api.i18n(DICT);
 
-  // K открывает и закрывает план; пока он открыт — стрелки его. На экране
-  // входа плана нет: там ещё нечему быть «здесь». Экран входа узнаётся по
+  // Клавиша объявляется, а не проверяется буквой: ядро держит реестр, и оно же
+  // однажды даст её переназначить. `KeyK` — физическая клавиша, поэтому под
+  // русской раскладкой это та же «Л», без второй ветки в коде.
+  api.keys([{ id: 'toggle', codes: ['KeyK'], group: 'panel' }]);
+
+  // Пока панель открыта — стрелки её; это разбор внутри панели, он остаётся на
+  // сырой клавише, как у всех остальных панелей офиса.
+  api.on('key', (raw) => planKey(raw));
+
+  // На экране входа плана нет: там ещё нечему быть «здесь». Экран узнаётся по
   // классу на body — так ядро прячет под ним HUD, и модулю хватает того же.
-  api.on('key', (raw) => {
-    if (planKey(raw)) return true;
-    const k = String(raw).toLowerCase();
-    if (k !== 'k' && k !== 'л') return false;
+  api.on('action', (id) => {
+    if (id !== 'plan.toggle') return false;
     if (document.body.classList.contains('titling')) return false;
     planOpen() ? closePlan() : openPlan();
     return true;

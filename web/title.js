@@ -9,6 +9,7 @@ import { t as tr, lang } from './i18n.js';
 import { esc } from './esc.js';
 import { drawPerson } from './sprites.js';
 import * as PF from './pixfont.js';
+import { actionOf, codesOf } from './keymap.js';
 
 const $ = (s) => document.querySelector(s);
 const px = (ctx, x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); };
@@ -78,10 +79,10 @@ function zone() {
 // и единственное, обо что тут можно споткнуться, — панель меню и человечек.
 export function tickTitle(dt, keys) {
   if (!T.open || T.page !== 'menu') { T.moving = false; return; }
-  const ix = (keys.has('arrowright') || keys.has('d') || keys.has('в') ? 1 : 0)
-    - (keys.has('arrowleft') || keys.has('a') || keys.has('ф') ? 1 : 0);
+  const held = (id) => codesOf(id).some((c) => keys.has(c));
+  const ix = (held('move.right') ? 1 : 0) - (held('move.left') ? 1 : 0);
   if (ix) {
-    T.x = Math.max(walkMin(), Math.min(WALK_MAX, T.x + ix * (keys.has('shift') ? 2.6 : 1.35) * dt));
+    T.x = Math.max(walkMin(), Math.min(WALK_MAX, T.x + ix * (held('move.run') ? 2.6 : 1.35) * dt));
     T.dir = ix;
   }
   T.moving = !!ix;
@@ -415,9 +416,13 @@ const agents = (n) => tr('title.count', { n, word: word('title.agent', n) });
 
 // ------------------------------------------------------------------ клавиши
 // true — клавишу забрал экран входа, офису её видеть не нужно
-export function titleKey(raw) {
+export function titleKey(ev) {
   if (!T.open) return false;
-  const k = raw.toLowerCase();
+  // Стрелки, Enter и Esc экран разбирает сам — это его устройство. А буквы,
+  // открывающие панели, приходят из общего реестра: одна клавиша, одно
+  // действие, где бы её ни нажали.
+  const k = (typeof ev === 'string' ? ev : ev.key).toLowerCase();
+  const act = typeof ev === 'string' ? null : actionOf(ev);
 
   if (T.page === 'rooms') {
     const rooms = (S.layout && S.layout.projectRooms) || [];
@@ -452,11 +457,13 @@ export function titleKey(raw) {
     else if (z === 'lang') api.lang();
     return true;
   }
-  if (k === 'tab') { T.page = 'rooms'; T.roomIdx = 0; renderTitle(); return true; }
-  if (k === 'c' || k === 'с') { api.bag(); return true; }
-  if (k === 'p' || k === 'з') { api.sky(); return true; }
+  if (act === 'panel.round') { T.page = 'rooms'; T.roomIdx = 0; renderTitle(); return true; }
+  if (act === 'panel.bag') { api.bag(); return true; }
+  if (act === 'panel.sky') { api.sky(); return true; }
   if (k === 'escape') return true;   // из офиса выйти некуда, ESC тут ничего не значит
-  return ['arrowleft', 'arrowright', 'a', 'd', 'ф', 'в'].includes(k);
+  // Клавиши ходьбы экран съедает: иначе шаг вдоль коридора уходил бы ещё и в
+  // офис за спиной.
+  return act === 'move.left' || act === 'move.right';
 }
 
 export function closeTitle() {

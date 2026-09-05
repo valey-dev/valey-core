@@ -14,6 +14,7 @@ import { titleOf } from './paintings.js';
 import { drawBubble } from './badges.js';
 import { skateStep, rolling, drawSkateboard, ollieStep, canOllie, OLLIE_POP } from './skate.js';
 import { readPad, edges as padEdges } from './pad.js';
+import { actionOf, codeOf, codesOf } from './keymap.js';
 // t переименован в tr: в main.js `t` — это время кадра у draw(t), и импорт
 // молча перекрывался числом внутри каждого колбэка отрисовки
 import { t as tr, lang, setLang, onLang } from './i18n.js';
@@ -86,6 +87,9 @@ const state = {
 };
 
 const keys = new Set();
+// Зажата ли сейчас клавиша этого действия. Множество ключуется физическими
+// кодами, поэтому переназначение ходьбы однажды заработает само собой.
+const held = (id) => codesOf(id).some((c) => keys.has(c));
 // Ручки для отладки из консоли. __ui нужен ещё и потому, что мост расширения
 // Claude in Chrome не резолвит динамический import() в странице: вызов повисает
 // и уносит с собой весь канал, так что дотянуться до модуля можно только так.
@@ -577,6 +581,11 @@ for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
 // именами клавиш, и панели отвечают им, не зная, откуда нажатие.
 function onKey(e) {
   const k = e.key.toLowerCase();
+  // Физическая клавиша и действие, которое на ней висит. Буквы ниже не
+  // сравниваются: `code` одинаков под любой раскладкой, а что он значит,
+  // решает реестр в web/keymap.js.
+  const code = codeOf(e);
+  const act = actionOf(e);
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
   // Сочетание с Cmd, Ctrl или Alt принадлежит браузеру и системе, а не офису.
   // Без этой строки Cmd+R перезагружал страницу и заодно выкатывал приёмник —
@@ -591,20 +600,28 @@ function onKey(e) {
   // этажам, а не по офису.
   if (UI.liftKey(e.key)) { e.preventDefault(); return; }
   if (UI.rosterKey(e.key)) { e.preventDefault(); return; }
+  // Сначала действие, потом сырая клавиша: модуль, объявивший свои клавиши
+  // через api.keys(), отвечает на идентификатор, а не на букву. Старая точка
+  // остаётся живой — на ней держатся модули, которые не переписывали.
+  if (act && first('action', act, e)) { e.preventDefault(); return; }
   if (first('key', e.key, e.shiftKey)) { e.preventDefault(); return; }
   if (UI.notesKey(e.key)) { e.preventDefault(); return; }
   if (UI.bagKey(e.key)) { e.preventDefault(); return; }
   if (UI.skyKey(e.key)) { e.preventDefault(); return; }
   if (UI.skinKey(e.key)) { e.preventDefault(); return; }
-  if (['tab', ' ', 'e', 'escape'].includes(k)) e.preventDefault();
+  // Что отнимаем у браузера: прокрутку по пробелу, переход фокуса по Tab.
+  // Считаем по физической клавише, а не по символу: под русской раскладкой
+  // пробел остаётся пробелом, а вот проверка по символу мимо кириллицы
+  // проходила молча.
+  if (['Tab', 'Space', 'Escape'].includes(code)) e.preventDefault();
   if (state.dialogOpen && (k.startsWith('arrow') || k === 'enter')) e.preventDefault();
-  keys.add(k);
+  if (code) keys.add(code);
 
   // Экран входа забирает клавиши себе — но только когда поверх него ничего не
   // открыто: «переодеться» и «окно в мир» зовутся прямо отсюда и должны сами
   // отвечать на стрелки и ESC.
   if (titleFree()) {
-    if (titleKey(e.key)) { e.preventDefault(); return; }
+    if (titleKey(e)) { e.preventDefault(); return; }
   }
 
   // Пейджер держит свои две клавиши, пока карточки нет: Enter отвечает, Esc
@@ -629,27 +646,27 @@ function onKey(e) {
   // офиса. Пока он стоял ниже, ветка камер возвращалась раньше — и снять вид с
   // камеры было нельзя вообще, ровно тот кадр, которым Prod и иллюстрирует
   // пультовую. Нашлось 30 августа 2026 при пересъёмке плит.
-  if (e.key === 'F9') { e.preventDefault(); saveShot(e.shiftKey ? 4 : 1); return; }
+  if (act === 'service.shot') { e.preventDefault(); saveShot(e.shiftKey ? 4 : 1); return; }
 
   if (state.cctv.on) {
-    if (k === 'arrowleft' || k === 'a' || k === 'ф') return switchCam(-1);
-    if (k === 'arrowright' || k === 'd' || k === 'в') return switchCam(1);
-    if (k === 't' || k === 'е') return toggleAutoCams();
-    if (k === ' ' || k === 'e' || k === 'у' || k === 'enter') return closeCams();
+    if (act === 'move.left') return switchCam(-1);
+    if (act === 'move.right') return switchCam(1);
+    if (act === 'cams.auto') return toggleAutoCams();
+    if (act === 'act.interact' || k === 'enter') return closeCams();
     return;
   }
   // масштаб: работает всегда, даже поверх открытых панелей
-  if (k === '+' || k === '=') { e.preventDefault(); return stepZoom(1); }
-  if (k === '-' || k === '_') { e.preventDefault(); return stepZoom(-1); }
-  if (k === '0') { e.preventDefault(); return setZoom(0); }
+  if (act === 'zoom.in') { e.preventDefault(); return stepZoom(1); }
+  if (act === 'zoom.out') { e.preventDefault(); return stepZoom(-1); }
+  if (act === 'zoom.reset') { e.preventDefault(); return setZoom(0); }
 
-  if (k === 'tab') return toggle('roster', UI.renderRoster, UI.closeRoster);
+  if (act === 'panel.round') return toggle('roster', UI.renderRoster, UI.closeRoster);
   // N снаружи показывает все заметки; внутри разговора та же клавиша их пишет
-  if (k === 'n' || k === 'т') return toggle('notes', UI.renderNotes, UI.closeNotes);
+  if (act === 'panel.notes') return toggle('notes', UI.renderNotes, UI.closeNotes);
   // C открывает инвентарь на «на себе» — там, где эта клавиша была всегда.
-  if (k === 'c' || k === 'с') return toggle('bag', () => UI.renderBag('self'), UI.closeBag);
-  if (k === 'p' || k === 'з') return toggle('sky', UI.renderSky, UI.closeSky);
-  if (k === 'u' || k === 'г') return toggle('skin', UI.renderSkin, UI.closeSkin);
+  if (act === 'panel.bag') return toggle('bag', () => UI.renderBag('self'), UI.closeBag);
+  if (act === 'panel.sky') return toggle('sky', UI.renderSky, UI.closeSky);
+  if (act === 'panel.skin') return toggle('skin', UI.renderSkin, UI.closeSkin);
   // I — пригласить. Кадры клавишу не задают, это выбор здесь: G занята
   // нарисованным «этажом команды», а из свободных букв I — единственная,
   // которая читается и по-русски (ш) как та же кнопка. Панель только у
@@ -657,23 +674,23 @@ function onKey(e) {
   // вкладке, где он был. Две ветки претендовали на букву с 2 сентября 2026,
   // инвентарь стоял выше и приглашение не открывалось ни у кого — а другого
   // входа у панели нет.
-  if (k === 'i' || k === 'ш') {
+  if (act === 'panel.invite') {
     if (state.owner !== false) return UI.inviteOpen() ? UI.closeInvite() : UI.openInvite();
     return toggle('bag', UI.renderBag, UI.closeBag);
   }
   // H — вернуть отложенный пейджер. Не E: она в офисе равна ПРОБЕЛу, и
   // «перезвоню» с возвратом на одну клавишу были бы разговором с агентом.
-  if ((k === 'h' || k === 'р') && recall()) return;
+  if (act === 'panel.pager' && recall()) return;
   // B — скейт. Не S: та занята шагом вниз в WASD, и переназначить её нельзя,
   // не сломав ходьбу.
-  if (k === 'b' || k === 'и') return toggleSkate();
-  if (k === 'm' || k === 'ь') {
+  if (act === 'act.skate') return toggleSkate();
+  if (act === 'act.sound') {
     state.soundOn = sound.toggle();
     UI.renderHud();
     UI.toast(state.soundOn ? tr('toast.soundOn') : tr('toast.soundOff'));
     return;
   }
-  if ((k === ' ' || k === 'e' || k === 'у') && !state.dialogOpen) {
+  if (act === 'act.interact' && !state.dialogOpen) {
     // На доске ПРОБЕЛ прыгает — но только там, где ему раньше нечего было
     // делать. Иначе с агентом стало бы не поговорить, не слезая с доски.
     if (canOllie(state.player) && !nearest()) state.player.vz = OLLIE_POP;
@@ -687,7 +704,11 @@ const titleFree = () => titleOpen()
   && ['bag', 'sky', 'viewer', 'roster'].every((id) => document.getElementById(id).hidden);
 const NO_KEYS = new Set();
 
-addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+// Отпускание считается по той же физической клавише, что и нажатие. Пока
+// множество ключевалось символом, смена раскладки при зажатой клавише роняла
+// туда мусор навсегда: нажал под латиницей, отпустил под кириллицей — запись
+// не удалялась, и офис продолжал идти сам.
+addEventListener('keyup', (e) => { const c = codeOf(e); if (c) keys.delete(c); });
 addEventListener('blur', () => keys.clear());
 
 // Геймпад опрашивается раз в кадр: у Gamepad API нет событий на кнопки, только
@@ -713,7 +734,7 @@ function tickPad() {
     if (typing() && key.startsWith('Arrow')) continue;
     onKey({ key, shiftKey: next.down.has('Shift'), target: { tagName: 'GAMEPAD' }, preventDefault() {} });
   }
-  for (const key of released) keys.delete(key.toLowerCase());
+  for (const key of released) { const c = codeOf({ key }); if (c) keys.delete(c); }
   pad.x = next.x; pad.y = next.y; pad.down = next.down;
 }
 
@@ -1293,13 +1314,11 @@ function update(dt, now) {
   }
 
   if (!panelsOpen() && !state.drink && !state.play) {
-    const running = keys.has('shift');
+    const running = held('move.run');
     // Стик берёт верх над клавишами: он же и кладёт стрелки в keys, когда
     // наклонён за порог, и складывать их с аналогом значило бы терять аналог.
-    const ix = pad.x || (keys.has('arrowright') || keys.has('d') || keys.has('в') ? 1 : 0)
-      - (keys.has('arrowleft') || keys.has('a') || keys.has('ф') ? 1 : 0);
-    const iy = pad.y || (keys.has('arrowdown') || keys.has('s') || keys.has('ы') ? 1 : 0)
-      - (keys.has('arrowup') || keys.has('w') || keys.has('ц') ? 1 : 0);
+    const ix = pad.x || (held('move.right') ? 1 : 0) - (held('move.left') ? 1 : 0);
+    const iy = pad.y || (held('move.down') ? 1 : 0) - (held('move.up') ? 1 : 0);
     // Сидящего поднимает первое же движение — и в этом же кадре он уже идёт.
     if (state.seat && (ix || iy)) standUp();
     let dx = 0, dy = 0;

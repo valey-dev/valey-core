@@ -98,8 +98,10 @@ const focused = (sel) => (sel === '.tbtn'
 // Шагов берётся заведомо больше, чем нужно, — упор в край коридора и есть
 // проверка, что дальше игрок не уходит.
 const held = new Set();
-const walk = (key, steps) => {
-  held.clear(); held.add(key);
+// Множество зажатых ключуется физическими кодами, как в офисе с 5 сентября
+// 2026: символ туда больше не кладут.
+const walk = (code, steps) => {
+  held.clear(); held.add(code);
   for (let i = 0; i < steps; i++) tickTitle(3, held);
   held.clear(); tickTitle(3, held);
 };
@@ -112,59 +114,66 @@ ok('карточка показывает всех агентов', overlay.inne
 ok('и сколько ждут ответа', overlay.innerHTML.includes('3 ждут ответа'), null);
 ok('меню при старте погашено', /class="tmenu away"/.test(overlay.innerHTML), overlay.innerHTML.match(/class="tmenu[^"]*"/));
 ok('и фокуса не держит', focused('.tbtn') === 0, overlay.innerHTML.match(/class="tbtn[^"]*"/g));
-ok('стрелка вниз издалека проглатывается', titleKey('ArrowDown') === true, null);
+// Экран входа получает событие целиком, а не символ: с 5 сентября 2026 буквы
+// разбирает реестр по физической клавише (web/keymap.js), и стенд обязан слать
+// то же, что шлёт браузер. Русская «з» — это KeyP, и проверка ниже про это.
+const ev = (key, code) => ({ key, code: code || null });
+const NAMED = { ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight', Enter: 'Enter', Escape: 'Escape', Tab: 'Tab', ' ': 'Space' };
+const key = (raw, code) => titleKey(ev(raw, code || NAMED[raw] || null));
+
+ok('стрелка вниз издалека проглатывается', key('ArrowDown') === true, null);
 ok('но по меню не ходит', focused('.tbtn') === 0, null);
 
-ok('ПРОБЕЛ у двери входит в офис', (titleKey(' '), calls.enter.length === 1 && calls.enter[0] === null), calls.enter);
+ok('ПРОБЕЛ у двери входит в офис', (key(' '), calls.enter.length === 1 && calls.enter[0] === null), calls.enter);
 calls.enter.length = 0;
 
 // ----------------------------------------------------- посреди коридора пусто
-walk('arrowright', 8);   // ушёл от двери, но до переключателя не дошёл
+walk('ArrowRight', 8);   // ушёл от двери, но до переключателя не дошёл
 renderTitle();
 ok('в пустом месте коридора меню тоже погашено', /class="tmenu away"/.test(overlay.innerHTML), null);
-titleKey(' ');
+key(' ');
 ok('и ПРОБЕЛ там ничего не делает', calls.enter.length === 0 && calls.lang === 0, [calls.enter, calls.lang]);
 
 // -------------------------------------------------------- подошёл к переключателю
-walk('arrowright', 80);
-titleKey(' ');
+walk('ArrowRight', 80);
+key(' ');
 ok('ПРОБЕЛ у переключателя меняет язык', calls.lang === 1, calls.lang);
 ok('и в офис при этом не входит', calls.enter.length === 0, calls.enter);
 
 // ---------------------------------------------------------------- подошёл к меню
-walk('arrowleft', 120);
+walk('ArrowLeft', 120);
 ok('меню зажглось, не дожидаясь перерисовки', !menuNode.has('away'), null);
 renderTitle();
 ok('и фокус появился на «Войти»', focused('.tbtn') === 1 && /class="tbtn main focus/.test(overlay.innerHTML), overlay.innerHTML.match(/class="tbtn[^"]*"/g));
 
-ok('стрелки забираются экраном', titleKey('ArrowDown') === true, null);
-titleKey('ArrowDown');   // idx = 2
-titleKey('ArrowUp');     // idx = 1
-ok('Enter на «Кто внутри» открывает список', titleKey('Enter') === true, null);
+ok('стрелки забираются экраном', key('ArrowDown') === true, null);
+key('ArrowDown');   // idx = 2
+key('ArrowUp');     // idx = 1
+ok('Enter на «Кто внутри» открывает список', key('Enter') === true, null);
 ok('в списке три комнаты', overlay.querySelectorAll('.trow').length === 3, overlay.querySelectorAll('.trow').length);
 
 // ------------------------------------------------------------- комнаты
-ok('стрелка вниз идёт по комнатам', titleKey('ArrowDown') === true, null);
-titleKey('ArrowDown');   // roomIdx = 2, последняя
-titleKey('ArrowDown');   // упирается, а не заворачивается
-titleKey('Enter');
+ok('стрелка вниз идёт по комнатам', key('ArrowDown') === true, null);
+key('ArrowDown');   // roomIdx = 2, последняя
+key('ArrowDown');   // упирается, а не заворачивается
+key('Enter');
 ok('Enter входит в выбранную комнату', calls.enter.at(-1) === 'shebis', calls.enter);
 
-titleKey('Escape');
+key('Escape');
 renderTitle();
 ok('ESC вернул в меню, а не закрыл экран', titleOpen() && overlay.querySelectorAll('.tbtn').length === 4, overlay.querySelectorAll('.tbtn').length);
 
 // --------------------------------------------------------- прочие клавиши
 calls.enter.length = 0;
-titleKey('c');
+key('c', 'KeyC');
 ok('C зовёт инвентарь', calls.bag === 1, calls.bag);
-titleKey('з');
+key('з', 'KeyP');
 ok('русская «з» — это P, окно в мир', calls.sky === 1, calls.sky);
-titleKey('p');
+key('p', 'KeyP');
 ok('и латинская тоже', calls.sky === 2, calls.sky);
-ok('влево-вправо забирает экран: это ходьба', titleKey('ArrowLeft') === true, null);
-ok('и русская «ф» тоже', titleKey('ф') === true, null);
-ok('а W не занят: вверх-вниз в коридоре не ходят', titleKey('w') === false, titleKey('w'));
+ok('влево-вправо забирает экран: это ходьба', key('ArrowLeft') === true, null);
+ok('и русская «ф» тоже', key('ф', 'KeyA') === true, null);
+ok('а W не занят: вверх-вниз в коридоре не ходят', key('w', 'KeyW') === false, key('w', 'KeyW'));
 
 // ------------------------------------------------------------ пустой офис
 state.agents = [];
@@ -180,7 +189,7 @@ ok('счётчиков-нулей нет', !overlay.innerHTML.includes('0 аге
 // и потеряли строку про стрелки — меню погашено, а чем его зажечь, гостю не
 // написано нигде. Обе карточки собраны на общей разметке, стенд её и держит.
 state.entry = { from: 'Сергей' };
-walk('arrowright', 40);
+walk('ArrowRight', 40);
 renderTitle();
 ok('у гостя меню тоже погашено', /class="tmenu away"/.test(overlay.innerHTML), overlay.innerHTML.match(/class="tmenu[^"]*"/));
 ok('и гостю сказано, чем его зажечь', overlay.innerHTML.includes('tmeta center'), null);
@@ -188,23 +197,23 @@ state.entry = { refused: 'err.needCode' };
 renderTitle();
 ok('на отказном входе подсказка тоже есть', overlay.innerHTML.includes('tmeta center'), null);
 state.entry = null;
-walk('arrowleft', 120);
+walk('ArrowLeft', 120);
 
 // ------------------------------------------------------------------ вход
 state.agents = agents; state.layout = floor(rooms);
 renderTitle();
 // Выйдя из списка по ESC, фокус остаётся на «Кто внутри» — на том пункте,
 // откуда ушёл. Поэтому Enter здесь снова откроет список, а не войдёт в офис.
-titleKey('Enter');
+key('Enter');
 ok('после ESC фокус там же, откуда ушёл', overlay.querySelectorAll('.trow').length === 3, overlay.querySelectorAll('.trow').length);
-titleKey('Escape');
-titleKey('ArrowUp');     // «Кто внутри» → «Войти»
-titleKey('Enter');
+key('Escape');
+key('ArrowUp');     // «Кто внутри» → «Войти»
+key('Enter');
 ok('Enter на «Войти» зовёт вход без комнаты', calls.enter.length === 1 && calls.enter[0] === null, calls.enter);
 closeTitle();
 ok('после входа экран закрыт', !titleOpen(), titleOpen());
-ok('и клавиши больше не забираются', titleKey('ArrowDown') === false, null);
-ok('ходьба тоже встала', (walk('arrowleft', 10), true), null);
+ok('и клавиши больше не забираются', key('ArrowDown') === false, null);
+ok('ходьба тоже встала', (walk('ArrowLeft', 10), true), null);
 ok('оверлей спрятан', overlay.hidden === true, overlay.hidden);
 
 console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');

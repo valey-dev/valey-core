@@ -114,7 +114,14 @@ const CORE = await import('../../web/ui.js');
 const UI = await import('./client.js');
 const { addDict } = await import('../../web/i18n.js');
 const hooks = {};
-UI.register({ id: 'radio', on: (n, f) => (hooks[n] = f), i18n: (d) => addDict(d) });
+const { define: defineKeys, reset: resetKeys } = await import('../../web/keymap.js');
+resetKeys();
+UI.register({
+  id: 'radio',
+  on: (n, f) => (hooks[n] = f),
+  i18n: (d) => addDict(d),
+  keys: (list) => defineKeys([].concat(list).map((a) => ({ ...a, id: `radio.${a.id}` }))),
+});
 
 const agents = (n) => Array.from({ length: n }, (_, i) => ({
   id: 'a' + i, name: 'Агент ' + i, project: 'AI valey', status: 'awaiting',

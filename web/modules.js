@@ -8,8 +8,14 @@
 //   collect — спрашиваем всех и складываем, что вернули (отрисовка, подсказки);
 //   first   — отдаём событие первому, кто взялся (клавиша, ПРОБЕЛ, ESC).
 import { addDict } from './i18n.js';
+import { define as defineKeys } from './keymap.js';
 
-const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'esc', 'tick', 'hud', 'lang', 'help', 'busy'];
+// `action` — новая точка рядом со старой `key`, а не вместо неё. Модуль,
+// объявивший свои действия через api.keys(), получает сюда идентификатор и не
+// знает никаких букв; модуль, который так и остался на `key`, работает как
+// работал. Это не любезность: платные модули уезжают покупателю архивом, и
+// сломать их обновлением офиса нельзя.
+const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'action', 'esc', 'tick', 'hud', 'lang', 'help', 'busy'];
 const hooks = Object.fromEntries(HOOKS.map(h => [h, []]));
 const dicts = [];
 let ids = [];
@@ -74,7 +80,16 @@ function apiFor(id) {
     },
     // Словарь модуля вливается в общий сразу: ключи именуются с его id
     // впереди, иначе два модуля однажды подерутся за одно имя.
-    i18n(dict) { dicts.push(dict); addDict(dict); }
+    i18n(dict) { dicts.push(dict); addDict(dict); },
+    // Клавиши модуля объявляются, а не проверяются буквой в обработчике. Так
+    // ядро знает, что занято, и умеет об этом рассказать — до 5 сентября 2026
+    // спор двух модулей за одну букву решался порядком загрузки, то есть
+    // алфавитом по имени папки, и молча.
+    keys(list) {
+      const own = [].concat(list || []).map((a) => ({ ...a, id: a.id.startsWith(id + '.') ? a.id : `${id}.${a.id}` }));
+      defineKeys(own);
+      return own.map((a) => a.id);
+    }
   };
 }
 

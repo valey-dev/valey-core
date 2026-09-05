@@ -453,11 +453,13 @@ export function register(api) {
     return q ? { y: q.y, fn: (ctx) => drawRadio(ctx, q.x, q.y, t) } : null;
   });
 
-  // R открывает и закрывает приёмник, а пока панель открыта — стрелки её.
-  api.on('key', (raw) => {
-    if (radioKey(raw)) return true;
-    const k = String(raw).toLowerCase();
-    if (k !== 'r' && k !== 'к') return false;
+  // Клавиша объявлена в общем реестре: `KeyR` — физическая, поэтому русская «К»
+  // это она же, без второй ветки. Пока панель открыта, стрелки её — и это
+  // остаётся на сырой клавише, как у всех панелей.
+  api.keys([{ id: 'toggle', codes: ['KeyR'], group: 'panel' }]);
+  api.on('key', (raw) => radioKey(raw));
+  api.on('action', (id) => {
+    if (id !== 'radio.toggle') return false;
     radioOpen() ? closeRadio() : openRadio();
     return true;
   });
