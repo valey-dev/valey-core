@@ -121,6 +121,13 @@ export function normalizeLook(look) {
   if (o.jacket === undefined) o.jacket = null;
   if (o.tie === undefined) o.tie = null;
   if (o.bottom === undefined) o.bottom = 'pants';
+  // The haircut is defaulted with the rest, and that is not cosmetics. Hair is
+  // drawn only for style 0…4, and the office has no bald variant at all: the
+  // wardrobe offers five haircuts and lookOf picks from the same five. So a
+  // look without a style is a forgotten field rather than a decision, and it
+  // came out bald in silence. Found on 1 September 2026 across three frames of
+  // the host in a row, where it was blamed on the small scale.
+  if (o.style === undefined) o.style = 0;
   delete o.acc; delete o.beard;
   return o;
 }
