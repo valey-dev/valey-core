@@ -4,6 +4,18 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.19.0 — 6 September 2026
+
+### Added
+
+- **release:** the same release tooling can cut a version in a second repository (cfc49fc)
+- **radio:** Spotify becomes a key on the shelf, and the receiver stops explaining itself (8b9fc22)
+
+### Fixed
+
+- **i18n:** the language of the device is asked in a browser, not in a stand (642e9a7)
+- **office:** the copy button on a key card answers on itself, not in a toast (49da087)
+- **office:** the key shelf is walked with the keyboard, card and all (c8fba04)
 ## v0.18.0 — 6 September 2026
 
 ### Added
