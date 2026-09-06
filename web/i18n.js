@@ -46,7 +46,19 @@ export function deviceLang() {
   return pickLang(list);
 }
 
-let LANG = deviceLang();
+// The device is asked only where there is a device. Node 22 has a `navigator` of
+// its own and answers `language` with the locale of the machine, so on
+// 6 September 2026 every stand that compares strings started reading them in
+// English on an en-US laptop: modules/bible/test-keys.mjs failed ten checks two
+// days after anybody had touched that module, and the module was fine. A default
+// that depends on whose computer runs the check is not a default.
+//
+// Node introduces itself in its user agent, and that is the honest way to tell a
+// browser from a stand — better than looking for `document`, which the stands
+// install themselves.
+const inBrowser = typeof navigator !== 'undefined'
+  && !/^Node\.js/.test(String(navigator.userAgent || ''));
+let LANG = inBrowser ? deviceLang() : 'ru';
 
 const DICT = {
   ru: {
