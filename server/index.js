@@ -1001,6 +1001,15 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   const token = await ownerToken();
   const s = await getSettings();
   console.log(`Valey office at http://localhost:${port}`);
+  // Where the questions from Claude Code go. Several offices run on this machine
+  // at once — worktrees, stands, the one you actually work in — and the hook asks
+  // exactly one of them. On 6 September 2026 that cost an evening: two pager
+  // requests were expected in an office that could never have received them,
+  // because the hook was talking to another port. So every office says out loud
+  // whether it is the one being asked.
+  const canon = Number((s.network || {}).port) || 5177;
+  if (port === canon) console.log('  вопросы Claude Code приходят сюда (канонический порт)');
+  else console.log(`  вопросы Claude Code идут не сюда, а на ${canon} — этот офис их не получит`);
   if (external) {
     const t = (boot.network || {}).token || '';
     console.log(`  открыт наружу (${HOST}) — с другого устройства один раз с токеном:`);
