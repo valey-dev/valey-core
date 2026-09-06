@@ -206,6 +206,10 @@ initPager(state, {
 });
 
 UI.initUI(state, {
+  // The badge in the corner presses the same thing H does. It lives here rather
+  // than in the pager's callbacks because it is the HUD that calls it, and the two
+  // objects are different `api`.
+  recallPager: () => { if (recall()) { state.pagerWaiting = waitingCount(); UI.renderHud(); } },
   close: closeAll,
   saveMe: () => {
     localStorage.setItem('valey-me', JSON.stringify(state.me));

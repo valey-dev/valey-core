@@ -89,10 +89,18 @@ export function renderHud() {
     <span class="chip zoom${z.tight ? ' wait' : ''}" title="${tr('hud.zoomTitle')}${
       z.tight ? tr('hud.zoomTitleTight') : ''
     }">⛶ ×${z.dev}${z.auto ? tr('hud.zoomAuto') : ''}${z.tight ? tr('hud.zoomTight') : ''}</span>
-    ${S.pagerWaiting ? `<span class="chip wait" title="${tr('hud.pagerTitle')}">📟 ${S.pagerWaiting}</span>` : ''}
+    ${S.pagerWaiting ? `<button id="pagerChip" class="chip wait" title="${tr('hud.pagerTitle')}">📟 ${S.pagerWaiting}</button>` : ''}
     <span class="chip dim">${S.soundOn ? '🔊' : '🔇'} M</span>
     ${collect('hud', S).map((c) => `<span class="chip ${esc(c.kind || 'dim')}" title="${esc(c.title || '')}">${esc(c.text || '')}</span>`).join('')}
     <span class="chip dim">${tr('hud.round')}</span>`;
+  // The badge is the only trace a deferred request leaves once its toast is gone,
+  // and until 6 September 2026 it was a `span`: a person saw three requests in the
+  // corner and had nowhere to press. H brings them back, but it is written in a
+  // tooltip, and Esc — which is «back» everywhere else in the office — is what
+  // defers them in the first place, so the pager is easy to put away by accident
+  // and hard to find afterwards.
+  const chip = $('#pagerChip');
+  if (chip) chip.onclick = () => api.recallPager();
 }
 
 // ------------------------------------------------------------------- dialog

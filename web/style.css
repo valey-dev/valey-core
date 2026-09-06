@@ -90,6 +90,12 @@ canvas{image-rendering:pixelated; display:block; border:3px solid var(--frame);
 #hud b{color:var(--warn); letter-spacing:.14em}
 .chip{margin-left:10px; color:var(--ink-dim)}
 .chip.work{color:var(--accent)} .chip.wait{color:var(--warn)}
+/* The pager badge is a button among spans, so it has to give back everything a
+   browser gives a button and keep only the pointer: the HUD is one line of text
+   and a raised control in it would read as a foreign object. */
+button.chip{background:none; border:0; padding:0; font:inherit; cursor:pointer}
+button.chip:hover{color:var(--ink-hi)}
+button.chip:focus-visible{outline:2px solid var(--warn); outline-offset:2px}
 
 /* ---- dialog ---- */
 #dialog{position:fixed; left:50%; bottom:46px; transform:translateX(-50%); z-index:20;
