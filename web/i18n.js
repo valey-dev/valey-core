@@ -145,6 +145,8 @@ const DICT = {
     // ------------------------------------------------------- a permission request
     // The pager calls, the card asks. The words differ: on the pager «Ответить»
     // is about the call, in the card «Разрешить» is about the command.
+    'permit.askQ': '— Спрашивает тебя:',
+    'pager.asks': 'спрашивает:',
     'pager.someone': 'агент',
     'pager.may': 'можно выполнить?',
     'pager.answer': 'Ответить',
@@ -803,6 +805,8 @@ const DICT = {
     'toast.namePack': 'Names: {pack}. All {n} renamed — {from} is now {to}.',
     'toast.namePackPlain': 'Names: {pack}.',
     // ------------------------------------------------------ permission request
+    'permit.askQ': '— Asks you:',
+    'pager.asks': 'asks:',
     'pager.someone': 'an agent',
     'pager.may': 'may I run?',
     'pager.answer': 'Answer',

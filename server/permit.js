@@ -31,6 +31,25 @@ const waiting = new Map();
 // case and the reason for all of this: there the decision is made on the text
 // of the command. The other tools show whatever they have that answers "what
 // exactly are you touching".
+// A question the agent asks the person, rather than a command it wants to run.
+// Claude Code sends it as a nested structure, and until 6 September 2026 the
+// office fell through to JSON.stringify and dropped the whole thing onto the
+// pager as one line of braces: the owner could see that something was being
+// asked and not what. Both shapes are read — a single question and the list —
+// because the office does not get to choose which one arrives.
+export function questionOf(input) {
+  if (!input || typeof input !== 'object') return null;
+  const one = Array.isArray(input.questions) ? input.questions[0] : input;
+  if (!one || typeof one !== 'object') return null;
+  const text = typeof one.question === 'string' ? one.question : '';
+  if (!text) return null;
+  const options = (Array.isArray(one.options) ? one.options : [])
+    .map((o) => (typeof o === 'string' ? o : (o && typeof o.label === 'string' ? o.label : '')))
+    .filter(Boolean)
+    .slice(0, 8);
+  return { text, header: typeof one.header === 'string' ? one.header : '', options };
+}
+
 function commandOf(tool, input) {
   if (!input || typeof input !== 'object') return '';
   const first = (...keys) => {
@@ -40,6 +59,9 @@ function commandOf(tool, input) {
   if (tool === 'Bash') return first('command');
   const named = first('file_path', 'path', 'url', 'pattern', 'query', 'notebook_path');
   if (named) return named;
+  // A question reads as a question: its own text, not the envelope it came in.
+  const q = questionOf(input);
+  if (q) return q.text;
   // An unknown tool — show its input as it is, not as "…". Trimming happens in
   // one place, below, and the same way for everyone.
   try { return JSON.stringify(input); } catch { return ''; }
@@ -55,7 +77,7 @@ const cut = (s) => (String(s || '').length > CUT ? String(s).slice(0, CUT) + ' �
 // The public part of an entry: what goes to the owner in the snapshot and in the event.
 const shown = (e) => ({
   id: e.id, agentId: e.agentId, tool: e.tool, command: e.command,
-  description: e.description, at: e.at, until: e.until,
+  description: e.description, question: e.question || null, at: e.at, until: e.until,
   // The rule that "always allow" would write into the settings. Shown in words
   // before the press: a rule written silently is a permission the owner never
   // gave.
@@ -95,6 +117,9 @@ export function ask(payload, { audience }) {
     tool,
     command: cut(commandOf(tool, input)),
     description: cut((input && input.description) || ''),
+    // The options of a question travel with it: «allow or deny» says nothing
+    // about a question whose answer is one of four.
+    question: questionOf(input),
     rule: ruleOf(payload && payload.permission_suggestions),
     suggestions: (payload && payload.permission_suggestions) || [],
     at: Date.now(),

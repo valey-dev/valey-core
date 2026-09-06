@@ -372,8 +372,8 @@ function buildDialog(a) {
     if (!p) body = `<p class="say">${tr('permit.gone')}</p>`;
     else if (denying) {
       body = `<p class="q">${tr('permit.denyQ')}</p>
-        <p class="say">${esc(p.description || tr('permit.noDesc'))}</p>
-        <pre class="cmd">${esc(p.command)}</pre>
+        <p class="say">${esc(p.description || (p.question ? p.question.text : '') || tr('permit.noDesc'))}</p>
+        ${p.question ? '' : `<pre class="cmd">${esc(p.command)}</pre>`}
         <textarea id="denyNote" rows="3" placeholder="${tr('permit.denyHint')}"></textarea>
         <div class="prow">
           <button data-a="deny" class="primary">${tr('permit.deny')} <kbd>⏎</kbd></button>
@@ -381,9 +381,17 @@ function buildDialog(a) {
         </div>
         <p class="hint">${tr('permit.denyNote')}</p>`;
     } else {
-      body = `<p class="q">${tr('permit.q')}</p>
-        <p class="say">${esc(p.description || tr('permit.noDesc'))}</p>
-        <pre class="cmd">${esc(p.command)}</pre>
+      body = `<p class="q">${p.question ? tr('permit.askQ') : tr('permit.q')}</p>
+        <p class="say">${esc(p.description || (p.question ? p.question.text : '') || tr('permit.noDesc'))}</p>
+        ${p.question
+          // A question is not a command, and a <pre> full of braces is what the
+          // office used to show instead of it. The options are the whole point:
+          // «разрешить или отказать» says nothing about a question whose answer
+          // is one of four.
+          ? (p.question.options.length
+            ? `<ul class="qopts">${p.question.options.map((o) => `<li>${esc(o)}</li>`).join('')}</ul>`
+            : '')
+          : `<pre class="cmd">${esc(p.command)}</pre>`}
         ${p.rule ? `<p class="hint">${tr('permit.rule', { rule: esc(p.rule) })}</p>` : ''}
         <div class="prow">
           <button data-a="allow" class="primary">${tr('permit.allow')} <kbd>⏎</kbd></button>
