@@ -1376,11 +1376,7 @@ function currentPlace() {
   // One panel, two places: on «поговорить» the cursor is in the field, so the
   // letters type instead of opening anything. That is the state this whole
   // feature was asked for.
-  // «Разговор» is not the tab, it is the cursor. onKey returns on its first line
-  // while a field has focus, so that — and only that — is the state where the
-  // office hears nothing at all. On the same tab with the field unfocused the
-  // card's own keys work, and so do the floor's.
-  if (state.dialogOpen) return typing() ? 'talk' : 'card';
+  if (state.dialogOpen) return 'card';
   // A module that owns the screen names its own place; the core does not know
   // module ids and must not learn them.
   const mine = first('place');

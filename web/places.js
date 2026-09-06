@@ -31,11 +31,15 @@
 // transcript ignores them. Without `mute` the registry would light them «ходить»,
 // which is worse than dimming a working key: it is a promise that nothing keeps.
 //
-// **Two places are genuinely deaf**, and they are marked so. In the control room
-// the branch in onKey ends in an unconditional return, so nothing below it runs.
-// With the cursor in a text field onKey returns on its first line — even «?»
-// types itself there, which is why `deaf` also puts out the one key that is
-// otherwise always lit.
+// **One place is genuinely deaf**, and it is marked so: the control room, whose
+// branch in onKey ends in an unconditional return, so nothing below it runs.
+//
+// Typing in a field is not a place. It looked like one and had a board of its own
+// for a day — but to see a board you press «?», and in a field that types a slash,
+// so the board could never be reached. What is true there is one sentence, and it
+// belongs on the card's board rather than on a screen nobody can open: while the
+// cursor is in the field the keyboard belongs to the field. (The gamepad is not
+// covered by that — it hands onKey a target of its own and is heard while typing.)
 //
 // Drawn from the approved frame «Контекстная клавиатура», nine boards, one per
 // place. The captions here are the captions there, which is why they are i18n
@@ -65,22 +69,11 @@ const PLACES = [
     registry: true,
     caps: {
       // The card's own tabs, by the names the buttons print — see web/ui.js.
+      // While the cursor sits in the field none of this is heard; that is a line on
+      // the board, not a place of its own — see the note at the top of this file.
       Digit1: 'tab.talk', Digit2: 'tab.work', Digit3: 'tab.task', Escape: 'tab.close',
       Enter: 'place.press', Space: 'place.press',
       ArrowUp: 'place.focus', ArrowDown: 'place.focus', ArrowLeft: 'place.focus', ArrowRight: 'place.focus',
-    },
-  },
-  {
-    // Typing. onKey returns on its first line while a field has focus, so nothing
-    // here belongs to the office at all — these keys are the card's own DOM
-    // handlers. The one place where «?» cannot open this panel.
-    id: 'talk',
-    title: 'place.talk',
-    deaf: true,
-    caps: {
-      Escape: 'place.close', Enter: 'place.talk.send',
-      ShiftLeft: 'place.talk.shift', ShiftRight: 'place.talk.shift',
-      ArrowUp: 'place.talk.reply', ArrowDown: 'place.talk.reply',
     },
   },
   {

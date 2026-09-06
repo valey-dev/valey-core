@@ -74,15 +74,15 @@ ok('в галерее R не горит, хотя на этаже это рад�
 ok('съеденное не попадает и в список горящих',
   !litCodes('transcript').includes('ArrowLeft'), litCodes('transcript').filter((c) => c.startsWith('Arrow')));
 
-// ---------------------------------------------------------------- deaf places
-// Two screens hear nothing below their own keys: the control room returns before
-// the dispatch, and with the cursor in a field onKey returns on its first line.
+// ----------------------------------------------------------------- the deaf one
+// One screen hears nothing below its own keys: the control room's branch in onKey
+// ends in a return.
 ok('пультовая помечена глухой', get('cctv').deaf === true, get('cctv'));
 ok('и буква этажа там мертва', keyIn('cctv', 'KeyB').lit === false, keyIn('cctv', 'KeyB'));
-ok('разговор с курсором в поле — тоже глухой', get('talk').deaf === true, get('talk'));
-ok('в разговоре SHIFT — перевод строки, а не бег',
-  keyIn('talk', 'ShiftLeft').caption === 'place.talk.shift', keyIn('talk', 'ShiftLeft'));
-ok('и буква этажа мертва и там', keyIn('talk', 'KeyB').lit === false, keyIn('talk', 'KeyB'));
+// Typing in a field is not a place. It had one for a day, and it could never be
+// shown: to see a board you press «?», and in a field that types a slash. What is
+// true there is a line on the card's board.
+ok('места «разговор» больше нет', !has('talk'), all_().map((p) => p.id));
 
 // --------------------------------------------------------- the key that opens this
 // «?» answers wherever the office is listening at all — and nowhere it is not.
