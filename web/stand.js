@@ -8,7 +8,19 @@
 // It is shown only when the server was started with VALEY_STAND — in an ordinary
 // office it is not there at all, and there is no need to take it down before a
 // showing.
+//
+// It does cover the top-left corner of the floor, though, and that corner is
+// sometimes the thing being checked. So «~» folds the plaque into a small tab and
+// unfolds it back: scaffolding you can push aside beats scaffolding you have to
+// restart the server without. The tab stays — a stand must never be able to pass
+// for an ordinary office, which is the whole reason the plaque exists.
 import { moduleFailures } from './modules.js';
+
+// Folded or not survives a reload, because the reload is not always yours: a
+// module switched off on the plaque reloads the page by itself, and a plaque that
+// unfolded every time would have to be folded again after every switch.
+const FOLD = 'valey-stand-folded';
+const folded = () => { try { return localStorage.getItem(FOLD) === '1'; } catch { return false; } };
 
 export async function initStand() {
   let s = null;
@@ -28,7 +40,7 @@ export async function initStand() {
     d.textContent = text;
     box.appendChild(d);
   };
-  line('stand-tag', 'ТЕСТОВЫЙ СТЕНД');
+  line('stand-tag', 'ТЕСТОВЫЙ СТЕНД · ~ СВЕРНУТЬ');
   line('stand-what', s.text);
   const where = [s.branch && `ветка ${s.branch}`, s.port && `порт ${s.port}`].filter(Boolean).join(' · ');
   if (where) line('stand-where', where);
@@ -80,6 +92,38 @@ export async function initStand() {
     // disk, and this is a check of how the office behaves, not of a build without it.
     line('stand-fine', 'выключение — имитация: файлы на диске остаются');
   }
+  // The tab that is left when the plaque is folded. It says the same first thing
+  // the plaque says — this is a stand — and nothing else; everything else is one
+  // key or one click away.
+  const tab = document.createElement('button');
+  tab.id = 'standtab';
+  tab.type = 'button';
+  tab.textContent = 'СТЕНД';
+  tab.title = 'развернуть табличку стенда (~)';
+
+  const fold = (on) => {
+    document.body.classList.toggle('stand-folded', !!on);
+    try { localStorage.setItem(FOLD, on ? '1' : ''); } catch {}
+  };
+  tab.onclick = () => fold(false);
+
   document.body.appendChild(box);
+  document.body.appendChild(tab);
+  fold(folded());
+
+  // The key is bound here rather than in web/keymap.js on purpose: it exists only
+  // where the plaque exists. Putting it in the registry would print it on the keys
+  // card of every office, including the ones that have no stand and never will.
+  //
+  // Backquote is «ё» under the Russian layout and the office answers to neither, so
+  // nothing is being taken away from anyone.
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'Backquote' || e.metaKey || e.ctrlKey || e.altKey) return;
+    const t = e.target || {};
+    if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return;   // the field is typing, not the office
+    e.preventDefault();
+    fold(!document.body.classList.contains('stand-folded'));
+  });
+
   return s;
 }
