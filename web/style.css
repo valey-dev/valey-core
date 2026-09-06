@@ -1060,6 +1060,11 @@ body.titling #hud{visibility:hidden}
 /* Поле внутри карточки подсвечивается так же, как кнопка: ходят по ним одной
    стрелкой, и рука не должна гадать, где она стоит. */
 .keydetail input.focus{outline:2px solid var(--warn); outline-offset:-2px; border-color:var(--warn)}
+/* Кнопка, которая только что скопировала. Цвета те же, что у .mdcopy в
+   транскрипте: один приём — один вид, иначе «скопировано» в двух местах офиса
+   выглядит как два разных события. */
+.obtn.done{color:var(--accent); border-color:var(--accent)}
+.obtn.fail{color:var(--warn); border-color:var(--warn)}
 .keywarn{margin:0; padding:8px 10px; font-size:11px; color:var(--ink);
   background:rgba(255,209,102,.10); border-left:3px solid var(--warn);
   display:flex; align-items:center; gap:10px}

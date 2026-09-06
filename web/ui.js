@@ -850,6 +850,25 @@ async function copyBlock(btn) {
   return ok;
 }
 
+// То же, что copyBlock, но для одиночной кнопки, у которой нет блока кода под
+// боком: карточка ключа, где копируют строку из поля рядом. Приём общий и
+// намеренно повторён отсюда, а не изобретён заново — кнопка и есть ответ,
+// отдельной строки статуса нет.
+async function copyOnBtn(btn, text) {
+  const was = btn.dataset.was || btn.textContent;
+  btn.dataset.was = was;
+  const ok = await copyText(text);
+  btn.classList.remove('done', 'fail');
+  btn.classList.add(ok ? 'done' : 'fail');
+  btn.textContent = tr(ok ? 'key.copied' : 'key.copyFailed');
+  clearTimeout(btn._back);
+  btn._back = setTimeout(() => {
+    btn.classList.remove('done', 'fail');
+    btn.textContent = was;
+  }, ok ? 1500 : 4000);
+  return ok;
+}
+
 // Клавиша копирует верхний блок, попавший в экран, — тот, который читают.
 // Ниже экрана блоки есть почти всегда, и копировать первый в документе значило
 // бы копировать не то, что видно.
@@ -1536,10 +1555,10 @@ function bindKeys() {
   // Copying is shared by every card: a command, a path, a Redirect URI. Without
   // https the browser has no clipboard, and that has to show on the button
   // rather than in the console.
-  detail.querySelectorAll('[data-copy]').forEach((b) => b.onclick = async () => {
-    const ok = await copyText(b.dataset.copy);
-    toast(tr(ok ? 'key.copied' : 'key.copyFailed'), ok ? '' : 'wait');
-  });
+  // Ответ живёт на нажатой кнопке, как у блоков кода в транскрипте. Тост
+  // уезжал вверх, к строке статуса офиса, а рука в этот момент смотрит на
+  // кнопку, которую только что нажала: «ничего не произошло».
+  detail.querySelectorAll('[data-copy]').forEach((b) => b.onclick = () => copyOnBtn(b, b.dataset.copy));
   const card = cards[keyIdx];
   if (card && card.bind) card.bind(detail);
   paintBagFocus();
