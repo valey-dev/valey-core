@@ -176,6 +176,21 @@ async function saveSettings(patch) {
   return r;
 }
 
+// A fresh office has no language yet — settings say 'auto', every tab resolves it
+// from its own device, and the server, which has no device, would keep handing out
+// Russian names to an English office. So the first page to arrive writes down what
+// it resolved, and the office has one language from then on, switchable by the
+// figure in the corridor like any other.
+//
+// A guest cannot write the settings and does not try: the office is not theirs to
+// name, and their own tab is already in their own language either way. Failures
+// are ignored for the same reason — this is a default being recorded, not work
+// somebody is waiting on.
+function pinLang(settings) {
+  if (!settings || settings.lang === lang() || !state.owner) return;
+  saveSettings({ lang: lang() }).catch(() => {});
+}
+
 // One entrance for both sources: the event and the snapshot. The counter of deferred
 // ones lives in the state, because it is drawn by the header rather than by the pager.
 function takePermits(list) {
@@ -290,7 +305,7 @@ const admission = knock().then((entered) => {
 });
 
 fetch('/api/settings', { headers: owned() }).then((r) => r.json()).then((r) => {
-  if (r.settings) { state.settings = r.settings; setLang(r.settings.lang); paintSign(); }
+  if (r.settings) { state.settings = r.settings; setLang(r.settings.lang); pinLang(r.settings); paintSign(); }
   if (r.packs) state.packs = r.packs;
   if (r.weather) applyWeather(r.weather);
   UI.renderHud();
@@ -601,6 +616,10 @@ const onSnapshot = (e) => {
     if (wornCode !== dressCode()) dressAll();
     // the language could have been switched by somebody in a neighbouring tab — we catch up
     setLang(data.settings.lang);
+    // And here too, not only on the boot fetch: that one races with whoami, so on a
+    // fresh office the page can learn the settings before it knows it is the owner,
+    // and the language would stay unresolved until the next reload.
+    pinLang(data.settings);
     paintSign();
     if (changed && !document.getElementById('sky').hidden) UI.renderSky();
   }

@@ -13,9 +13,40 @@
 // drift apart between the languages.
 
 const listeners = new Set();
-let LANG = 'ru';
 
 export const LANGS = ['ru', 'en'];
+
+// Which language a device is asking for. Until 6 September 2026 the office
+// simply started in Russian and waited to be switched: written by a Russian
+// speaker for himself, it read as a bug to everybody else, and it is the first
+// thing a stranger sees. The repository is going public, so the default cannot
+// stay a private habit.
+//
+// Russian only when the device asks for Russian; English for everything else,
+// including a device asking for a third language the office does not speak. The
+// tag is matched on its primary subtag — `ru-RU`, `ru-KZ` and plain `ru` are one
+// language here, and a region the office does not distinguish must not decide
+// the answer.
+export function pickLang(tags) {
+  for (const tag of tags || []) {
+    const base = String(tag).toLowerCase().split('-')[0];
+    if (LANGS.includes(base)) return base;
+  }
+  return 'en';
+}
+
+// `languages` is the ordered list the person actually set; `language` is one
+// value and is the fallback for a browser without the list. Node has a
+// `navigator` too but not always a locale, hence the guard: the dictionary is
+// imported by the stands, where there is no browser at all.
+export function deviceLang() {
+  if (typeof navigator === 'undefined') return 'en';
+  const list = navigator.languages && navigator.languages.length
+    ? navigator.languages : [navigator.language];
+  return pickLang(list);
+}
+
+let LANG = deviceLang();
 
 const DICT = {
   ru: {
@@ -1357,12 +1388,21 @@ export function t(key, vars) {
   return s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? String(vars[k]) : m));
 }
 
+// 'auto' — nobody has chosen yet, so the device decides. Anything unknown lands
+// there too: a settings file edited by hand should give the office a language it
+// can read rather than a key nobody switched.
+//
+// The page attributes are set even when the language did not change, because the
+// document starts out language-neutral: index.html carries no Russian title to
+// be corrected, and something has to write the first one. The listeners are what
+// the return value is about, and they still only fire on a real change.
 export function setLang(l) {
-  const next = LANGS.includes(l) ? l : 'ru';
-  if (next === LANG) return false;
+  const next = LANGS.includes(l) ? l : deviceLang();
+  const changed = next !== LANG;
   LANG = next;
   document.documentElement.lang = LANG;
   document.title = t('doc.title');
+  if (!changed) return false;
   for (const fn of listeners) { try { fn(LANG); } catch { /* one listener does not bring the others down */ } }
   return true;
 }
