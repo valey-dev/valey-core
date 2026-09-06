@@ -59,7 +59,7 @@ export async function fakeClaudeDir(dir, {
  * sessions directory, if the stand needs an agent. It is killed by its own child
  * process, not by name and not by port.
  */
-export async function startOffice({ settings = {}, claudeDir = null, env = {} } = {}) {
+export async function startOffice({ settings = {}, claudeDir = null, env = {}, root = ROOT } = {}) {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-stand-'));
   const settingsFile = path.join(dir, 'settings.json');
   await fsp.writeFile(settingsFile, JSON.stringify({
@@ -70,8 +70,13 @@ export async function startOffice({ settings = {}, claudeDir = null, env = {} } 
   }, null, 2));
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
+  // `root` is which office to raise, and it is not always this one. A module
+  // lives in the other repository and is symlinked into a core checkout; its
+  // stand has to raise the core it is plugged into rather than whichever one
+  // this file happens to sit in, or it tests a version of the seam nobody is
+  // editing.
   const srv = spawn(process.execPath, ['server/index.js'], {
-    cwd: ROOT,
+    cwd: root,
     env: {
       ...process.env, PORT: String(port), HOST: '127.0.0.1', VALEY_SETTINGS: settingsFile,
       ...(claudeDir ? { VALEY_CLAUDE_DIR: claudeDir } : {}), ...env,

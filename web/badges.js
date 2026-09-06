@@ -5,7 +5,11 @@
 // is drawn by one function in both places.
 import { pxText } from './office.js';
 
-export function drawBubble(ctx, x, y, agent, t) {
+// The shell alone: the box, the tail and the light border. Exported because a
+// module draws its own state inside the same bubble — the voice puts a speaking
+// mark over a person's head — and a second bubble drawn by hand somewhere else
+// would drift from this one exactly the way the mock-up used to.
+export function bubbleShell(ctx, x, y) {
   const w = 16, h = 12;
   ctx.fillStyle = 'rgba(28,22,18,0.85)';
   ctx.fillRect(x - w / 2, y - h, w, h);
@@ -13,6 +17,10 @@ export function drawBubble(ctx, x, y, agent, t) {
   ctx.fillStyle = '#f6e3c0';
   ctx.fillRect(x - w / 2, y - h, w, 1); ctx.fillRect(x - w / 2, y - 1, w, 1);
   ctx.fillRect(x - w / 2, y - h, 1, h); ctx.fillRect(x + w / 2 - 1, y - h, 1, h);
+}
+
+export function drawBubble(ctx, x, y, agent, t) {
+  bubbleShell(ctx, x, y);
   if (agent.limited) {
     // an hourglass: there is nothing to work with, waiting for the limit to reset
     const flip = Math.floor(t / 900) % 2;

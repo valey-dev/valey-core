@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { snapshot, fileOwners, conversation, PACK_IDS, namePool, nameSample, effectivePack, previewPack } from './agents.js';
 import { realWeather, forgetWeather, geocode } from './weather.js';
 import { getSettings, patchSettings, publicSettings, ownerToken } from './settings.js';
-import { deliver, deliveryStatus, isBusy, MODES } from './deliver.js';
+import { deliver, deliveryStatus, forgetCli, isBusy, MODES } from './deliver.js';
 import { ask as askPermit, answer as answerPermit, permits, forgetGone } from './permit.js';
 import { releaseNudge } from './release.js';
 import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff } from './modules.js';
@@ -257,6 +257,18 @@ function peopleTick() {
 // not reach him, and holding a question for him means holding it for nobody.
 const audience = () => [...clients].some((res) => !res.valeyGuest);
 
+// One event to one person's open streams. Presence broadcasts to everybody and
+// needs nothing like this; a module that introduces two browsers to each other
+// does — an offer is addressed to one person, not to the floor. Returns how
+// many streams took it, and zero is an answer rather than an error: the other
+// tab may have closed half a second ago.
+function toPerson(id, event, data) {
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  let n = 0;
+  for (const res of clients) if (res.valeyPerson === id) { res.write(payload); n += 1; }
+  return n;
+}
+
 // The pager has to ring at once rather than on the snapshot tick: 2.5 seconds
 // is the difference between "I am being called" and "I was called". The event
 // goes to owners only, because a guest's projection holds no requests at all.
@@ -485,6 +497,11 @@ async function handle(req, res) {
     const guest = await guestOf(req);
     const who = guest ? guest.guest : null;
     res.valeyGuest = who;
+    // Who is on the other end of this stream, by the same id `/api/here` uses.
+    // Presence does not need it — it broadcasts to everyone — but the voice does:
+    // an SDP offer is addressed to one person, and without a name on the socket
+    // there is nobody to address it to.
+    res.valeyPerson = String(url.searchParams.get('me') || '').slice(0, 64) || null;
     res.write(`data: ${JSON.stringify(who ? project(last, who) : last)}\n\n`);
     // Whoever just came in sees who is already in the office at once, not a presence tick later.
     res.write(`event: people\ndata: ${JSON.stringify(livePeople())}\n\n`);
@@ -741,6 +758,13 @@ async function handle(req, res) {
     }
   }
 
+  // fresh=1 — forget the cached CLI answer and ask again. The cache lives a
+  // minute, which is right for the background; but somebody who has just been
+  // to the terminal and pressed «check now» should not have to wait it out.
+  if (url.pathname === '/api/delivery') {
+    if (url.searchParams.get('fresh') === '1') forgetCli();
+    return send(res, 200, await deliveryStatus());
+  }
   // A permission request from Claude Code. It comes from the hook on this same
   // machine and HANGS here until the owner answers: while it hangs there is no
   // dialog in the terminal. Only the owner can answer, so only he is let in to
@@ -781,7 +805,6 @@ async function handle(req, res) {
     return send(res, 200, { ok: true, ...done, permits: permits() });
   }
 
-  if (url.pathname === '/api/delivery') return send(res, 200, await deliveryStatus());
 
   // Where the office looks out of the window, and whether it looks at all.
   if (url.pathname === '/api/settings') {
@@ -954,7 +977,17 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   // 2026 the order was the other way round, and a module's section appeared in
   // the settings only after the first save — the radio client masked that with
   // `|| {}`.
-  const mods = await loadModules(ROOT);
+  // The context is the office's half of the seam: what a module cannot reach on
+  // its own and should not reimplement. Both pieces are about people — who is
+  // standing where, and how to say one thing to one of them — because that is
+  // what the floor tier is built out of. A module that wants neither simply
+  // does not export `setup`.
+  // `settings` comes along because a module route gets none: `defaults` and
+  // `publicView` are handed the settings, and `route` was not — so a module
+  // holding a secret in settings had nowhere to read it at request time. The
+  // voice needs it for temporary relay credentials, which must be computed per
+  // request and must never be written into the page.
+  const mods = await loadModules(ROOT, { people: livePeople, toPerson, settings: getSettings });
   let boot = await getSettings();
   const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
   if (external && !(boot.network || {}).token) {

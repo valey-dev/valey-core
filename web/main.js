@@ -1,7 +1,7 @@
 import { lookOf, drawPerson, drawCat, normalizeLook, isSelfLabel, dressOf, dressMe } from './sprites.js';
 import { potState, water as waterPot, tally, CAN_FULL } from './garden.js';
 import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, pickRoom, WALL } from './layout.js';
-import { loadModules, collect, first } from './modules.js';
+import { loadModules, collect, first, attachStreams } from './modules.js';
 import { owned, setTokens } from './owned.js';
 import { initStand } from './stand.js';
 import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, pxText, kickerBusy } from './office.js';
@@ -15,6 +15,10 @@ import { titleOf } from './paintings.js';
 import { drawBubble } from './badges.js';
 import { skateStep, rolling, drawSkateboard, ollieStep, canOllie, OLLIE_POP } from './skate.js';
 import { readPad, edges as padEdges } from './pad.js';
+import { viewport, stepScale, SCALE_MIN, SCALE_MAX } from './viewport.js';
+// ui.scale is the interface size: the HUD and hint strips are stretched by it,
+// and fit() must account for that when it measures their height.
+import { ui, onUiScale } from './theme.js';
 import { actionOf, codeOf, codesOf, hints } from './keymap.js';
 import { renderKeys, closeKeys, keysOpen, readLayout } from './keys.js';
 import { has as hasPlace } from './places.js';
@@ -23,7 +27,8 @@ import { has as hasPlace } from './places.js';
 import { t as tr, lang, setLang, onLang } from './i18n.js';
 import { initTitle, drawTitle, renderTitle, titleKey, titleOpen, closeTitle, layoutTitle, tickTitle } from './title.js';
 
-const VW = 400, VH = 225;
+// Changed by fit(): the canvas takes the window instead of standing in letterbox bars.
+let VW = 400, VH = 225;
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 canvas.width = VW; canvas.height = VH;
@@ -89,7 +94,7 @@ const state = {
   permits: [], pagerWaiting: 0,
   soundOn: sound.on,
   // physical pixels per game pixel; filled in by the very first fit()
-  zoom: { dev: 3, max: 3, auto: true, clamped: false },
+  zoom: { dev: 3, max: 3, auto: true, tight: false },
 };
 
 const keys = new Set();
@@ -203,6 +208,12 @@ UI.initUI(state, {
     .then((r) => r.json()).catch((e) => ({ error: e.message, packs: [] })),
   sound: () => { state.soundOn = sound.toggle(); UI.renderHud(); return state.soundOn; },
   geocode: (q) => fetch('/api/geocode?q=' + encodeURIComponent(q)).then((r) => r.json()).catch((e) => ({ error: e.message })),
+  // The key card asks about the CLI again: somebody went to the terminal,
+  // logged in and came back, and the server's answer lives a minute — no
+  // reason to sit out that minute looking at «not logged in».
+  recheckCli: () => fetch('/api/delivery?fresh=1', { headers: owned() })
+    .then((r) => r.json()).then((d) => { state.delivery = d; return d; })
+    .catch((e) => ({ error: e.message })),
   saveSettings,
   invites: () => fetch('/api/invites', { headers: owned() })
     .then((r) => r.json()).catch((e) => ({ error: e.message, invites: [] })),
@@ -248,7 +259,14 @@ UI.initUI(state, {
 
 // We knock first and ask who we are after: with a code in hand the answer to the second
 // question depends on the first.
-knock().then((entered) => {
+//
+// The whole chain is kept, because the modules have to wait for it. A guest who
+// arrives by an invitation link is nobody until the code is exchanged, and
+// `/api/modules` answers a refusal rather than a list to nobody: on 6 September
+// 2026 a guest coming through a tunnel got an office with no modules at all —
+// no voice, no microphone, an empty floor — while the owner on the same machine
+// saw everything, because he needed no code and won the race by accident.
+const admission = knock().then((entered) => {
   if (entered && entered.errorKey) state.entry = { refused: entered.errorKey };
   else if (entered && entered.ok) state.entry = { from: entered.from || '' };
   return fetch('/api/whoami', { headers: owned() }).then((r) => r.json());
@@ -395,6 +413,11 @@ const MY_ID = (() => {
   if (!v) { v = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()); localStorage.setItem('valey-id', v); }
   return v;
 })();
+// The office's own id, put where the modules can see it. A module in the floor
+// tier has to sign what it sends — an offer says who it is from — and reaching
+// into localStorage for the same key from two places is how the two of them
+// quietly stop agreeing.
+state.meId = MY_ID;
 
 // While you walk, often; while you stand, rarely. The threshold is by distance rather
 // than by "is a key pressed": the lift carries a person by itself, and staying silent
@@ -481,7 +504,11 @@ function openStream() {
   if (es) es.close();
   const pass = OWNER ? 'owner=' + encodeURIComponent(OWNER)
     : GUEST ? 'guest=' + encodeURIComponent(GUEST) : '';
-  es = new EventSource('/api/stream' + (pass ? '?' + pass : ''));
+  // The stream says whose it is. Presence goes to everybody and never needed a
+  // name; an event addressed to one person does — that is how the meeting room's
+  // hub sends an offer to one browser and not to the floor.
+  const named = (pass ? pass + '&' : '') + 'me=' + encodeURIComponent(MY_ID);
+  es = new EventSource('/api/stream?' + named);
   // The pager has to beep at once: in the snapshot tick it would be "somebody called me".
   es.addEventListener('permits', (e) => {
     try { takePermits(JSON.parse(e.data)); } catch { /* junk in the frame — we skip it */ }
@@ -489,6 +516,7 @@ function openStream() {
   es.addEventListener('people', (e) => {
     try { seePeople(JSON.parse(e.data)); } catch { /* junk in the frame — we skip it */ }
   });
+  attachStreams(es);
   es.onmessage = (e) => { streamRetry = 2000; onSnapshot(e); };
   es.onerror = () => {
     if (es.readyState !== EventSource.CLOSED) return;   // the network blinked — the browser will come back by itself
@@ -830,17 +858,6 @@ function paintSign() {
 }
 
 function renderStatic() {
-  const help = document.getElementById('help');
-  // The strip is squeezed down to one hint: the full list lives in the keys panel. While
-  // the list stood here it took two lines, grew with every module, and still showed only
-  // one binding out of two — a keyboard shows what a sentence cannot: what is next to
-  // what, and what is still free.
-  //
-  // `collect('help')` stays for modules that have not declared their keys through
-  // api.keys() yet: their line is the only thing they say about themselves.
-  const keysHint = hints().find((h) => h.hint === 'hint.keys');
-  const opener = keysHint ? `${keysHint.caps[0]} — ${tr('hint.keys')}` : '';
-  if (help) help.textContent = [opener, ...collect('help'), tr('help.tail')].filter(Boolean).join(' · ');
   document.title = tr('doc.title');
   document.documentElement.lang = lang();
   paintSign();
@@ -1892,14 +1909,11 @@ document.addEventListener('visibilitychange', () => {
 // and the seven-pixel font above the heads turns into soap. We count the scale in dots —
 // then every pixel takes exactly N.
 // The scale is counted in PHYSICAL pixels per game pixel — only a whole number gives a
-// crisp picture. The steps are fixed, ×2…×8; a zero means "fit the window".
+// crisp picture. The steps are ×2…×8; a zero means "count it from the width".
+// All the arithmetic lives in web/viewport.js and is covered by a stand; this is canvas only.
 const ZOOM_KEY = 'valey-zoom';
-// We do not go below ×6: at that step the hint at the bottom fits whole, and smaller than
-// that the office reads badly. Shrinking is left only as an emergency exit, for when the
-// window physically does not hold ×6 — then the step is clamped by itself.
-const ZOOM_MIN = 6, ZOOM_MAX = 8;
 let zoomWanted = Math.max(0, Number(localStorage.getItem(ZOOM_KEY)) || 0);
-if (zoomWanted && zoomWanted < ZOOM_MIN) zoomWanted = ZOOM_MIN;
+if (zoomWanted) zoomWanted = Math.max(SCALE_MIN, Math.min(SCALE_MAX, zoomWanted));
 
 function setZoom(next) {
   zoomWanted = next;
@@ -1907,47 +1921,48 @@ function setZoom(next) {
   else localStorage.removeItem(ZOOM_KEY);
   refit();
   UI.renderHud();
-  UI.toast(next ? `Масштаб ×${state.zoom.dev}` : `Масштаб по окну — ×${state.zoom.dev}`);
+  UI.toast(next ? tr('toast.zoomSet', { n: state.zoom.dev }) : tr('toast.zoomAuto', { n: state.zoom.dev }));
 }
 
 function stepZoom(dir) {
-  const from = zoomWanted || state.zoom.dev;
-  const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, from + dir));
-  if (dir < 0 && from <= ZOOM_MIN) {
-    UI.toast(tr('toast.zoomFloor', { n: ZOOM_MIN }));
+  const next = stepScale(zoomWanted || state.zoom.dev, dir);
+  if (next === null) {
+    UI.toast(dir < 0 ? tr('toast.zoomFloor', { n: SCALE_MIN }) : tr('toast.zoomCeil', { n: SCALE_MAX }));
     return;
   }
-  if (next === zoomWanted) return;
   setZoom(next);
 }
 
 function fit() {
   const dpr = window.devicePixelRatio || 1;
   const hud = document.getElementById('hud');
-  const help = document.getElementById('help');
-  // how much the strips at the top and bottom have eaten — we measure rather than guess:
-  // the hint wraps onto three or four lines the moment the window is narrowed or zoomed
-  const top = (hud ? hud.offsetHeight : 0) + 20;
-  const bottom = (help ? help.offsetHeight : 0) + 16;
+  // The strips measure in their own pixels while zoom:var(--ui) stretches them on
+  // screen, and offsetHeight knows nothing about it. Without the multiplier the hint
+  // at 175% lies on top of the office — visible on the "интерфейс 175%" frame.
+  const k = ui.scale || 1;
+  const top = (hud ? hud.offsetHeight * k : 0) + 20;
+  // Nothing sits along the bottom any more — the key list moved into the ? panel — so the
+  // office only keeps a gap the size of the one above it, and takes the rest.
+  const bottom = 20;
   document.body.style.paddingTop = top + 'px';
   document.body.style.paddingBottom = bottom + 'px';
   // the toasts stand above the hint rather than over it: it can be three lines tall
   const toasts = document.getElementById('toasts');
   if (toasts) toasts.style.bottom = (bottom + 8) + 'px';
 
-  const availW = Math.max(VW, innerWidth - 16);
-  const availH = Math.max(VH, innerHeight - top - bottom);
-  const max = Math.max(1, Math.floor(Math.min(availW * dpr / VW, availH * dpr / VH)));
-  // the chosen step cannot be larger than what fits into the window
-  // "fit the window" does not go small either: we take ×6, even if the window allows more to be seen
-  const dev = Math.max(1, Math.min(zoomWanted || Math.max(ZOOM_MIN, max), max));
-  canvas.style.width = VW * dev / dpr + 'px';
-  canvas.style.height = VH * dev / dpr + 'px';
-  state.zoom = {
-    dev, max, auto: !zoomWanted,
-    clamped: !!zoomWanted && dev < zoomWanted,
-    tight: dev < ZOOM_MIN,   // the window is smaller than ×6 needs — that is visible in the bar
-  };
+  const availW = Math.max(160, innerWidth - 16);
+  const availH = Math.max(90, innerHeight - top - bottom);
+  // The entrance is drawn in 400×225 and its composition is approved by its own
+  // frames: it does not stretch — the office behind its door does.
+  const v = viewport(availW, availH, dpr, zoomWanted, titleOpen());
+  if (canvas.width !== v.vw || canvas.height !== v.vh) {
+    canvas.width = v.vw; canvas.height = v.vh;
+    ctx.imageSmoothingEnabled = false;   // resizing the canvas resets the context
+  }
+  VW = v.vw; VH = v.vh;
+  canvas.style.width = VW * v.scale / dpr + 'px';
+  canvas.style.height = VH * v.scale / dpr + 'px';
+  state.zoom = { dev: v.scale, max: SCALE_MAX, auto: v.auto, tight: v.tight };
   layoutTitle();   // the entrance menu is tied to the canvas rather than to the window
   return top + bottom;
 }
@@ -1960,6 +1975,9 @@ function refit() {
   requestAnimationFrame(() => { if (fit() !== was) fit(); });
 }
 addEventListener('resize', refit);
+// A bigger interface means a taller HUD, and the office is laid out around it. The
+// browser fires no event for that, so the size control tells us itself.
+onUiScale(() => refit());
 
 // A zoom changes devicePixelRatio, and a resize does not arrive after it in every browser.
 // The subscription lives on exactly the current value, so we re-register it every time.
@@ -2004,6 +2022,10 @@ initTitle(state, {
     }
     closeTitle();
     document.body.classList.remove('titling');
+    // The entrance is drawn in a fixed 400×225 and the office is not: the canvas has to
+    // be recounted the moment the door closes behind us, or the office keeps the
+    // entrance's size and sits in bars.
+    refit();
     UI.renderHud();
     sound.init();
     sound.door(0.8);
@@ -2021,7 +2043,15 @@ renderTitle();
 
 // The modules come up before the first frame: their things have to get into the plan at
 // once, or the first pass will draw the office without them and it will flicker.
+// Nothing is asked of the office before it knows who is asking. For the owner
+// this changes nothing; for a guest it is the difference between an office and
+// an empty room.
+await admission;
 await loadModules();
+// The modules arrive later than the first stream, so their listeners are hung on
+// the open one now. Without this their events would be silently lost until the
+// network happened to blink and the stream was reopened.
+if (es) attachStreams(es);
 // Rebuild the static: the hint line at the bottom is assembled once at start-up, while the
 // keys of the modules arrive later — without this a free build and a paid one would show
 // the same hint.

@@ -86,5 +86,38 @@ applyLine(talk, JSON.stringify({
 }));
 ok('разговор не качает ничего', Object.values(talk.skills).every((n) => n === 0), talk.skills);
 
+// --------------------------------------------------------------- the shift
+//
+// Three numbers next to the grades: replies, characters and the gaps between
+// them. The gap is the delicate one — it is counted from the stamps, and a
+// pause of ten minutes is the border. What breaks quietly here is the clock:
+// the tail and the deep pass walk one file from two ends, and a shared
+// last-seen stamp would turn the head's older stamps into negative gaps.
+
+const spoke = (text, ts) => JSON.stringify({
+  type: 'assistant', timestamp: new Date(ts).toISOString(),
+  message: { model: 'claude-opus-5', content: [{ type: 'text', text }] },
+});
+const shiftOf = (lines) => { const st = emptyState(); for (const l of lines) applyLine(st, l); return st.shift; };
+
+const T0 = Date.parse('2026-09-06T10:00:00Z');
+const MIN = 60000;
+const said = shiftOf([spoke('раз', T0), spoke('два', T0 + MIN), spoke('три', T0 + 2 * MIN)]);
+ok('заходы считаются по репликам', said.turns === 3, said);
+ok('знаки складываются', said.chars === 'раз'.length + 'два'.length + 'три'.length, said.chars);
+ok('короткие паузы простоем не считаются', said.idleN === 0, said);
+
+const paused = shiftOf([spoke('до', T0), spoke('после', T0 + 40 * MIN), spoke('и ещё', T0 + 41 * MIN)]);
+ok('пауза длиннее десяти минут — это простой', paused.idleN === 1, paused);
+ok('и он посчитан в минутах, а не в репликах', Math.round(paused.idleMs / MIN) === 40, paused.idleMs);
+
+const edge = shiftOf([spoke('a', T0), spoke('b', T0 + 10 * MIN)]);
+ok('ровно десять минут — ещё не простой', edge.idleN === 0, edge);
+
+// A message with no text is a tool call: it adds no reply to the count, though
+// it does carry a stamp, so a gap is measured across it.
+const toolOnly = shiftOf([spoke('слово', T0), line('Read', { file_path: '/p/a.js' })]);
+ok('вызов инструмента не считается заходом', toolOnly.turns === 1, toolOnly);
+
 console.log(bad ? `\nПЛОХО: ${bad}` : '\nвсё хорошо');
 process.exit(bad ? 1 : 0);
