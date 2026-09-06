@@ -35,6 +35,10 @@ const die = (m) => { console.error('release: ' + m); process.exit(1); };
 const argv = process.argv.slice(2);
 const dry = argv.includes('--dry');
 const ship = argv.includes('--ship');
+// Cutting several features into one version is admitting a release was skipped.
+// It has to be said out loud, in the command, rather than in the changelog after
+// the fact — so the guard below refuses and this flag is how you agree.
+const catchUp = argv.includes('--catch-up');
 // The digit is optional now. A bare `--ship` must not be read as one, so the
 // first argument is taken only when it is not a flag.
 const asked = argv.find((a) => !a.startsWith('--')) || null;
@@ -71,6 +75,18 @@ const verdict = check(asked, picked);
 if (!verdict.ok) die(verdict.note);
 const kind = asked || picked.kind;
 if (!kind) die(`${picked.why}. Если релиз всё же нужен — скажи patch словом`);
+// One accepted feature is one minor, so more than one in a range means a release
+// was not cut when it was earned. Until 5 September 2026 this only printed a
+// warning and cut anyway: v0.10.0 went out carrying five features from two
+// different sessions, and the digit said one. A refusal puts the choice back at
+// the moment it is being made.
+// The dry run refuses too, on purpose: «what would happen» has to include «it
+// would not». A guard you only meet on the real run is a guard you meet too late.
+if (picked.feats.length > 1 && !catchUp) {
+  die(`в диапазоне ${picked.feats.length} фич, а по правилу одна принятая фича — один минор.\n` +
+    '  Значит релиз пропущен. Если догоняем осознанно — повтори с --catch-up,\n' +
+    '  и это уедет одним минором, как сейчас и происходит.');
+}
 for (const w of picked.warnings) console.log('ВНИМАНИЕ: ' + w + '\n');
 if (verdict.note) console.log('ВНИМАНИЕ: ' + verdict.note + '\n');
 if (!asked) console.log(`разряд выбран по диапазону: ${kind} — ${picked.why}\n`);
@@ -144,8 +160,24 @@ if (dry) { console.log('--dry: ничего не записано'); process.exi
 // A release is a tag on `main` — nothing merges there that has not been accepted,
 // so there is no other branch a version can honestly come from. Cutting one on a
 // feature branch produces a tag that disappears the moment the branch is deleted.
-const branch = git('rev-parse', '--abbrev-ref', 'HEAD');
-if (branch !== 'main') die(`релиз режется на main, а тут ${branch}`);
+// What matters is the commit, not the name of the branch pointing at it. The old
+// check demanded the branch be called `main`, and `main` can be checked out in
+// exactly one worktree — so whoever wanted to release had to walk into somebody
+// else's tree, and on 5 September 2026 that is what happened. Now any tree works
+// as long as its HEAD is the commit `main` is on: a temporary worktree, a fresh
+// clone, main itself.
+const head = git('rev-parse', 'HEAD');
+const mainAt = (() => { try { return gitQuiet('rev-parse', 'origin/main'); } catch { return ''; } })();
+if (mainAt) {
+  if (head !== mainAt) {
+    die('релиз режется с того коммита, на котором стоит origin/main.\n' +
+      `  здесь HEAD ${head.slice(0, 7)}, а origin/main ${mainAt.slice(0, 7)} — сначала слей и подтяни.`);
+  }
+} else {
+  // No remote at all — a young clone. Then the branch name is the only signal left.
+  const branch = git('rev-parse', '--abbrev-ref', 'HEAD');
+  if (branch !== 'main') die(`origin не настроен, а ветка ${branch} — релиз режется на main`);
+}
 
 // The stands run before anything is written, not after: this is the last moment
 // the release commit is still cheap to change. `--ship` pushes, and a pushed
@@ -178,7 +210,7 @@ console.log(`\nготово: ${tag} на ${git('rev-parse', '--short', 'HEAD')}`
 // releases on GitHub, and everybody kept calling the tags releases. The notes
 // existed the whole time — they just never left the repository.
 if (!ship) {
-  console.log(`пуш — отдельно:\n  git push origin main ${tag}`);
+  console.log(`пуш — отдельно:\n  git push origin HEAD:main ${tag}`);
   console.log(`и следом страница релиза из этой же секции:\n  node tools/gh-release.mjs ${tag}`);
   console.log(`или всё сразу в следующий раз:\n  npm run ship`);
 }
@@ -212,7 +244,7 @@ if (ship) {
   const remote = (() => { try { return git('remote', 'get-url', 'origin'); } catch { return ''; } })();
   if (!remote) die(`тег ${tag} на месте, но origin не настроен — пушить некуда`);
   console.log(`\nпуш в origin (${remote}):`);
-  git('push', 'origin', 'main', tag);
+  git('push', 'origin', 'HEAD:main', tag);
   console.log(`  main и ${tag} уехали`);
 
   console.log('\nстраница релиза:');

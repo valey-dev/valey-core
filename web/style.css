@@ -1036,6 +1036,12 @@ body.titling #hud{visibility:hidden}
 .kface{display:block; font-size:calc(var(--cap) * 0.21); line-height:1; color:var(--ink)}
 .kcap.free .kface{color:var(--muted)}
 .kcap.free .kwhat{color:var(--muted-dim)}
+/* Клавиша, которая существует, но не отсюда. Гасится целиком — вместе с полосой
+   группы и с русской буквой в углу, — потому что гасится не подпись, а факт:
+   в разговоре с агентом C не «одежда, но бледная», а не работает вовсе.
+   Значение то же, что на кадре «Контекстная клавиатура». */
+.kcap.off{opacity:.22}
+.keyslegend s.off{opacity:.22}
 .ktwin{position:absolute; top:calc(var(--cap) * 0.077); right:calc(var(--cap) * 0.096);
   font-style:normal; font-size:calc(var(--cap) * 0.173); color:var(--muted-dim)}
 /* Подпись на колпачке обрезается двумя строками, а целиком висит в title.

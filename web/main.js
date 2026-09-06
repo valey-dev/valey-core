@@ -21,6 +21,7 @@ import { viewport, stepScale, SCALE_MIN, SCALE_MAX } from './viewport.js';
 import { ui } from './theme.js';
 import { actionOf, codeOf, codesOf, hints } from './keymap.js';
 import { renderKeys, closeKeys, keysOpen, readLayout } from './keys.js';
+import { has as hasPlace } from './places.js';
 // t was renamed to tr: in main.js `t` is the frame time in draw(t), and the import
 // was silently shadowed by a number inside every drawing callback
 import { t as tr, lang, setLang, onLang } from './i18n.js';
@@ -677,6 +678,15 @@ function onKey(e) {
   // shot of a camera view was impossible at all, exactly the frame Prod illustrates the
   // control room with. Found on 30 August 2026 while reshooting the plates.
   if (act === 'service.shot') { e.preventDefault(); saveShot(e.shiftKey ? 4 : 1); return; }
+  // The keys panel stands as high as F9 and for the same reason: it has to answer
+  // everywhere, and «everywhere» includes the screens that return before the
+  // dispatch below. The control room did exactly that — its branch ends in an
+  // unconditional return, so «/» never reached the panel, and the one place whose
+  // board says «этаж не слышен» was the one place you could not read it from.
+  //
+  // Not through toggle(): that one looks the node up by id, and this panel creates
+  // its own on first opening — on an empty office toggle would throw on the first press.
+  if (act === 'service.keys') { e.preventDefault(); return keysOpen() ? closeKeys() : renderKeys(currentPlace()); }
 
   if (state.cctv.on) {
     if (act === 'move.left') return switchCam(-1);
@@ -690,9 +700,6 @@ function onKey(e) {
   if (act === 'zoom.out') { e.preventDefault(); return stepZoom(-1); }
   if (act === 'zoom.reset') { e.preventDefault(); return setZoom(0); }
 
-  // Not through toggle(): that one looks the node up by id, and this panel creates its
-  // own on first opening — on an empty place toggle would have thrown on the first press.
-  if (act === 'service.keys') return keysOpen() ? closeKeys() : renderKeys();
   if (act === 'panel.round') return toggle('roster', UI.renderRoster, UI.closeRoster);
   // N from outside shows all the notes; inside a conversation the same key writes them
   if (act === 'panel.notes') return toggle('notes', UI.renderNotes, UI.closeNotes);
@@ -1324,6 +1331,44 @@ function panelsOpen() {
     || keysOpen()
     || collect('busy').some(Boolean)
     || ['viewer', 'roster', 'bag', 'sky', 'lift', 'invite', 'lang'].some((id) => !document.getElementById(id).hidden);
+}
+
+// Where the office is standing, for the keys panel to draw the right board.
+//
+// The order is the order onKey resolves a press in, and it has to be: whoever
+// eats the key first is the place you are in. Read the other way round the panel
+// would describe a screen lying underneath another one — the control room while
+// the lift is open over it, say.
+//
+// This lives here and not in keys.js on purpose. Only the entry point knows what
+// is on top of what; the panel is given an answer and draws it.
+function currentPlace() {
+  if (state.cctv.on) return 'cctv';
+  // The viewer is two places. A wall of thumbnails is walked like any panel; one
+  // open file has its own keys, and ESC out of it goes back to the wall.
+  const viewer = UI.viewerOpen();
+  if (viewer) return viewer === 'single' ? 'viewer' : 'panel';
+  if (UI.liftOpen() || state.lift.phase !== 'idle') return 'lift';
+  if (UI.rosterOpen()) return 'round';
+  // One panel, two places: on «поговорить» the cursor is in the field, so the
+  // letters type instead of opening anything. That is the state this whole
+  // feature was asked for.
+  if (state.dialogOpen) return UI.cardPage() === 'talk' ? 'talk' : 'card';
+  // A module that owns the screen names its own place; the core does not know
+  // module ids and must not learn them.
+  const mine = first('place');
+  if (mine && hasPlace(mine)) return mine;
+  // A panel with no board of its own is still a panel: the floor is not listening.
+  if (['bag', 'sky', 'skin', 'notes', 'invite', 'lang'].some((id) => {
+    const n = document.getElementById(id);
+    return n && !n.hidden;
+  })) return 'panel';
+  if (collect('busy').some(Boolean)) return 'panel';
+  // Standing at something on the floor: the floor still answers, and only the
+  // thing under your hand renames SPACE.
+  const near = nearest();
+  if (near && near.kind === 'water') return 'cooler';
+  return 'floor';
 }
 
 function update(dt, now) {
