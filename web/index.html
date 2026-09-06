@@ -32,15 +32,14 @@
   <div id="title" hidden></div>
   <div id="notes" hidden></div>
   <div id="pager" hidden></div>
-  <!-- Карта импортов: /web/… это то же самое, что /… .
-       Модуль лежит рядом с web/, а не внутри него, поэтому импорт ядра из
-       модуля пишется как ../../web/i18n.js — так он правдив на диске, и по
-       нему модуль запускается в Node из своего теста. В браузере тот же путь
-       превратился бы во ВТОРОЙ экземпляр ядра: свой i18n со своим языком и
-       пустым словарём, отчего подсказка модуля показывала бы «hint.cabinet»
-       вместо текста. Поймано 1 сентября 2026 на первом же модуле, и поймано
-       только приборами: на вид офис работал. Карта склеивает оба пути в один
-       модуль. -->
+  <!-- Import map: /web/… and /… resolve to the same place. A module sits beside
+       web/, not inside it, so its core import is ../../web/i18n.js. That path is
+       truthful on disk and lets the module run under Node in its own test. In a
+       browser it would otherwise create a SECOND core instance with its own
+       language and empty dictionary, showing "hint.cabinet" instead of a hint.
+       The first module exposed this on 1 September 2026, and only instruments
+       caught it because the office looked functional. The map joins both paths
+       into one module. -->
   <script type="importmap">{ "imports": { "/web/": "/" } }</script>
   <script type="module" src="main.js"></script>
 </body>

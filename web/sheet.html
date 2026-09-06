@@ -1,11 +1,11 @@
-<!doctype html><meta charset="utf-8"><title>Лист состояний · Valey</title>
+<!doctype html><meta charset="utf-8"><title>State sheet · Valey</title>
 <!--
-  Служебная страница: лист всех состояний человечка для дизайн-библиотеки.
-  Снимается той же командой, что и офис:
+  Utility page: every figure state for the design library. Capture it with the
+  same command as the office:
     node tools/shot.mjs --url http://localhost:5177/sheet.html --out .shots/sheet.png
-  Смысл в том, что лист СЧИТАЕТСЯ тем же кодом, что рисует офис. Копировать
-  человечков в макет руками нельзя: их никто не рисовал, их собирает drawPerson,
-  и ручная копия разошлась бы с движком на первой правке спрайтов.
+  The point is that the sheet is COMPUTED by the same code that draws the office.
+  Do not copy figures into a design by hand: nobody drew them, drawPerson builds
+  them, and a manual copy would diverge on the first sprite change.
 -->
 <style>
   html,body{margin:0;background:#171009}
@@ -24,8 +24,8 @@ ctx.fillStyle = '#171009'; ctx.fillRect(0, 0, 470, 560);
 const BASE = normalizeLook({ skin: '#f4c9a0', hair: '#3a2a20', shirt: '#4a7fa8', pants: '#3f4a63', boots: BOOTS[0] });
 const cap = (x, y, s) => pxText(ctx, s, x, y, '#c9b391', 7);
 const head = (y, s) => { pxText(ctx, s, 8, y, '#ffd166', 7); ctx.fillStyle = '#3a2c20'; ctx.fillRect(8, y + 3, 454, 1); };
-// t для мигающих значков фиксировано: лист должен быть одинаковым при каждой
-// пересъёмке, иначе два прогона подряд дают разные картинки и diff бесполезен.
+// Keep t fixed for blinking badges so every capture is identical; otherwise two
+// consecutive runs produce different images and the diff is useless.
 const T = 0;
 
 let y = 14;
@@ -66,7 +66,7 @@ HEADS.forEach((h, i) => {
   drawPerson(ctx, x, y + 26, normalizeLook({ ...BASE, head: h }), { pose: 'stand' });
   cap(x - 16, y + 36, h);
 });
-HEADS.forEach((h, i) => {   // то же в очках
+HEADS.forEach((h, i) => {   // The same heads with glasses.
   const x = 260 + i * 46;
   drawPerson(ctx, x, y + 26, normalizeLook({ ...BASE, head: h, glasses: true }), { pose: 'stand' });
   cap(x - 16, y + 36, h + '+очки');

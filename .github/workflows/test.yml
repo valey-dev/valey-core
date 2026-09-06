@@ -1,17 +1,17 @@
-# Что проверяет машина, пока правило «прогони перед пушем» проверяет человека.
+# What the machine checks while "run before pushing" governs the person.
 #
-# Матрица — не украшение: 3 сентября 2026 в ядро уехал `crypto.randomUUID()`
-# без импорта. Глобальный `crypto` появился в Node 19, а `engines` обещает 18 —
-# офис на нём не стартовал вовсе, и нашлось это ревью, а не прогоном. Здесь
-# такое падает до слияния.
+# The matrix is not decoration: on 3 September 2026 `crypto.randomUUID()` landed
+# without an import. Global `crypto` appeared in Node 19 while `engines` promises
+# 18, where the office did not start at all. Review found it; this makes it fail
+# before a merge.
 #
-# `npm test` — свой раннер, tools/run-tests.mjs: встроенный `node --test`
-# принимает каталоги на Node 20 и шаблоны на Node 22, и ни одного написания
-# нет на обеих. Проверено прогоном 4 сентября 2026, отсюда и свой обход.
+# `npm test` uses tools/run-tests.mjs. Built-in `node --test` accepts directories
+# on Node 20 and globs on Node 22, with no spelling shared by both. Verified on
+# 4 September 2026; hence the custom traversal.
 #
-# Ставить нечего: у проекта нет зависимостей, поэтому нет ни `npm ci`, ни кеша.
-# Модулей в этом чекауте только `radio` — то есть CI гоняет ровно бесплатную
-# сборку, ту, которую никто из нас на своей машине не запускает.
+# There is nothing to install: the project has no dependencies, so there is no
+# `npm ci` or cache. This checkout contains only the free modules, so CI runs the
+# exact free build that local machines with private modules do not.
 name: tests
 
 on:
@@ -24,15 +24,15 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false        # 18 упал — 20 и 22 всё равно интересны
+      fail-fast: false        # A failure on 18 still leaves 20 and 22 useful.
       matrix:
         node: ['18', '20', '22']
     name: node ${{ matrix.node }}
     steps:
-      # v5, а не v4: сами экшены крутятся на Node внутри раннера, и v4 сидят
-      # на Node 20, который GitHub гасит 23 сентября 2026. Три предупреждения
-      # в первом зелёном прогоне 4 сентября были ровно про это — не про наш
-      # код и не про матрицу ниже, она про то, на чём запускается офис.
+      # v5 rather than v4: actions run their own Node inside the runner, and v4
+      # uses Node 20, which GitHub retires on 23 September 2026. The first green
+      # run on 4 September showed three warnings about this—not our code or the
+      # matrix below, which controls the office runtime.
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
@@ -44,36 +44,33 @@ jobs:
           done
       - name: tests
         run: npm test
-      # Node 20 и 22 сами узнают модуль по синтаксису, Node 18 — нет, и стенд
-      # загрузчика модулей падал только там. Флаг гасит это определение и на
-      # свежих версиях: подставной модуль без своего package.json ловится
-      # трижды, а не один раз в самой старой колонке.
+      # Node 20 and 22 detect modules by syntax while Node 18 does not, so the
+      # module-loader stand once failed only there. Disable detection on newer
+      # versions too: a substitute module without package.json is then tested
+      # three times rather than only in the oldest column.
       - name: tests, without module detection
         if: matrix.node != '18'
         run: node --no-experimental-detect-module tools/run-tests.mjs
-      # Сухой прогон выпуска: он читает историю и package.json, и ломается
-      # молча — например, от версии, которую не разобрать. Дешевле проверить.
+      # The release dry run reads history and package.json and can fail silently,
+      # for example on an unparseable version. It is cheaper to check here.
       - name: release dry run
         run: node tools/release.mjs patch --dry
 
-  # Покрытие считается отдельной работой и на одной версии Node: число от
-  # версии не зависит, а гонять его трижды — платить втрое за одну и ту же
-  # цифру.
+  # Coverage is a separate job on one Node version: the number does not depend
+  # on the version, and running it three times pays three times for one result.
   #
-  # `npx`, а не зависимость в package.json. У проекта их нет, и это не
-  # случайность, а обещание из README: нет `npm install`, нет `node_modules`.
-  # Ради цифры в CI ломать его нельзя, поэтому c8 приезжает на время шага и
-  # с прибитым мажором — иначе однажды CI покраснеет от чужого релиза, а не от
-  # нашего кода.
+  # Use `npx`, not a package.json dependency. Having none is a README promise:
+  # no `npm install`, no `node_modules`. Coverage must not break it, so c8 arrives
+  # for this step with its major pinned; otherwise CI could turn red because of
+  # somebody else's release rather than our code.
   #
-  # Команда одна на CI и на человека: `npm run coverage` в package.json, здесь
-  # только вызов. Две копии разъехались бы, и локальная цифра перестала бы
-  # значить то же, что машинная.
+  # CI and people share one command: `npm run coverage` in package.json, invoked
+  # here. Two copies would drift and make local and machine figures differ.
   #
-  # Пол, а не цель: 70 по строкам и 55 по функциям при сегодняшних 75.9 и 62.
-  # Запас нарочный. Порог вплотную к текущему числу краснеет от любой правки и
-  # быстро становится тем, что обходят; этот молчит на обычной работе и
-  # срабатывает на обвале — когда кусок офиса остался вовсе без стенда.
+  # A floor, not a target: 70 lines and 55 functions against today's 75.9 and 62.
+  # The margin is deliberate. A threshold touching the current number turns red
+  # on ordinary edits and gets bypassed; this one stays quiet until coverage
+  # collapses because part of the office has no stand at all.
   coverage:
     runs-on: ubuntu-latest
     name: coverage
@@ -87,8 +84,8 @@ jobs:
         run: |
           set -eo pipefail
           npm run coverage 2>&1 | tee /tmp/coverage.txt
-      # Цифра на виду, а не в логе: сводка попадает на страницу прогона, иначе
-      # её не открывает никто и считать её незачем.
+      # Keep the number visible rather than buried in logs. The summary goes on
+      # the run page; otherwise nobody opens it and computing it is pointless.
       - name: summary
         if: always()
         shell: bash

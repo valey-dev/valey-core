@@ -25,9 +25,9 @@
 .md pre.mdcode[data-lang]::before{content:attr(data-lang); display:block; color:#6d5a48;
   font-size:10px; margin-bottom:4px; letter-spacing:.1em}
 
-/* Кнопка копирования. В покое она цвета подписи языка: блок кода не должен
-   превращаться в панель с кнопками. Загорается, когда мышь на блоке, — и
-   всегда видна с клавиатуры, потому что C копирует верхний блок в экране. */
+/* Copy button. At rest it matches the language caption so a code block does not
+   become a button panel. It lights on hover and stays keyboard-visible because
+   C copies the top block on screen. */
 .md .mdblock{position:relative}
 .md .mdcopy{position:absolute; top:8px; right:8px; cursor:pointer;
   background:#1a120c; color:#6d5a48; border:1px solid rgba(138,98,71,.45);

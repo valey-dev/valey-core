@@ -215,8 +215,8 @@ const MODE_LABEL = () => ({
 });
 const modeNote = (mode) => tr('modeNote.' + (MODE_KEY[mode] || 'acceptEdits'));
 const hintText = () => {
-  // Ответ сервера — и в notice, и в why — текст, который claude вернул или
-  // с которым упал; в словаре его нет, значит и доверять ему как разметке нельзя.
+  // Both notice and why contain text returned by Claude, or the error it failed
+  // with. It is not in the dictionary, so it cannot be trusted as markup.
   if (S.notice) return esc(S.notice);
   const d = S.delivery || {};
   if (!d.available) return tr('hint.noCli', { why: esc(said(d, 'hint') || said(d) || tr('hint.noCliDefault')) });
@@ -224,14 +224,14 @@ const hintText = () => {
   return tr('hint.deliver', { note: modeNote(mode) });
 }
 
-// Гостю записку оставить можно, отправить в чат — нет. Кнопки и выбора режима
-// у него не появляется вовсе: неактивная кнопка обещает, что когда-нибудь
-// нажмётся, а эта не нажмётся никогда.
+// A guest may leave a note, but may not send it into the chat. They get neither
+// the button nor the mode selector: a disabled button promises it might work
+// later, while this one will never work for them.
 //
-// Подсказка выбирается здесь, а не по месту, потому что мест два: панель
-// собирается целиком при открытии и подновляется частями на каждом такте.
-// 30 августа 2026 гостевую строку переписывала обратно хозяйской именно
-// вторая — кнопки уже не было, а текст обещал отправку.
+// The hint is chosen here rather than at the call sites because there are two:
+// the panel is built in full when opened and patched on every tick. On 30 August
+// 2026 the latter overwrote the guest hint with the owner's: the button was
+// already gone, while the text still promised delivery.
 const isGuest = () => S.owner === false;
 const taskHint = () => (isGuest() ? tr('hint.guest') : hintText());
 
@@ -243,10 +243,10 @@ export function renderDialog() {
   const a = S.focus;
   if (!a) return;
   el.dialog.hidden = false;
-  // Состояние доступа входит в ключ: без него смена «закрыто → просим →
-  // отказали» не пересобирает тело, и человек жмёт кнопку в пустоту.
-  // Запрос входит в ключ: он уходит по ответу — своему или чужому, — и
-  // карточка обязана пересобраться, а не остаться с кнопками в пустоту.
+  // Access state is part of the key: without it, moving through "closed → asked →
+  // denied" does not rebuild the body and a person clicks a dead button.
+  // The request is part of the key too: it disappears after any answer, ours or
+  // another tab's, and the card must rebuild instead of leaving dead buttons.
   const key = a.id + '|' + S.page + '|' + accessOf(a.id) + '|' + ((permitOf(a.id) || {}).id || '') + '|' + (denying ? 'deny' : '');
   if (key === dialogKey && el.dialog.firstChild) return patchDialog(a);
   dialogKey = key;
@@ -264,15 +264,15 @@ function patchDialog(a) {
 
   if (S.page === 'talk') {
     const said = clean(a.lastSaid) || tr('dlg.silent');
-    // Пока ссылка выбрана, целишься в неё, а не читаешь: перенабор текста с нуля
-    // в этот момент только дёргает карточку. Дописываем ответ молча.
+    // While the link is selected the person is aiming at it, not reading. Restarting
+    // the typewriter then only jerks the card, so append the answer silently.
     if (said !== S.sayText) {
       S.sayText = said;
       if (linkFocused) { S.typed = said.length; finishTypewriter(); }
       else { S.typed = 0; typewriter(); }
     }
-    // ответ дорастает прямо в открытой карточке, и «ещё N символов» врёт, если
-    // подпись не обновлять вместе с ним
+    // The answer grows inside the open card, and "N more characters" lies unless
+    // its caption is updated with the answer.
     const link = readLink();
     if (link) {
       const label = readLabel(a);
@@ -297,17 +297,17 @@ function patchDialog(a) {
       bindNotes(a);
     }
   }
-  // подсветку кладём заново: обновление могло переписать узел вместе с классом
+  // Paint the highlight again: an update may have replaced the node and its class.
   paintDialogFocus();
 }
 
-// Запрос разрешения, которого ждёт этот агент. У гостя списка нет вовсе —
-// сервер его не присылает, — поэтому проверять «хозяин ли» здесь не нужно.
+// The permission request this agent is waiting on. A guest has no such list—the
+// server never sends it—so there is no need to check ownership here.
 const permitOf = (id) => (S.permits || []).find((p) => p.agentId === id) || null;
 
-// Что гость знает про доступ к этому агенту. Три состояния и умолчание:
-// закрыто, попросили, отказали. Отдельного «открыто» не нужно — там просто
-// видно то же, что видит хозяин.
+// What the guest knows about access to this agent. There are three states and a
+// default: closed, requested, denied. "Open" needs no separate state because
+// the guest then simply sees what the owner sees.
 function accessOf(id) {
   const acc = S.access || {};
   if ((acc.granted || []).includes(id)) return 'open';
@@ -319,10 +319,10 @@ function accessOf(id) {
 function buildDialog(a) {
   let body = '';
   if (S.page === 'talk') {
-    // Гостю показывать нечего: реплики у него нет и не было — сервер её не
-    // прислал. Вместо пустого места — что именно закрыто и что с этим делать.
-    // Формулировка «не покидало машину» здесь была бы неправдой: в этом офисе
-    // сессии свои, сервер их просто не отдаёт.
+    // There is no reply to show a guest: the server never sent it. Instead of an
+    // empty space, explain what is closed and what can be done about it. Saying it
+    // "never left the machine" would be false here: these sessions belong to this
+    // office and the server simply withholds them.
     const st = isGuest() ? accessOf(a.id) : 'open';
     if (st !== 'open') {
       const btn = st === 'pending' ? ''
@@ -333,7 +333,7 @@ function buildDialog(a) {
         ${btn}
         <p class="hint dim">${tr('acc.note')}</p>`;
     }
-    // Лимит подписки — объявление на двери, а не слова агента: он ничего не отвечал
+    // The subscription limit is a notice on the door, not the agent's words: it did not reply.
     else if (a.limited) {
       body = `<p class="q">${tr('dlg.whatUp')}</p>
         <p class="say limitline">${tr('dlg.limited', {
@@ -375,12 +375,12 @@ function buildDialog(a) {
         : ''}`;
   }
 
-  // Макет: [Диалог · Разрешение · Bash](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=947-2)
-  // Отказ с запиской: [Диалог · Разрешение · отказ](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=947-230)
+  // Design: [Permission dialog · Bash](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=947-2)
+  // Denial with a note: [Permission dialog · denied](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=947-230)
   else if (S.page === 'permit') {
     const p = permitOf(a.id);
-    // Запрос могли ответить с другой вкладки или он истёк, пока карточка была
-    // открыта. Пустое место тут читалось бы как поломка.
+    // The request may have been answered in another tab or expired while this
+    // card was open. An empty space here would look like a broken UI.
     if (!p) body = `<p class="say">${tr('permit.gone')}</p>`;
     else if (denying) {
       body = `<p class="q">${tr('permit.denyQ')}</p>
@@ -469,15 +469,15 @@ function buildDialog(a) {
   const readAll = $('#readAll');
   if (readAll) readAll.onclick = () => openTranscript(a);
 
-  // Просьба уходит один раз и заменяет прежнюю: повторная не ложится второй,
-  // и хозяин не получает две одинаковые подряд.
+  // A request is sent once and replaces the previous one; a retry does not create
+  // a second entry or make the owner receive two identical requests in a row.
   const askBtn = $('#askAccess');
   if (askBtn) {
     askBtn.onclick = async () => {
       askBtn.disabled = true;
       await api.askAccess(a.id);
-      // Ставим «ждём» сами, не дожидаясь снимка: он приходит раз в 2.5 секунды,
-      // и всё это время кнопка выглядела бы ненажатой.
+      // Set "waiting" locally rather than waiting for the snapshot, which arrives
+      // every 2.5 seconds; otherwise the button looks untouched in the meantime.
       const acc = (S.access = S.access || {});
       acc.pending = [...new Set([...(acc.pending || []), a.id])];
       acc.refused = (acc.refused || []).filter((x) => x !== a.id);
@@ -488,8 +488,8 @@ function buildDialog(a) {
   const ta = $('#taskInput');
   if (ta) {
     const submit = async (wanted) => {
-      // Гость кладёт на стол в любом случае: сочетания клавиш живут дольше
-      // кнопок, и Ctrl+Enter у него иначе уходил бы в сервер за отказом.
+      // A guest always leaves the note on the desk. Keyboard shortcuts outlive
+      // buttons, and otherwise Ctrl+Enter would still reach the server and be denied.
       const deliver = wanted && !isGuest();
       const text = ta.value.trim(); if (!text) return;
       if (deliver && armed !== 'yes') { armed = 'yes'; renderArm(); return; }
@@ -531,20 +531,20 @@ function buildDialog(a) {
 }
 
 // Buttons that live on the notes themselves: send a lying one, or retry a blocked one.
-// Ответ на запрос разрешения. Кнопки уходят сразу, не дожидаясь снимка:
-// агент по ту сторону ждёт живьём, и «нажалось или нет» — не тот вопрос,
-// который человек должен себе задавать.
+// Answer a permission request. Remove the buttons immediately rather than
+// waiting for a snapshot: the agent on the other side is waiting live, and the
+// person should never have to wonder whether the click registered.
 function bindPermit(a) {
   const rows = [...el.dialog.querySelectorAll('.prow button')];
   if (!rows.length) return;
   const p = permitOf(a.id);
-  // Фокус на первой кнопке: карточку открыли ответить, и Enter должен
-  // отвечать, а не переключать вкладку под курсором.
+  // Focus the first button: the card was opened to answer, so Enter should answer
+  // rather than switch the tab under the cursor.
   fileIdx = 0;
   paintDialogFocus();
-  // Поле записки слушает те же клавиши, что поле задания: Enter отправляет,
-  // Shift+Enter переносит строку, Esc возвращает к кнопкам. Другая раскладка в
-  // соседнем поле той же карточки — это ошибка, которую делают руками.
+  // The note field uses the same keys as the task field: Enter sends, Shift+Enter
+  // inserts a line break, and Esc returns to the buttons. Giving adjacent fields
+  // in one card different bindings is an easy mistake to make by hand.
   const note = $('#denyNote');
   if (note) note.onkeydown = (e) => {
     if (e.key === 'Escape') { denying = false; renderDialog(); return; }
@@ -579,8 +579,8 @@ function bindPermit(a) {
       const message = act === 'deny' ? ($('#denyNote')?.value || '').trim() : '';
       const r = await api.answerPermit(p.id, act, message);
       denying = false;
-      // Сервер мог не найти запрос: ответили с другой вкладки или он истёк.
-      // Тогда карточка просто пересобирается и говорит об этом.
+    // The server may not find the request because another tab answered it or it
+    // expired. In that case the card simply rebuilds and says so.
       if (r && r.error) UI_toastKey(r);
       else if (act === 'always' && p.rule) api.toast(tr('toast.permitAlways', { rule: p.rule }), 'news');
       else if (act === 'allow') api.toast(tr('toast.permitAllowed', { who: a.name }));
@@ -593,7 +593,7 @@ function bindPermit(a) {
   }
 }
 
-// Ошибка сервера — своим текстом, если ключ знаком, и чужим, если нет.
+  // Use our text for a known server error key, and the external text otherwise.
 const UI_toastKey = (r) => toast(said(r), 'wait');
 
 function bindNotes(a) {
@@ -651,16 +651,16 @@ function typewriter() {
 
 export function closeDialog() {
   el.dialog.hidden = true; dialogKey = ''; armedNote = 0; btnIndex = 0; linkFocused = false; fileIdx = -1;
-  clearInterval(S.tw);   // машинка дописывала бы реплику в закрытую карточку
+  clearInterval(S.tw);   // Otherwise the typewriter would append into a closed card.
   denying = false;
-  // Карточка закрылась — пейджер должен узнать: вопрос, отданный ей, иначе
-  // пропадает с экрана совсем.
+  // Tell the pager when the card closes; otherwise the question handed to the
+  // card disappears from the screen entirely.
   cardClosed();
 }
 
-// Esc на шаге «отказать с запиской» — это «назад к кнопкам», а не «закрыть
-// карточку»: человек только что нажал отказ и ещё ничего не отправил. Зовётся
-// из main.js выше общего закрытия.
+// On the "deny with a note" step, Esc means "back to the buttons," not "close
+// the card": the person has just chosen denial but sent nothing yet. main.js
+// calls this before its general close handler.
 export function permitEscape() {
   if (!denying) return false;
   denying = false;
@@ -668,7 +668,7 @@ export function permitEscape() {
   return true;
 }
 
-// Карточку разрешения открывает пейджер: он знает, у какого агента спросили.
+// The pager opens the permission card because it knows which agent was requested.
 export function openPermit(agentId) {
   const a = (S.agents || []).find((x) => x.id === agentId);
   if (!a) return false;
@@ -680,9 +680,9 @@ export function openPermit(agentId) {
 // ---- arrows walk along the bottom row, Enter presses ----
 const actButtons = () => [...el.dialog.querySelectorAll('.acts button')];
 
-// Цифра переключает вкладку карточки: 1 — чем занят, 2 — показать работу,
-// 3 — дать задание. «Закрыть» номера не получает, у неё есть Esc. Пока
-// печатаешь записку, сюда вообще не доходит: main.js отдаёт клавиши полю.
+// A number switches card tabs: 1—current work, 2—show work, 3—give a task.
+// Close gets no number because it already has Esc. While a note is being typed,
+// this handler is not reached at all: main.js gives the keys to the field.
 export function dialogNumber(raw) {
   if (!S || !S.dialogOpen) return false;
   const n = Number(raw);
@@ -693,10 +693,10 @@ export function dialogNumber(raw) {
   return true;
 }
 const readLink = () => el.dialog.querySelector('#readAll');
-// Строки файлов на вкладке «Показать работу» и кнопки на записках во вкладке
-// «Дать задание» — это одно и то же место в карточке: список под текстом, в
-// который уводит стрелка вверх. Вкладки не открыты одновременно, поэтому
-// достаточно объединить селекторы и не разводить их по страницам.
+// File rows on "Show work" and note buttons on "Give a task" occupy the same
+// place in the card: the list below the text, reached with Arrow Up. The tabs
+// are never open together, so combining selectors is enough; separate page
+// logic would add nothing.
 // «попросить доступ» belongs here too: until 5 September 2026 it was in no
 // focus list at all, and a guest could press it with a mouse and by no other
 // means — the one button in the office the keyboard could not reach. The tabs
@@ -704,24 +704,24 @@ const readLink = () => el.dialog.querySelector('#readAll');
 const bodyRows = () => [...el.dialog.querySelectorAll(
   '.files li, .notes [data-retry], .notes [data-send], .notes [data-edit], .notes [data-del], .prow button, #askAccess, .qopt')];
 
-// Стрелка вверх на оборванном ответе уводит фокус на «дочитать»: длинную реплику
-// всё равно читают целиком, и тянуться за ней мышью — лишний шаг.
+// Arrow Up on a truncated answer focuses "read more": a long reply will be read
+// in full anyway, and reaching for the mouse adds an unnecessary step.
 let linkFocused = false;
 
-// То же самое в теле карточки, только целей много. Список файлов и кнопки на
-// записках были кликабельными и только кликабельными: ни открыть работу
-// агента, ни переслать записку без мыши было нельзя.
+// The same applies to the card body, only with several targets. The file list
+// and note buttons used to be clickable only: neither opening an agent's work
+// nor forwarding a note was possible without a mouse.
 let fileIdx = -1;
 
-// Фокус живёт в переменной, а видно его по классу на узле — и перерисовка узел
-// меняет. Поэтому красим заново после каждого обновления карточки, а если ссылки
-// на новой вкладке нет, фокус возвращается на кнопки: иначе подсветки не видно
-// нигде и нажимать нечего.
+// Focus lives in a variable but is shown by a class on a node, and a redraw
+// replaces that node. Repaint it after every card update. If the new tab has no
+// link, return focus to the buttons; otherwise no highlight is visible and
+// there is nothing to activate.
 function paintDialogFocus() {
   if (linkFocused && !readLink()) linkFocused = false;
   const rows = bodyRows();
-  // Файлы и записки приходят живым потоком, и строка под курсором может уехать.
-  // Тогда фокус возвращается на кнопки, а не висит на пустоте.
+  // Files and notes arrive in a live stream, so the row under the cursor may
+  // disappear. Return focus to the buttons instead of leaving it on empty space.
   if (fileIdx >= rows.length) fileIdx = -1;
   const inBody = linkFocused || fileIdx >= 0;
   actButtons().forEach((b, i) => b.classList.toggle('focus', !inBody && i === btnIndex));
@@ -739,18 +739,17 @@ export function moveDialogFocus(step) {
   paintDialogFocus();
 }
 
-// Пока реплика печатается, первый Enter или ПРОБЕЛ дописывает её целиком, а не
-// нажимает то, на чём стоит фокус. Мышью это делалось кликом по самому тексту —
-// клавиши не было вообще, и ждать машинку приходилось молча.
+// While a reply is being typed, the first Enter or SPACE completes it instead
+// of activating the focused control. The mouse already did this by clicking
+// the text; there was no keyboard equivalent, so people had to wait silently.
 const stillTyping = () => S.page === 'talk' && !!$('#say') && !!S.sayText
   && S.typed < S.sayText.length;
 
 export function pressDialogFocus() {
-  // Дописывает машинку только тот Enter, который иначе нажал бы кнопку под
-  // фокусом. Ушёл стрелкой вверх — на ссылку транскрипта или на файл — значит
-  // уже выбрал, что делать, и перехватывать у него клавишу нельзя. 3 сентября
-  // 2026 перехватывала: чтобы открыть транскрипт во весь экран, приходилось
-  // жать Enter дважды, и первое нажатие выглядело как «не сработало».
+  // Only an Enter that would otherwise activate the focused button may complete
+  // the typewriter. Moving up to the transcript link or a file already expresses
+  // an action, so the key must not be intercepted. On 3 September 2026 it was:
+  // opening the full transcript took two presses, and the first looked broken.
   if (stillTyping() && !linkFocused && fileIdx < 0) { finishTypewriter(); return; }
   if (linkFocused) {
     const link = readLink();
@@ -759,8 +758,8 @@ export function pressDialogFocus() {
   }
   if (fileIdx >= 0) {
     const row = bodyRows()[fileIdx];
-    // Строка могла уехать с обновлением снимка между отрисовкой и нажатием.
-    // Молча ничего не делать тут нельзя: это читается как «Enter не работает».
+    // A snapshot update may remove the row between drawing and activation. Doing
+    // nothing silently reads as "Enter is broken."
     if (row) { row.click(); return; }
     fileIdx = -1;
     paintDialogFocus();
@@ -769,28 +768,28 @@ export function pressDialogFocus() {
   if (b && !b.disabled) b.click();
 }
 
-// Вверх: сначала домотать текст до верха, а с верхней строки — прыгнуть на ссылку.
-// На только что открытой карточке верх и так виден, поэтому первый же нажим
-// попадает на ссылку — ровно то, зачем это делалось.
+// Up first scrolls the text to the top, then jumps from the top line to the link.
+// A newly opened card already shows the top, so the first press reaches the
+// link—which is exactly why this path exists.
 export function dialogUp() {
   const body = el.dialog.querySelector('.body');
   const rows = bodyRows();
   if (rows.length) {
-    // Заходим в список снизу, с последнего файла: кнопки стоят под ним, и вверх
-    // — это шаг к ближайшей строке, а не прыжок через весь список.
+    // Enter the list from below at the last file: the buttons are underneath it,
+    // so Up moves to the nearest row rather than jumping across the whole list.
     if (fileIdx < 0) fileIdx = rows.length - 1;
     else if (fileIdx > 0) fileIdx -= 1;
-    else return scrollDialogBody(-1);   // выше первой строки листать, а не выходить
+    else return scrollDialogBody(-1);   // Above the first row, scroll rather than leave.
     paintDialogFocus();
     rows[fileIdx].scrollIntoView({ block: 'nearest' });
     return;
   }
   if (!linkFocused && readLink() && (!body || body.scrollTop <= 2)) {
     linkFocused = true;
-    // Встал на блок транскрипта — значит читать будешь там, и машинка тут
-    // больше не нужна: она дописывает текст сама и тянет внимание обратно.
-    // То же правило ядро уже применяло к новой реплике, пришедшей при
-    // выбранной ссылке, — здесь оно просто срабатывает и на само нажатие.
+    // Focusing the transcript block means the person will read there, so the
+    // local typewriter is no longer useful: it completes the text and pulls
+    // attention back. The core already applied this rule to a new reply arriving
+    // while the link was selected; here it also applies to selecting the link.
     finishTypewriter();
     paintDialogFocus();
     const link = readLink();
@@ -804,8 +803,8 @@ export function dialogDown() {
   if (linkFocused) { linkFocused = false; paintDialogFocus(); }
   const rows = bodyRows();
   if (fileIdx >= 0) {
-    // С последней строки вниз — обратно на кнопки: тупик внизу списка читается
-    // как «клавиатура сломалась».
+    // Down from the last row returns to the buttons; a dead end at the bottom of
+    // a list reads as "the keyboard is broken."
     fileIdx = fileIdx + 1 < rows.length ? fileIdx + 1 : -1;
     paintDialogFocus();
     if (fileIdx >= 0) rows[fileIdx].scrollIntoView({ block: 'nearest' });
@@ -844,9 +843,9 @@ function renderGallery() {
       <figcaption>${esc(f.name)}<span>${f.agent ? esc(f.agent.name + ' · ' + f.agent.project) : ''}</span></figcaption></figure>`).join('')
       || `<p class="empty">${tr('gal.empty')}</p>`}</div></div>`;
   $('#vx').onclick = closeViewer;
-  // Обработчик вешается кодом, а не атрибутом onerror в разметке: строка в
-  // атрибуте — это скрипт, собранный из текста, и однажды в него попала бы
-  // кавычка из словаря. Заодно это то, что запретит CSP, когда он появится.
+  // Bind the handler in code rather than through an onerror attribute: an
+  // attribute is a script assembled from text, and a dictionary quote would
+  // eventually break it. A future CSP would reject it as well.
   el.viewer.querySelectorAll('img.thumbimg').forEach((im) => {
     im.onerror = () => im.replaceWith(Object.assign(document.createElement('span'), { textContent: '✕' }));
   });
@@ -858,23 +857,23 @@ function renderGallery() {
   if (picked) picked.scrollIntoView({ block: 'nearest' });
 }
 
-// ------------------------------------------------ копирование блоков кода
-// Кнопку рисует markdown.js, нажатие ловится здесь и одной делегацией на
-// панель: блоков в транскрипте бывают сотни, и вешать обработчик на каждый —
-// это сотни обработчиков, переживающих перерисовку.
+// ---------------------------------------------------- copying code blocks
+// markdown.js draws the button; one delegated handler on the panel catches its
+// clicks. A transcript may contain hundreds of blocks, and attaching a handler
+// to every one would leave hundreds of handlers alive across redraws.
 //
-// Буфер обмена в браузере доступен только на localhost или по https. Офис
-// открывают и по туннелю, и по адресу в сети — там `navigator.clipboard` либо
-// отсутствует, либо отказывает, поэтому за ним стоит старый `execCommand`, а
-// если и он не сработал, кнопка говорит «не вышло» вместо того, чтобы соврать
-// зелёным.
+// The browser clipboard is available only on localhost or over HTTPS. The
+// office is also opened through tunnels and LAN addresses, where
+// `navigator.clipboard` is absent or rejects the call, so the old `execCommand`
+// is the fallback. If that fails too, the button says so instead of lying in
+// green.
 async function copyText(text) {
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       await navigator.clipboard.writeText(text);
       return true;
     }
-  } catch { /* туннель или http — падаем на запасной путь */ }
+  } catch { /* A tunnel or plain HTTP: fall back to the legacy path. */ }
   try {
     const ta = document.createElement('textarea');
     ta.value = text;
@@ -891,8 +890,8 @@ async function copyText(text) {
   }
 }
 
-// Состояние живёт на самой кнопке полторы секунды и возвращается в покой.
-// Отдельной строки статуса нет нарочно: кнопка и есть ответ.
+// State lives on the button for 1.5 seconds and then returns to idle. There is
+// deliberately no separate status line: the button itself is the response.
 async function copyBlock(btn) {
   const block = btn.closest('.mdblock');
   const code = block && block.querySelector('pre.mdcode code');
@@ -909,10 +908,9 @@ async function copyBlock(btn) {
   return ok;
 }
 
-// То же, что copyBlock, но для одиночной кнопки, у которой нет блока кода под
-// боком: карточка ключа, где копируют строку из поля рядом. Приём общий и
-// намеренно повторён отсюда, а не изобретён заново — кнопка и есть ответ,
-// отдельной строки статуса нет.
+// The same behavior as copyBlock for a standalone button with no adjacent code
+// block, such as a key card that copies the neighboring field. This deliberately
+// reuses the pattern: the button itself is the response, with no status line.
 async function copyOnBtn(btn, text) {
   const was = btn.dataset.was || btn.textContent;
   btn.dataset.was = was;
@@ -928,9 +926,9 @@ async function copyOnBtn(btn, text) {
   return ok;
 }
 
-// Клавиша копирует верхний блок, попавший в экран, — тот, который читают.
-// Ниже экрана блоки есть почти всегда, и копировать первый в документе значило
-// бы копировать не то, что видно.
+// The key copies the topmost visible block—the one being read. There are almost
+// always more blocks below the viewport, so copying the first document block
+// would often copy something other than what is visible.
 function copyTopBlock() {
   const box = el.viewer.querySelector('#chatlog') || el.viewer.querySelector('.vbody') || el.viewer;
   const top = box.getBoundingClientRect ? box.getBoundingClientRect().top : 0;
@@ -1041,10 +1039,9 @@ function pickTake(n) {
   return true;
 }
 
-// Строка клавиш внизу перечисляет то, что работает, — и обещание должно быть
-// правдой: C копирует, только когда в панели есть блок кода, поэтому и в
-// подсказке она появляется только тогда. Пустое обещание клавиши офис уже
-// проходил на радио, когда «R — радио» стояло в строке бесплатной сборки.
+// The shortcut bar lists what actually works. C copies only when the panel has
+// a code block, so the hint appears only then. The office already had a hollow
+// shortcut promise when “R — radio” appeared in the free build.
 export function paintCopyHint() {
   if (!el.viewer || el.viewer.hidden) return;
   const line = el.viewer.querySelector('.vpath');
@@ -1056,12 +1053,11 @@ export function paintCopyHint() {
   line.appendChild(piece);
 }
 
-// Делегация ставится один раз на панель просмотра: разметка внутри неё
-// перерисовывается постоянно, а обработчик переживает это, потому что висит
-// выше.
+// Delegate once on the viewer panel. Its contents redraw constantly, while the
+// handler survives because it lives above them.
 export function bindCopyButtons() {
-  // Подставной DOM клавиатурных стендов слушателей не умеет, и это не повод
-  // им падать: они проверяют состояние, а не подписку.
+  // The keyboard stands' fake DOM has no event listeners. That should not make
+  // them fail: they test state, not subscriptions.
   if (!el.viewer || !el.viewer.addEventListener || el.viewer._copyBound) return;
   el.viewer._copyBound = true;
   el.viewer.addEventListener('click', (e) => {
@@ -1203,9 +1199,9 @@ export function closeViewer() {
 
 const VIEWER_KEYS = ['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'pageup', 'pagedown', 'home', 'end', 'enter', ' ', 'escape', 'r', 'к', 'z', 'я'];
 
-// Кнопки в шапке открытого файла: переключить исходник и разрешить скрипты в
-// песочнице. Отдельной буквы у скриптов нарочно нет — случайно нажатая клавиша
-// не должна запускать чужой код, поэтому до неё надо дойти стрелками и нажать.
+// The open file's header buttons switch to source and permit scripts in the
+// sandbox. Scripts deliberately have no letter shortcut: an accidental key
+// must not run somebody else's code, so the person must reach and press it.
 let headIdx = 0;
 const headBtns = () => [...el.viewer.querySelectorAll('#mdtoggle, #htmlscripts')];
 
@@ -1268,8 +1264,8 @@ export function viewerKey(raw, big = false) {
 
   if (gallery.mode === 'single') {
     if (key === 'r' || key === 'к') return toggleMarkdownRaw();
-    // Лупа по пикселям — действие над самой картинкой, кнопки у неё нет, и
-    // мышью это был единственный способ разглядеть пиксель.
+    // Pixel zoom is an action on the image itself and has no button. The mouse
+    // used to be the only way to inspect an individual pixel.
     if (key === 'z' || key === 'я') {
       const img = $('#zimg');
       if (img) { img.classList.toggle('pixel'); return true; }
@@ -1551,20 +1547,20 @@ export function rosterKey(raw) {
   return rosterRing.key(key, true);
 }
 
-// -------------------------------------------------------------------- инвентарь
-// Панель «Как ты выглядишь» переехала сюда целиком и стала вкладкой «на себе»:
-// слева цвета, справа тело. Съёмное ушло на «вещи» и показывается сеткой, а не
-// строками с ◀▶ — галстуков в дресс-коде будет восемнадцать, и перебирать их
-// стрелкой это не выбор, а перелистывание.
+// -------------------------------------------------------------------- inventory
+// The "How you look" panel moved here in full and became the "on you" tab:
+// colours on the left, body on the right. Removable items moved to "things" and
+// use a grid rather than ◀▶ rows—there will be eighteen dress-code ties, and
+// cycling through those with an arrow is paging, not choosing.
 //
-// Вкладки лежат списком, а не тремя ветками if: «ключи» и «офис» из того же
-// макета приезжают следующими коммитами и добавляются сюда одной строкой.
-// Макет: Figma, секция «🔵 WIP — Дресс-код и инвентарь · Ready for Dev»,
-// кадры 556:56 (на себе) и 556:508 (вещи).
+// Tabs live in a list rather than three if branches: "keys" and "office" from
+// the same design arrive in later commits and each adds one line here.
+// Design: Figma section "🔵 WIP — Dress code and inventory · Ready for Dev",
+// frames 556:56 (on you) and 556:508 (things).
 const COLORS = [
   { key: 'skin', list: SKIN },
   { key: 'hair', list: HAIR },
-  { key: 'shirt', list: SHIRT },   // подменяется офисной рубашкой, см. colorFields()
+  { key: 'shirt', list: SHIRT },   // Replaced by the office shirt; see colorFields().
   { key: 'pants', list: PANTS },
   { key: 'boots', list: BOOTS },
 ];
@@ -1574,9 +1570,9 @@ const BODY = [
   { key: 'style', list: [0, 1, 2, 3, 4] },
   { key: 'face', list: FACES },
 ];
-// Слот сетки умеет читать и писать не только S.me[key]: галстук лежит парой
-// «цвет + крой», и разложить его на две строки честнее, чем городить
-// восемнадцать клеток в одну.
+// A grid slot can read and write more than S.me[key]: a tie is stored as a
+// "colour + cut" pair, and two rows represent it more honestly than eighteen
+// cells in one row.
 const THINGS = [
   { key: 'head', list: HEADS },
   { key: 'glasses', list: [false, true] },
@@ -1590,8 +1586,8 @@ const THINGS = [
   { key: 'jacket', office: true, list: [null, ...JACKET] },
 ];
 const readSlot = (f) => (f.get ? f.get() : S.me[f.key]);
-// Подпись клетки. У галстука и пиджака значение — цвет, и ключа в словаре под
-// него не бывает: показываем сам цвет, а «нет» переводим.
+// Cell caption. A tie or jacket value is a colour and has no dictionary key, so
+// show the colour itself and translate only "none."
 const cellTitle = (f, v) => (f.key === 'tie' || f.key === 'jacket'
   ? (v ? String(v) : tr('val.none'))
   : tr(`val.${f.key}.${v}`));
@@ -1603,16 +1599,16 @@ const FIELDS = [...COLORS, ...BODY];
 // retraining a hand that has learned its digit. Decided 5 September 2026, frame
 // «Ключи в инвентаре · Ready for Dev».
 const TABS = ['self', 'things', 'office', 'tree', 'keys'];
-// Гость вкладку «дерево» не видит: у него чужой этаж, и из чего он собран —
-// не его вопрос.
+// A guest cannot see the "tree" tab: this is somebody else's floor, and how it
+// is assembled is not theirs to inspect.
 const tabs = () => (isGuest() ? TABS.filter((t) => t !== 'tree') : TABS);
 let bagTab = 'self';
 
-// Дресс-код читается отсюда же, из настроек офиса: он общий, а не браузерный.
+// Read the dress code from office settings too: it is shared, not browser-local.
 const dressCode = () => (S.settings && S.settings.dress && S.settings.dress.code) || 'casual';
 const officeOn = () => dressCode() === 'office';
-// В офисном режиме «верх» правит офисную рубашку, а не свободную кофту: иначе
-// переключение туда-обратно съедало бы выбранный цвет.
+// In office mode, "top" edits the office shirt rather than the casual top;
+// otherwise switching back and forth would discard the selected colour.
 const topField = () => (officeOn()
   ? { key: 'shirtWork', list: [...SHIRT_WORK, ...BLOUSE.filter((c) => !SHIRT_WORK.includes(c))] }
   : { key: 'shirt', list: SHIRT });
@@ -1781,13 +1777,13 @@ function bindKeys() {
   // Copying is shared by every card: a command, a path, a Redirect URI. Without
   // https the browser has no clipboard, and that has to show on the button
   // rather than in the console.
-  // Ответ живёт на нажатой кнопке, как у блоков кода в транскрипте. Тост
-  // уезжал вверх, к строке статуса офиса, а рука в этот момент смотрит на
-  // кнопку, которую только что нажала: «ничего не произошло».
-  // Делегированием, а не по кнопкам: карточка может узнать, что копировать,
-  // уже после отрисовки — мольберт спрашивает у сервера путь до файла настроек
-  // и проставляет data-copy, когда ответ пришёл. Обработчик, навешенный
-  // поимённо, такую кнопку не увидел бы никогда.
+  // Put the answer on the pressed button, as with code blocks in a transcript.
+  // A toast moved up to the office status while the hand was looking at the
+  // button it had just pressed, making the action appear to do nothing.
+  // Delegate rather than binding named buttons: a card may learn what to copy
+  // only after rendering—the easel asks the server for the settings path and
+  // adds data-copy when the answer arrives. A handler attached by name would
+  // never see that button.
   detail.onclick = (e) => {
     const b = e.target.closest && e.target.closest('[data-copy]');
     if (b && detail.contains(b)) copyOnBtn(b, b.dataset.copy);
@@ -1854,9 +1850,9 @@ function keysKey(key) {
   return keysRing.key(key, true);
 }
 
-// Вкладка «офис». Дресс-код живёт здесь, потому что у него нет предмета в
-// офисе: погоду настраивают у окна, язык — у таблички, а «всем надеть
-// галстуки» не висит нигде.
+// The "office" tab. Dress code lives here because it has no object in the
+// office: weather is set at the window, language at the sign, while "put ties
+// on everyone" hangs nowhere.
 const officeHtml = () => {
   const on = officeOn();
   return `<div class="bbody">
@@ -1877,30 +1873,30 @@ const officeHtml = () => {
     </div>`;
 };
 
-// ------------------------------------------------------------ дерево модулей
-// Вкладка «дерево»: вся сборка офиса как дерево навыков, три колонки по
-// ярусам. Состав — web/library.js; горит то, что ядро (бесплатные ветки) и что
-// вернул /api/modules (модули). Ни цен, ни «купить»: касса живёт на valey.dev,
-// а здесь видно, из чего офис собран и что из чего растёт.
+// ------------------------------------------------------------- module tree
+// The "tree" tab shows the whole office build as a three-tier skill tree. Its
+// contents come from web/library.js; core branches and modules returned by
+// /api/modules are lit. There are no prices or "buy" links: checkout belongs on
+// valey.dev, while this view explains what the office contains and depends on.
 //
-// Выбранный узел и есть фокус: стрелки ходят по дереву — ↑↓ по колонке, ←→ по
-// ребру (к родителю и к первому потомку), и карточка под деревом меняется
-// сразу, без Enter. Отдельного кольца фокуса нет: подсвечивать одно, а
-// показывать другое — это два курсора на одной панели.
-// Макет: Figma, Prod, секция «18 · Дерево модулей в инвентаре», кадры 932:2
-// (бесплатная сборка) и 934:2 (сборка «Офис»). Принято 4 сентября 2026.
+// The selected node is the focus: arrows move through the tree—↑↓ within a
+// column and ←→ along an edge to the parent or first child—and the card below
+// changes immediately without Enter. There is no separate focus ring: lighting
+// one thing while showing another would create two cursors in one panel.
+// Design: Figma, Prod, section "18 · Module tree in inventory," frames 932:2
+// (free build) and 934:2 (Office build). Accepted 4 September 2026.
 let treeSel = null;
-// Цвета иконок — заглушки из четырёх пикселей, как на макете; свои иконки —
-// отдельная работа. Ветка и её продолжение красятся одним тоном — кроме
-// мольберта: он вырос из доски работ вместе с деревом гита, а два одинаково
-// зелёных узла рядом читались бы как один предмет.
+// Icon colours are four-pixel placeholders from the design; bespoke icons are
+// separate work. A branch and its continuation share a tone, except the easel:
+// it grew from the work board alongside the Git tree, and two adjacent green
+// nodes read as a single object.
 const TONE = { floor1: '#c9a06a', bible: '#c9a06a', art: '#d97b6c', easel: '#d97b6c',
   board: '#9fe0a8', gittree: '#9fe0a8', task: '#ffd166', feed: '#ffd166', cctv: '#8fbcff', dossier: '#8fbcff',
   radio: '#c39bff', dress: '#f6e3c0', agents: '#e0a06a', floor: '#e0a06a', talk: '#9fe0a8', meet: '#9fe0a8',
   door: '#8c7660', guest: '#8c7660' };
 const L = (v) => (v ? (v[lang()] || v.ru) : '');
-// own — горит; office/floor — тусклый с именем тарифа; room — бесплатная
-// ветка, у которой не лежит папка (радио без modules/); ghost — «за год».
+// own is lit; office/floor is dim with the tier name; room is a free branch
+// whose folder is absent (radio without modules/); ghost is "in a year."
 const treeState = (n) => (n.tier === 'more' ? 'ghost'
   : n.module ? (moduleIds().includes(n.module) ? 'own' : n.tier)
   : n.tier === 'room' ? 'own' : n.tier);
@@ -1912,8 +1908,9 @@ const treeCount = (tier) => {
 const treeSub = (c) => (c.t === 'room' ? tr(c.n === c.m ? 'tree.sub.room' : 'tree.sub.roomSome')
   : c.t === 'office' ? tr(c.n === c.m ? 'tree.sub.officeAll' : c.n ? 'tree.sub.officeSome' : 'tree.sub.office')
   : tr('tree.sub.floor'));
-// По умолчанию выбран первый модуль «Офиса», которого нет: это и есть ответ на
-// «что в следующем тире». Когда есть всё — призрачный узел про год.
+// Select the first missing Office module by default: that directly answers
+// "what is in the next tier." When everything is installed, select the ghost
+// node about the coming year.
 const treeDefault = () => LIBRARY.find((n) => n.tier === 'office' && !treeOwn(n)) || byId('more');
 const treeCur = () => byId(treeSel) || (treeSel = treeDefault().id, byId(treeSel));
 export const treeSelected = () => treeCur().id;
@@ -2048,12 +2045,13 @@ const treeHtml = () => {
     </div>`;
 };
 
-// Рёбра — по настоящей геометрии кнопок, а не по номерам строк: ширина панели
-// на узком экране плывёт, а сетка — нет. Ребро идёт от правого края родителя
-// к левому краю потомка через середину жёлоба; строка в строку — прямой.
+// Draw edges from the buttons' real geometry, not row numbers: panel width
+// shifts on a narrow screen while the grid does not. An edge runs from the
+// parent's right side to the child's left through the gutter; same-row edges
+// are straight.
 function treeEdges() {
   const box = el.bag.querySelector('#tree'), svg = box && box.querySelector('.tedges');
-  if (!svg || !box.getBoundingClientRect) return;          // подставной DOM стенда
+  if (!svg || !box.getBoundingClientRect) return;          // The stand's substitute DOM.
   const o = box.getBoundingClientRect();
   const at = (b) => { const r = b.getBoundingClientRect(); return { l: r.left - o.left, r: r.right - o.left, y: r.top - o.top + r.height / 2 }; };
   const nodes = new Map([...box.querySelectorAll('.tnode')].map((b) => [b.dataset.id, b]));
@@ -2165,8 +2163,8 @@ function wideKey(key, cur) {
   return true;
 }
 
-// Ближайший по строке узел соседней колонки — когда ребра нет: «за год» не
-// растёт ни из чего, а у радио нет продолжения.
+// When there is no edge, use the closest row in the adjacent column: "in a
+// year" grows from nothing, while radio has no continuation.
 const treeNear = (col, row) => LIBRARY.filter((n) => colOf(n) === col)
   .sort((a, b) => Math.abs(a.row - row) - Math.abs(b.row - row))[0] || null;
 
@@ -2190,9 +2188,9 @@ function treeKey(key) {
   } else if (key === 'arrowright') {
     next = children(cur.id)[0] || treeNear(colOf(cur) + 1, cur.row);
   } else if (key === 'enter' || key === ' ') {
-    return true;                       // выбранное уже раскрыто карточкой
+    return true;                       // The selected item is already open in the card.
   } else return false;
-  // Край дерева — не повод отдать стрелку офису: панель открыта.
+  // The edge of the tree is not a reason to hand the arrow back to the office.
   if (next && next.id !== cur.id) { treeSel = next.id; renderBag(); }
   return true;
 }
@@ -2247,14 +2245,14 @@ function bindSelf() {
     c.imageSmoothingEnabled = false;
     c.fillStyle = '#2a1f19'; c.fillRect(0, 0, 72, 86);
     c.save(); c.scale(2.4, 2.4);
-    // человечек показан одетым по коду офиса: панель обещает то же, что видно
-    // на этаже, а не то, что лежит в сохранении
+    // Dress the figure according to the office mode: the panel promises what is
+    // visible on the floor, not the raw saved values.
     drawPerson(c, 15, 33, dressMe(S.me, dressCode()), { pose: 'stand', frame: 0 });
     c.restore();
   };
-  // строка показывает своё значение, поэтому обновляется вместе с человечком.
-  // Перерисовать всю панель было бы короче, но тогда стрелка забирает фокус у
-  // поля с именем — прямо посреди того, как его печатают.
+  // Each row shows its value, so update it with the figure. Redrawing the whole
+  // panel would be shorter, but the arrow would steal focus from the name field
+  // in the middle of typing.
   const refresh = () => {
     for (const f of colorFields()) {
       const s = el.bag.querySelector(`.sw[data-k="${f.key}"]`);
@@ -2295,8 +2293,8 @@ function bindThings() {
         writeSlot(f, f.list[Number(b.dataset.i)]);
         api.saveMe();
         el.bag.querySelectorAll(`.bcell[data-slot="${f.key}"]`).forEach((o) => o.classList.toggle('on', o === b));
-        // крой рисуется цветом выбранного галстука, и наоборот — поэтому
-        // соседняя строка перерисовывается вместе с этой
+        // The cut is drawn in the selected tie colour and vice versa, so redraw
+        // the neighbouring row with this one.
         if (f.key === 'tie' || f.key === 'cut') renderBag();
       };
     });
@@ -2304,8 +2302,8 @@ function bindThings() {
   paintBagFocus();
 }
 
-// Вкладка «офис» — ряд кнопок, а не список слотов и не сетка: у неё третье
-// поведение клавиш, и держать его руками рядом с двумя другими незачем.
+// The "office" tab is a row of buttons, not a slot list or a grid. It has a
+// third keyboard behaviour, which need not be maintained beside the other two.
 const officeRing = focusRing(() => el.bag, '.obtn');
 
 function openTab(tab) {
@@ -2330,13 +2328,13 @@ export function openKeyCard(id) {
   renderBag('keys');
 }
 
-// «На себе» — не ряд кнопок, а список слотов, у каждого ◀ и ▶. Поэтому
-// вверх-вниз ходят по слотам, а в стороны крутят значение того, на котором
-// стоишь: так этот список и читается глазами.
+// "On you" is a slot list rather than a row of buttons, each with ◀ and ▶.
+// Up and down move among slots; sideways changes the selected slot's value,
+// matching the way the list is read.
 //
-// «Вещи» — сетка, и там те же четыре стрелки значат другое: вверх-вниз меняют
-// ряд, в стороны ходят по клеткам, ⏎ надевает. Один индекс на оба случая не
-// годится, поэтому их два.
+// "Things" is a grid where the same arrows mean something else: up and down
+// change rows, sideways moves among cells, and ⏎ equips. One index cannot
+// represent both interactions, so there are two.
 let bagIdx = 0;
 let cellIdx = 0;
 const bagRows = () => [...el.bag.querySelectorAll('.namerow, .drow')];
@@ -2345,7 +2343,7 @@ const catCells = (cat) => (cat ? [...cat.querySelectorAll('.bcell')] : []);
 
 function paintBagFocus() {
   if (bagTab === 'office') { officeRing.paint(); return; }
-  if (bagTab === 'tree') return;      // выбранный узел и есть фокус, см. treeHtml()
+  if (bagTab === 'tree') return;      // The selected node is the focus; see treeHtml().
   // The key shelf lights itself: the class `on` on the picked card is also what
   // draws its border. The focus ring has no business here.
   if (bagTab === 'keys') return;
@@ -2369,13 +2367,13 @@ function paintBagFocus() {
   list[bagIdx].scrollIntoView({ block: 'nearest' });
 }
 
-// Escape не трогаем: его ловит closeAll() в main.js.
+// Leave Escape alone: closeAll() in main.js handles it.
 export function bagKey(raw) {
   if (el.bag.hidden) return false;
   const key = raw.toLowerCase();
 
-  // Цифра — вкладка. Клавиши 1..9 в офисе больше ничем не заняты: масштаб
-  // сидит на +, − и 0.
+  // A digit selects a tab. Keys 1–9 have no other office role; scale uses +, −,
+  // and 0.
   //
   // The one exception is the detailed tree: while that view is up the digits
   // pick a direction, because the tiles carry those numbers and a number on
@@ -2409,12 +2407,12 @@ function selfKey(key) {
   if (turn !== undefined) {
     const b = row && row.querySelector(`[data-d="${turn}"]`);
     if (b) b.click();
-    return true;                 // на строке с именем крутить нечего, но и
-                                 // уводить стрелку в офис оттуда незачем
+    return true;                 // The name row has nothing to turn, but the
+                                 // arrow should not escape into the office.
   }
   if (key === 'enter' || key === ' ') {
-    // Имя — поле ввода: по Enter отдаём ему настоящий фокус, дальше печатает
-    // браузер. У слота Enter делает то же, что ▶.
+    // The name is an input: Enter gives it real focus, then the browser types.
+    // On a slot, Enter does the same thing as ▶.
     const input = row && row.querySelector('input');
     if (input) { input.focus(); return true; }
     const next = row && row.querySelector('[data-d="1"]');
@@ -2527,7 +2525,7 @@ export function renderSky(results = null, busy = '') {
 function renderResults(results) {
   if (!results) return '';
   if (!results.length) return `<p class="hint">${tr('sky.nothing')}</p>`;
-  // Метки и детали приходят от геокодера — это чужой текст, как и всё снаружи.
+  // Labels and details come from the geocoder and are external text like any other input.
   return results.map((r) => `<button class="skyhit" data-lat="${esc(r.lat)}" data-lon="${esc(r.lon)}" data-label="${esc(r.label)}">
     ${esc(r.label)}<span>${esc(r.detail || '')}</span></button>`).join('');
 }
@@ -2542,27 +2540,25 @@ function bindResults() {
 }
 
 
-// ------------------------------------------------------- кольцо фокуса панели
-// Пятая панель подряд повторяла один и тот же кусок: номер выбранной кнопки,
-// покраска класса, стрелки по кругу, Enter — клик. Дальше копировать это
-// нельзя, поэтому окно в мир и цвет офиса берут общий помощник; лифт, обход,
-// заметки и переодевание пока живут своими копиями — их сворачивание
-// записано в BACKLOG.md, чтобы не переписывать проверенное посреди ночи.
+// ---------------------------------------------------------- panel focus ring
+// A fifth panel repeated the same machinery: selected-button index, focus class,
+// wrapping arrows, Enter as click. Copying it again was no longer defensible, so
+// the world window and office colour share this helper. The lift, round, notes,
+// and wardrobe still have their own copies; consolidating those is in BACKLOG.md
+// rather than rewriting proven code in the middle of the night.
 //
-// Ползунки в кольце ведут себя как ползунки: стрелки в стороны крутят
-// значение, а не уводят фокус. Иначе громкость и оттенок остаются мышиными.
-// Экспортируется: панель модуля водит фокус теми же стрелками, что и панели
-// ядра, и заводить второй способ ходить по кнопкам значило бы завести второй
-// офис.
-// opts.numbers — цифра 1..9 выбирает пункт списка и нажимает его. Идея приехала
-// из инвентаря, где так переключаются вкладки, и оказалась общей: список на
-// экране почти всегда короткий и пронумерован глазами и без нас.
-//   numbers: true          — по всем пунктам кольца
-//   numbers: '.rst'        — только по этим (в радио цифра — волна, а не ручка)
+// Range controls in the ring behave like range controls: sideways arrows change
+// the value rather than move focus. Otherwise volume and hue remain mouse-only.
+// This is exported so module panels use the same arrows as core panels; a second
+// way to move among buttons would create a second office.
+// opts.numbers makes digits 1–9 select and press a list item. It came from the
+// inventory tabs and proved general: on-screen lists are usually short and
+// visually numbered already.
+//   numbers: true          — every item in the ring
+//   numbers: '.rst'        — only these (in radio a digit is a station, not a knob)
 // opts.cols — the mirror of opts.rows for a panel laid out in columns.
-//   byData: 'n'            — цифра ищет пункт с data-n="цифра", а не N-й по счёту:
-//                            в лифте «3» это третий этаж, даже если он второй в
-//                            списке.
+//   byData: 'n'            — find data-n="digit" instead of the Nth item: in the
+//                            lift, "3" is floor three even if it is second in the list.
 export function focusRing(nodeOf, selector, opts = {}) {
   let idx = 0;
   const list = () => (nodeOf() ? [...nodeOf().querySelectorAll(selector)] : []);
@@ -2572,16 +2568,16 @@ export function focusRing(nodeOf, selector, opts = {}) {
     idx = Math.max(0, Math.min(l.length - 1, idx));
     l.forEach((b, i) => b.classList.toggle('focus', i === idx));
     l[idx].scrollIntoView({ block: 'nearest' });
-    // Панель, которой мало подсветить кнопку: у языка под кнопками стоит
-    // строка «что будет, если нажать», и она обязана меняться вместе с фокусом,
-    // а не по нажатию. Без этого цена показывалась бы уже уплаченной.
+    // Some panels need more than a highlighted button. The language panel has a
+    // "what happens if pressed" line below, which must follow focus, not a click.
+    // Otherwise the cost would be shown only after it had already been paid.
     if (opts.onMove) opts.onMove(l[idx]);
   };
   return {
     paint,
     reset() { idx = 0; },
-    // Поставить фокус на конкретный номер: лифту — на этаж, где ты стоишь,
-    // заметкам — на первую строку при выходе из поиска.
+    // Focus a particular index: the current floor in the lift, or the first note
+    // after leaving search.
     at(i) { idx = i; paint(); },
     key(raw, open) {
       if (!open) return false;
@@ -2603,8 +2599,8 @@ export function focusRing(nodeOf, selector, opts = {}) {
         if (Number.isInteger(n) && n >= 1 && n <= 9) {
           const pool = opts.numbers === true ? l : [...nodeOf().querySelectorAll(opts.numbers)];
           const hit = opts.byData ? pool.find((b) => Number(b.dataset[opts.byData]) === n) : pool[n - 1];
-          // Цифра мимо списка не уезжает в офис: панель открыта, и шаг игрока
-          // из-под неё читается как «клавиатура живёт своей жизнью».
+          // A digit outside the list does not escape into the office. The panel
+          // is open, and a player moving underneath reads as erratic keyboard input.
           if (!hit) return true;
           const at = l.indexOf(hit);
           if (at >= 0) { idx = at; paint(); }
@@ -2613,10 +2609,9 @@ export function focusRing(nodeOf, selector, opts = {}) {
         }
       }
 
-      // Панель со строками: ↑↓ переносят между строками, ←→ ходят внутри одной.
-      // Плоский обход тут врёт руке — «интерфейс» и «имена агентов» это два
-      // разных вопроса, и стрелка вниз должна отвечать на второй, а не
-      // доводить до конца первый.
+      // In a row-based panel, ↑↓ move between rows and ←→ within a row. A flat
+      // traversal misleads the hand: "interface" and "agent names" are separate
+      // questions, so Down should reach the second instead of finishing the first.
       if (opts.rows) {
         const rows = [...nodeOf().querySelectorAll(opts.rows)]
           .map((r) => l.filter((b) => r.contains(b)))
@@ -2669,7 +2664,7 @@ export function focusRing(nodeOf, selector, opts = {}) {
       if (step !== undefined) { idx = (idx + step + l.length) % l.length; paint(); return true; }
       if (key === 'enter' || key === ' ') {
         if (!cur || cur.disabled) return true;
-        // Поле ввода получает настоящий фокус, дальше печатает браузер.
+        // Give an input real focus, then let the browser type.
         if (cur.tagName === 'INPUT' && cur.type !== 'range') cur.focus();
         else cur.click();
         return true;
@@ -2679,30 +2674,30 @@ export function focusRing(nodeOf, selector, opts = {}) {
   };
 }
 
-// ------------------------------------------------------------ язык и имена
+// ------------------------------------------------------- language and names
 //
-// Человечек в коридоре до 4 сентября 2026 щёлкал язык одним нажатием. Паков
-// имён стало два, а со временем будет больше — щелчком по кругу растущий
-// список не выбирают, поэтому ПРОБЕЛ открывает панель. Цена названа вслух:
-// вместо одного нажатия стало три.
-let packs = null;   // ответ /api/names, живёт пока панель открыта
+// Until 4 September 2026 the small figure in the corridor switched language in
+// one press. There are now two name packs and more will follow; cycling is not
+// how a growing list is selected, so SPACE opens a panel. The cost is explicit:
+// one press became three.
+let packs = null;   // The /api/names response; lives while the panel is open.
 
 export async function openLang() {
   el.lang.hidden = false;
   langRing.reset();
   renderLang();
-  // Цена нажатия приезжает отдельно и может опоздать: сервер однопоточный, и
-  // запрос, попавший в обход транскриптов, ждёт вместе со всеми. Панель к тому
-  // времени уже нарисована и читается — ждёт только строка про переименование.
+  // The cost of pressing arrives separately and may be late: the server is
+  // single-threaded, so a request caught behind transcript scanning waits too.
+  // By then the panel is drawn and readable; only the rename line is waiting.
   packs = await api.names().catch((e) => ({ error: String(e && e.message), packs: [] }));
   if (!el.lang.hidden) renderLang();
 }
 
 export function closeLang() { el.lang.hidden = true; packs = null; langRing.reset(); }
 
-// Что офис получит, нажав на этот пак: сколько имён сменится и пара примеров.
-// Считается по живым агентам, а не по всему реестру на диске: обещание «всех
-// 12» проверяется глазами по этажу, и число обязано сойтись именно с ним.
+// What selecting a pack will do: the number of changed names and two examples.
+// Count live agents rather than the entire on-disk registry. The promise "all
+// 12" is checked against the visible floor, so this number must match it.
 function packChange(id) {
   const p = packs && packs.packs.find((x) => x.id === id);
   if (!p) return null;
@@ -2712,16 +2707,16 @@ function packChange(id) {
   return { n: pairs.length, pairs };
 }
 
-// Пак, который получится, если выбрать это значение: «как язык офиса» —
-// не пак, а обещание идти за языком.
+// The effective pack for this choice: "follows the office language" is not a
+// pack, but a promise to follow the language.
 const packUnder = (choice, lng) => (choice === 'auto' ? lng : choice);
 
 function renderLang() {
   const lng = lang();
   const choice = (packs && packs.choice) || (S.settings && S.settings.namePack) || 'auto';
   const now = packUnder(choice, lng);
-  // Кнопки берутся из описи, а не из ответа про цену: список паков должен
-  // стоять на месте с первого кадра, иначе панель перерисовывается под рукой.
+  // Build buttons from the inventory, not the cost response. The pack list must
+  // be stable from the first frame or the panel redraws under the person's hand.
   const ids = (S.packs || []).map((p) => p.id);
   const mark = (on, text) => (on ? `● ${text}` : text);
 
@@ -2756,8 +2751,8 @@ function renderLang() {
   langRing.paint();
 }
 
-// Размер и образец берутся из описи, приехавшей с настройками: она статична,
-// и ждать её незачем. Круга до сервера ждёт только цена нажатия.
+// Size and sample come from the inventory delivered with settings; it is static
+// and needs no waiting. Only the cost of pressing requires a server round trip.
 function langStatus(id) {
   const p = (S.packs || []).find((x) => x.id === id);
   if (!p) return tr('lang.counting');
@@ -2768,8 +2763,8 @@ function langStatus(id) {
   });
 }
 
-// Строка «что будет, если нажать» — она же цена. Показывается только у пака,
-// который сейчас не работает: у включённого нажимать нечего.
+// The "what happens if pressed" line is the cost. Show it only for a pack that
+// is not active; pressing the active one would do nothing.
 function langWarn(node) {
   const warn = el.lang && el.lang.querySelector('.langwarn');
   const status = el.lang && el.lang.querySelector('.langstatus');
@@ -2779,9 +2774,9 @@ function langWarn(node) {
   const target = pick ? packUnder(pick, lang()) : null;
   const change = target && pick !== choice ? packChange(target) : null;
 
-  // Строка состояния идёт за фокусом: стоишь на «English» — она про английский
-  // словарь, а не про включённый. Иначе панель отвечает не на тот вопрос,
-  // который человек только что задал стрелкой.
+  // The status line follows focus: when "English" is selected it describes the
+  // English dictionary, not the active one. Otherwise the panel answers a
+  // different question from the one the arrow just asked.
   status.innerHTML = langStatus(target || packUnder(choice, lang()));
 
   if (!change || !change.n) { warn.hidden = true; warn.textContent = ''; return; }
@@ -2793,21 +2788,21 @@ function langWarn(node) {
 }
 
 async function applyPack(pick) {
-  // Порядок здесь важнее красоты: сначала действие, потом рассказ о нём.
+  // Order matters more than symmetry here: perform the action, then describe it.
   //
-  // Раньше тост ждал предпросмотр, и если тот не успел приехать, применение
-  // висело на его ожидании — офис переименовывался молча, а панель делала вид,
-  // что ничего не произошло. Круга до сервера тут два, и второй не должен
-  // задерживать первый: страница в этот момент рисует офис каждый кадр, и
-  // разбор ответа встаёт в очередь за отрисовкой — 3.6 секунды на стенде
-  // 4 сентября 2026 против 2 миллисекунд у curl по тому же адресу.
+  // The toast used to wait for the preview. If the preview was late, applying
+  // the pack waited too: the office renamed silently while the panel pretended
+  // nothing happened. There are two server round trips, and the second must not
+  // delay the first. The page renders the office every frame, and response
+  // parsing queues behind that work—3.6 seconds in the 4 September 2026 stand,
+  // versus 2 milliseconds for curl against the same address.
   const before = packChange(packUnder(pick, lang()));
   await api.saveSettings({ namePack: pick });
   if (packs) packs.choice = pick;
   renderLang();
 
-  // Цену знаем — называем число и пример, как на кадре. Не знаем — говорим
-  // хотя бы что переключили: молчание тут читается как «кнопка не сработала».
+  // When the cost is known, name the count and example from the frame. When it
+  // is not, at least say what changed; silence reads as a broken button.
   const name = tr('lang.pack.' + packUnder(pick, lang()));
   if (!before || !before.n) return toast(tr('toast.namePackPlain', { pack: name }));
   const [from, to] = before.pairs[0];
@@ -2824,15 +2819,15 @@ const skyRing = focusRing(() => el.sky, '#skytoggle, #skyq, .skyhit, #skygeo');
 export function closeSky() { el.sky.hidden = true; skyRing.reset(); clearTimeout(geoTimer); }
 export function skyKey(raw) { return skyRing.key(raw, el.sky && !el.sky.hidden); }
 
-// ------------------------------------------------------------- цвет офиса
-// Тон крутится живьём: пока тянешь ползунок, панели перекрашиваются под рукой.
-// ---------------------------------------------------------------------- лифт
-// Панель кабины: этаж — это коридор, а под ним подписаны комнаты, двери которых
-// с него открываются. Так понятно, куда едешь, без плана этажа перед глазами.
-// ------------------------------------------------------------- приглашение
-// Панель хозяина: сделать ссылку, посмотреть выданные, погасить. Ссылка видна
-// целиком и копируется руками — «поделиться» кнопкой в чужой сервис офис не
-// умеет и не должен.
+// ------------------------------------------------------------- office colour
+// Hue changes live: while the slider moves, panels repaint under the hand.
+// ----------------------------------------------------------------------- lift
+// The cabin panel treats a floor as a corridor and labels the rooms whose doors
+// open from it. The destination is clear without keeping a floor plan in mind.
+// ---------------------------------------------------------------- invitation
+// The owner panel creates a link, lists issued invitations, and revokes them.
+// The full link is visible and copied by hand; the office neither can nor should
+// "share" it through an external service.
 const when = (ms) => {
   const d = new Date(ms);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -2840,12 +2835,13 @@ const when = (ms) => {
 
 let lastLink = '';
 
-// Имя агента по id: в запросе лежит id, а человеку нужно имя того, кто сидит
-// за столом.
+// Resolve an agent name from an id: the request stores an id, while a person
+// needs the name of whoever sits at the desk.
 const agentName = (id) => (S.agents.find((a) => a.id === id) || {}).name || id.slice(0, 6);
 
-// Запросы доступа. Всё, на чём строится решение, стоит до кнопок: кто, о ком,
-// что написал. Кнопки равны по весу — «отказать» не спрятана.
+// Access requests. Everything needed for a decision precedes the buttons: who
+// asked, about whom, and what they wrote. The buttons have equal weight; Deny
+// is not hidden.
 function requestsHtml() {
   const reqs = ((S.access || {}).requests) || [];
   if (!reqs.length) return '';
@@ -2858,8 +2854,8 @@ function requestsHtml() {
     </li>`).join('')}</ul>`;
 }
 
-// Что сейчас открыто. Список видит только хозяин, и закрыть можно из строки —
-// отзыв должен быть не длиннее выдачи.
+// What is open right now. Only the owner sees this list, and each row can close
+// its own grant, keeping revocation no longer than issuance.
 function openHtml() {
   const open = ((S.access || {}).open) || [];
   if (!open.length) return '';
@@ -2912,7 +2908,7 @@ export async function syncInvite() {
   const back = $('#invWho');
   if (!back) return;
   back.value = typed.value;
-  if (typed.focused) { back.focus(); try { back.setSelectionRange(typed.at, typed.at); } catch { /* поле могло сменить тип */ } }
+  if (typed.focused) { back.focus(); try { back.setSelectionRange(typed.at, typed.at); } catch { /* The field may have changed type. */ } }
 }
 
 async function renderInvite() {
@@ -2944,9 +2940,9 @@ async function renderInvite() {
     </div></div>`;
 
   $('#invx').onclick = closeInvite;
-  // Ответ сервера несёт свежий список — берём его сразу, не дожидаясь снимка:
-  // тот приходит раз в 2.5 секунды, и всё это время нажатая кнопка выглядела
-  // бы ненажатой.
+  // The server response carries a fresh list, so use it immediately rather than
+  // waiting for the 2.5-second snapshot. Otherwise the clicked button would look
+  // untouched during that entire interval.
   const took = async (r) => { if (r && r.access) S.access = r.access; inviteSig = accessSig(); await renderInvite(); };
   el.invite.querySelectorAll('[data-yes]').forEach((b) => {
     b.onclick = async () => took(await api.answerAccess(b.dataset.yes, true));
@@ -2995,25 +2991,25 @@ export function openLift(lift, floorNow, pick) {
     closeLift();
     if (n !== floorNow) pick(n);
   });
-  // Фокус встаёт на этаж, где ты сейчас: у него уже есть метка ▸, и от него
-  // стрелка вверх-вниз читается как «этажом выше», а не «первый пункт списка».
+  // Focus the current floor: it already has the ▸ marker, and moving up or down
+  // from it reads as “one floor up,” not “the first item in a list.”
   const here = lift.floors.findIndex((f) => f.n === floorNow);
   liftRing.at(here < 0 ? 0 : here);
 }
 
-// Панель лифта и стойка ресепшена делят один узел el.lift, поэтому клавиатура у
-// них общая: фокус ходит по тому, что в открытой панели вообще можно нажать.
-// До этого этажи нажимались только мышью — то есть без мыши остальные этажи
-// офиса были недостижимы вовсе, а не просто неудобны.
+// The lift panel and reception desk share the el.lift node, so they share their
+// keyboard handling: focus moves across whatever the open panel can activate.
+// Floors used to be mouse-only, making the rest of the office unreachable—not
+// merely inconvenient—without a mouse.
 //
-// Escape тут не перехватываем: его ловит closeAll() в main.js.
+// Escape is left to closeAll() in main.js.
 const liftRing = focusRing(() => el.lift, '.liftbtn, .recgo', { numbers: '.liftbtn', byData: 'n' });
 export function closeLift() { el.lift.hidden = true; liftRing.reset(); }
 export function liftKey(raw) { return liftRing.key(raw, el.lift && !el.lift.hidden); }
 
-// ----------------------------------------------------------------- ресепшен
-// Стойка отвечает на один вопрос: что на этом этаже. Счётчики берём из того же
-// списка агентов, что и HUD с обходом, — иначе цифры разойдутся между собой.
+// ---------------------------------------------------------------- reception
+// The desk answers one question: what is on this floor. Counts come from the
+// same agent list as the HUD tour so the two cannot disagree.
 export function openReception(desk, guide) {
   const rows = desk.rooms.map((title) => {
     const list = S.agents.filter((a) => a.project === title);
@@ -3054,8 +3050,8 @@ export function openReception(desk, guide) {
   liftRing.at(0);
 }
 
-// В английском форм две, в русском три. Ключи одни и те же, а выбор формы
-// делает язык, иначе «2 agents» превращается в «2 agent».
+// English has two forms and Russian has three. Both use the same keys, while the
+// active language chooses the form; otherwise “2 agents” becomes “2 agent.”
 const pluralKey = (base, n) => {
   if (lang() === 'en') return base + (n === 1 ? '.one' : '.many');
   const a = Math.abs(n) % 100, b = a % 10;
@@ -3102,8 +3098,8 @@ export function renderSkin() {
     mark();
   };
   $('#skinx').onclick = closeSkin;
-  // Панель сама внутри .rwrap, поэтому после смены она перерисуется уже в новом
-  // размере — видно сразу, не выходя из настройки.
+  // The panel itself is inside .rwrap, so after the change it redraws at the new
+  // size immediately, without leaving the setting.
   el.skin.querySelectorAll('[data-size]').forEach((b) => b.onclick = () => {
     applyUiScale(Number(b.dataset.size));
     renderSkin();
@@ -3127,14 +3123,14 @@ export function skinKey(raw) { return skinRing.key(raw, el.skin && !el.skin.hidd
 
 
 // ------------------------------------------------- reading the whole answer
-// Открытый разговор живёт своим состоянием: R перечитывает его на месте, стрелки
-// листают. Без этого единственный способ увидеть новую реплику — закрыть карточку
-// и открыть заново, а это теряет место, до которого дочитал.
+// An open conversation has its own state: R rereads it in place and arrows
+// scroll. Otherwise the only way to see a new reply is to close and reopen the
+// card, losing the place already reached.
 let chatView = null;
 
 export async function openTranscript(a, focusTs = null) {
   el.viewer.hidden = false;
-  gallery = { items: [], title: '', sel: 0, mode: 'grid' };   // Esc отсюда закрывает, а не возвращает в чужую галерею
+  gallery = { items: [], title: '', sel: 0, mode: 'grid' };   // Esc closes here, not into another gallery.
   chatView = { agent: a, msgs: [], token: 0, editing: null, pending: null, focusTs };
   // The header in two rows: who is talking — what he is working on. The session
   // name stays in the top right corner at the size it had, and service lines such
@@ -3149,9 +3145,8 @@ export async function openTranscript(a, focusTs = null) {
   await loadChat(0);
 }
 
-// Карточка заметки. Рисуется из хранилища при каждой перерисовке лога, а не
-// живёт в DOM: paintChat пересобирает всё целиком, и пережить это может только
-// то, что лежит снаружи.
+// A note card is drawn from storage on every log repaint rather than living in
+// the DOM: paintChat rebuilds everything, and only outside state can survive it.
 const noteCard = (n, orphan) => {
   const when = new Date(n.at).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   const anchor = orphan && n.ts
@@ -3170,14 +3165,14 @@ const noteEditor = (ts, text) => `<div class="noteed" data-anchor="${ts == null 
     <textarea id="notein" rows="2" placeholder="${tr('note.placeholder')}">${esc(text || '')}</textarea>
     <i>${tr('note.keys')}</i></div>`;
 
-// fresh — сколько реплик в хвосте показать как новые.
-// force — наша собственная перерисовка (открыли или закрыли редактор). Данные
-// с сервера так рисовать нельзя: они придут посреди набора текста.
+// fresh is the number of tail messages to show as new.
+// force marks our own repaint after opening or closing the editor. Server data
+// must not be drawn this way because it may arrive in the middle of typing.
 function paintChat(msgs, fresh = 0, force = false) {
   const box = $('#chatlog');
   if (!box) return;
-  // Пока человек пишет заметку, лог не трогаем: перерисовка сотрёт недописанное.
-  // Свежие данные ждут в pending и лягут, как только редактор закроется.
+  // Do not touch the log while a note is being written; a repaint would erase
+  // unfinished text. Fresh data waits in pending until the editor closes.
   if (chatView.editing && !force) { chatView.pending = { msgs, fresh }; return; }
   // The same holds while the numbers are up: a repaint rebuilds the log and the
   // badges vanish under the hand that was choosing. Found on 5 September 2026 —
@@ -3190,7 +3185,7 @@ function paintChat(msgs, fresh = 0, force = false) {
   const { byTs, orphans } = splitNotes(a.id, msgs);
   const stamp = (ts) => ts ? new Date(ts).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
 
-  // Правится заметка — на её месте стоит редактор, а не карточка
+  // An edited note is replaced by the editor rather than its card.
   const ed = chatView.editing;
   const renderNotes = (list, orphan) => list.map((n) =>
     (ed && ed.id === n.id) ? noteEditor(n.ts, ed.text) : noteCard(n, orphan)).join('');
@@ -3219,8 +3214,8 @@ function paintChat(msgs, fresh = 0, force = false) {
   }
   paintNoteCount();
   bindNoteControls();
-  // Пришли из панели заметок — встаём на ту реплику, к которой она привязана,
-  // и подсвечиваем её: иначе непонятно, ради чего разговор открылся.
+  // When arriving from the notes panel, move to and highlight the anchored
+  // message; otherwise the reason for opening the conversation is unclear.
   const target = chatView.focusTs != null ? box.querySelector(`.msg[data-ts="${chatView.focusTs}"]`) : null;
   if (target) {
     target.classList.add('anchored');
@@ -3243,12 +3238,12 @@ function paintNoteCount() {
   c.textContent = n ? tr('note.count', { n }) : '';
 }
 
-// Перерисовать лог по своей воле, не дожидаясь сервера.
+// Repaint the log on demand without waiting for the server.
 const repaintChat = () => paintChat(chatView.msgs, 0, true);
 
-// Реплика, на которую сейчас смотришь, — первая, чей низ ниже верхней кромки
-// окна. Именно к ней и цепляется заметка, и она обводится, пока пишешь, чтобы
-// привязку было видно, а не приходилось угадывать.
+// The message currently being viewed is the first whose bottom is below the
+// viewport's top edge. A note attaches to that message, which is outlined while
+// writing so the anchor is visible instead of guessed.
 function topMessageTs() {
   const box = $('#chatlog');
   if (!box) return null;
@@ -3266,7 +3261,7 @@ function openNoteEditor(ts, note) {
   const box = $('#chatlog');
   const ta = $('#notein');
   if (!ta) return;
-  // Обводим реплику-якорь: без этого непонятно, к чему привяжется заметка
+  // Outline the anchor message so it is clear what the note will attach to.
   const anchor = box.querySelector(`.msg[data-ts="${chatView.editing.ts}"]`);
   if (anchor) anchor.classList.add('anchored');
   const ed = ta.closest('.noteed');
@@ -3284,8 +3279,8 @@ function saveNote(text) {
   const ed = chatView && chatView.editing;
   if (!ed) return;
   const a = chatView.agent;
-  // Снимок контекста кладётся один раз, при записи: потом сессия умрёт, и взять
-  // его будет неоткуда — ни имени агента, ни того, что ты в этот момент читал.
+  // Store the context snapshot once, when saving. The session will eventually
+  // die, leaving nowhere to recover the agent name or what was being read.
   const anchor = (chatView.msgs || []).find((m) => m.ts === ed.ts);
   const ctx = { agent: a.name, project: a.project, title: a.title,
     quote: anchor ? clean(anchor.text) : '' };
@@ -3294,7 +3289,7 @@ function saveNote(text) {
   closeNoteEditor(ed.id ? tr('note.saved') : tr('note.added'));
 }
 
-// Редактор закрылся — можно наконец положить то, что пришло, пока писали.
+// Once the editor closes, apply what arrived while the person was writing.
 function closeNoteEditor(status) {
   if (!chatView) return;
   chatView.editing = null;
@@ -3319,7 +3314,7 @@ function bindNoteControls() {
   });
   box.querySelectorAll('[data-del]').forEach((b) => b.onclick = (e) => {
     e.stopPropagation();
-    // Второй клик подтверждает: заметку писали руками, случайный промах обиден
+    // A second click confirms deletion: notes are handwritten, so a miss hurts.
     if (b.dataset.armed !== 'yes') { b.dataset.armed = 'yes'; b.textContent = '✕?'; b.classList.add('arm'); return; }
     removeNote(a.id, b.dataset.del);
     repaintChat();
@@ -3344,7 +3339,7 @@ async function loadChat(fresh) {
   }
   const msgs = r.messages || [];
   const was = chatView.msgs;
-  // Хвост мог не прибавиться, а дописаться — растущий ответ это одна и та же реплика.
+  // The tail may grow in place rather than gain an item; a growing answer is one message.
   const grew = msgs.length > was.length
     || (msgs.length && was.length && msgs[msgs.length - 1].text !== was[was.length - 1].text);
   if (fresh && !grew) { chatStatus(tr('chat.noNew') + ' · ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })); return; }
@@ -3357,7 +3352,7 @@ async function loadChat(fresh) {
   } else chatStatus(a.title || '');
 }
 
-// Стрелки листают лог; SHIFT — почти на экран за нажатие.
+// Arrows scroll the log; SHIFT moves almost one viewport per press.
 function scrollChat(dir, big) {
   const box = $('#chatlog');
   if (!box) return;
@@ -3366,8 +3361,8 @@ function scrollChat(dir, big) {
 
 export function transcriptKey(key, big) {
   if (!chatView || el.viewer.hidden || !$('#chatlog')) return false;
-  // Пока открыт редактор, клавиши забирает textarea; сюда долетает только то,
-  // что мимо неё, и трогать лог в этот момент нельзя.
+  // While the editor is open, textarea owns the keys. Only misses arrive here,
+  // and the log must not move at that point.
   if (chatView.editing) return key === 'escape' ? (closeNoteEditor(), true) : true;
   if (key === 'n' || key === 'т') { openNoteEditor(topMessageTs(), null); return true; }
   if (key === 'arrowup') { scrollChat(-1, big); return true; }
@@ -3381,11 +3376,11 @@ export function transcriptKey(key, big) {
   return false;
 }
 
-// ----------------------------------------------------- все заметки разом
-// Заметка, записанная в разговоре, живёт внутри него — а найти её потом нужно,
-// не помня, у какого агента она осталась. Панель собирает все и группирует по
-// проекту из снимка контекста, а не из живого офиса: офиса к этому моменту
-// может уже не быть.
+// ---------------------------------------------------------- all notes at once
+// A note written in a conversation lives there, but must be discoverable later
+// without remembering which agent held it. The panel gathers all notes and
+// groups by the project in their context snapshot, not the live office, which
+// may no longer exist.
 let notesQuery = '';
 
 export function renderNotes() {
@@ -3394,7 +3389,7 @@ export function renderNotes() {
   const q = notesQuery.trim().toLowerCase();
   const hit = q ? all.filter((n) => (n.text + ' ' + ((n.ctx && n.ctx.quote) || '')).toLowerCase().includes(q)) : all;
 
-  // группировка по проекту; у старых заметок снимка нет — им отдельная куча
+  // Group by project; old notes without a snapshot get their own pile.
   const groups = new Map();
   for (const n of hit) {
     const key = (n.ctx && n.ctx.project) || '';
@@ -3459,9 +3454,8 @@ export function renderNotes() {
   $('#notesx').onclick = closeNotes;
   const input = $('#notesq');
   input.oninput = () => { notesQuery = input.value; const at = input.selectionStart; renderNotes(); const f = $('#notesq'); if (f) { f.focus(); f.setSelectionRange(at, at); } };
-  // Поиск держит настоящий фокус, пока в него печатают, и стрелки туда не
-  // доходят. Стрелка вниз — выход из него в найденное: ровно тот ход, ради
-  // которого этот поиск и нужен.
+  // Search holds real focus while typing, so arrows do not reach this handler.
+  // Arrow Down exits into the results, exactly the move this search needs.
   input.onkeydown = (e) => {
     if (e.key !== 'ArrowDown') return;
     e.preventDefault();
@@ -3476,7 +3470,7 @@ export function renderNotes() {
   });
   el.notes.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => {
     const agent = S.agents.find((a) => a.id === b.dataset.go);
-    if (!agent) { renderNotes(); return; }      // успел закрыться, пока смотрел
+    if (!agent) { renderNotes(); return; }      // It closed while the person was looking.
     closeNotes();
     openTranscript(agent, b.dataset.ts ? Number(b.dataset.ts) : null);
   });
@@ -3488,9 +3482,9 @@ export function renderNotes() {
   notesRing.paint();
 }
 
-// Панель заметок открывается по N и до сих пор требовала мыши на всё: открыть
-// разговор по заметке и удалить её. Обе кнопки стоят в одном кольце, в порядке
-// разметки — сначала «открыть» строки, потом её ✕.
+// The notes panel opens with N but used to require a mouse for every action:
+// opening a note's conversation and deleting it. Both buttons share one ring in
+// markup order—the row's Open first, then its ✕.
 const notesRing = focusRing(() => el.notes, '.ngo, .ndel');
 export function closeNotes() { el.notes.hidden = true; notesRing.reset(); }
 export function notesKey(raw) { return notesRing.key(raw, el.notes && !el.notes.hidden); }
@@ -3499,13 +3493,13 @@ export function notesOpen() { return !el.notes.hidden; }
 
 export function relabel() {
   renderHud();
-  // Диалог и обход перерисовываются только когда меняется их ключ — иначе
-  // панель мигала бы каждые две секунды на живых данных. Смена языка данные не
-  // трогает, поэтому ключ надо сбросить руками, иначе половина панели остаётся
-  // на прежнем языке: подписи из buildDialog не обновляются вовсе.
+  // Dialog and standup redraw only when their key changes; otherwise live data
+  // would flash the panel every two seconds. Language changes do not touch the
+  // data, so reset the key explicitly or half the panel stays in the old
+  // language because buildDialog labels are never patched.
   dialogKey = ''; rosterSig = '';
-  // Панель модуля тоже осталась бы на прежнем языке: свой текст она рисует
-  // сама, и перерисовать его может только она.
+  // A module panel would stay in the old language too: it draws its own text,
+  // and only the module can redraw it.
   collect('lang');
   if (S && S.dialogOpen) renderDialog();
   if (el.roster && !el.roster.hidden) renderRoster();

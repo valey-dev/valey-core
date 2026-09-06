@@ -22,12 +22,12 @@
 .t-attr{color:var(--warn)}
 
 /* a page rendered in its own sandbox, plus the strip that says so */
-/* Делится на --ui по той же причине, что и .vwrap в style.css: панель
-   масштабируется через zoom, а vh внутри неё считается от экрана, и на 175%
-   объявленные 68vh становятся 73vh экрана. Замеры 30 августа 2026 показали,
-   что верстку это не ломает — .vwrap флекс-колонка и ужимает рамку, шапка и
-   строка песочницы остаются на местах, — но число перестаёт значить
-   написанное, а рядом четыре соседа уже поделены. */
+/* Divide by --ui for the same reason as .vwrap in style.css: the panel scales
+   with zoom while its vh is measured against the screen, so at 175% a declared
+   68vh becomes 73vh of the display. Measurements on 30 August 2026 showed no
+   layout break—.vwrap is a flex column and shrinks the frame while the header
+   and sandbox line stay put—but the number stops meaning what it says, and the
+   four neighbouring limits are already divided. */
 .htmlframe{width:100%; height:min(720px, calc(68vh / var(--ui, 1))); border:2px solid var(--frame);
   background:#fff; display:block}
 .framebar{display:flex; align-items:center; gap:10px; padding:6px 2px 0;
@@ -40,5 +40,5 @@
 .md pre.mdcode code .t-comment{color:#7d6852}
 .md pre.mdcode code .t-punct{color:#8a7358}
 
-/* масштаб в баре: своим цветом, чтобы не путался со звуком и радио */
+/* Scale in the HUD gets its own colour so it is not confused with sound or radio. */
 .chip.zoom{color:#c39bff}

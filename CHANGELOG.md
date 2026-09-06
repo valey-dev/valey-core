@@ -411,7 +411,7 @@ Three things, so the file does not mislead. **The hashes lead into the project's
 - refactor(storage): browser keys drop the AI, like the product (7a3d6cc)
 - refactor(ui): four panels share one focus ring (7f516be)
 - refactor(layout): service rooms live in rooms, not beside it (a2ef66e)
-- Стол закрепляется за сессией и переживает перезапуск (d007573)
+- A desk stays assigned to its session across restarts (d007573)
 
 ## v0.1.0 — 30 August 2026
 

@@ -1,18 +1,18 @@
-/* План офиса — стили модуля. Каркас панели (.rwrap, .vhead) остаётся ядру:
-   рамка у панелей офиса одна на всех; здесь только то, что внутри. */
+/* Office plan module styles. Core owns the panel frame (.rwrap, .vhead): every
+   office panel shares it, while this file styles only the contents. */
 #plan{position:fixed; inset:0; z-index:28; background:rgba(12,8,5,.8);
   display:flex; align-items:center; justify-content:center}
 #plan[hidden]{display:none}
-/* Ширина делится на --ui там, где задаётся: vw внутри zoom меряется от окна и
-   потом умножается на масштаб, и ограничитель перестаёт ограничивать. */
+/* Divide width by --ui where set: vw inside zoom measures the window and is
+   multiplied by scale, making an undivided limit stop limiting. */
 .planwrap{width:min(680px, calc(92vw / var(--ui, 1)))}
 .vhead #plancount{font-style:normal; font-weight:normal; color:var(--muted); margin-left:10px}
 .planbody{display:flex; min-height:0}
 .planmap{position:relative; flex:0 0 auto; padding:10px 0 8px 10px}
 .planmap canvas{image-rendering:pixelated; display:block; border:2px solid var(--frame-dim); background:#f1e2bc}
-/* Клетка комнаты — кнопка для мыши поверх холста. Сама она невидима: рамку
-   фокуса рисует холст, там же, где стены и люди, иначе они разъезжаются на
-   полпикселя при дробном масштабе. */
+/* A room cell is an invisible mouse button over the canvas. The canvas draws
+   its focus outline beside walls and people; separate layers drift by half a
+   pixel at fractional scale. */
 .plancell{position:absolute; background:none; border:0; padding:0; margin:0; cursor:pointer; opacity:0}
 .plandetail{flex:1 1 auto; min-width:0; padding:12px 12px 8px; display:flex; flex-direction:column; gap:6px;
   border-left:2px solid var(--wood-hi); overflow-y:auto}
@@ -29,8 +29,8 @@
 .planrow .who i{font-style:normal; color:var(--muted)}
 .planrow.wait .who i{color:var(--ink-dim)}
 .plandetail .spacer{flex:1}
-/* Кнопка одна, и Enter нажимает её без фокуса — рамка на ней стоит всегда,
-   чтобы было видно, что Enter здесь есть чему нажать. */
+/* There is one button and Enter presses it without focus, so its outline is
+   always visible to show that Enter has a target here. */
 .plango{align-self:flex-start; background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:12px "JetBrains Mono", "Courier New", monospace; padding:5px 12px; cursor:pointer;
   outline:2px solid var(--warn); outline-offset:-2px}
