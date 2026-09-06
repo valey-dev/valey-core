@@ -909,6 +909,25 @@ async function copyBlock(btn) {
   return ok;
 }
 
+// То же, что copyBlock, но для одиночной кнопки, у которой нет блока кода под
+// боком: карточка ключа, где копируют строку из поля рядом. Приём общий и
+// намеренно повторён отсюда, а не изобретён заново — кнопка и есть ответ,
+// отдельной строки статуса нет.
+async function copyOnBtn(btn, text) {
+  const was = btn.dataset.was || btn.textContent;
+  btn.dataset.was = was;
+  const ok = await copyText(text);
+  btn.classList.remove('done', 'fail');
+  btn.classList.add(ok ? 'done' : 'fail');
+  btn.textContent = tr(ok ? 'key.copied' : 'key.copyFailed');
+  clearTimeout(btn._back);
+  btn._back = setTimeout(() => {
+    btn.classList.remove('done', 'fail');
+    btn.textContent = was;
+  }, ok ? 1500 : 4000);
+  return ok;
+}
+
 // Клавиша копирует верхний блок, попавший в экран, — тот, который читают.
 // Ниже экрана блоки есть почти всегда, и копировать первый в документе значило
 // бы копировать не то, что видно.
@@ -1753,6 +1772,7 @@ function bindKeys() {
   });
   const detail = el.bag.querySelector('.keydetail');
   if (!detail) return;
+  if (keysIn) keysRing.paint();
   // A guest gets the cards to read and no controls at all: POST /api/settings
   // answers him 403 anyway, and saying «the owner sets the keys up» beats
   // letting him press a button and collect a refusal. Hidden by the class, so
@@ -1761,31 +1781,70 @@ function bindKeys() {
   // Copying is shared by every card: a command, a path, a Redirect URI. Without
   // https the browser has no clipboard, and that has to show on the button
   // rather than in the console.
-  detail.querySelectorAll('[data-copy]').forEach((b) => b.onclick = async () => {
-    const ok = await copyText(b.dataset.copy);
-    toast(tr(ok ? 'key.copied' : 'key.copyFailed'), ok ? '' : 'wait');
-  });
+  // Ответ живёт на нажатой кнопке, как у блоков кода в транскрипте. Тост
+  // уезжал вверх, к строке статуса офиса, а рука в этот момент смотрит на
+  // кнопку, которую только что нажала: «ничего не произошло».
+  detail.querySelectorAll('[data-copy]').forEach((b) => b.onclick = () => copyOnBtn(b, b.dataset.copy));
   const card = cards[keyIdx];
   if (card && card.bind) card.bind(detail);
   paintBagFocus();
 }
 
 // Arrows walk the shelf, ⏎ hands focus to the card — from there it is Tab.
+// The shelf is two floors, and the arrows say which one you are on. Left and
+// right walk the cards; down steps into the open card and then walks its rows;
+// up from the first row comes back out to the shelf.
+//
+// Enter used to hand the browser's own focus to the first control and leave the
+// rest to Tab. That was enough while a card was one button — the CLI has one —
+// and stopped being enough the moment Spotify arrived with four steps, two
+// fields and five buttons. This office is walked with the keyboard; a card that
+// needs the mouse is a card nobody set up.
+const KEY_ROWS = '.keystep, .keycmd, .keywarn, .keyfoot';
+const keysRing = focusRing(() => el.bag.querySelector('.keydetail'), 'input, .obtn', { rows: KEY_ROWS });
+let keysIn = false;
+
+// Leaving the card: on a card switch, on a tab switch, on closing the bag. The
+// flag outliving its card would swallow the arrows on the shelf.
+export function keysOut() { keysIn = false; keysRing.reset(); }
+
 function keysKey(key) {
   const cards = keyCards();
   if (!cards.length) return false;
-  const step = { arrowleft: -1, arrowright: 1, arrowup: -1, arrowdown: 1 }[key];
-  if (step !== undefined) {
-    keyIdx = (keyIdx + step + cards.length) % cards.length;
-    renderBag();
-    return true;
+
+  if (!keysIn) {
+    const step = { arrowleft: -1, arrowright: 1 }[key];
+    if (step !== undefined) {
+      keyIdx = (keyIdx + step + cards.length) % cards.length;
+      keysRing.reset();
+      renderBag();
+      return true;
+    }
+    if (key === 'arrowdown' || key === 'enter' || key === ' ') {
+      if (!el.bag.querySelector('.keydetail input, .keydetail .obtn')) return true;
+      keysIn = true;
+      keysRing.reset();
+      keysRing.paint();
+      return true;
+    }
+    // Up on the shelf is nobody's: the tabs are digits, and the office below is
+    // not walked from inside a panel.
+    return key === 'arrowup';
   }
-  if (key === 'enter') {
-    const first = el.bag.querySelector('.keydetail input, .keydetail .obtn');
-    if (first) first.focus();
-    return true;
+
+  // Up out of the first row leaves the card rather than wrapping round to the
+  // last: a ring that swallows the way back is how a panel traps a hand.
+  if (key === 'arrowup') {
+    const detail = el.bag.querySelector('.keydetail');
+    const cur = detail && detail.querySelector('.focus');
+    const rows = detail ? [...detail.querySelectorAll(KEY_ROWS)] : [];
+    if (!cur || !rows.length || rows[0].contains(cur)) {
+      keysOut();
+      el.bag.querySelectorAll('.keydetail .focus').forEach((n) => n.classList.remove('focus'));
+      return true;
+    }
   }
-  return false;
+  return keysRing.key(key, true);
 }
 
 // Вкладка «офис». Дресс-код живёт здесь, потому что у него нет предмета в
@@ -2245,11 +2304,24 @@ const officeRing = focusRing(() => el.bag, '.obtn');
 function openTab(tab) {
   if (!tabs().includes(tab) || tab === bagTab) return;
   bagTab = tab; bagIdx = 0; cellIdx = 0;
+  keysOut();
   officeRing.reset();
   renderBag();
 }
 
-export function closeBag() { el.bag.hidden = true; bagIdx = 0; cellIdx = 0; officeRing.reset(); }
+export function closeBag() { el.bag.hidden = true; bagIdx = 0; cellIdx = 0; officeRing.reset(); keysOut(); }
+
+// Open the shelf on one particular key. The thing that uses a key is the natural
+// place to ask for it — the receiver knows the office has no Spotify long before
+// anybody walks to the inventory — so it needs a way to say «this one», not just
+// «the keys tab». Unknown id opens the shelf as it was rather than throwing: a
+// module can be switched off while its neighbour still points at it.
+export function openKeyCard(id) {
+  const at = keyCards().findIndex((c) => c.id === id);
+  if (at >= 0) keyIdx = at;
+  keysOut();
+  renderBag('keys');
+}
 
 // «На себе» — не ряд кнопок, а список слотов, у каждого ◀ и ▶. Поэтому
 // вверх-вниз ходят по слотам, а в стороны крутят значение того, на котором

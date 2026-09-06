@@ -46,7 +46,13 @@ import { owned } from './owned.js';
 
 let failed = [];
 
-export async function loadModules() {
+// What the core lends a module. Handed in at load rather than imported here:
+// modules.js must not reach into main.js, or the loader stops being a seam and
+// becomes half of the office.
+let core = {};
+
+export async function loadModules(callbacks = {}) {
+  core = callbacks;
   let list = [];
   try {
     list = await (await fetch('/api/modules', { headers: owned() })).json();
@@ -110,6 +116,18 @@ function apiFor(id) {
     // Opening a second EventSource would work and would be wasteful: one more
     // connection per module, for events the office is already carrying.
     stream(name, fn) { streams.push({ id, name, fn }); },
+    // Writing to the office settings. A module keeps its own section there —
+    // the loader already lets it declare defaults and guard its secret on the
+    // server — and until now it had no way to write one from the page.
+    //
+    // The radio thought it had: two handlers in its panel called
+    // `api.saveSettings` from a scope where `api` did not exist, so pasting a
+    // Spotify Client ID threw a ReferenceError on click and nothing was saved.
+    // Nothing caught it — the module loads, the panel draws, and the stand does
+    // not click. Found 6 September 2026 while moving that flow onto the key
+    // shelf. No new hole: POST /api/settings is the owner's alone, and it was
+    // already the only way in.
+    saveSettings(patch) { return core.saveSettings(patch); },
     // A module's keys are declared, not tested letter by letter in a handler.
     // That way the core knows what is taken and can say so — until 5 September
     // 2026 a fight between two modules over one letter was settled by load

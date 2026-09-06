@@ -2106,7 +2106,7 @@ renderTitle();
 // this changes nothing; for a guest it is the difference between an office and
 // an empty room.
 await admission;
-await loadModules();
+await loadModules({ saveSettings });
 // The modules arrive later than the first stream, so their listeners are hung on
 // the open one now. Without this their events would be silently lost until the
 // network happened to blink and the stream was reopened.

@@ -1121,7 +1121,23 @@ body.stand-folded #standtab{display:block}
   border:1px solid var(--frame-dim); padding:5px 8px; font:12px "JetBrains Mono", monospace}
 .keystep .obtn{white-space:nowrap}
 .keyfoot{display:flex; align-items:center; gap:10px; margin-top:2px; font-size:11px; color:var(--muted)}
-.keyfoot .obtn{margin-left:auto}
+/* Only the first button is pushed to the right — with margin-left:auto on every
+   one of them three buttons would spread across the whole footer with the note
+   lost between them. */
+.keyfoot .obtn:first-of-type{margin-left:auto}
+/* A connected key answers «what is set up», not «how to set it up»: a term on
+   the left, the value on the right, as in the personnel file. Frame 565:2. */
+.keyrow{display:flex; gap:14px; font-size:12px}
+.keyrow span{flex:0 0 110px; color:var(--muted)}
+.keyrow b{font-weight:normal; color:var(--ink-dim)}
+/* Поле внутри карточки подсвечивается так же, как кнопка: ходят по ним одной
+   стрелкой, и рука не должна гадать, где она стоит. */
+.keydetail input.focus{outline:2px solid var(--warn); outline-offset:-2px; border-color:var(--warn)}
+/* Кнопка, которая только что скопировала. Цвета те же, что у .mdcopy в
+   транскрипте: один приём — один вид, иначе «скопировано» в двух местах офиса
+   выглядит как два разных события. */
+.obtn.done{color:var(--accent); border-color:var(--accent)}
+.obtn.fail{color:var(--warn); border-color:var(--warn)}
 .keywarn{margin:0; padding:8px 10px; font-size:11px; color:var(--ink);
   background:rgba(255,209,102,.10); border-left:3px solid var(--warn);
   display:flex; align-items:center; gap:10px}
