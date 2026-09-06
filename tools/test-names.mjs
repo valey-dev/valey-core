@@ -38,6 +38,34 @@ for (const id of PACK_IDS) {
     pool.every((n) => genderOf(n, id) === 'm' || genderOf(n, id) === 'f'));
   ok(`${id}: словарь заметно больше прежних пятидесяти`, pool.length > 150, pool.length);
 }
+// The alphabet of a pack. On 6 September 2026 the Russian pool turned out to
+// hold 'Costa' — «Костя» typed on the wrong keyboard layout, and the same name
+// already sat ten places below in Cyrillic. It arrived with the very first
+// commit of the repository and nobody saw it for four days: a name is only ever
+// seen when a session's hash lands on it, and one Latin word among a hundred and
+// seventy reads as somebody's joke rather than as a slip.
+//
+// The check is the alphabet rather than the one word, because the mistake is the
+// layout and it will come back with the next name added to the list.
+const SCRIPT = { ru: /^\p{Script=Cyrillic}[\p{Script=Cyrillic}\p{Pd} ]*$/u, en: /^\p{Script=Latin}[\p{Script=Latin}\p{Pd}' ]*$/u };
+for (const id of PACK_IDS) {
+  const rule = SCRIPT[id];
+  ok(`${id}: у пака есть правило алфавита`, !!rule, id);
+  if (!rule) continue;
+  const strays = namePool(id).filter((n) => !rule.test(n));
+  ok(`${id}: имена написаны алфавитом пака`, strays.length === 0, strays);
+}
+
+// A digit in a pool name would be read as the number the office appends when the
+// pool runs dry: `genderOf('Ося 51')` strips it to ask about «Ося», and a name
+// that came with a number of its own would be asked about as something else.
+for (const id of PACK_IDS) {
+  const numbered = namePool(id).filter((n) => /\d/.test(n));
+  ok(`${id}: в словаре нет имён с цифрой`, numbered.length === 0, numbered);
+  const untidy = namePool(id).filter((n) => n !== n.trim() || n === '');
+  ok(`${id}: нет пустых имён и хвостов пробелов`, untidy.length === 0, untidy);
+}
+
 // One pool size across the packs is not pedantry: a name is handed out from a
 // hash around the circle, and an office that moved onto a short pack will run
 // into numbers where a long one had none.
