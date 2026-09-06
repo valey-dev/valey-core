@@ -60,10 +60,19 @@ const UI_KEY = 'valey-uiscale';
 export const UI_STEPS = [1, 1.15, 1.3, 1.5, 1.75];
 export const ui = { scale: 1 };
 
+// Who has to be told the interface got bigger. The canvas is the one that cares:
+// the HUD is measured by fit() to decide how much room the office gets, so a size
+// change that does not reach fit() leaves the office laid out for the old strip —
+// the gap above it goes wrong and only a reload puts it right. i18n does the same
+// thing with onLang, and for the same reason.
+const uiListeners = new Set();
+export function onUiScale(fn) { uiListeners.add(fn); return () => uiListeners.delete(fn); }
+
 export function applyUiScale(v) {
   ui.scale = UI_STEPS.includes(Number(v)) ? Number(v) : 1;
   document.documentElement.style.setProperty('--ui', String(ui.scale));
   try { localStorage.setItem(UI_KEY, String(ui.scale)); } catch {}
+  for (const fn of uiListeners) fn(ui.scale);
 }
 
 applyUiScale(Number(localStorage.getItem(UI_KEY)));

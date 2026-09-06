@@ -4,6 +4,34 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.13.0 — 6 September 2026
+
+### Added
+
+- **modules:** a module route can read the office settings (9b68277)
+- **office:** the strip along the bottom is gone, the ? panel says it all (463c65b)
+- **office:** the canvas takes the window, so a tall monitor shows more floor (000e103)
+- **agents:** the shift — replies, characters and the gaps between them (a1bf739)
+- **modules:** a module can be handed the office stream and told who it is talking as (977aa6d)
+- **modules:** a module can be handed the floor — who is standing where, and how to reach one of them (36e7b70)
+- **meeting:** the office introduces two browsers to each other and then gets out of the way (cf67e26)
+- **office:** the inventory grows a keys shelf, and the office says what it connects to (a281d81)
+
+### Fixed
+
+- **office:** changing the interface size recounts the office, without a reload (6ff1ea2)
+- **test:** a range with several features is a fifth right answer, not a broken dry run (585c185)
+- **hud:** the HUD grows with the interface, not with the office (61a1714)
+- **office:** the copy icon no longer hides while the cursor is crossing to it (de6fa6f)
+- **office:** a guest asked for the modules before he was let in, and got an office without any (723165f)
+- **shot:** two shots at once photographed the same browser, so two people read as one (e8fe739)
+- **test:** a branch whose main was released past it is not a broken dry run (55026b2)
+- **office:** the inventory keeps one height across its five tabs (5031b0a)
+- **office:** keys take the last tab, and the hint stops counting digits aloud (ac56e00)
+
+### Other
+
+- docs(office): the tree points at the Prod section it was promoted to (649a855)
 ## v0.12.0 — 6 September 2026
 
 ### Added
