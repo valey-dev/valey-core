@@ -46,7 +46,19 @@ export function deviceLang() {
   return pickLang(list);
 }
 
-let LANG = deviceLang();
+// The device is asked only where there is a device. Node 22 has a `navigator` of
+// its own and answers `language` with the locale of the machine, so on
+// 6 September 2026 every stand that compares strings started reading them in
+// English on an en-US laptop: modules/bible/test-keys.mjs failed ten checks two
+// days after anybody had touched that module, and the module was fine. A default
+// that depends on whose computer runs the check is not a default.
+//
+// Node introduces itself in its user agent, and that is the honest way to tell a
+// browser from a stand — better than looking for `document`, which the stands
+// install themselves.
+const inBrowser = typeof navigator !== 'undefined'
+  && !/^Node\.js/.test(String(navigator.userAgent || ''));
+let LANG = inBrowser ? deviceLang() : 'ru';
 
 const DICT = {
   ru: {
@@ -55,7 +67,7 @@ const DICT = {
 
     // --------------------------------------------------------------- the header
     'hud.corridor': 'коридор',
-    'hud.round': 'Tab — обход',
+    'hud.round': 'Tab — планёрка',
     'hud.zoomAuto': ' авто',
     'hud.zoomTight': ' тесно',
     'hud.skyTitle': 'погода {source} · P — настроить',
@@ -146,6 +158,8 @@ const DICT = {
     // The pager calls, the card asks. The words differ: on the pager «Ответить»
     // is about the call, in the card «Разрешить» is about the command.
     'permit.askQ': '— Спрашивает тебя:',
+    'permit.noAnswer': 'не отвечу',
+    'permit.askNote': 'Нажатый вариант и есть ответ: он уходит агенту, и тот идёт дальше с ним. «В терминале» отдаёт вопрос обратно, если отвечать хочется там.',
     'pager.asks': 'спрашивает:',
     'pager.someone': 'агент',
     'pager.may': 'можно выполнить?',
@@ -155,6 +169,8 @@ const DICT = {
     'pager.more': 'ещё {n}',
     'pager.sec': '{n} с',
     'pager.min': '{n} мин',
+    'hud.workTitle': 'агенты за работой',
+    'hud.waitTitle': 'ждут твоего ответа · нажми или TAB — обход',
     'hud.pagerTitle': 'отложенные запросы · H — вернуть пейджер',
     'permit.q': '— Можно выполнить?',
     'permit.noDesc': 'без пояснения',
@@ -370,7 +386,7 @@ const DICT = {
     'rec.agents': '{n} {word}',
     'rec.agent.one': 'агент', 'rec.agent.few': 'агента', 'rec.agent.many': 'агентов',
     'rec.lead': 'проводить',
-    'rec.hint': 'Провожу к любому — он подсветится стрелкой, как в утреннем обходе.',
+    'rec.hint': 'Провожу к любому — он подсветится стрелкой, как в планёрке.',
     'skin.title': 'Цвет офиса',
     'skin.hue': 'тон', 'skin.sat': 'насыщенность', 'skin.accent': 'акцент',
     'skin.textSize': 'размер текста',
@@ -461,10 +477,17 @@ const DICT = {
     'dlg.readOnArrow': '↑ дочитать — здесь оборвано, дальше ещё {n} символов →',
 
     // -------------------------------------------- the round, the look, the weather
-    'round.title': 'Утренний обход · {done} из {n}',
-    'round.untitled': '(без названия)',
-    'round.lead': 'вести',
-    'round.nobody': 'Никто не ждёт. Редкий день.',
+    'standup.title': 'ПЛАНЁРКА',
+    'standup.people': 'one:{n} человек|few:{n} человека|many:{n} человек',
+    'standup.teams': 'one:{n} команда|few:{n} команды|many:{n} команд',
+    'standup.waiting': 'one:{n} ждёт тебя|few:{n} ждут тебя|many:{n} ждут тебя',
+    'standup.nobodyWaits': 'никто не ждёт',
+    'standup.untitled': '(без названия)',
+    'standup.noReport': 'без отчёта',
+    'standup.lead': 'вести',
+    'standup.nobody': 'Ни одной живой сессии.',
+    'standup.nobodyWhy': 'Планёрка показывает то, что открыто прямо сейчас, — запусти агента, и он встанет в колонку своего проекта. Задача в карточке берётся из его же отчёта: пока агент не назвал её тремя строками, доска покажет имя чата и чем он занят, но не задачу.',
+    'standup.keys': '↑ ↓ ← → карточка · ENTER — открыть · G — вести · ESC',
     'bag.title': 'Инвентарь',
     'bag.tab.self': 'на себе', 'bag.tab.things': 'вещи',
     'bag.tabHint': 'цифры — вкладки · C и I — открыть',
@@ -474,7 +497,7 @@ const DICT = {
     'bag.tab.keys': 'ключи',
     // The key shelf. «not connected» is fixed by pasting a key, «not logged in»
     // by a trip to the terminal: different words because they are different acts.
-    'key.shelf': 'стрелки — по ключам, ⏎ — открыть',
+    'key.shelf': '← → по ключам · ↓ внутрь карточки · ⏎ нажать',
     'key.none': 'Подключать нечего: офис в этой сборке наружу не ходит.',
     'key.copy': 'скопировать',
     'key.guest': 'Ключи заводит хозяин офиса — здесь их только видно.',
@@ -680,7 +703,7 @@ const DICT = {
     'hint.interact': 'действие',
     'hint.interactMore': 'поговорить, попить, нажать выбранное; на доске без соседей — прыжок',
     'hint.skate': 'скейт',
-    'hint.sound': 'звук', 'hint.round': 'обход', 'hint.notes': 'заметки',
+    'hint.sound': 'звук', 'hint.standup': 'планёрка', 'hint.notes': 'заметки',
     'hint.bag': 'одежда',
     'hint.invite': 'гости', 'hint.inviteMore': 'пригласить',
     'hint.sky': 'окно в мир', 'hint.skin': 'цвет офиса',
@@ -692,7 +715,8 @@ const DICT = {
     'place.floor': 'на этаже',
     'place.cooler': 'у кулера', 'place.cooler.space': 'попить',
     'place.card': 'в карточке агента', 'place.card.note': 'записка',
-    'place.round': 'обход — кто где', 'place.round.go': 'вести', 'place.round.row': 'строка',
+    'place.standup': 'планёрка — кто над чем', 'place.standup.open': 'открыть',
+    'place.standup.go': 'вести', 'place.standup.card': 'карточка', 'place.standup.team': 'команда',
     'place.viewer': 'просмотрщик файла', 'place.viewer.back': 'в галерею',
     'place.viewer.reread': 'обновить', 'place.viewer.loupe': 'лупа',
     'place.viewer.buttons': 'кнопки', 'place.viewer.file': 'файл',
@@ -726,7 +750,7 @@ const DICT = {
     'lang.other': 'русский',
 
     'hud.corridor': 'corridor',
-    'hud.round': 'Tab — round',
+    'hud.round': 'Tab — the standup',
     'hud.zoomAuto': ' auto',
     'hud.zoomTight': ' tight',
     'hud.skyTitle': 'weather {source} · P to set up',
@@ -808,6 +832,8 @@ const DICT = {
     'toast.namePackPlain': 'Names: {pack}.',
     // ------------------------------------------------------ permission request
     'permit.askQ': '— Asks you:',
+    'permit.noAnswer': 'no answer',
+    'permit.askNote': 'The option you press is the answer: it goes to the agent and it carries on with it. «In the terminal» hands the question back, if you would rather answer there.',
     'pager.asks': 'asks:',
     'pager.someone': 'an agent',
     'pager.may': 'may I run?',
@@ -817,6 +843,8 @@ const DICT = {
     'pager.more': '{n} more',
     'pager.sec': '{n}s',
     'pager.min': '{n} min',
+    'hud.workTitle': 'agents at work',
+    'hud.waitTitle': 'waiting for your answer \u00b7 press it, or TAB for the round',
     'hud.pagerTitle': 'deferred requests \u00b7 H brings the pager back',
     'permit.q': '\u2014 May I run this?',
     'permit.noDesc': 'no description given',
@@ -1030,7 +1058,7 @@ const DICT = {
     'rec.agents': '{n} {word}',
     'rec.agent.one': 'agent', 'rec.agent.few': 'agents', 'rec.agent.many': 'agents',
     'rec.lead': 'take me',
-    'rec.hint': 'I will take you to any of them — they light up with an arrow, as in the morning round.',
+    'rec.hint': 'I will take you to any of them — they light up with an arrow, as in the standup.',
     'skin.title': 'Office colour',
     'skin.hue': 'hue', 'skin.sat': 'saturation', 'skin.accent': 'accent',
     'skin.textSize': 'text size',
@@ -1116,10 +1144,17 @@ const DICT = {
     'dlg.readOnArrow': '↑ read on — cut off here, {n} characters more →',
 
     // ------------------------------------------ the round, your look, weather
-    'round.title': 'Morning round · {done} of {n}',
-    'round.untitled': '(untitled)',
-    'round.lead': 'lead me',
-    'round.nobody': 'Nobody is waiting. A rare day.',
+    'standup.title': 'THE STANDUP',
+    'standup.people': 'one:{n} person|other:{n} people',
+    'standup.teams': 'one:{n} team|other:{n} teams',
+    'standup.waiting': 'one:{n} waiting for you|other:{n} waiting for you',
+    'standup.nobodyWaits': 'nobody is waiting',
+    'standup.untitled': '(untitled)',
+    'standup.noReport': 'no report',
+    'standup.lead': 'lead me',
+    'standup.nobody': 'Not a single live session.',
+    'standup.nobodyWhy': 'The standup shows what is open right now — start an agent and he takes his place in his project column. The task on a card comes from his own report: until he names it in three lines, the board shows the chat name and what he is doing, but not the task.',
+    'standup.keys': '↑ ↓ ← → card · ENTER opens · G leads you there · ESC',
     'bag.title': 'Inventory',
     'bag.tab.self': 'on you', 'bag.tab.things': 'things',
     'bag.tabHint': 'digits — tabs · C and I — open',
@@ -1127,7 +1162,7 @@ const DICT = {
     'bag.thingsNote': 'Everything you can take off lives here. Nothing drops and nothing is bought — it is all available, always: a display case, not a backpack.',
     'bag.tab.office': 'office',
     'bag.tab.keys': 'keys',
-    'key.shelf': 'arrows walk the shelf, ⏎ opens',
+    'key.shelf': '← → walk the shelf · ↓ into the card · ⏎ press',
     'key.none': 'Nothing to connect: this build never goes outside.',
     'key.copy': 'copy',
     'key.guest': 'The office owner sets the keys up; here they are only visible.',
@@ -1325,7 +1360,7 @@ const DICT = {
     'hint.interact': 'action',
     'hint.interactMore': 'talk, drink, press what is chosen; on the board with nobody near — an ollie',
     'hint.skate': 'skateboard',
-    'hint.sound': 'sound', 'hint.round': 'the round', 'hint.notes': 'notes',
+    'hint.sound': 'sound', 'hint.standup': 'the standup', 'hint.notes': 'notes',
     'hint.bag': 'clothes',
     'hint.invite': 'guests', 'hint.inviteMore': 'invite them in',
     'hint.sky': 'window on the world', 'hint.skin': 'office colour',
@@ -1335,7 +1370,8 @@ const DICT = {
     'place.floor': 'on the floor',
     'place.cooler': 'at the cooler', 'place.cooler.space': 'drink',
     'place.card': 'in the agent card', 'place.card.note': 'a note',
-    'place.round': 'the round — who is where', 'place.round.go': 'lead me there', 'place.round.row': 'row',
+    'place.standup': 'the standup — who is on what', 'place.standup.open': 'open',
+    'place.standup.go': 'lead me there', 'place.standup.card': 'card', 'place.standup.team': 'team',
     'place.viewer': 'the file viewer', 'place.viewer.back': 'back to the gallery',
     'place.viewer.reread': 'refresh', 'place.viewer.loupe': 'loupe',
     'place.viewer.buttons': 'buttons', 'place.viewer.file': 'file',

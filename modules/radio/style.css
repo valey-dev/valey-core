@@ -84,3 +84,10 @@
 #radiovol.focus, #radiouri.focus, .radioauth button.focus{
   outline:2px solid var(--warn); outline-offset:-2px}
 #dialog, #toasts, .vwrap, .rwrap, .radiowrap{zoom:var(--ui, 1)}
+
+/* The receiver no longer explains how to connect: it says why the music breaks
+   off and points the way. Frame 572:2. Everything else moved to the key shelf —
+   four steps of setting up an application, inside the panel that is playing
+   music, read as an instruction manual laid over a record player. */
+.radiotune{display:flex; align-items:center; gap:10px; margin-top:6px}
+.radiotune .hint{margin:0; flex:1 1 auto}

@@ -43,8 +43,25 @@ export function questionOf(input) {
   if (!one || typeof one !== 'object') return null;
   const text = typeof one.question === 'string' ? one.question : '';
   if (!text) return null;
+  // An option is a label and the sentence under it. That sentence is what the
+  // choice is actually made on: a bare label says «later» and nothing about what
+  // later costs. Until 6 September 2026 this mapper threw it away and kept the
+  // label alone.
+  //
+  // `description` is the field Claude Code sends; the other two names are read
+  // because the office does not get to pick what arrives, and a comment shown
+  // under the wrong key is the same as no comment.
   const options = (Array.isArray(one.options) ? one.options : [])
-    .map((o) => (typeof o === 'string' ? o : (o && typeof o.label === 'string' ? o.label : '')))
+    .map((o) => {
+      if (typeof o === 'string') return { label: o, note: '' };
+      if (!o || typeof o !== 'object') return null;
+      const label = typeof o.label === 'string' ? o.label : '';
+      if (!label) return null;
+      const note = ['description', 'detail', 'hint']
+        .map((k) => (typeof o[k] === 'string' ? o[k].trim() : ''))
+        .find(Boolean) || '';
+      return { label, note };
+    })
     .filter(Boolean)
     .slice(0, 8);
   return { text, header: typeof one.header === 'string' ? one.header : '', options };

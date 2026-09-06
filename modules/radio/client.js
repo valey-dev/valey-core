@@ -10,7 +10,7 @@
 // silently do nothing.
 import { pxText } from '../../web/office.js';
 import { t as tr } from '../../web/i18n.js';
-import { toast, renderHud, focusRing } from '../../web/ui.js';
+import { toast, renderHud, focusRing, openKeyCard, closeBag } from '../../web/ui.js';
 import { sound } from '../../web/sound.js';
 import { MARGIN } from '../../web/layout.js';
 import { radio, toUri, stationName } from './radio.js';
@@ -32,6 +32,10 @@ function ensurePanel() {
 // The state of the office arrives at the points; we hold the reference so that the panel
 // knows about the settings and the body about the volume.
 let S = null;
+// The core's callbacks, kept from register(). Saving a setting used to be
+// written as `api.saveSettings` inside paintRadio, where no `api` existed — a
+// ReferenceError on click, and the Client ID went nowhere. Held here on purpose.
+let api = null;
 let prop = null;
 
 const nowPlaying = () => (radio.sdk && player.track ? player.track.name : stationName(radio.station()) || '');
@@ -82,6 +86,33 @@ const DICT = {
     'radio.badId': 'Client ID выглядит не так',
     'radio.appSaved': 'Приложение записано — теперь «подключить Spotify»',
     'radio.noteOwn': 'Играет твой Spotify: треки целиком, громкость ручкой. Когда отходишь по коридору, радио затихает; пока оно играет, офис звучит тише.',
+    'key.spot.name': 'Spotify',
+    'key.spot.on': 'подключён',
+    'key.spot.off': 'не подключён',
+    'key.spot.bad': 'нужен 127.0.0.1',
+    'key.spot.gives': 'Что даёт: в приёмнике у входа играют целые треки твоего Spotify вместо тридцатисекундных превью. Без ключа приёмник работает — просто превью, отсюда обрывы.',
+    'key.spot.givesOn': 'Что даёт: в приёмнике у входа играет твой Spotify — целые треки вместо тридцатисекундных превью, громкость ручкой, затихает, когда отходишь по коридору.',
+    'key.spot.loopback': 'Офис открыт на {host}, а Spotify пускает обратно только на 127.0.0.1. Открой офис по 127.0.0.1:{port}, иначе четвёртый шаг откажет.',
+    'key.spot.openLoop': 'открыть 127.0.0.1:{port}',
+    'key.spot.s1': 'Заведи приложение на developer.spotify.com — бесплатно, хватит обычного аккаунта.',
+    'key.spot.s1btn': 'открыть в браузере',
+    'key.spot.s2': 'Впиши в него Redirect URI:',
+    'key.spot.s3': 'Вставь Client ID:',
+    'key.spot.s4': 'Spotify спросит разрешение в новом окне и вернёт сюда.',
+    'key.spot.note': 'Client ID — не секрет: он лежит в .settings.json и один на весь офис. А ключ, который Spotify выдаёт в ответ, останется в этом браузере — в другом придётся подключаться заново.',
+    'key.spot.premium': 'Нужен Premium: без него Web Playback SDK не заводится, и целых треков не будет даже с ключом.',
+    'key.spot.rowAccount': 'аккаунт',
+    'key.spot.rowApp': 'приложение',
+    'key.spot.rowDevice': 'устройство',
+    'key.spot.accountVal': 'Premium — без него плеер не заводится',
+    'key.spot.appVal': 'client id {id} · твоё, заведено на developer.spotify.com',
+    'key.spot.deviceVal': '«Valey — офис»',
+    'key.spot.noDrm': 'В приёмнике нет Widevine, поэтому Spotify отдаёт только превью. Полные треки — в Chrome, Safari или Firefox.',
+    'key.spot.inBrowser': 'ключ живёт в этом браузере, а не на диске',
+    'key.spot.toRadio': 'проводить к приёмнику',
+    'key.spot.whyBrowser': 'Поэтому в другом браузере офис попросит подключиться заново — и поэтому же ключ не уезжает вместе с .settings.json на другую машину.',
+    'radio.previewLine': 'Играет превью — короткие отрывки, отсюда обрывы. Целые треки, если подключить свой Spotify.',
+    'radio.tune': 'настроить',
     'radio.noteDrm': 'В этом браузере нет расшифровки защищённого контента (Widevine), поэтому Spotify сможет отдавать только превью. Полные треки — в браузере с DRM: Chrome, Safari, Firefox.',
     'radio.notePreview': 'Встроенный плеер отдаёт превью — короткие отрывки, отсюда обрывы. Треки целиком играют, только если подключить свой Spotify кнопкой выше.',
     'radio.noteEmbed': 'Играет прямо в этой вкладке. Пока радио играет, офис звучит тише.',
@@ -130,6 +161,33 @@ const DICT = {
     'radio.badId': 'That Client ID does not look right',
     'radio.appSaved': 'App saved — now press “connect Spotify”',
     'radio.noteOwn': 'Your own Spotify is playing: whole tracks, volume on the knob. Walk off down the corridor and the radio fades; while it plays, the office itself goes quieter.',
+    'key.spot.name': 'Spotify',
+    'key.spot.on': 'connected',
+    'key.spot.off': 'not connected',
+    'key.spot.bad': '127.0.0.1 needed',
+    'key.spot.gives': 'What it gives: the receiver by the entrance plays whole tracks from your Spotify instead of thirty-second previews. Without the key the receiver still works — previews, hence the cut-offs.',
+    'key.spot.givesOn': 'What it gives: the receiver by the entrance plays your Spotify — whole tracks instead of thirty-second previews, volume on the knob, fading as you walk off down the corridor.',
+    'key.spot.loopback': 'The office is open at {host}, and Spotify only lets you back in at 127.0.0.1. Open the office at 127.0.0.1:{port}, or the fourth step will refuse.',
+    'key.spot.openLoop': 'open 127.0.0.1:{port}',
+    'key.spot.s1': 'Register an app at developer.spotify.com — free, an ordinary account is enough.',
+    'key.spot.s1btn': 'open in the browser',
+    'key.spot.s2': 'Give it this Redirect URI:',
+    'key.spot.s3': 'Paste the Client ID:',
+    'key.spot.s4': 'Spotify will ask permission in a new window and bring you back here.',
+    'key.spot.note': 'The Client ID is not a secret: it lies in .settings.json and is one for the whole office. The key Spotify hands back stays in this browser — in another one you connect again.',
+    'key.spot.premium': 'Premium is required: without it the Web Playback SDK never starts, and there are no whole tracks even with a key.',
+    'key.spot.rowAccount': 'account',
+    'key.spot.rowApp': 'app',
+    'key.spot.rowDevice': 'device',
+    'key.spot.accountVal': 'Premium — the player will not start without it',
+    'key.spot.appVal': 'client id {id} · yours, registered at developer.spotify.com',
+    'key.spot.deviceVal': '“Valey — the office”',
+    'key.spot.noDrm': 'This browser has no Widevine, so Spotify only hands over previews. Whole tracks live in Chrome, Safari or Firefox.',
+    'key.spot.inBrowser': 'the key lives in this browser, not on the disk',
+    'key.spot.toRadio': 'walk me to the receiver',
+    'key.spot.whyBrowser': 'So in another browser the office will ask you to connect again — and so the key never travels with .settings.json to another machine.',
+    'radio.previewLine': 'A preview is playing — short snippets, hence the cut-offs. Whole tracks if you connect your own Spotify.',
+    'radio.tune': 'set up',
     'radio.noteDrm': 'This browser has no protected-content decryption (Widevine), so Spotify can only hand over previews. Whole tracks need a browser with DRM: Chrome, Safari, Firefox.',
     'radio.notePreview': 'The embedded player serves previews — short excerpts, hence the cut-offs. Whole tracks play only if you connect your own Spotify with the button above.',
     'radio.noteEmbed': 'Playing right in this tab. While the radio plays, the office sounds quieter.',
@@ -265,26 +323,122 @@ function buildRadio() {
   radio.onChange = paintRadio;
 }
 
-// What to show in the footer of the panel: an invitation to set up an application, the
-// sign-in button, or a note that the full player is already playing.
+// What stands in the footer of the panel now that the connection has moved out.
+// One line and a way to it — the receiver's job is to say why the music breaks
+// off, not to walk anybody through four steps of setting up an application.
+// Frame 572:2.
+//
+// The whole flow lives on the key shelf: the Client ID field, the Redirect URI,
+// the loopback warning and the sign-in are the card's, and there is exactly one
+// of each. While the full player is live the block is gone altogether — the
+// panel then wears the player's own face, and the hint under it already says
+// whose Spotify is playing.
 function authBlock() {
-  const cfg = (S.settings && S.settings.spotify) || {};
-  if (radio.needsLoopback) {
-    return `<p class="warn">${tr('radio.loopback', { port: location.port })}</p>`;
-  }
-  if (!cfg.clientId) {
-    return `<p class="hint">${tr('radio.setup', { uri: esc(location.origin) + '/callback' })}</p>
-      <div class="radiorow"><input id="radiocid" placeholder="Client ID">
-      <button id="radiosave">${tr('radio.save')}</button></div>`;
-  }
-  if (player.state === 'ready') {
-    return `<div class="radiorow"><span class="ok">${tr('radio.yours')}</span>
-      <button id="radioout">${tr('radio.signOut')}</button></div>`;
-  }
-  const label = player.state === 'starting' ? tr('radio.connecting') : tr('radio.connect');
-  return `<div class="radiorow"><button id="radioin">${label}</button>
-    <button id="radioforget" class="thin">${tr('radio.changeApp')}</button></div>`;
+  if (player.state === 'ready') return '';
+  return `<div class="radiotune"><p class="hint">${tr('radio.previewLine')}</p>
+    <button id="radiotune">${tr('radio.tune')}</button></div>`;
 }
+
+// ------------------------------------------------------------- the key card
+// Spotify on the inventory's key shelf. Frames: 571:2 (not connected), 565:2
+// (connected). The whole connection lives here — the receiver keeps one line
+// and a way over, because a thing that plays music is a bad place to explain
+// four steps of registering an application.
+//
+// Three states, and the third earns its place: `bad` is the office opened on
+// localhost. Everything is set up correctly and the last step will still
+// refuse, because Spotify only returns to 127.0.0.1 — a different problem with
+// a different fix, and calling it «not connected» sends people back round the
+// same four steps.
+function spotIcon(c) {
+  c.fillStyle = '#1c130d'; c.fillRect(0, 0, 48, 36);
+  c.fillStyle = '#3f7a4e';
+  c.beginPath(); c.arc(24, 18, 13, 0, Math.PI * 2); c.fill();
+  c.strokeStyle = '#0f1a12'; c.lineCap = 'round';
+  for (const [y, w, t] of [[13, 16, 3], [18, 12, 2.4], [23, 8, 2]]) {
+    c.lineWidth = t;
+    c.beginPath(); c.arc(24, y + 6, w / 2, Math.PI * 1.15, Math.PI * 1.85); c.stroke();
+  }
+}
+
+const spotCfg = () => (S && S.settings && S.settings.spotify) || {};
+const spotState = () => (player.state === 'ready' ? 'on' : radio.needsLoopback ? 'bad' : 'off');
+
+// The Redirect URI Spotify must be given. Always the loopback form: that is the
+// one Spotify accepts, whatever address the office happens to be open at.
+const redirectUri = () => `http://127.0.0.1:${location.port}/callback`;
+
+function spotBody() {
+  const cfg = spotCfg();
+  if (player.state === 'ready') {
+    const id = cfg.clientId ? cfg.clientId.slice(0, 8) + '…' : '—';
+    const drm = radio.drm === 'none' ? `<p class="keywarn">⚠ ${tr('key.spot.noDrm')}</p>` : '';
+    return `<p class="keygives">${tr('key.spot.givesOn')}</p>
+      <div class="keyrow"><span>${tr('key.spot.rowAccount')}</span><b>${tr('key.spot.accountVal')}</b></div>
+      <div class="keyrow"><span>${tr('key.spot.rowApp')}</span><b>${tr('key.spot.appVal', { id: esc(id) })}</b></div>
+      <div class="keyrow"><span>${tr('key.spot.rowDevice')}</span><b>${tr('key.spot.deviceVal')}</b></div>
+      ${drm}
+      <div class="keyfoot"><span class="dim">${tr('key.spot.inBrowser')}</span>
+        <button class="obtn" data-act="forget">${tr('radio.changeApp')}</button>
+        <button class="obtn" data-act="toradio">${tr('key.spot.toRadio')}</button>
+        <button class="obtn" data-act="out">${tr('radio.signOut')}</button></div>
+      <p class="hint">${tr('key.spot.whyBrowser')}</p>`;
+  }
+  const loop = radio.needsLoopback
+    ? `<p class="keywarn">⚠ ${tr('key.spot.loopback', { host: esc(location.host), port: esc(location.port) })}
+      <button class="obtn" data-act="loop">${tr('key.spot.openLoop', { port: esc(location.port) })}</button></p>`
+    : '';
+  const has = !!cfg.clientId;
+  const four = player.state === 'starting' ? tr('radio.connecting') : tr('radio.connect');
+  return `<p class="keygives">${tr('key.spot.gives')}</p>
+    ${loop}
+    <div class="keystep"><i>1</i><span>${tr('key.spot.s1')}</span>
+      <button class="obtn" data-act="dash">${tr('key.spot.s1btn')}</button></div>
+    <div class="keystep"><i>2</i><span>${tr('key.spot.s2')}</span>
+      <input id="spoturi" value="${esc(redirectUri())}" readonly>
+      <button class="obtn" data-copy="${esc(redirectUri())}">${tr('key.copy')}</button></div>
+    <div class="keystep"><i>3</i><span>${tr('key.spot.s3')}</span>
+      <input id="spotcid" placeholder="Client ID" value="${esc(cfg.clientId || '')}">
+      <button class="obtn" data-act="save">${tr('radio.save')}</button></div>
+    <div class="keystep${has ? '' : ' todo'}"><i>4</i><span>${tr('key.spot.s4')}</span>
+      <button class="obtn" data-act="in"${has ? '' : ' disabled'}>${four}</button></div>
+    <p class="hint">${tr('key.spot.note')}</p>
+    <p class="hint">${tr('key.spot.premium')}</p>`;
+}
+
+function spotBind(root) {
+  const on = (act, fn) => { const b = root.querySelector(`[data-act="${act}"]`); if (b) b.onclick = fn; };
+  on('dash', () => window.open('https://developer.spotify.com/dashboard', '_blank', 'noreferrer'));
+  on('loop', () => { location.href = `http://127.0.0.1:${location.port}/`; });
+  on('save', async () => {
+    const id = root.querySelector('#spotcid').value.trim();
+    if (!/^[A-Za-z0-9]{16,64}$/.test(id)) return toast(tr('radio.badId'));
+    await api.saveSettings({ spotify: { clientId: id } });
+    await radio.connect(id);
+    openKeyCard('spotify');
+    toast(tr('radio.appSaved'));
+  });
+  on('in', () => radio.signIn());
+  on('out', () => { radio.signOut(); openKeyCard('spotify'); });
+  on('forget', async () => {
+    await api.saveSettings({ spotify: { clientId: '' } });
+    radio.signOut();
+    openKeyCard('spotify');
+  });
+  // «Проводить к приёмнику» closes the inventory and opens the radio: the key is
+  // set up, and the next thing anybody wants is to hear it.
+  on('toradio', () => { closeBag(); openRadio(); });
+}
+
+const spotCard = () => ({
+  id: 'spotify',
+  name: tr('key.spot.name'),
+  state: spotState(),
+  word: () => tr('key.spot.' + spotState()),
+  icon: spotIcon,
+  body: spotBody,
+  bind: spotBind,
+});
 
 // The cover is repainted only when it has really changed: the panel is repainted on every
 // event of the player, and copying pixels has nothing to do there.
@@ -342,25 +496,8 @@ function paintRadio() {
   repaintRadioFocus();
 
   $('#radioauth').innerHTML = authBlock();
-  const save = $('#radiosave');
-  if (save) save.onclick = async () => {
-    const id = $('#radiocid').value.trim();
-    if (!/^[A-Za-z0-9]{16,64}$/.test(id)) return toast(tr('radio.badId'));
-    await api.saveSettings({ spotify: { clientId: id } });
-    await radio.connect(id);
-    paintRadio();
-    toast(tr('radio.appSaved'));
-  };
-  const signIn = $('#radioin');
-  if (signIn) signIn.onclick = () => radio.signIn();
-  const out = $('#radioout');
-  if (out) out.onclick = () => { radio.signOut(); paintRadio(); };
-  const forget = $('#radioforget');
-  if (forget) forget.onclick = async () => {
-    await api.saveSettings({ spotify: { clientId: '' } });
-    radio.signOut();
-    paintRadio();
-  };
+  const tune = $('#radiotune');
+  if (tune) tune.onclick = () => { closeRadio(); openKeyCard('spotify'); };
 
   // A track length of thirty seconds is a sure sign that the built-in player is giving out
   // a preview rather than music: otherwise the break-off looks like a broken radio.
@@ -458,7 +595,8 @@ function drawRadio(ctx, x, y, t) {
   }
 }
 
-export function register(api) {
+export function register(a) {
+  api = a;
   api.i18n(DICT);
 
   // The receiver is right by the entrance, pressed to the outer wall: in the middle of the
@@ -518,6 +656,7 @@ export function register(api) {
     radioOpen() ? closeRadio() : openRadio();
     return true;
   });
+  api.on('keys', () => spotCard());
   api.on('esc', () => (radioOpen() ? (closeRadio(), true) : false));
   // An open panel holds the screen: while it is visible the office does not count as free.
   // The core used to know that by the line UI.radioOpen() in busy() — the core does not know
