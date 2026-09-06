@@ -528,9 +528,13 @@ export function register(api) {
   // Its own place on the keys board. The module says what its keys mean while the
   // plan is up — the arrows walk rooms here, not buttons — and answers `place` with
   // that id while it owns the screen. The core never learns the id: it asks.
+  // `registry: true`: the module's `key` hook answers the arrows, ENTER and ESC
+  // and returns false for everything else, so the floor's letters reach their
+  // dispatch — with the plan open, C still opens the wardrobe over it.
   const [MAP] = api.places([{
     id: 'map',
     title: 'plan.place',
+    registry: true,
     caps: {
       Escape: 'plan.place.close', KeyK: 'plan.place.close',
       Enter: 'plan.place.go', Space: 'plan.place.go',
