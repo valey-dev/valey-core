@@ -83,17 +83,13 @@ canvas{image-rendering:pixelated; display:block; border:3px solid var(--frame);
    «окно минус left», то есть половина окна, и шапка ломалась на две строки
    посреди пустого места. transform сдвигает уже после переноса и не помогает. */
 #hud{position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:5;
-  width:max-content; max-width:calc(100vw - 20px); background:rgba(26,18,12,.9);
+  width:max-content; max-width:calc((100vw - 20px) / var(--ui, 1)); background:rgba(26,18,12,.9);
   border:2px solid var(--frame); padding:4px 12px;
   letter-spacing:.06em; font-size:12px; text-align:center;}
 .chip{display:inline-block; white-space:nowrap}
 #hud b{color:var(--warn); letter-spacing:.14em}
 .chip{margin-left:10px; color:var(--ink-dim)}
 .chip.work{color:var(--accent)} .chip.wait{color:var(--warn)}
-/* left:50% отдавал подсказке только половину окна, и она ломалась на четыре
-   строки. Растягиваем на всю ширину и центрируем текстом. */
-#help{position:fixed; bottom:8px; left:0; right:0; text-align:center;
-  padding:0 16px; color:var(--muted); font-size:11px; letter-spacing:.05em}
 
 /* ---- dialog ---- */
 #dialog{position:fixed; left:50%; bottom:46px; transform:translateX(-50%); z-index:20;
@@ -342,6 +338,16 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
    fitted, so the missing scroll was invisible; the second scale is what asked
    the question. The tabs and the tree's own header stay put while it moves. */
 .bagwrap{width:min(700px, calc(94vw / var(--ui, 1)))}
+/* Высота у инвентаря одна на все вкладки, а не по содержимому. Пять вкладок
+   одного экрана давали окно от 348 до 616 пикселей — «вещи» и «дерево» высокие,
+   «на себе» низкая, — и панель прыгала под руками на каждой цифре: кнопка, на
+   которую целишься, уезжает. То же решение, что у дерева гита (.gitwrap.tall) и
+   у транскрипта (.body с полом и потолком): рамку держит экран, а содержимое
+   прокручивается внутри. Потолок в vh — чтобы на низком окне панель не вылезла;
+   деление на --ui нужно потому, что vh внутри масштабированной панели считается
+   в её единицах. */
+.bagwrap{height:min(560px, calc(86vh / var(--ui, 1)))}
+.bagwrap .bbody, .bagwrap .dbody{flex:1 1 auto; overflow-y:auto; min-height:0}
 .bagwrap .bbody{min-height:0}
 /* The tree keeps one height whatever branch is open. Its content varies a lot —
    five nodes in one direction, one in another, a card of two lines or of six —
@@ -351,7 +357,6 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
    если переключаюсь даже между направлениями».
    The tabs, the tree's own header and the direction tiles stay put; everything
    below them moves. */
-.bagwrap.steady{height:min(616px, calc(84vh / var(--ui, 1)))}
 .bagwrap.steady .bbody{flex:1 1 auto; overflow:hidden}
 .tscroll{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain;
   display:flex; flex-direction:column; gap:10px; padding-right:2px}
@@ -837,7 +842,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
    Именно visibility, а не display:none — fit() меряет их высоту, чтобы
    отвести место под полосы. С display холст на входе раздувался бы, а при
    «Войти» прыгал обратно и налезал на шапку до ближайшего resize. */
-body.titling #hud, body.titling #help{visibility:hidden}
+body.titling #hud{visibility:hidden}
 
 /* ---- размер текста панелей ---- */
 /* zoom, а не font-size: панель растёт целиком — вместе с отступами, рамками и
@@ -847,7 +852,10 @@ body.titling #hud, body.titling #help{visibility:hidden}
    offsetHeight, а под zoom он возвращает неотмасштабированную высоту — холст
    полез бы на них, ровно как в баге с браузерным зумом. Оверлей входа вдобавок
    позиционируется в пикселях от рамки холста, и zoom увёл бы его от двери. */
-#dialog, #toasts, .vwrap, .rwrap{zoom:var(--ui, 1)}
+/* The HUD and the hint are interface too, not world: they grow with the panels.
+   Until 6 September 2026 they stayed 12 and 11 pixels at any office scale, so the
+   bigger the office got, the smaller the HUD read against it. */
+#dialog, #toasts, .vwrap, .rwrap, #hud{zoom:var(--ui, 1)}
 /* У всех пятерых ширина в vw поделена на --ui там, где она задаётся. Иначе
    ограничитель не ограничивает: vw внутри zoom меряется от окна и потом
    умножается на масштаб, и min(1000px, 94vw) при 175% даёт 1750 px в окне
@@ -1003,6 +1011,52 @@ body.titling #hud, body.titling #help{visibility:hidden}
 /* Цена нажатия. Жёлтая, как всё, что говорит «сейчас что-то произойдёт». */
 .langwarn{margin:0; color:var(--warn); font-size:12px}
 
+/* Полка ключей в инвентаре. Карточка — предмет на полке: тусклый, пока не
+   подключён, и с честным словом под именем. Макет: 564:2, 565:74, 571:2. */
+.keysbox{display:flex; flex-direction:column; gap:12px}
+.keyshelf{display:flex; align-items:flex-start; gap:10px; flex-wrap:wrap}
+.keycard{display:flex; flex-direction:column; align-items:center; gap:4px; width:88px;
+  background:var(--field); border:2px solid transparent; padding:8px 6px; cursor:pointer}
+.keycard canvas{width:48px; height:36px; image-rendering:pixelated}
+.keycard:hover{background:var(--wood)}
+.keycard.on{border-color:var(--accent); background:var(--wood)}
+.keycard.dimmed canvas{opacity:.45}
+.keycard .kname{font-size:11px; color:var(--ink-dim)}
+.keycard.dimmed .kname{color:var(--muted)}
+.kword{font-size:10px; color:var(--muted)}
+.kword.on{color:var(--accent)} .kword.off{color:var(--muted)} .kword.bad{color:var(--bad-dim)}
+/* Подсказка полки — одной строкой справа, как на кадре: в двух она читается
+   как абзац и перетягивает взгляд с самих карточек. */
+.keyshelf .bhint{margin-left:auto; text-align:right; white-space:nowrap; align-self:center}
+.keydetail{background:var(--field); border:1px solid var(--frame-dim); padding:12px 14px;
+  display:flex; flex-direction:column; gap:8px}
+.keyhead{display:flex; align-items:baseline; justify-content:space-between}
+.keyhead b{color:var(--ink); font-size:13px}
+.keygives{margin:0; color:var(--ink-dim); font-size:12px; line-height:1.5}
+.keynote{margin:0; color:var(--muted); font-size:11px}
+/* Строка с командой: её копируют, поэтому она моноширинная и с кнопкой рядом. */
+.keycmd{display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  background:var(--bg-deep); border:1px solid var(--frame-dim); padding:7px 10px}
+.keycmd code{color:var(--accent); font:12px "JetBrains Mono", monospace}
+.keycmd span{font-size:11px; color:var(--muted)}
+.keycmd .obtn{margin-left:auto}
+/* Шаги подключения: номер слева, дело справа, будущий шаг тусклый. */
+.keystep{display:flex; align-items:center; gap:10px; font-size:12px; color:var(--ink-dim)}
+.keystep i{width:14px; color:var(--muted); font-style:normal; text-align:right}
+.keystep.todo{color:var(--muted)}
+.keystep input{flex:1 1 200px; min-width:0; background:var(--bg-deep); color:var(--ink);
+  border:1px solid var(--frame-dim); padding:5px 8px; font:12px "JetBrains Mono", monospace}
+.keystep .obtn{white-space:nowrap}
+.keyfoot{display:flex; align-items:center; gap:10px; margin-top:2px; font-size:11px; color:var(--muted)}
+.keyfoot .obtn{margin-left:auto}
+.keywarn{margin:0; padding:8px 10px; font-size:11px; color:var(--ink);
+  background:rgba(255,209,102,.10); border-left:3px solid var(--warn);
+  display:flex; align-items:center; gap:10px}
+.keywarn .obtn{margin-left:auto; white-space:nowrap}
+@media (max-width:720px){ .keyshelf .bhint{display:none} }
+/* Гостю карточка ключа читается, но не нажимается: сервер ему всё равно
+   ответит 403, а спрятанное поле заодно уходит из обхода по Tab. */
+.keydetail.guest .obtn, .keydetail.guest input, .keydetail.guest .keywarn .obtn{display:none}
 /* Панель «клавиши»: вся клавиатура и что на ней в этом офисе. Рисуется по
    кадру «Раскладка · офис» — те же ряды, те же цвета групп, и свободная
    клавиша та, у которой нет контура. Цвета сняты с легенды кадра, а не

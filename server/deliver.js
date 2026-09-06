@@ -63,6 +63,11 @@ async function account(path) {
 
 // Logged in as someone else — the office learns it at once, without waiting out the minute
 export function forgetAccount() { acc = { at: 0, value: null }; }
+// The full recheck behind the key card's button: the binary and the account
+// both. findCli caches forever, which is right for the hot path — but somebody
+// may have installed the CLI a minute ago, and «not found» after an install
+// reads as the office being broken.
+export function forgetCli() { cli = { checked: false, path: null, error: null }; forgetAccount(); }
 
 export async function deliveryStatus() {
   const c = await findCli();

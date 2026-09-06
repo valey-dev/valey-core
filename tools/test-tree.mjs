@@ -149,11 +149,15 @@ check('цифра уводит на другую вкладку', !/class="tnode
 UI.closeBag();
 check('закрытый инвентарь стрелки не ест', UI.bagKey('ArrowDown') === false, 'съело');
 
-// A guest does not see the tab and does not open it with a digit.
+// A guest does not see the tab and does not open it with a digit. Digits count
+// the tabs a guest actually sees, so since keys took the last slot the fourth
+// one is keys for him and the fifth is nobody's.
 state.owner = false;
 UI.renderBag('self');
 check('гость: вкладки «дерево» нет', !/data-tab="tree"/.test(bag.innerHTML), 'есть');
-check('гость: цифра 4 мимо', UI.bagKey('4') === false, 'открыла');
+check('гость: цифра 4 ведёт на ключи, а не на дерево',
+  UI.bagKey('4') === true && !/class="tnode/.test(bag.innerHTML), 'открылось дерево');
+check('гость: пятой вкладки нет', UI.bagKey('5') === false, 'открыла');
 UI.closeBag();
 
 console.log(failed ? `\nупало: ${failed}` : '\nвсё прошло');

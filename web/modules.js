@@ -28,9 +28,15 @@ import { define as definePlaces } from './places.js';
 // place ids it declared, and the keys panel draws that board instead of the floor.
 // Without it the office would have to know which module owns what, which is the
 // one thing the module system exists to avoid.
-const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'action', 'esc', 'tick', 'hud', 'lang', 'help', 'busy', 'note', 'place'];
+// 'keys' — a card on the inventory's key shelf. A module hands in its own: the
+// key belongs to whoever uses it, and in a free build the Figma card must not
+// sit on the shelf on behalf of an easel that is not there.
+const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'action', 'esc', 'tick', 'hud', 'lang', 'busy', 'note', 'place', 'keys'];
 const hooks = Object.fromEntries(HOOKS.map(h => [h, []]));
 const dicts = [];
+// Module listeners on the office stream: {id, name, fn}. Attached by main.js,
+// which owns the connection.
+const streams = [];
 let ids = [];
 // The modules that did not come up. An empty list is not the same as "all is
 // well": while it was not shown, the easel was silently missing from the office,
@@ -98,6 +104,12 @@ function apiFor(id) {
     // A module's dictionary is poured into the common one at once: the keys are
     // named with its id in front, or two modules will one day fight over one name.
     i18n(dict) { dicts.push(dict); addDict(dict); },
+    // An event of one's own in the office stream. The core listens for the two
+    // it knows about — the snapshot and the people — and a module that adds a
+    // route on the server usually needs an answer coming back the same way.
+    // Opening a second EventSource would work and would be wasteful: one more
+    // connection per module, for events the office is already carrying.
+    stream(name, fn) { streams.push({ id, name, fn }); },
     // A module's keys are declared, not tested letter by letter in a handler.
     // That way the core knows what is taken and can say so — until 5 September
     // 2026 a fight between two modules over one letter was settled by load
@@ -116,6 +128,21 @@ function apiFor(id) {
       return own.map((p) => p.id);
     }
   };
+}
+
+// Module listeners are attached by whoever owns the connection: the loader knows
+// nothing about EventSource, and the stream is reopened on every break. Called
+// on each open, and again once the modules have loaded — they arrive later than
+// the first stream, and without the second call their events go nowhere until
+// the network happens to blink.
+export function attachStreams(es) {
+  for (const s of streams) {
+    if (s.attached === es) continue;   // a reopened stream is a new object; the same one is not attached twice
+    s.attached = es;
+    es.addEventListener(s.name, (e) => {
+      try { s.fn(JSON.parse(e.data)); } catch { /* junk in the frame — we skip it */ }
+    });
+  }
 }
 
 export function moduleDicts() { return dicts; }
