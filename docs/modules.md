@@ -71,7 +71,6 @@ Two calling conventions, and confusing them is expensive:
 | `tick` | collect | `state, dt` | nothing; every frame |
 | `hud` | collect | `state` | `{ text, kind, title }` — a chip in the top bar |
 | `lang` | collect | — | nothing; redraw your own panel |
-| `help` | collect | — | a string appended to the key strip at the bottom |
 
 `layout` is called on every plan rebuild **and** once after the modules load, because the floor is usually built before they arrive. Make it idempotent, or you will push the same thing twice.
 

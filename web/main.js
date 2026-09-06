@@ -1,4 +1,4 @@
-import { lookOf, drawPerson, drawCat, normalizeLook, dressOf, dressMe } from './sprites.js';
+import { lookOf, drawPerson, drawCat, normalizeLook, isSelfLabel, dressOf, dressMe } from './sprites.js';
 import { potState, water as waterPot, tally, CAN_FULL } from './garden.js';
 import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, pickRoom, WALL } from './layout.js';
 import { loadModules, collect, first, attachStreams } from './modules.js';
@@ -15,12 +15,20 @@ import { titleOf } from './paintings.js';
 import { drawBubble } from './badges.js';
 import { skateStep, rolling, drawSkateboard, ollieStep, canOllie, OLLIE_POP } from './skate.js';
 import { readPad, edges as padEdges } from './pad.js';
+import { viewport, stepScale, SCALE_MIN, SCALE_MAX } from './viewport.js';
+// ui.scale is the interface size: the HUD and hint strips are stretched by it,
+// and fit() must account for that when it measures their height.
+import { ui } from './theme.js';
+import { actionOf, codeOf, codesOf, hints } from './keymap.js';
+import { renderKeys, closeKeys, keysOpen, readLayout } from './keys.js';
+import { has as hasPlace } from './places.js';
 // t was renamed to tr: in main.js `t` is the frame time in draw(t), and the import
 // was silently shadowed by a number inside every drawing callback
 import { t as tr, lang, setLang, onLang } from './i18n.js';
 import { initTitle, drawTitle, renderTitle, titleKey, titleOpen, closeTitle, layoutTitle, tickTitle } from './title.js';
 
-const VW = 400, VH = 225;
+// Changed by fit(): the canvas takes the window instead of standing in letterbox bars.
+let VW = 400, VH = 225;
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 canvas.width = VW; canvas.height = VH;
@@ -86,10 +94,13 @@ const state = {
   permits: [], pagerWaiting: 0,
   soundOn: sound.on,
   // physical pixels per game pixel; filled in by the very first fit()
-  zoom: { dev: 3, max: 3, auto: true, clamped: false },
+  zoom: { dev: 3, max: 3, auto: true, tight: false },
 };
 
 const keys = new Set();
+// Whether the key of this action is held right now. The set is keyed by physical
+// codes, so remapping the walking will one day work by itself.
+const held = (id) => codesOf(id).some((c) => keys.has(c));
 // Handles for debugging from the console. __ui is also needed because the bridge of the
 // Claude in Chrome extension does not resolve a dynamic import() in the page: the call
 // hangs and takes the whole channel with it, so reaching the module is only possible
@@ -197,6 +208,12 @@ UI.initUI(state, {
     .then((r) => r.json()).catch((e) => ({ error: e.message, packs: [] })),
   sound: () => { state.soundOn = sound.toggle(); UI.renderHud(); return state.soundOn; },
   geocode: (q) => fetch('/api/geocode?q=' + encodeURIComponent(q)).then((r) => r.json()).catch((e) => ({ error: e.message })),
+  // The key card asks about the CLI again: somebody went to the terminal,
+  // logged in and came back, and the server's answer lives a minute — no
+  // reason to sit out that minute looking at «not logged in».
+  recheckCli: () => fetch('/api/delivery?fresh=1', { headers: owned() })
+    .then((r) => r.json()).then((d) => { state.delivery = d; return d; })
+    .catch((e) => ({ error: e.message })),
   saveSettings,
   invites: () => fetch('/api/invites', { headers: owned() })
     .then((r) => r.json()).catch((e) => ({ error: e.message, invites: [] })),
@@ -618,6 +635,11 @@ for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
 // names of keys, and the panels answer them without knowing where the press came from.
 function onKey(e) {
   const k = e.key.toLowerCase();
+  // The physical key and the action that hangs on it. No letters are compared
+  // below: `code` is the same under every layout, and what it means is decided by
+  // the registry in web/keymap.js.
+  const code = codeOf(e);
+  const act = actionOf(e);
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
   // A combination with Cmd, Ctrl or Alt belongs to the browser and to the system, not to
   // the office. Without this line Cmd+R reloaded the page and rolled the radio out into the
@@ -632,21 +654,28 @@ function onKey(e) {
   // walk the floors rather than the office.
   if (UI.liftKey(e.key)) { e.preventDefault(); return; }
   if (UI.rosterKey(e.key)) { e.preventDefault(); return; }
+  // The action first, the raw key second: a module that declared its keys through
+  // api.keys() answers an id rather than a letter. The old seam stays alive — the
+  // modules nobody rewrote are held up by it.
+  if (act && first('action', act, e)) { e.preventDefault(); return; }
   if (first('key', e.key, e.shiftKey)) { e.preventDefault(); return; }
   if (UI.notesKey(e.key)) { e.preventDefault(); return; }
   if (UI.bagKey(e.key)) { e.preventDefault(); return; }
   if (UI.skyKey(e.key)) { e.preventDefault(); return; }
   if (UI.skinKey(e.key)) { e.preventDefault(); return; }
   if (UI.langKey(e.key)) { e.preventDefault(); return; }
-  if (['tab', ' ', 'e', 'escape'].includes(k)) e.preventDefault();
+  // What we take from the browser: scrolling on space, moving focus on Tab. Counted by
+  // the physical key rather than by the character: under a Russian layout the space bar
+  // is still the space bar, while a check by character walked past Cyrillic in silence.
+  if (['Tab', 'Space', 'Escape'].includes(code)) e.preventDefault();
   if (state.dialogOpen && (k.startsWith('arrow') || k === 'enter')) e.preventDefault();
-  keys.add(k);
+  if (code) keys.add(code);
 
   // The entrance screen takes the keys for itself — but only while nothing is open over
   // it: "change clothes" and "the window on the world" are called straight from here and
   // have to answer the arrows and ESC themselves.
   if (titleFree()) {
-    if (titleKey(e.key)) { e.preventDefault(); return; }
+    if (titleKey(e)) { e.preventDefault(); return; }
   }
 
   // The pager holds its two keys while there is no card: Enter answers, Esc defers. An
@@ -671,50 +700,59 @@ function onKey(e) {
   // the office. While it stood lower, the camera branch returned earlier — and taking a
   // shot of a camera view was impossible at all, exactly the frame Prod illustrates the
   // control room with. Found on 30 August 2026 while reshooting the plates.
-  if (e.key === 'F9') { e.preventDefault(); saveShot(e.shiftKey ? 4 : 1); return; }
+  if (act === 'service.shot') { e.preventDefault(); saveShot(e.shiftKey ? 4 : 1); return; }
+  // The keys panel stands as high as F9 and for the same reason: it has to answer
+  // everywhere, and «everywhere» includes the screens that return before the
+  // dispatch below. The control room did exactly that — its branch ends in an
+  // unconditional return, so «/» never reached the panel, and the one place whose
+  // board says «этаж не слышен» was the one place you could not read it from.
+  //
+  // Not through toggle(): that one looks the node up by id, and this panel creates
+  // its own on first opening — on an empty office toggle would throw on the first press.
+  if (act === 'service.keys') { e.preventDefault(); return keysOpen() ? closeKeys() : renderKeys(currentPlace()); }
 
   if (state.cctv.on) {
-    if (k === 'arrowleft' || k === 'a' || k === 'ф') return switchCam(-1);
-    if (k === 'arrowright' || k === 'd' || k === 'в') return switchCam(1);
-    if (k === 't' || k === 'е') return toggleAutoCams();
-    if (k === ' ' || k === 'e' || k === 'у' || k === 'enter') return closeCams();
+    if (act === 'move.left') return switchCam(-1);
+    if (act === 'move.right') return switchCam(1);
+    if (act === 'cams.auto') return toggleAutoCams();
+    if (act === 'act.interact' || k === 'enter') return closeCams();
     return;
   }
   // the scale: works always, even over open panels
-  if (k === '+' || k === '=') { e.preventDefault(); return stepZoom(1); }
-  if (k === '-' || k === '_') { e.preventDefault(); return stepZoom(-1); }
-  if (k === '0') { e.preventDefault(); return setZoom(0); }
+  if (act === 'zoom.in') { e.preventDefault(); return stepZoom(1); }
+  if (act === 'zoom.out') { e.preventDefault(); return stepZoom(-1); }
+  if (act === 'zoom.reset') { e.preventDefault(); return setZoom(0); }
 
-  if (k === 'tab') return toggle('roster', UI.renderRoster, UI.closeRoster);
+  if (act === 'panel.round') return toggle('roster', UI.renderRoster, UI.closeRoster);
   // N from outside shows all the notes; inside a conversation the same key writes them
-  if (k === 'n' || k === 'т') return toggle('notes', UI.renderNotes, UI.closeNotes);
+  if (act === 'panel.notes') return toggle('notes', UI.renderNotes, UI.closeNotes);
   // C opens the bag on "worn" — where this key has always led.
-  if (k === 'c' || k === 'с') return toggle('bag', () => UI.renderBag('self'), UI.closeBag);
-  if (k === 'p' || k === 'з') return toggle('sky', UI.renderSky, UI.closeSky);
-  if (k === 'u' || k === 'г') return toggle('skin', UI.renderSkin, UI.closeSkin);
+  if (act === 'panel.bag') return toggle('bag', () => UI.renderBag('self'), UI.closeBag);
+  if (act === 'panel.sky') return toggle('sky', UI.renderSky, UI.closeSky);
+  if (act === 'panel.skin') return toggle('skin', UI.renderSkin, UI.closeSkin);
   // I — invite. The frames do not fix the key, it is a choice made here: G is taken by
-  // the drawn "team floor", and of the free letters I is the only one that reads as the
-  // same button in Russian too («ш»). The panel is the owner's only; a guest has nobody to
+  // the drawn "team floor", and of the free letters I was the only one that reads as the
+  // same button in Russian too. The panel is the owner's only; a guest has nobody to
   // invite, and for him I opens the bag on the tab he was on. Two branches laid claim to
   // the letter from 2 September 2026, the bag stood higher and the invitation opened for
   // nobody — and the panel has no other entrance.
-  if (k === 'i' || k === 'ш') {
+  if (act === 'panel.invite') {
     if (state.owner !== false) return UI.inviteOpen() ? UI.closeInvite() : UI.openInvite();
     return toggle('bag', UI.renderBag, UI.closeBag);
   }
-  // H — bring back a deferred pager. Not E: in the office that one is the same as SPACE,
-  // and "I will call back" with a return on one key would be a conversation with an agent.
-  if ((k === 'h' || k === 'р') && recall()) return;
-  // B — the skateboard. Not S: that one is taken by the step down in WASD, and it cannot
-  // be reassigned without breaking the walking.
-  if (k === 'b' || k === 'и') return toggleSkate();
-  if (k === 'm' || k === 'ь') {
+  // H — bring back a deferred pager.
+  if (act === 'panel.pager' && recall()) return;
+  // B — the skateboard. It was chosen because S held the step down in WASD; WASD was
+  // removed on 5 September 2026 and S is free again, but the key stays: fingers already
+  // remember it, and moving it would not add a free letter.
+  if (act === 'act.skate') return toggleSkate();
+  if (act === 'act.sound') {
     state.soundOn = sound.toggle();
     UI.renderHud();
     UI.toast(state.soundOn ? tr('toast.soundOn') : tr('toast.soundOff'));
     return;
   }
-  if ((k === ' ' || k === 'e' || k === 'у') && !state.dialogOpen) {
+  if (act === 'act.interact' && !state.dialogOpen) {
     // On the board SPACE jumps — but only where it had nothing to do before. Otherwise
     // talking to an agent without getting off the board would become impossible.
     if (canOllie(state.player) && !nearest()) state.player.vz = OLLIE_POP;
@@ -728,7 +766,11 @@ const titleFree = () => titleOpen()
   && ['bag', 'sky', 'viewer', 'roster', 'lang'].every((id) => document.getElementById(id).hidden);
 const NO_KEYS = new Set();
 
-addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+// A release is counted by the same physical key as the press. While the set was
+// keyed by character, switching layout with a key held dropped rubbish into it
+// forever: pressed under Latin, released under Cyrillic, the entry was never
+// removed and the office kept walking by itself.
+addEventListener('keyup', (e) => { const c = codeOf(e); if (c) keys.delete(c); });
 addEventListener('blur', () => keys.clear());
 
 // The gamepad is polled once a frame: the Gamepad API has no events for buttons, only a
@@ -754,7 +796,7 @@ function tickPad() {
     if (typing() && key.startsWith('Arrow')) continue;
     onKey({ key, shiftKey: next.down.has('Shift'), target: { tagName: 'GAMEPAD' }, preventDefault() {} });
   }
-  for (const key of released) keys.delete(key.toLowerCase());
+  for (const key of released) { const c = codeOf({ key }); if (c) keys.delete(c); }
   pad.x = next.x; pad.y = next.y; pad.down = next.down;
 }
 
@@ -816,11 +858,6 @@ function paintSign() {
 }
 
 function renderStatic() {
-  const help = document.getElementById('help');
-  // The help line lists the keys, and some of the keys belong to modules. While "R — the
-  // radio" stood in the line itself, a free build promised a key it does not have: the hint
-  // lied exactly where it is read — when you do not know what to press.
-  if (help) help.textContent = [tr('help'), ...collect('help')].join(' · ');
   document.title = tr('doc.title');
   document.documentElement.lang = lang();
   paintSign();
@@ -829,6 +866,9 @@ function renderStatic() {
 }
 onLang(renderStatic);
 renderStatic();
+// What the keys are really engraved with is asked once, and only of a browser
+// that knows; the rest make do with the QWERTY labels.
+readLayout().then(() => { if (keysOpen()) renderKeys(); });
 
 function nearest() {
   const p = state.player;
@@ -1277,6 +1317,7 @@ function closeAll() {
   if (state.lift.phase !== 'idle') return;
   if (!document.getElementById('lift').hidden) return UI.closeLift();
   if (state.cctv.on) return closeCams();
+  if (keysOpen()) return closeKeys();
   if (!document.getElementById('viewer').hidden) return UI.closeViewer();
   if (!document.getElementById('roster').hidden) return UI.closeRoster();
   if (!document.getElementById('bag').hidden) return UI.closeBag();
@@ -1310,8 +1351,47 @@ function panelsOpen() {
   // a moving cabin holds the person in place too: the doors are closed, there is nowhere to go out to
   return titleOpen() || state.dialogOpen || state.cctv.on || UI.inviteOpen() || state.lift.phase !== 'idle'
     // A module panel holds the screen too: the core does not know its ids and must not.
+    || keysOpen()
     || collect('busy').some(Boolean)
     || ['viewer', 'roster', 'bag', 'sky', 'lift', 'invite', 'lang'].some((id) => !document.getElementById(id).hidden);
+}
+
+// Where the office is standing, for the keys panel to draw the right board.
+//
+// The order is the order onKey resolves a press in, and it has to be: whoever
+// eats the key first is the place you are in. Read the other way round the panel
+// would describe a screen lying underneath another one — the control room while
+// the lift is open over it, say.
+//
+// This lives here and not in keys.js on purpose. Only the entry point knows what
+// is on top of what; the panel is given an answer and draws it.
+function currentPlace() {
+  if (state.cctv.on) return 'cctv';
+  // The viewer is two places. A wall of thumbnails is walked like any panel; one
+  // open file has its own keys, and ESC out of it goes back to the wall.
+  const viewer = UI.viewerOpen();
+  if (viewer) return viewer === 'single' ? 'viewer' : 'panel';
+  if (UI.liftOpen() || state.lift.phase !== 'idle') return 'lift';
+  if (UI.rosterOpen()) return 'round';
+  // One panel, two places: on «поговорить» the cursor is in the field, so the
+  // letters type instead of opening anything. That is the state this whole
+  // feature was asked for.
+  if (state.dialogOpen) return UI.cardPage() === 'talk' ? 'talk' : 'card';
+  // A module that owns the screen names its own place; the core does not know
+  // module ids and must not learn them.
+  const mine = first('place');
+  if (mine && hasPlace(mine)) return mine;
+  // A panel with no board of its own is still a panel: the floor is not listening.
+  if (['bag', 'sky', 'skin', 'notes', 'invite', 'lang'].some((id) => {
+    const n = document.getElementById(id);
+    return n && !n.hidden;
+  })) return 'panel';
+  if (collect('busy').some(Boolean)) return 'panel';
+  // Standing at something on the floor: the floor still answers, and only the
+  // thing under your hand renames SPACE.
+  const near = nearest();
+  if (near && near.kind === 'water') return 'cooler';
+  return 'floor';
 }
 
 function update(dt, now) {
@@ -1344,13 +1424,11 @@ function update(dt, now) {
   }
 
   if (!panelsOpen() && !state.drink && !state.play) {
-    const running = keys.has('shift');
+    const running = held('move.run');
     // The stick takes precedence over the keys: it also puts arrows into keys when tilted
     // past the threshold, and adding them to the analogue would mean losing the analogue.
-    const ix = pad.x || (keys.has('arrowright') || keys.has('d') || keys.has('в') ? 1 : 0)
-      - (keys.has('arrowleft') || keys.has('a') || keys.has('ф') ? 1 : 0);
-    const iy = pad.y || (keys.has('arrowdown') || keys.has('s') || keys.has('ы') ? 1 : 0)
-      - (keys.has('arrowup') || keys.has('w') || keys.has('ц') ? 1 : 0);
+    const ix = pad.x || (held('move.right') ? 1 : 0) - (held('move.left') ? 1 : 0);
+    const iy = pad.y || (held('move.down') ? 1 : 0) - (held('move.up') ? 1 : 0);
     // Somebody sitting is lifted by the very first movement — and in the same frame he is already walking.
     if (state.seat && (ix || iy)) standUp();
     let dx = 0, dy = 0;
@@ -1640,7 +1718,10 @@ function draw(t) {
       });
       // A name over somebody else is always there rather than on approach: otherwise
       // nameless figures stand in the corridor and it is unclear who is who.
-      label(q.x, q.y - 34, q.name || '?', '#8fc8ff');
+      // A page that has not been reloaded since 5 September 2026 still sends
+      // «ТЫ» as its name. Over somebody else it is a lie whoever sent it, so it
+      // is read here as what it means: a person who has not named himself.
+      label(q.x, q.y - 34, (isSelfLabel(q.name) ? tr('label.guest') : q.name) || '?', '#8fc8ff');
     } });
   }
 
@@ -1824,14 +1905,11 @@ document.addEventListener('visibilitychange', () => {
 // and the seven-pixel font above the heads turns into soap. We count the scale in dots —
 // then every pixel takes exactly N.
 // The scale is counted in PHYSICAL pixels per game pixel — only a whole number gives a
-// crisp picture. The steps are fixed, ×2…×8; a zero means "fit the window".
+// crisp picture. The steps are ×2…×8; a zero means "count it from the width".
+// All the arithmetic lives in web/viewport.js and is covered by a stand; this is canvas only.
 const ZOOM_KEY = 'valey-zoom';
-// We do not go below ×6: at that step the hint at the bottom fits whole, and smaller than
-// that the office reads badly. Shrinking is left only as an emergency exit, for when the
-// window physically does not hold ×6 — then the step is clamped by itself.
-const ZOOM_MIN = 6, ZOOM_MAX = 8;
 let zoomWanted = Math.max(0, Number(localStorage.getItem(ZOOM_KEY)) || 0);
-if (zoomWanted && zoomWanted < ZOOM_MIN) zoomWanted = ZOOM_MIN;
+if (zoomWanted) zoomWanted = Math.max(SCALE_MIN, Math.min(SCALE_MAX, zoomWanted));
 
 function setZoom(next) {
   zoomWanted = next;
@@ -1839,47 +1917,48 @@ function setZoom(next) {
   else localStorage.removeItem(ZOOM_KEY);
   refit();
   UI.renderHud();
-  UI.toast(next ? `Масштаб ×${state.zoom.dev}` : `Масштаб по окну — ×${state.zoom.dev}`);
+  UI.toast(next ? tr('toast.zoomSet', { n: state.zoom.dev }) : tr('toast.zoomAuto', { n: state.zoom.dev }));
 }
 
 function stepZoom(dir) {
-  const from = zoomWanted || state.zoom.dev;
-  const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, from + dir));
-  if (dir < 0 && from <= ZOOM_MIN) {
-    UI.toast(tr('toast.zoomFloor', { n: ZOOM_MIN }));
+  const next = stepScale(zoomWanted || state.zoom.dev, dir);
+  if (next === null) {
+    UI.toast(dir < 0 ? tr('toast.zoomFloor', { n: SCALE_MIN }) : tr('toast.zoomCeil', { n: SCALE_MAX }));
     return;
   }
-  if (next === zoomWanted) return;
   setZoom(next);
 }
 
 function fit() {
   const dpr = window.devicePixelRatio || 1;
   const hud = document.getElementById('hud');
-  const help = document.getElementById('help');
-  // how much the strips at the top and bottom have eaten — we measure rather than guess:
-  // the hint wraps onto three or four lines the moment the window is narrowed or zoomed
-  const top = (hud ? hud.offsetHeight : 0) + 20;
-  const bottom = (help ? help.offsetHeight : 0) + 16;
+  // The strips measure in their own pixels while zoom:var(--ui) stretches them on
+  // screen, and offsetHeight knows nothing about it. Without the multiplier the hint
+  // at 175% lies on top of the office — visible on the "интерфейс 175%" frame.
+  const k = ui.scale || 1;
+  const top = (hud ? hud.offsetHeight * k : 0) + 20;
+  // Nothing sits along the bottom any more — the key list moved into the ? panel — so the
+  // office only keeps a gap the size of the one above it, and takes the rest.
+  const bottom = 20;
   document.body.style.paddingTop = top + 'px';
   document.body.style.paddingBottom = bottom + 'px';
   // the toasts stand above the hint rather than over it: it can be three lines tall
   const toasts = document.getElementById('toasts');
   if (toasts) toasts.style.bottom = (bottom + 8) + 'px';
 
-  const availW = Math.max(VW, innerWidth - 16);
-  const availH = Math.max(VH, innerHeight - top - bottom);
-  const max = Math.max(1, Math.floor(Math.min(availW * dpr / VW, availH * dpr / VH)));
-  // the chosen step cannot be larger than what fits into the window
-  // "fit the window" does not go small either: we take ×6, even if the window allows more to be seen
-  const dev = Math.max(1, Math.min(zoomWanted || Math.max(ZOOM_MIN, max), max));
-  canvas.style.width = VW * dev / dpr + 'px';
-  canvas.style.height = VH * dev / dpr + 'px';
-  state.zoom = {
-    dev, max, auto: !zoomWanted,
-    clamped: !!zoomWanted && dev < zoomWanted,
-    tight: dev < ZOOM_MIN,   // the window is smaller than ×6 needs — that is visible in the bar
-  };
+  const availW = Math.max(160, innerWidth - 16);
+  const availH = Math.max(90, innerHeight - top - bottom);
+  // The entrance is drawn in 400×225 and its composition is approved by its own
+  // frames: it does not stretch — the office behind its door does.
+  const v = viewport(availW, availH, dpr, zoomWanted, titleOpen());
+  if (canvas.width !== v.vw || canvas.height !== v.vh) {
+    canvas.width = v.vw; canvas.height = v.vh;
+    ctx.imageSmoothingEnabled = false;   // resizing the canvas resets the context
+  }
+  VW = v.vw; VH = v.vh;
+  canvas.style.width = VW * v.scale / dpr + 'px';
+  canvas.style.height = VH * v.scale / dpr + 'px';
+  state.zoom = { dev: v.scale, max: SCALE_MAX, auto: v.auto, tight: v.tight };
   layoutTitle();   // the entrance menu is tied to the canvas rather than to the window
   return top + bottom;
 }
@@ -1936,6 +2015,10 @@ initTitle(state, {
     }
     closeTitle();
     document.body.classList.remove('titling');
+    // The entrance is drawn in a fixed 400×225 and the office is not: the canvas has to
+    // be recounted the moment the door closes behind us, or the office keeps the
+    // entrance's size and sits in bars.
+    refit();
     UI.renderHud();
     sound.init();
     sound.door(0.8);
@@ -1943,6 +2026,10 @@ initTitle(state, {
   bag: () => UI.renderBag('self'),
   sky: () => UI.renderSky(),
   lang: () => switchLang(),
+  // The name typed on the entrance card is the same name the inventory edits and
+  // presence sends: one field, stored in one place, so a guest who named himself
+  // at the door is not «ГОСТЬ» a second later.
+  setName(name) { state.me.name = name; localStorage.setItem('valey-me', JSON.stringify(state.me)); },
 });
 document.body.classList.add('titling');
 renderTitle();

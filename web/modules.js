@@ -8,7 +8,15 @@
 //   collect — we ask everyone and put together what came back (drawing, hints);
 //   first   — we give the event to the first one who took it (a key, SPACE, ESC).
 import { addDict } from './i18n.js';
+import { define as defineKeys } from './keymap.js';
+import { define as definePlaces } from './places.js';
 
+// `action` and `note` are both new seams, and both sit beside `key` rather
+// than replacing it. A module that declared its keys through api.keys() gets an
+// action id here and knows no letters at all; one that stayed on `key` works as
+// it always did. That is not politeness: paid modules reach a buyer as an
+// archive, and an office update must not break one.
+//
 // `note` — the ninth seam, from 5 September 2026. A note used to hang on a
 // reply in a conversation and nothing else; now it hangs on an address, and a
 // module can name addresses of its own. The list of notes stays in the core,
@@ -16,7 +24,14 @@ import { addDict } from './i18n.js';
 // everyone and takes the first module that answers. It never reads such an
 // address itself. Nobody answered — the row says so out loud, and the note is
 // still readable from the line of context stored with it.
-const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'esc', 'tick', 'hud', 'lang', 'help', 'busy', 'note'];
+// `place` is how a module says the screen is its own: it answers with one of the
+// place ids it declared, and the keys panel draws that board instead of the floor.
+// Without it the office would have to know which module owns what, which is the
+// one thing the module system exists to avoid.
+// 'keys' — a card on the inventory's key shelf. A module hands in its own: the
+// key belongs to whoever uses it, and in a free build the Figma card must not
+// sit on the shelf on behalf of an easel that is not there.
+const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'action', 'esc', 'tick', 'hud', 'lang', 'busy', 'note', 'place', 'keys'];
 const hooks = Object.fromEntries(HOOKS.map(h => [h, []]));
 const dicts = [];
 // Module listeners on the office stream: {id, name, fn}. Attached by main.js,
@@ -94,7 +109,24 @@ function apiFor(id) {
     // route on the server usually needs an answer coming back the same way.
     // Opening a second EventSource would work and would be wasteful: one more
     // connection per module, for events the office is already carrying.
-    stream(name, fn) { streams.push({ id, name, fn }); }
+    stream(name, fn) { streams.push({ id, name, fn }); },
+    // A module's keys are declared, not tested letter by letter in a handler.
+    // That way the core knows what is taken and can say so — until 5 September
+    // 2026 a fight between two modules over one letter was settled by load
+    // order, which is alphabetical by folder name, and settled in silence.
+    keys(list) {
+      const own = [].concat(list || []).map((a) => ({ ...a, id: a.id.startsWith(id + '.') ? a.id : `${id}.${a.id}` }));
+      defineKeys(own);
+      return own.map((a) => a.id);
+    },
+    // A module's places, named the same way as its keys. The ids come back so the
+    // module can answer the `place` hook with one of them rather than repeating
+    // its own prefix by hand and getting it wrong.
+    places(list) {
+      const own = [].concat(list || []).map((p) => ({ ...p, id: p.id.startsWith(id + '.') ? p.id : `${id}.${p.id}` }));
+      definePlaces(own);
+      return own.map((p) => p.id);
+    }
   };
 }
 

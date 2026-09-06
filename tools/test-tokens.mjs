@@ -40,7 +40,13 @@ const ALLOWED = [
 // stack and in the office falls through to the fallback on purpose, and --c is
 // written per element by ui.js — it is the tone of one node of the tree, and
 // there is no one value for it to have here.
-const OUTSIDE = new Set(['--ui', '--mono', '--c']);
+//
+// The keys panel adds three of the same kind, all geometry rather than colour.
+// --cap is the width of a key cap, solved from the panel's width by keys.js so
+// the keyboard fills it; --u is how many caps wide one key is, written into each
+// key's style attribute; --edge is the colour of the bar under a bound key,
+// taken from the group and written per key for the same reason --c is.
+const OUTSIDE = new Set(['--ui', '--mono', '--c', '--cap', '--u', '--edge']);
 
 let bad = 0;
 const ok = (name, cond, got) => {

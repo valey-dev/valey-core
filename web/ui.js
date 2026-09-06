@@ -80,15 +80,15 @@ export function renderHud() {
   const room = S.currentRoom ? `<span class="chip room">▣ ${esc(S.currentRoom.title)}</span>` : `<span class="chip room">${tr('hud.corridor')}</span>`;
   const w = S.weather || { kind: 'clear' };
   const temp = w.temp != null ? ` ${Math.round(w.temp)}°` : '';
-  const z = S.zoom || { dev: 1, auto: true, clamped: false };
+  const z = S.zoom || { dev: 1, auto: true, tight: false };
   const place = w.label ? ` · ${esc(w.label)}` : '';
   el.hud.innerHTML = `<b>VALEY</b> · ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}
     <span class="chip sky" title="${tr('hud.skyTitle', { source: w.source === 'выдумана' ? tr('sky.made') : esc(w.source || '') })}">${WEATHER_ICON[w.kind] || '·'} ${tr('sky.' + w.kind)}${temp}${place}</span>
     ${room}<span class="chip work">⌨ ${working}</span><span class="chip wait">! ${waiting}</span>
     <span class="chip">👥 ${S.agents.length}</span>
     <span class="chip zoom${z.tight ? ' wait' : ''}" title="${tr('hud.zoomTitle')}${
-      z.tight ? tr('hud.zoomTitleTight') : z.clamped ? tr('hud.zoomTitleClamped', { n: z.dev }) : ''
-    }">⛶ ×${z.dev}${z.auto ? tr('hud.zoomAuto') : ''}${z.tight ? tr('hud.zoomTight') : z.clamped ? tr('hud.zoomMax') : ''}</span>
+      z.tight ? tr('hud.zoomTitleTight') : ''
+    }">⛶ ×${z.dev}${z.auto ? tr('hud.zoomAuto') : ''}${z.tight ? tr('hud.zoomTight') : ''}</span>
     ${S.pagerWaiting ? `<span class="chip wait" title="${tr('hud.pagerTitle')}">📟 ${S.pagerWaiting}</span>` : ''}
     <span class="chip dim">${S.soundOn ? '🔊' : '🔇'} M</span>
     ${collect('hud', S).map((c) => `<span class="chip ${esc(c.kind || 'dim')}" title="${esc(c.title || '')}">${esc(c.text || '')}</span>`).join('')}
@@ -1139,6 +1139,20 @@ function paintHeadFocus() {
 }
 
 // true means the key belonged to the viewer and the office should ignore it
+// Which screen is up, for the keys panel. It asks rather than guesses: only this
+// file knows that the viewer has two states — a wall of thumbnails and one open
+// file — and they are not the same place. ESC leaves the file for the gallery and
+// the gallery for the room, so one caption cannot serve both.
+export function viewerOpen() {
+  if (!el.viewer || el.viewer.hidden) return null;
+  return gallery.mode === 'single' ? 'single' : 'gallery';
+}
+export function rosterOpen() { return !!(el.roster && !el.roster.hidden); }
+export function liftOpen() { return !!(el.lift && !el.lift.hidden); }
+// The tab the card is reading. In «поговорить» the cursor sits in the field, and
+// that is a different place from the card itself: there the letters type.
+export function cardPage() { return S.page; }
+
 export function viewerKey(raw, big = false) {
   if (el.viewer.hidden) return false;
   const key = raw.toLowerCase();
@@ -1339,7 +1353,11 @@ const cellTitle = (f, v) => (f.key === 'tie' || f.key === 'jacket'
 const writeSlot = (f, v) => { if (f.set) f.set(v); else S.me[f.key] = v; };
 
 const FIELDS = [...COLORS, ...BODY];
-const TABS = ['self', 'things', 'office', 'tree'];
+// Keys take the last slot rather than the third one the first frame showed: the
+// tree is already there and working, and moving it for a new neighbour means
+// retraining a hand that has learned its digit. Decided 5 September 2026, frame
+// «Ключи в инвентаре · Ready for Dev».
+const TABS = ['self', 'things', 'office', 'tree', 'keys'];
 // Гость вкладку «дерево» не видит: у него чужой этаж, и из чего он собран —
 // не его вопрос.
 const tabs = () => (isGuest() ? TABS.filter((t) => t !== 'tree') : TABS);
@@ -1388,6 +1406,161 @@ const thingsHtml = () => `<div class="bbody">
       </div>`).join('')}
       <p class="hint">${tr('bag.thingsNote')}</p>
     </div>`;
+
+// -------------------------------------------------------------- the keys tab
+// A shelf of the office's connections outward. The card is drawn by whoever
+// owns the key: the core draws its own (the CLI and the weather), modules draw
+// theirs through the 'keys' hook. Hardcoding them here would put the Figma card
+// on the shelf of a free build that has no easel behind it.
+//
+// A card hands in { id, name, state, word, icon(ctx), body(), bind(root) }.
+// state is 'on' | 'off' | 'bad': works, not connected, broken. Three words and
+// not two, because «not connected» is fixed by pasting a key and «not logged
+// in» by a trip to the terminal — merging them sends people to the wrong place.
+//
+// Frames: section «🔵 WIP — Ключи в инвентаре · Ready for Dev», 564:2 (Figma),
+// 565:74 (Claude CLI), 571:2 (Spotify).
+
+// The Claude CLI icon — a terminal window with three lines, as on the frame.
+function cliIcon(c) {
+  c.fillStyle = '#1c130d'; c.fillRect(0, 0, 48, 36);
+  c.fillStyle = '#8c7660';
+  c.fillRect(8, 12, 22, 3); c.fillRect(8, 19, 32, 3); c.fillRect(8, 26, 16, 3);
+}
+// Weather — a sun behind a cloud, the same one the window on the world draws.
+// The sun sits up and to the right so that it peeks out: hidden entirely, it
+// turned the icon into a grey blob — visible only on a real frame, never in the
+// markup.
+function skyIcon(c) {
+  c.fillStyle = '#1c130d'; c.fillRect(0, 0, 48, 36);
+  c.fillStyle = '#ffd166'; c.fillRect(28, 6, 11, 11);
+  c.fillStyle = '#c9b391';
+  c.fillRect(9, 20, 22, 7); c.fillRect(13, 16, 13, 5); c.fillRect(7, 23, 28, 4);
+}
+
+const cliState = () => {
+  const d = S.delivery || {};
+  if (d.available) return 'on';
+  return d.account && d.account.loggedIn === false ? 'bad' : 'off';
+};
+
+const coreKeys = () => [
+  {
+    id: 'cli',
+    name: 'Claude CLI',
+    state: cliState(),
+    word: () => tr('key.cli.' + cliState()),
+    icon: cliIcon,
+    body: () => {
+      const d = S.delivery || {};
+      const who = d.account && d.account.email ? `<p class="keynote">${tr('key.cli.who', { email: esc(d.account.email) })}</p>` : '';
+      return `<p class="keygives">${tr('key.cli.gives')}</p>
+        <div class="keycmd"><code>claude</code><span>${tr('key.cli.then')}</span><code>/login</code>
+          <span class="dim">${tr('key.cli.or')}</span><code>claude setup-token</code>
+          <button class="obtn" data-copy="claude">${tr('key.copy')}</button></div>
+        <p class="hint">${tr('key.cli.note')}</p>
+        ${who}
+        <div class="keyfoot"><span class="dim">${tr('key.cli.rechecks')}</span>
+          <button class="obtn" data-act="recheck">${tr('key.cli.check')}</button></div>`;
+    },
+    bind: (root) => {
+      const b = root.querySelector('[data-act="recheck"]');
+      if (b) b.onclick = async () => { await api.recheckCli(); renderBag(); };
+    },
+  },
+  {
+    id: 'sky',
+    name: tr('key.sky.name'),
+    state: (S.settings && S.settings.weather && S.settings.weather.enabled) ? 'on' : 'off',
+    word: () => tr('key.sky.' + ((S.settings && S.settings.weather && S.settings.weather.enabled) ? 'on' : 'off')),
+    icon: skyIcon,
+    // Weather is the one connection without a key: a pair of coordinates goes
+    // out, not a secret. Hence no field here, only the way to the window.
+    body: () => `<p class="keygives">${tr('key.sky.gives')}</p>
+      <p class="hint">${tr('key.sky.note')}</p>
+      <div class="keyfoot"><span class="dim">P</span>
+        <button class="obtn" data-act="sky">${tr('key.sky.open')}</button></div>`,
+    bind: (root) => {
+      const b = root.querySelector('[data-act="sky"]');
+      if (b) b.onclick = () => { closeBag(); renderSky(); };
+    },
+  },
+];
+
+// Shelf order: the core first, then modules in load order. The shelf is short
+// and must not be sorted by state — a card has to lie where it lay yesterday.
+const keyCards = () => [...coreKeys(), ...collect('keys')];
+let keyIdx = 0;
+
+const keysHtml = () => {
+  const cards = keyCards();
+  if (!cards.length) return `<div class="bbody"><p class="empty">${tr('key.none')}</p></div>`;
+  keyIdx = Math.max(0, Math.min(cards.length - 1, keyIdx));
+  const card = cards[keyIdx];
+  return `<div class="bbody keysbox">
+      <div class="keyshelf">
+        ${cards.map((k, i) => `<button class="keycard${i === keyIdx ? ' on' : ''}${k.state === 'on' ? '' : ' dimmed'}" data-i="${i}">
+          <canvas width="48" height="36"></canvas>
+          <span class="kname">${esc(k.name)}</span>
+          <span class="kword ${k.state}">${esc(k.word())}</span>
+        </button>`).join('')}
+        <span class="bhint">${tr('key.shelf')}</span>
+      </div>
+      <div class="keydetail${isGuest() ? ' guest' : ''}">
+        <div class="keyhead"><b>${esc(card.name)}</b><span class="kword ${card.state}">${esc(card.word())}</span></div>
+        ${card.body()}
+        ${isGuest() ? `<p class="hint">${tr('key.guest')}</p>` : ''}
+      </div>
+    </div>`;
+};
+
+function bindKeys() {
+  const cards = keyCards();
+  el.bag.querySelectorAll('.keycard canvas').forEach((cv, i) => {
+    const c = cv.getContext('2d');
+    c.imageSmoothingEnabled = false;
+    if (cards[i] && cards[i].icon) cards[i].icon(c);
+  });
+  el.bag.querySelectorAll('.keycard').forEach((b) => b.onclick = () => {
+    keyIdx = Number(b.dataset.i);
+    renderBag();
+  });
+  const detail = el.bag.querySelector('.keydetail');
+  if (!detail) return;
+  // A guest gets the cards to read and no controls at all: POST /api/settings
+  // answers him 403 anyway, and saying «the owner sets the keys up» beats
+  // letting him press a button and collect a refusal. Hidden by the class, so
+  // the fields fall out of the tab order too.
+  if (isGuest()) return;
+  // Copying is shared by every card: a command, a path, a Redirect URI. Without
+  // https the browser has no clipboard, and that has to show on the button
+  // rather than in the console.
+  detail.querySelectorAll('[data-copy]').forEach((b) => b.onclick = async () => {
+    const ok = await copyText(b.dataset.copy);
+    toast(tr(ok ? 'key.copied' : 'key.copyFailed'), ok ? '' : 'wait');
+  });
+  const card = cards[keyIdx];
+  if (card && card.bind) card.bind(detail);
+  paintBagFocus();
+}
+
+// Arrows walk the shelf, ⏎ hands focus to the card — from there it is Tab.
+function keysKey(key) {
+  const cards = keyCards();
+  if (!cards.length) return false;
+  const step = { arrowleft: -1, arrowright: 1, arrowup: -1, arrowdown: 1 }[key];
+  if (step !== undefined) {
+    keyIdx = (keyIdx + step + cards.length) % cards.length;
+    renderBag();
+    return true;
+  }
+  if (key === 'enter') {
+    const first = el.bag.querySelector('.keydetail input, .keydetail .obtn');
+    if (first) first.focus();
+    return true;
+  }
+  return false;
+}
 
 // Вкладка «офис». Дресс-код живёт здесь, потому что у него нет предмета в
 // офисе: погоду настраивают у окна, язык — у таблички, а «всем надеть
@@ -1477,8 +1650,9 @@ const treeCard = (n) => {
 // with the digits as soon as V returns the flat view, and the bottom line says
 // so — a mode may take the keys, but it has to admit that it did.
 //
-// Design: Figma, WIP «Дерево модулей: варианты представления», six direction
-// frames plus the two switch frames.
+// Design: Figma, Prod, section 22 — both views at 100% and at 175%. The six
+// direction frames and the rejected variants B and B-prime are on Legacy: that
+// is where «why is it like this?» is answered.
 let treeWide = false;
 let treeDir = 'work';
 
@@ -1743,7 +1917,9 @@ export function renderBag(tab) {
       ${tabs().map((t, i) => `<button class="btab${t === bagTab ? ' on' : ''}" data-tab="${t}">${tr('bag.tab.' + t)}<kbd>${i + 1}</kbd></button>`).join('')}
       <span class="bhint">${tr('bag.tabHint')}</span>
     </div>
-    ${bagTab === 'self' ? selfHtml() : bagTab === 'things' ? thingsHtml() : bagTab === 'tree' ? (treeWide ? wideHtml() : treeHtml()) : officeHtml()}
+    ${bagTab === 'self' ? selfHtml() : bagTab === 'things' ? thingsHtml()
+      : bagTab === 'tree' ? (treeWide ? wideHtml() : treeHtml())
+      : bagTab === 'keys' ? keysHtml() : officeHtml()}
   </div>`;
 
   $('#bx').onclick = closeBag;
@@ -1751,6 +1927,7 @@ export function renderBag(tab) {
   if (bagTab === 'self') bindSelf();
   else if (bagTab === 'things') bindThings();
   else if (bagTab === 'tree') { bindTree(); bindTreeView(); }
+  else if (bagTab === 'keys') bindKeys();
   else bindOffice();
 }
 
@@ -1864,6 +2041,9 @@ const catCells = (cat) => (cat ? [...cat.querySelectorAll('.bcell')] : []);
 function paintBagFocus() {
   if (bagTab === 'office') { officeRing.paint(); return; }
   if (bagTab === 'tree') return;      // выбранный узел и есть фокус, см. treeHtml()
+  // The key shelf lights itself: the class `on` on the picked card is also what
+  // draws its border. The focus ring has no business here.
+  if (bagTab === 'keys') return;
   if (bagTab === 'things') {
     const cats = bagCats();
     if (!cats.length) return;
@@ -1904,6 +2084,7 @@ export function bagKey(raw) {
   }
   if (bagTab === 'office') return officeRing.key(key, true);
   if (bagTab === 'tree') return treeKey(key);
+  if (bagTab === 'keys') return keysKey(key);
   return bagTab === 'things' ? thingsKey(key) : selfKey(key);
 }
 

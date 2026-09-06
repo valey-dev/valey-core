@@ -4,6 +4,72 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.12.0 — 6 September 2026
+
+### Added
+
+- **plan:** the office plan names its own place on the keys board (ca80688)
+- **keys:** «?» shows the keys of the place you are standing in, not of the floor (4129cb8)
+
+### Fixed
+
+- **keys:** every footnote on a cap is one the frame can actually print (22091db)
+- **keys:** the caps say what the frame promised — the zoom keys, and the footnotes behind «·» (ade2ea7)
+## v0.11.1 — 6 September 2026
+
+### Fixed
+
+- **release:** land clears its temporary tree even when the release fails (cf73ac3)
+## v0.11.0 — 6 September 2026
+
+### Added
+
+- **release:** landing a pull request and cutting the version are one command (fac6084)
+
+### Fixed
+
+- **release:** the dry run of land cuts from the head and stops claiming it shipped (a5d9964)
+- **release:** a version can be cut from any tree, and a skipped release now refuses (6495bad)
+
+### Other
+
+- test(release): the newest tag and package.json have to say the same thing (99c536c)
+## v0.10.0 — 5 September 2026
+
+### Added
+
+- **lounge:** a bear skin in front of the sofa, head and teeth included (a9a65bb)
+- **keys:** walking moves to the arrows, and WASD gives back its four letters (659ee0a)
+- **keys:** the keyboard fills the panel instead of sitting in a column (9bed03e)
+- **keys:** the whole keyboard on «?», and the strip below shrinks to one line (c54e314)
+- **keys:** the strip at the bottom is built from the registry, so it cannot lie about the keys (21e219a)
+
+### Fixed
+
+- **sprites:** a look built by hand keeps its hair (a95f128)
+- **keys:** T is «смена камер» and I is «гости», in words that fit the cap (aa56c2c)
+- **keys:** the space bar acts alone, and E goes back to the free letters (e786dd9)
+- **keys:** the space bar says «действие», the pager says «пейджер» (a067382)
+- **keys:** one word for clothes everywhere, and F9 says what fits on a cap (3b0329c)
+- **keys:** the panel highlights a key the way the frame does — a bar along its bottom edge (1f745b5)
+
+### Other
+
+- refactor(keys): the office answers to actions, and reads the key under the finger, not the letter on it (0a21c38)
+## v0.9.0 — 5 September 2026
+
+### Added
+
+- **guest:** a guest says who they are at the door, not a minute later (ed7b726)
+
+### Fixed
+
+- **guest:** the word «ТЫ» stops being a name, in storage and over other people (4a697ea)
+
+### Other
+
+- docs(library): the tree says a guest gives a name at the door (1a81a5a)
+- chore: give the Figma audit a command to type (6a8ec90)
 ## v0.8.1 — 5 September 2026
 
 ### Fixed
