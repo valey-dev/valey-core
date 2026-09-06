@@ -72,7 +72,7 @@ export function renderPager() {
     <div class="lcd">
       <div class="l1"><b>${esc(whoOf(p).toUpperCase())}</b> · ${esc(p.tool)} · ${esc(held(p))}
         ${queue > 1 ? `<span class="pn">1/${queue}</span>` : ''}</div>
-      <div class="l2">${esc(tr('pager.may'))} ${esc(p.command)}</div>
+      <div class="l2">${esc(p.question ? tr('pager.asks') : tr('pager.may'))} ${esc(p.command)}</div>
       ${p.description ? `<div class="l3">${esc(p.description)}</div>` : ''}
     </div>
     <div class="pkeys">

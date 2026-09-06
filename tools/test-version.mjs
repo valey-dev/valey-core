@@ -28,16 +28,32 @@ const ok = (name, cond, got) => {
 const version = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 ok('версия в package.json читается', /^\d+\.\d+\.\d+$/.test(version), version);
 
-// Sorted by version rather than by date: tags are cut from different trees, and
-// the order they were written in says nothing about which is the newest release.
-const tags = git('tag', '--list', 'v[0-9]*', '--sort=-v:refname').split('\n').filter(Boolean);
-if (!tags.length) {
+// The tag that HEAD can actually see, not the newest one in the repository. A
+// branch a release behind main is not broken — it simply has not pulled — and a
+// stand that reddens for that teaches people to ignore it. Written the other way
+// first, on 6 September 2026, and it failed on the very branch that added it.
+let reachable = '';
+try { reachable = git('describe', '--tags', '--abbrev=0', '--match', 'v[0-9]*'); } catch { /* no tags yet */ }
+
+if (!reachable) {
   // A repository before its first release is not broken, it is young.
   console.log('ok    | тегов ещё нет — сравнивать не с чем');
 } else {
-  const newest = tags[0].replace(/^v/, '');
-  ok('старший тег и package.json говорят одно и то же', newest === version,
+  const newest = reachable.replace(/^v/, '');
+  ok('тег, который видит HEAD, и package.json говорят одно и то же', newest === version,
     `тег v${newest}, package.json ${version} — либо тег ушёл без релизного коммита, либо коммит не запушен`);
+}
+
+// Tags that exist but are not on this branch are worth a word rather than a
+// failure: on the morning of 6 September 2026 v0.4.1 and v0.5.0 hung off nothing
+// main could see, and the only thing that noticed was an unrelated stand failing
+// in a way that read as its own bug.
+const all = git('tag', '--list', 'v[0-9]*', '--sort=-v:refname').split('\n').filter(Boolean);
+const unreachable = all.filter((t) => {
+  try { git('merge-base', '--is-ancestor', t, 'HEAD'); return false; } catch { return true; }
+});
+if (unreachable.length) {
+  console.log(`      | к сведению: ${unreachable.length} тег(ов) не видно с этой ветки — ${unreachable.slice(0, 3).join(', ')}`);
 }
 
 console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');

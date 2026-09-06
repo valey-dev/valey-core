@@ -89,10 +89,18 @@ export function renderHud() {
     <span class="chip zoom${z.tight ? ' wait' : ''}" title="${tr('hud.zoomTitle')}${
       z.tight ? tr('hud.zoomTitleTight') : ''
     }">⛶ ×${z.dev}${z.auto ? tr('hud.zoomAuto') : ''}${z.tight ? tr('hud.zoomTight') : ''}</span>
-    ${S.pagerWaiting ? `<span class="chip wait" title="${tr('hud.pagerTitle')}">📟 ${S.pagerWaiting}</span>` : ''}
+    ${S.pagerWaiting ? `<button id="pagerChip" class="chip wait" title="${tr('hud.pagerTitle')}">📟 ${S.pagerWaiting}</button>` : ''}
     <span class="chip dim">${S.soundOn ? '🔊' : '🔇'} M</span>
     ${collect('hud', S).map((c) => `<span class="chip ${esc(c.kind || 'dim')}" title="${esc(c.title || '')}">${esc(c.text || '')}</span>`).join('')}
     <span class="chip dim">${tr('hud.round')}</span>`;
+  // The badge is the only trace a deferred request leaves once its toast is gone,
+  // and until 6 September 2026 it was a `span`: a person saw three requests in the
+  // corner and had nowhere to press. H brings them back, but it is written in a
+  // tooltip, and Esc — which is «back» everywhere else in the office — is what
+  // defers them in the first place, so the pager is easy to put away by accident
+  // and hard to find afterwards.
+  const chip = $('#pagerChip');
+  if (chip) chip.onclick = () => api.recallPager();
 }
 
 // ------------------------------------------------------------------- dialog
@@ -364,8 +372,8 @@ function buildDialog(a) {
     if (!p) body = `<p class="say">${tr('permit.gone')}</p>`;
     else if (denying) {
       body = `<p class="q">${tr('permit.denyQ')}</p>
-        <p class="say">${esc(p.description || tr('permit.noDesc'))}</p>
-        <pre class="cmd">${esc(p.command)}</pre>
+        <p class="say">${esc(p.description || (p.question ? p.question.text : '') || tr('permit.noDesc'))}</p>
+        ${p.question ? '' : `<pre class="cmd">${esc(p.command)}</pre>`}
         <textarea id="denyNote" rows="3" placeholder="${tr('permit.denyHint')}"></textarea>
         <div class="prow">
           <button data-a="deny" class="primary">${tr('permit.deny')} <kbd>⏎</kbd></button>
@@ -373,9 +381,17 @@ function buildDialog(a) {
         </div>
         <p class="hint">${tr('permit.denyNote')}</p>`;
     } else {
-      body = `<p class="q">${tr('permit.q')}</p>
-        <p class="say">${esc(p.description || tr('permit.noDesc'))}</p>
-        <pre class="cmd">${esc(p.command)}</pre>
+      body = `<p class="q">${p.question ? tr('permit.askQ') : tr('permit.q')}</p>
+        <p class="say">${esc(p.description || (p.question ? p.question.text : '') || tr('permit.noDesc'))}</p>
+        ${p.question
+          // A question is not a command, and a <pre> full of braces is what the
+          // office used to show instead of it. The options are the whole point:
+          // «разрешить или отказать» says nothing about a question whose answer
+          // is one of four.
+          ? (p.question.options.length
+            ? `<ul class="qopts">${p.question.options.map((o) => `<li>${esc(o)}</li>`).join('')}</ul>`
+            : '')
+          : `<pre class="cmd">${esc(p.command)}</pre>`}
         ${p.rule ? `<p class="hint">${tr('permit.rule', { rule: esc(p.rule) })}</p>` : ''}
         <div class="prow">
           <button data-a="allow" class="primary">${tr('permit.allow')} <kbd>⏎</kbd></button>
