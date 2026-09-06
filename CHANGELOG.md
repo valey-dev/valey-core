@@ -4,6 +4,16 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.20.0 — 6 September 2026
+
+### Added
+
+- **modules:** a module route can ask the office whether this is the owner (4ed115c)
+- **tools:** stand-stop puts out your own office and refuses everyone else's (3a2ad7f)
+
+### Other
+
+- test(tokens): the mockups' palette is checked against :root instead of trusted (bec307f)
 ## v0.19.0 — 6 September 2026
 
 ### Added
