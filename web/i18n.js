@@ -441,7 +441,7 @@ const DICT = {
     'bag.tab.keys': 'ключи',
     // The key shelf. «not connected» is fixed by pasting a key, «not logged in»
     // by a trip to the terminal: different words because they are different acts.
-    'key.shelf': 'стрелки — по ключам, ⏎ — открыть',
+    'key.shelf': '← → по ключам · ↓ внутрь карточки · ⏎ нажать',
     'key.none': 'Подключать нечего: офис в этой сборке наружу не ходит.',
     'key.copy': 'скопировать',
     'key.guest': 'Ключи заводит хозяин офиса — здесь их только видно.',
@@ -1090,7 +1090,7 @@ const DICT = {
     'bag.thingsNote': 'Everything you can take off lives here. Nothing drops and nothing is bought — it is all available, always: a display case, not a backpack.',
     'bag.tab.office': 'office',
     'bag.tab.keys': 'keys',
-    'key.shelf': 'arrows walk the shelf, ⏎ opens',
+    'key.shelf': '← → walk the shelf · ↓ into the card · ⏎ press',
     'key.none': 'Nothing to connect: this build never goes outside.',
     'key.copy': 'copy',
     'key.guest': 'The office owner sets the keys up; here they are only visible.',

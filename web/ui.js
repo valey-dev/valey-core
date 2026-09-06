@@ -1527,6 +1527,7 @@ function bindKeys() {
   });
   const detail = el.bag.querySelector('.keydetail');
   if (!detail) return;
+  if (keysIn) keysRing.paint();
   // A guest gets the cards to read and no controls at all: POST /api/settings
   // answers him 403 anyway, and saying «the owner sets the keys up» beats
   // letting him press a button and collect a refusal. Hidden by the class, so
@@ -1545,21 +1546,60 @@ function bindKeys() {
 }
 
 // Arrows walk the shelf, ⏎ hands focus to the card — from there it is Tab.
+// The shelf is two floors, and the arrows say which one you are on. Left and
+// right walk the cards; down steps into the open card and then walks its rows;
+// up from the first row comes back out to the shelf.
+//
+// Enter used to hand the browser's own focus to the first control and leave the
+// rest to Tab. That was enough while a card was one button — the CLI has one —
+// and stopped being enough the moment Spotify arrived with four steps, two
+// fields and five buttons. This office is walked with the keyboard; a card that
+// needs the mouse is a card nobody set up.
+const KEY_ROWS = '.keystep, .keycmd, .keywarn, .keyfoot';
+const keysRing = focusRing(() => el.bag.querySelector('.keydetail'), 'input, .obtn', { rows: KEY_ROWS });
+let keysIn = false;
+
+// Leaving the card: on a card switch, on a tab switch, on closing the bag. The
+// flag outliving its card would swallow the arrows on the shelf.
+export function keysOut() { keysIn = false; keysRing.reset(); }
+
 function keysKey(key) {
   const cards = keyCards();
   if (!cards.length) return false;
-  const step = { arrowleft: -1, arrowright: 1, arrowup: -1, arrowdown: 1 }[key];
-  if (step !== undefined) {
-    keyIdx = (keyIdx + step + cards.length) % cards.length;
-    renderBag();
-    return true;
+
+  if (!keysIn) {
+    const step = { arrowleft: -1, arrowright: 1 }[key];
+    if (step !== undefined) {
+      keyIdx = (keyIdx + step + cards.length) % cards.length;
+      keysRing.reset();
+      renderBag();
+      return true;
+    }
+    if (key === 'arrowdown' || key === 'enter' || key === ' ') {
+      if (!el.bag.querySelector('.keydetail input, .keydetail .obtn')) return true;
+      keysIn = true;
+      keysRing.reset();
+      keysRing.paint();
+      return true;
+    }
+    // Up on the shelf is nobody's: the tabs are digits, and the office below is
+    // not walked from inside a panel.
+    return key === 'arrowup';
   }
-  if (key === 'enter') {
-    const first = el.bag.querySelector('.keydetail input, .keydetail .obtn');
-    if (first) first.focus();
-    return true;
+
+  // Up out of the first row leaves the card rather than wrapping round to the
+  // last: a ring that swallows the way back is how a panel traps a hand.
+  if (key === 'arrowup') {
+    const detail = el.bag.querySelector('.keydetail');
+    const cur = detail && detail.querySelector('.focus');
+    const rows = detail ? [...detail.querySelectorAll(KEY_ROWS)] : [];
+    if (!cur || !rows.length || rows[0].contains(cur)) {
+      keysOut();
+      el.bag.querySelectorAll('.keydetail .focus').forEach((n) => n.classList.remove('focus'));
+      return true;
+    }
   }
-  return false;
+  return keysRing.key(key, true);
 }
 
 // Вкладка «офис». Дресс-код живёт здесь, потому что у него нет предмета в
@@ -2019,11 +2059,12 @@ const officeRing = focusRing(() => el.bag, '.obtn');
 function openTab(tab) {
   if (!tabs().includes(tab) || tab === bagTab) return;
   bagTab = tab; bagIdx = 0; cellIdx = 0;
+  keysOut();
   officeRing.reset();
   renderBag();
 }
 
-export function closeBag() { el.bag.hidden = true; bagIdx = 0; cellIdx = 0; officeRing.reset(); }
+export function closeBag() { el.bag.hidden = true; bagIdx = 0; cellIdx = 0; officeRing.reset(); keysOut(); }
 
 // Open the shelf on one particular key. The thing that uses a key is the natural
 // place to ask for it — the receiver knows the office has no Spotify long before
@@ -2033,6 +2074,7 @@ export function closeBag() { el.bag.hidden = true; bagIdx = 0; cellIdx = 0; offi
 export function openKeyCard(id) {
   const at = keyCards().findIndex((c) => c.id === id);
   if (at >= 0) keyIdx = at;
+  keysOut();
   renderBag('keys');
 }
 

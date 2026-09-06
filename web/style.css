@@ -1057,6 +1057,9 @@ body.titling #hud{visibility:hidden}
 .keyrow{display:flex; gap:14px; font-size:12px}
 .keyrow span{flex:0 0 110px; color:var(--muted)}
 .keyrow b{font-weight:normal; color:var(--ink-dim)}
+/* Поле внутри карточки подсвечивается так же, как кнопка: ходят по ним одной
+   стрелкой, и рука не должна гадать, где она стоит. */
+.keydetail input.focus{outline:2px solid var(--warn); outline-offset:-2px; border-color:var(--warn)}
 .keywarn{margin:0; padding:8px 10px; font-size:11px; color:var(--ink);
   background:rgba(255,209,102,.10); border-left:3px solid var(--warn);
   display:flex; align-items:center; gap:10px}

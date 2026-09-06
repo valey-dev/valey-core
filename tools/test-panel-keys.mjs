@@ -78,19 +78,31 @@ function makeBagOffice(n) {
 // not the markup.
 function makeBagKeys(n) {
   const cards = Array.from({ length: n }, () => node('keycard'));
-  const btn = node('obtn');
+  // Two rows inside the card, a control in each: that is the smallest card the
+  // arrows can be wrong about. One row and «down» has nowhere to go; the CLI
+  // card was exactly that, and it is why the shelf shipped without a way in.
+  const one = node('obtn');
+  const two = node('obtn');
+  const rowA = node('keystep');
+  const rowB = node('keyfoot');
+  rowA.contains = (x) => x === one;
+  rowB.contains = (x) => x === two;
   const detail = node('keydetail');
-  detail.querySelector = (sel) => (sel === '.keydetail input, .keydetail .obtn' ? btn : null);
-  detail.querySelectorAll = () => [];
+  const ctrls = [one, two];
+  detail.querySelector = (sel) => (sel === '.keydetail input, .keydetail .obtn' ? one
+    : sel === '.focus' ? ctrls.find((b) => b.classList.contains('focus')) || null : null);
+  detail.querySelectorAll = (sel) => (sel === 'input, .obtn' ? ctrls
+    : sel.includes('.keystep') ? [rowA, rowB] : []);
   // A real DOM answers a compound selector too — the panel asks with one for
   // the first thing it can hand focus to. The stand-in has to answer the same
   // way, or the stand is checking something the browser never does.
   return {
-    hidden: false, innerHTML: '', cards, btn,
+    hidden: false, innerHTML: '', cards, btn: one, btn2: two,
     querySelector: (sel) => (sel === '.keydetail' ? detail
-      : sel === '.keydetail input, .keydetail .obtn' ? btn : null),
+      : sel === '.keydetail input, .keydetail .obtn' ? one : null),
     querySelectorAll: (sel) => (sel === '.keycard' ? cards
-      : sel === '.keydetail input, .keydetail .obtn' ? [btn] : []),
+      : sel === '.keydetail input, .keydetail .obtn' ? ctrls
+      : sel === '.keydetail .focus' ? ctrls.filter((b) => b.classList.contains('focus')) : []),
   };
 }
 
@@ -307,15 +319,25 @@ check('цифра 1 вернула на «на себе»', focusRow() === 0, fo
 check('несуществующая вкладка не ловится', UI.bagKey('9') === false, 'поймана');
 check('шестой вкладки нет', UI.bagKey('6') === false, 'поймана');
 
-// The "keys" tab: a shelf. Arrows walk it and do not leak out of the panel, ⏎
-// hands focus to the card's first button — from there it is ordinary Tab.
+// The "keys" tab: a shelf of two floors. Left and right walk the cards, down
+// steps into the open card, and up out of its first row comes back to the shelf.
+// The office is walked with the keyboard: a card whose buttons need a mouse is
+// a card nobody sets up.
 bag = makeBagKeys(3);
 check('ключи: цифра 5 открыла вкладку', UI.bagKey('5') === true, 'не обработана');
 check('стрелка по полке обработана', UI.bagKey('ArrowRight') === true, 'не обработана');
-check('и вверх-вниз тоже: полка одна, а стрелок четыре', UI.bagKey('ArrowDown') === true, 'не обработана');
+check('вверх с полки никуда не уводит', UI.bagKey('ArrowUp') === true, 'не обработана');
+UI.bagKey('ArrowDown');
+check('вниз завела внутрь карточки', bag.btn.classList.contains('focus'), 'фокус не встал');
 UI.bagKey('Enter');
-check('Enter отдаёт фокус карточке, а не жмёт её', bag.btn.focused === 1 && bag.btn.clicked === 0,
-  `${bag.btn.focused} / ${bag.btn.clicked}`);
+check('Enter внутри карточки жмёт кнопку', bag.btn.clicked === 1, `${bag.btn.clicked}`);
+UI.bagKey('ArrowDown');
+check('вниз перешло во вторую строку', bag.btn2.classList.contains('focus'), 'фокус не переехал');
+UI.bagKey('ArrowUp');
+check('вверх вернулось в первую', bag.btn.classList.contains('focus'), 'фокус не вернулся');
+UI.bagKey('ArrowUp');
+check('вверх из первой строки вышло на полку', !bag.btn.classList.contains('focus'), 'застряло в карточке');
+check('и полка снова слушает стрелки вбок', UI.bagKey('ArrowRight') === true, 'не обработана');
 check('чужая клавиша с полки уходит в офис', UI.bagKey('q') === false, 'съедена');
 // A guest reads the cards and presses nothing: the class is what hides the
 // controls, and it also drops the fields out of the tab order.
