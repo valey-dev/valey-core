@@ -1234,6 +1234,19 @@ export function liftOpen() { return !!(el.lift && !el.lift.hidden); }
 // that is a different place from the card itself: there the letters type.
 export function cardPage() { return S.page; }
 
+// The box that scrolls in the open file: the image sits in its own frame, text
+// scrolls in the panel body.
+function scrollSingle(key) {
+  const can = (b) => b && b.scrollHeight > b.clientHeight + 1;
+  const zoom = el.viewer.querySelector('.zoomwrap');
+  const box = can(zoom) ? zoom : el.viewer.querySelector('.single') || zoom;
+  if (!box) return;
+  if (key === 'home') { box.scrollTop = 0; return; }
+  if (key === 'end') { box.scrollTop = box.scrollHeight; return; }
+  const step = Math.max(120, box.clientHeight * 0.9);
+  box.scrollTop += key === 'pageup' ? -step : step;
+}
+
 export function viewerKey(raw, big = false) {
   if (el.viewer.hidden) return false;
   const key = raw.toLowerCase();
@@ -1267,6 +1280,11 @@ export function viewerKey(raw, big = false) {
   const n = gallery.items.length;
 
   if (gallery.mode === 'single') {
+    // A tall image runs off the bottom of the screen and the mouse could reach
+    // it while the keyboard could not: PageUp/PageDown were in VIEWER_KEYS, so
+    // the viewer swallowed them and did nothing. On a Mac keyboard without a
+    // numeric block these are Fn+↑/↓, which is how this was noticed.
+    if (['pageup', 'pagedown', 'home', 'end'].includes(key)) { scrollSingle(key); return true; }
     if (key === 'r' || key === 'к') return toggleMarkdownRaw();
     // Лупа по пикселям — действие над самой картинкой, кнопки у неё нет, и
     // мышью это был единственный способ разглядеть пиксель.
