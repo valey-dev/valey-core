@@ -36,7 +36,10 @@ const r = spawnSync(process.execPath, [path.join(ROOT, 'tools/release.mjs'), '--
 // with its subject — found 5 September 2026, when v0.4.0 was cut and main went
 // red on the spot. The last was found the same day, on a branch sitting at
 // 0.8.1 while main had reached v0.9.0.
-const empty = /нет коммитов|выпускать нечего|уже есть/.test(r.stderr + r.stdout);
+// «одна принятая фича — один минор» is the fifth right answer: a range with
+// several features is refused until somebody says --catch-up. Like the others
+// it proves the script read THIS repository, which is all this stand is about.
+const empty = /нет коммитов|выпускать нечего|уже есть|один минор/.test(r.stderr + r.stdout);
 const spoke = /^## v\d+\.\d+\.\d+/m.test(r.stdout) || empty;
 ok('сухой прогон из чужой папки не падает', r.status === 0 || empty, r.stderr || r.stdout);
 ok('и говорит о своём репозитории, а не о чужой папке', spoke, r.stdout + r.stderr);
