@@ -172,7 +172,9 @@ const PLACES = [
     caps: {
       Escape: 'place.close', Enter: 'place.lift.go', Space: 'place.lift.go',
       Digit1: 'place.lift.floor', Digit2: 'place.lift.floor', Digit3: 'place.lift.floor',
+      // All four: liftRing steps on left and right as well as up and down.
       ArrowUp: 'place.lift.floor', ArrowDown: 'place.lift.floor',
+      ArrowLeft: 'place.lift.floor', ArrowRight: 'place.lift.floor',
     },
   },
 ];
