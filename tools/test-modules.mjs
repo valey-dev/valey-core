@@ -46,7 +46,14 @@ await fsp.writeFile(path.join(mods, 'пример', 'module.json'), JSON.stringi
 await fsp.writeFile(path.join(mods, 'пример', 'server.js'),
   'import fsp from "node:fs/promises";\n' +
   'export const defaults = () => ({ пример: { ключ: "" } });\n' +
-  'export const route = (url, req, res, send) => url.pathname === "/api/wip" ? (send(res, 200, { ok: true }), true) : false;\n' +
+  'export const route = async (url, req, res, send, ctx) => {\n' +
+  '  if (url.pathname === "/api/wip") { send(res, 200, { ok: true }); return true; }\n' +
+  '  if (url.pathname === "/api/wip/where") {\n' +
+  '    if (!(ctx && ctx.isOwner && await ctx.isOwner())) { send(res, 403, { error: "не хозяин" }); return true; }\n' +
+  '    send(res, 200, { file: "/tmp/settings.json" }); return true;\n' +
+  '  }\n' +
+  '  return false;\n' +
+  '};\n' +
   // The observer writes to disk rather than to memory: checking through a second
   // import is not on — the module is already loaded, and a second import returns
   // the cache.
@@ -69,6 +76,21 @@ let answered = null;
 const taken = await moduleRoute(new URL('http://x/api/wip'), {}, {}, (_res, code, body) => { answered = { code, body }; });
 ok('модуль забрал свой маршрут', taken === true && answered?.code === 200, answered);
 ok('чужой маршрут не забрал', (await moduleRoute(new URL('http://x/api/state'), {}, {}, () => {})) === false);
+
+// The owner check is handed to a module route, not worked out inside it: the
+// office has one such check and it knows about private mode, local addresses
+// and the middleman. A module asks, and refuses on its own.
+answered = null;
+await moduleRoute(new URL('http://x/api/wip/where'), {}, {}, (_res, code, body) => { answered = { code, body }; },
+  { isOwner: async () => true });
+ok('хозяину маршрут отвечает', answered?.code === 200 && answered.body.file === '/tmp/settings.json', answered);
+answered = null;
+await moduleRoute(new URL('http://x/api/wip/where'), {}, {}, (_res, code, body) => { answered = { code, body }; },
+  { isOwner: async () => false });
+ok('гостю — отказ', answered?.code === 403, answered);
+answered = null;
+await moduleRoute(new URL('http://x/api/wip/where'), {}, {}, (_res, code, body) => { answered = { code, body }; });
+ok('без контекста тоже отказ, а не падение', answered?.code === 403, answered);
 
 // 4. A broken module server does not bring the office down, but does not stay quiet either.
 await fsp.mkdir(path.join(mods, 'broken'), { recursive: true });

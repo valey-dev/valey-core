@@ -1784,7 +1784,14 @@ function bindKeys() {
   // Ответ живёт на нажатой кнопке, как у блоков кода в транскрипте. Тост
   // уезжал вверх, к строке статуса офиса, а рука в этот момент смотрит на
   // кнопку, которую только что нажала: «ничего не произошло».
-  detail.querySelectorAll('[data-copy]').forEach((b) => b.onclick = () => copyOnBtn(b, b.dataset.copy));
+  // Делегированием, а не по кнопкам: карточка может узнать, что копировать,
+  // уже после отрисовки — мольберт спрашивает у сервера путь до файла настроек
+  // и проставляет data-copy, когда ответ пришёл. Обработчик, навешенный
+  // поимённо, такую кнопку не увидел бы никогда.
+  detail.onclick = (e) => {
+    const b = e.target.closest && e.target.closest('[data-copy]');
+    if (b && detail.contains(b)) copyOnBtn(b, b.dataset.copy);
+  };
   const card = cards[keyIdx];
   if (card && card.bind) card.bind(detail);
   paintBagFocus();
