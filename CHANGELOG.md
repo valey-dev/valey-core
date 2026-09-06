@@ -4,6 +4,16 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.17.0 — 6 September 2026
+
+### Added
+
+- **pager:** an option of a question is pressed, by mouse or by keyboard (f3ea532)
+
+### Fixed
+
+- **permit:** the canonical office is named, and every other one says it is not (4cfc8a4)
+- **pager:** the sentence under an option travels with it (358ed45)
 ## v0.16.0 — 6 September 2026
 
 ### Added
