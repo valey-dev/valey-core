@@ -24,7 +24,9 @@ import path from 'node:path';
 // The root comes from this file rather than from the cwd, for the reason
 // release.mjs carries in its own header: git and the files have to look at one
 // repository.
-const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const ROOT = process.env.VALEY_REPO
+  ? path.resolve(process.env.VALEY_REPO)
+  : path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const git = (...a) => execFileSync('git', ['-C', ROOT, ...a], { encoding: 'utf8' }).trim();
 const die = (m) => { console.error('gh-release: ' + m); process.exit(1); };
 

@@ -13,7 +13,7 @@
 // runs the stands first, because that is the last moment the commit is still
 // cheap to change.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { pickKind, check } from './release-kind.mjs';
@@ -23,7 +23,14 @@ import { pickKind, check } from './release-kind.mjs';
 // package.json and CHANGELOG were taken from here: a run from a subdirectory
 // rewrote the files and `git add` failed on the pathspec — the version bumped,
 // the section written, no commit and no way back.
-const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+// The repository being released is not always the one holding this script.
+// valey-modules is a second repository living inside this working tree, with its
+// own version, its own tags and the same rules, and duplicating four tools into
+// it would mean two copies drifting apart. So the root is overridable, and the
+// default stays «the repo this file belongs to».
+const ROOT = process.env.VALEY_REPO
+  ? path.resolve(process.env.VALEY_REPO)
+  : path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 const git = (...a) => execFileSync('git', ['-C', ROOT, ...a], { encoding: 'utf8' }).trim();
 // The same, but quietly: before the first tag `git describe` shouts into stderr,
@@ -49,7 +56,7 @@ if (dry && ship) die('--dry и --ship вместе не имеют смысла'
 // A dirty tree is somebody else's edits landing in the release commit. Better to stop.
 if (!dry && git('status', '--porcelain')) die('дерево грязное, сначала закоммить или спрячь');
 
-const pkgPath = new URL('../package.json', import.meta.url);
+const pkgPath = path.join(ROOT, 'package.json');
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
 const [maj, min, pat] = pkg.version.split('.').map(Number);
 
@@ -184,17 +191,24 @@ if (mainAt) {
 // commit is not free to rewrite.
 if (ship) {
   console.log('\nстенды перед пушем:');
-  const t = spawnSync(process.execPath, [path.join(ROOT, 'tools/run-tests.mjs')],
+  // A repository without a runner is not a repository without checks — it is one
+  // whose checks are called otherwise. Saying so beats pretending they ran.
+  const runner = path.join(ROOT, 'tools/run-tests.mjs');
+  if (!existsSync(runner)) {
+    console.log('  стендов у этого репозитория нет — прогонять нечего');
+  } else {
+  const t = spawnSync(process.execPath, [runner],
     { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
   const tail = (t.stdout || '').trim().split('\n').slice(-3).join('\n');
   if (t.status !== 0) die('стенды не прошли — релиз не режется:\n' + tail);
   console.log(tail + '\n');
+  }
 }
 
 pkg.version = next;
 writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
 
-const changelogPath = new URL('../CHANGELOG.md', import.meta.url);
+const changelogPath = path.join(ROOT, 'CHANGELOG.md');
 const changelog = readFileSync(changelogPath, 'utf8');
 const at = changelog.indexOf('\n## ');
 if (at < 0) die('в CHANGELOG.md нет ни одного раздела ## — некуда вставлять');
@@ -219,7 +233,11 @@ if (!ship) {
 // v0.2.0 went out. So the draft script appears by itself, together with the tag.
 // A blank page is the main reason a release gets put off, and removing it is
 // cheaper than talking yourself into sitting down later.
-if (next.endsWith('.0')) {
+// The video is the office's own rule: a minor of the office is shown to people.
+// The modules repository is released by the same tooling and has no video and no
+// audience for one, so the draft belongs to the repo this script lives in.
+const ownRepo = ROOT === path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+if (next.endsWith('.0') && ownRepo) {
   try {
     const out = execFileSync(process.execPath, [fileURLToPath(new URL('script.mjs', import.meta.url)), tag],
       { encoding: 'utf8' });
