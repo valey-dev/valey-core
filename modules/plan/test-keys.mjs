@@ -120,8 +120,9 @@ check('стрелка на этом месте — комната, а не фо�
   keyIn('plan.map', 'ArrowLeft').caption === 'plan.place.room', keyIn('plan.map', 'ArrowLeft'));
 check('K здесь закрывает, а не открывает',
   keyIn('plan.map', 'KeyK').caption === 'plan.place.close', keyIn('plan.map', 'KeyK'));
-// The floor is not listening while the plan is up, and the board has to say so.
-check('буква этажа на плане не горит', keyIn('plan.map', 'KeyC').lit === false, keyIn('plan.map', 'KeyC'));
+// The floor is still listening: planKey answers the arrows and returns false for
+// letters, so C opens the wardrobe over the plan and the board must say so.
+check('буква этажа на плане горит', keyIn('plan.map', 'KeyC').lit === true, keyIn('plan.map', 'KeyC'));
 // Except the one that opens this board: it answers everywhere or it is useless.
 check('а «/» горит и здесь', keyIn('plan.map', 'Slash').lit === true, keyIn('plan.map', 'Slash'));
 check('фокус встаёт на ближайшую дверь — первую комнату', P.planFocus() === r0.key, P.planFocus());
