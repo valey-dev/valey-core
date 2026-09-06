@@ -18,7 +18,7 @@ import { readPad, edges as padEdges } from './pad.js';
 import { viewport, stepScale, SCALE_MIN, SCALE_MAX } from './viewport.js';
 // ui.scale is the interface size: the HUD and hint strips are stretched by it,
 // and fit() must account for that when it measures their height.
-import { ui } from './theme.js';
+import { ui, onUiScale } from './theme.js';
 import { actionOf, codeOf, codesOf, hints } from './keymap.js';
 import { renderKeys, closeKeys, keysOpen, readLayout } from './keys.js';
 import { has as hasPlace } from './places.js';
@@ -1971,6 +1971,9 @@ function refit() {
   requestAnimationFrame(() => { if (fit() !== was) fit(); });
 }
 addEventListener('resize', refit);
+// A bigger interface means a taller HUD, and the office is laid out around it. The
+// browser fires no event for that, so the size control tells us itself.
+onUiScale(() => refit());
 
 // A zoom changes devicePixelRatio, and a resize does not arrive after it in every browser.
 // The subscription lives on exactly the current value, so we re-register it every time.
