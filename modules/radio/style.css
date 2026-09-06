@@ -23,6 +23,13 @@
    the browser squashed the list to nothing instead of letting the body scroll.
    The body is the one scroller here; everything in it keeps its own height. */
 .radiobody > *{flex:none}
+/* And the scrolling leaves the padding visible. The focus ring moves with
+   scrollIntoView, which parks the element exactly on the edge of the scrollport:
+   measured on 6 September 2026 at 175% — the wave under the focus and the field
+   below it both ended with a gap of zero, flush against the frame, and that reads
+   as a panel cutting its own content rather than holding it. scroll-padding is
+   the only thing scrollIntoView asks about; a padding alone it ignores. */
+.radiobody{scroll-padding:12px}
 .radiocab{background:linear-gradient(var(--cab),var(--cab2)); border:3px solid var(--cab-edge);
   box-shadow:inset 0 0 0 2px var(--cab-in); padding:8px}
 .radiodial{background:var(--field); border:2px solid var(--cab-dial); color:var(--warn);
