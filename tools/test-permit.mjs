@@ -233,12 +233,20 @@ try {
   const has = typeof P2.questionOf === 'function';
   ok('офис умеет читать вопрос', has, typeof P2.questionOf);
   const nested = has && P2.questionOf({ questions: [{ header: 'Где хаб', question: 'Где живёт хаб?',
-    options: [{ label: 'у нас' }, { label: 'у покупателя' }] }] });
+    options: [{ label: 'у нас', description: 'хаб у нас, платит владелец' },
+      { label: 'у покупателя', description: 'ставит сам, мы не платим' }] }] });
   ok('вопрос читается из списка', nested && nested.text === 'Где живёт хаб?', nested);
-  ok('и варианты приезжают с ним', nested && nested.options.join('|') === 'у нас|у покупателя', nested && nested.options);
+  ok('и варианты приезжают с ним',
+    nested && nested.options.map((o) => o.label).join('|') === 'у нас|у покупателя', nested && nested.options);
+  // The sentence under an option is what the choice is made on; a label alone
+  // says «после демо» and nothing about what that costs.
+  ok('и комментарий под вариантом не теряется',
+    nested && nested.options[0].note === 'хаб у нас, платит владелец', nested && nested.options[0]);
   const flat = has && P2.questionOf({ question: 'Так тоже спрашивают?', options: ['да', 'нет'] });
   ok('одиночный вопрос читается так же', flat && flat.text === 'Так тоже спрашивают?', flat);
   ok('строки в вариантах не теряются', flat && flat.options.length === 2, flat && flat.options);
+  ok('вариант строкой остаётся вариантом, просто без комментария',
+    flat && flat.options[0].label === 'да' && flat.options[0].note === '', flat && flat.options[0]);
   ok('команда — не вопрос', has && P2.questionOf({ command: 'ls' }) === null, has && P2.questionOf({ command: 'ls' }));
 
   const asked = P2.ask({ session_id: 'sess-q', tool_name: 'AskUserQuestion',

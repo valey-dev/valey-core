@@ -241,7 +241,9 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
    person at the terminal — it shows what is being chosen between, and the answer
    is given there. */
 .qopts{list-style:none; margin:6px 0 0; padding:0; font-size:13px; color:var(--ink)}
-.qopts li{padding:2px 0 2px 14px; position:relative}
+.qopts li{padding:3px 0 3px 14px; position:relative}
+.qopts li b{font-weight:normal; color:var(--warn)}
+.qopts li span{display:block; color:var(--muted); font-size:11px; line-height:1.35}
 .qopts li::before{content:"·"; position:absolute; left:4px; color:var(--warn)}
 #denyNote{width:100%; box-sizing:border-box; margin:8px 0 0; padding:6px;
   background:var(--field); border:2px solid var(--frame); color:var(--ink); font:inherit; font-size:13px}

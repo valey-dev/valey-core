@@ -389,7 +389,14 @@ function buildDialog(a) {
           // «разрешить или отказать» says nothing about a question whose answer
           // is one of four.
           ? (p.question.options.length
-            ? `<ul class="qopts">${p.question.options.map((o) => `<li>${esc(o)}</li>`).join('')}</ul>`
+            // The note under an option is the half a person decides on. It is
+            // shown dimmer than the label rather than hidden behind a hover:
+            // a comment you have to go looking for is a comment nobody read.
+            ? `<ul class="qopts">${p.question.options.map((o) => {
+              const label = typeof o === 'string' ? o : (o.label || '');
+              const note = typeof o === 'string' ? '' : (o.note || '');
+              return `<li><b>${esc(label)}</b>${note ? `<span>${esc(note)}</span>` : ''}</li>`;
+            }).join('')}</ul>`
             : '')
           : `<pre class="cmd">${esc(p.command)}</pre>`}
         ${p.rule ? `<p class="hint">${tr('permit.rule', { rule: esc(p.rule) })}</p>` : ''}
