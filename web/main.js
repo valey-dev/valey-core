@@ -206,6 +206,10 @@ initPager(state, {
 });
 
 UI.initUI(state, {
+  // The badge in the corner presses the same thing H does. It lives here rather
+  // than in the pager's callbacks because it is the HUD that calls it, and the two
+  // objects are different `api`.
+  recallPager: () => { if (recall()) { state.pagerWaiting = waitingCount(); UI.renderHud(); } },
   close: closeAll,
   saveMe: () => {
     localStorage.setItem('valey-me', JSON.stringify(state.me));
@@ -700,7 +704,11 @@ function onKey(e) {
   // The pager holds its two keys while there is no card: Enter answers, Esc defers. An
   // open card takes them for itself — it is on top, and it already has both "allow" and
   // "close".
-  if (!state.dialogOpen && pagerKey(e.key)) { e.preventDefault(); return; }
+  // Esc closes the thing in front of you and nothing else. The pager sits in the
+  // corner under every panel, and until 6 September 2026 it took Esc and Enter
+  // whenever it was open: closing a panel deferred a request nobody meant to
+  // defer, and the badge in the corner was the only trace of it.
+  if (!aboveThePager() && pagerKey(e.key)) { e.preventDefault(); return; }
 
   // Esc on "deny with a note" is a step back to the buttons rather than closing the card:
   // the person pressed deny and has not sent anything yet.
@@ -1330,6 +1338,17 @@ function tickLift(now) {
   }
   st.phase = 'idle'; st.open = 1; st.riding = false;
   if (st.andOpen) { st.andOpen = false; openLiftPanel(); }
+}
+
+// What stands in front of the pager. Deliberately the same list closeAll() walks
+// rather than panelsOpen(): panelsOpen answers «can the person walk», and it does
+// not know about the notes or the wardrobe, so the pager would still have stolen
+// Esc from those two. One question, one list.
+const ABOVE_PAGER = ['viewer', 'roster', 'bag', 'sky', 'skin', 'notes', 'lift', 'invite', 'lang'];
+function aboveThePager() {
+  if (titleOpen() || state.dialogOpen || state.cctv.on || state.lift.phase !== 'idle') return true;
+  if (keysOpen() || collect('busy').some(Boolean)) return true;
+  return ABOVE_PAGER.some((id) => { const n = document.getElementById(id); return n && !n.hidden; });
 }
 
 function closeAll() {
