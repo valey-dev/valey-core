@@ -39,8 +39,8 @@ function inline(s) {
         : `<span class="mdlink">${text}</span>`))
     .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (_, pre, href) =>
       `${pre}<span class="mdcopyable">${copyBtn()}<a href="${href}" target="_blank" rel="noreferrer">${href}</a></span>`)
-    // содержимое не может начинаться или кончаться пробелом, иначе «2 * 3 * 4»
-    // превращается в курсив
+    // the contents can neither start nor end with a space, or «2 * 3 * 4» turns
+    // into italics
     .replace(/\*\*(\S(?:[^*]*\S)?)\*\*/g, '<b>$1</b>')
     .replace(/__(\S(?:[^_]*\S)?)__/g, '<b>$1</b>')
     .replace(/(^|[\s(])\*(\S(?:[^*\n]*\S)?)\*/g, '$1<i>$2</i>')
