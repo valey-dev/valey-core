@@ -2025,6 +2025,17 @@ function openTab(tab) {
 
 export function closeBag() { el.bag.hidden = true; bagIdx = 0; cellIdx = 0; officeRing.reset(); }
 
+// Open the shelf on one particular key. The thing that uses a key is the natural
+// place to ask for it — the receiver knows the office has no Spotify long before
+// anybody walks to the inventory — so it needs a way to say «this one», not just
+// «the keys tab». Unknown id opens the shelf as it was rather than throwing: a
+// module can be switched off while its neighbour still points at it.
+export function openKeyCard(id) {
+  const at = keyCards().findIndex((c) => c.id === id);
+  if (at >= 0) keyIdx = at;
+  renderBag('keys');
+}
+
 // «На себе» — не ряд кнопок, а список слотов, у каждого ◀ и ▶. Поэтому
 // вверх-вниз ходят по слотам, а в стороны крутят значение того, на котором
 // стоишь: так этот список и читается глазами.
