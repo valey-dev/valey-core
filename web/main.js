@@ -210,6 +210,8 @@ UI.initUI(state, {
   // than in the pager's callbacks because it is the HUD that calls it, and the two
   // objects are different `api`.
   recallPager: () => { if (recall()) { state.pagerWaiting = waitingCount(); UI.renderHud(); } },
+  // The waiting counter opens the round: those agents are exactly what it lists.
+  openRound: () => toggle('roster', UI.renderRoster, UI.closeRoster),
   close: closeAll,
   saveMe: () => {
     localStorage.setItem('valey-me', JSON.stringify(state.me));

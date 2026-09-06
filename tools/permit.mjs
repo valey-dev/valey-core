@@ -21,7 +21,21 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const URL_BASE = (process.env.VALEY_URL || 'http://127.0.0.1:5177').replace(/\/+$/, '');
+// Which office the questions go to. VALEY_URL wins — that is how a stand or a
+// second machine is pointed somewhere else on purpose — then the canonical port
+// from the settings, and 5177 only if the settings say nothing. Several offices
+// run on this machine at once, and asking all of them would mean the question is
+// answered by whichever tab happened to be open.
+const canonicalPort = () => {
+  const file = process.env.VALEY_SETTINGS
+    || path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'valey', 'settings.json');
+  try {
+    const s = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const p = s && s.network && s.network.port;
+    return Number.isInteger(p) && p > 0 ? p : 5177;
+  } catch { return 5177; }
+};
+const URL_BASE = (process.env.VALEY_URL || `http://127.0.0.1:${canonicalPort()}`).replace(/\/+$/, '');
 
 // The owner token lives in the same file as the rest of the office. In private
 // it is not needed — loopback is our own anyway — but in shared, without it, the

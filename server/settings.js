@@ -113,7 +113,11 @@ const DEFAULTS = {
   // session transcript in full, so an open port equals an open correspondence.
   // The token is created at the moment it is switched on, see
   // server/network.js.
-  network: { external: false, token: '' },
+  // `port` is the office Claude Code talks to. The hook asks one office and only
+  // one — several offices running at once is the normal state of this machine,
+  // and a question sprayed at all of them would be answered by whichever tab was
+  // left open. So the canonical port lives here, in one place both sides read.
+  network: { external: false, token: '', port: 5177 },
   // The floor's dress code: 'casual' is how it was always drawn, 'office' is
   // light tops, ties, jackets and skirts. A setting of the office, not of the
   // browser: every tab changes clothes at once, as with the weather.

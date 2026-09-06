@@ -6,7 +6,7 @@
 // The DOM is a stand-in, shared with the other stands: tools/lib/dom.mjs.
 import { node, proxy, installDom } from './lib/dom.mjs';
 
-function makeDialog({ withLink = true, files = 0, ask = false } = {}) {
+function makeDialog({ withLink = true, files = 0, ask = false, opts = 0 } = {}) {
   const state = {
     say: node('say', { id: 'say' }),
     body: node('body'),
@@ -15,6 +15,9 @@ function makeDialog({ withLink = true, files = 0, ask = false } = {}) {
     // The guest's card has no files and no transcript link — the only thing in
     // its body is the button asking the owner for access.
     ask: ask ? node('askbtn', { id: 'askAccess' }) : null,
+    // The options of a question: the answer itself, so the arrows have to reach
+    // them the way they reach the files and the buttons on a note.
+    opts: Array.from({ length: opts }, () => node('qopt')),
   };
   state.buttons = ['talk', 'work', 'task', 'close'].map((p) => {
     const b = node('btn-' + p);
@@ -38,7 +41,9 @@ function makeDialog({ withLink = true, files = 0, ask = false } = {}) {
       // back only if the walk actually asks for it. A stand-in that hands it
       // over regardless would pass on the very code that forgot it.
       : sel.startsWith('.files li')
-        ? state.files.concat(state.ask && sel.includes('#askAccess') ? [state.ask] : [])
+        ? state.files
+          .concat(state.ask && sel.includes('#askAccess') ? [state.ask] : [])
+          .concat(sel.includes('.qopt') ? state.opts : [])
       : []),
   };
   return state;
@@ -286,6 +291,20 @@ check('вкладки при этом не нажаты', current.buttons.every(
 UI.dialogDown();
 check('вниз возвращает фокус на вкладки',
   !current.ask.has('focus') && current.buttons.some((b) => b.has('focus')), 'фокус потерялся');
+
+// --- the options of a question are reached by the arrows and pressed by Enter ---
+// The office answers a question by pressing one of them, so «choose with the
+// keyboard» is the whole feature and not a convenience: without it the answer is
+// mouse-only, in an office where everything else answers keys.
+current = makeDialog({ withLink: false, files: 0, opts: 3 });
+UI.closeDialog();
+UI.dialogUp();
+check('вверх встаёт на последний вариант', current.opts[2].has('focus'), 'focus нет');
+UI.dialogUp();
+check('и следующий вверх идёт по списку вариантов', current.opts[1].has('focus'), 'focus не сдвинулся');
+UI.pressDialogFocus();
+check('Enter нажимает вариант под фокусом', current.opts[1].clicked === 1, current.opts[1].clicked);
+check('вкладки при этом не нажаты', current.buttons.every((b) => b.clicked === 0), 'вкладка нажалась');
 
 console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
 process.exit(failed ? 1 : 0);
