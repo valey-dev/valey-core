@@ -60,10 +60,22 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import net from 'node:net';
 
 const CHROME = process.env.CHROME_PATH
   || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const PORT_CDP = 9222;
+// The debugging port is asked of the system, not fixed. It was 9222 until
+// 6 September 2026, and a second shot taken while the first was still running
+// did not raise a browser of its own at all: Chrome failed to bind the busy
+// port, and the script then talked to the FIRST browser's endpoint — same
+// profile, same localStorage, so the office saw one person where two were being
+// staged. Three attempts to photograph two people in the meeting room came back
+// showing one, and the feature looked broken when the camera was.
+const PORT_CDP = await new Promise((resolve, reject) => {
+  const s = net.createServer();
+  s.on('error', reject);
+  s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => resolve(port)); });
+});
 
 const arg = (name, fallback) => {
   const i = process.argv.indexOf('--' + name);
@@ -122,12 +134,21 @@ for (let d = 0; d <= 9; d++) CODE[String(d)] = 'Digit' + d;
 const ALIAS = { Space: ' ', Spacebar: ' ', Esc: 'Escape', Slash: '/', Equal: '=', Minus: '-', Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight' };
 const alias = (k) => (Object.prototype.hasOwnProperty.call(ALIAS, k) ? ALIAS[k] : k);
 
+// Extra flags for the browser, space separated, through the environment rather
+// than the command line: they are rare, ugly and specific to one check. The one
+// that earned this: a microphone. Chrome can be given a fake capture device that
+// plays a tone — the only way to photograph anything that reacts to sound
+// without a person and a real microphone in the room.
+//
+//   VALEY_SHOT_FLAGS="--use-fake-device-for-media-stream --use-fake-ui-for-media-stream"
+const extraFlags = (process.env.VALEY_SHOT_FLAGS || '').split(' ').filter(Boolean);
+
 const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'valey-shot-'));
 const chrome = spawn(CHROME, [
   '--headless=new', `--user-data-dir=${profile}`, '--no-first-run',
   '--no-default-browser-check', '--disable-extensions', '--disable-gpu',
   '--hide-scrollbars', `--remote-debugging-port=${PORT_CDP}`,
-  `--window-size=${size}`, 'about:blank',
+  `--window-size=${size}`, ...extraFlags, 'about:blank',
 ], { stdio: 'ignore', detached: true });
 
 let ws;

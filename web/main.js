@@ -1,7 +1,7 @@
 import { lookOf, drawPerson, drawCat, normalizeLook, isSelfLabel, dressOf, dressMe } from './sprites.js';
 import { potState, water as waterPot, tally, CAN_FULL } from './garden.js';
 import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, pickRoom, WALL } from './layout.js';
-import { loadModules, collect, first } from './modules.js';
+import { loadModules, collect, first, attachStreams } from './modules.js';
 import { owned, setTokens } from './owned.js';
 import { initStand } from './stand.js';
 import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, pxText, kickerBusy } from './office.js';
@@ -259,7 +259,14 @@ UI.initUI(state, {
 
 // We knock first and ask who we are after: with a code in hand the answer to the second
 // question depends on the first.
-knock().then((entered) => {
+//
+// The whole chain is kept, because the modules have to wait for it. A guest who
+// arrives by an invitation link is nobody until the code is exchanged, and
+// `/api/modules` answers a refusal rather than a list to nobody: on 6 September
+// 2026 a guest coming through a tunnel got an office with no modules at all —
+// no voice, no microphone, an empty floor — while the owner on the same machine
+// saw everything, because he needed no code and won the race by accident.
+const admission = knock().then((entered) => {
   if (entered && entered.errorKey) state.entry = { refused: entered.errorKey };
   else if (entered && entered.ok) state.entry = { from: entered.from || '' };
   return fetch('/api/whoami', { headers: owned() }).then((r) => r.json());
@@ -406,6 +413,11 @@ const MY_ID = (() => {
   if (!v) { v = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()); localStorage.setItem('valey-id', v); }
   return v;
 })();
+// The office's own id, put where the modules can see it. A module in the floor
+// tier has to sign what it sends — an offer says who it is from — and reaching
+// into localStorage for the same key from two places is how the two of them
+// quietly stop agreeing.
+state.meId = MY_ID;
 
 // While you walk, often; while you stand, rarely. The threshold is by distance rather
 // than by "is a key pressed": the lift carries a person by itself, and staying silent
@@ -492,7 +504,11 @@ function openStream() {
   if (es) es.close();
   const pass = OWNER ? 'owner=' + encodeURIComponent(OWNER)
     : GUEST ? 'guest=' + encodeURIComponent(GUEST) : '';
-  es = new EventSource('/api/stream' + (pass ? '?' + pass : ''));
+  // The stream says whose it is. Presence goes to everybody and never needed a
+  // name; an event addressed to one person does — that is how the meeting room's
+  // hub sends an offer to one browser and not to the floor.
+  const named = (pass ? pass + '&' : '') + 'me=' + encodeURIComponent(MY_ID);
+  es = new EventSource('/api/stream?' + named);
   // The pager has to beep at once: in the snapshot tick it would be "somebody called me".
   es.addEventListener('permits', (e) => {
     try { takePermits(JSON.parse(e.data)); } catch { /* junk in the frame — we skip it */ }
@@ -500,6 +516,7 @@ function openStream() {
   es.addEventListener('people', (e) => {
     try { seePeople(JSON.parse(e.data)); } catch { /* junk in the frame — we skip it */ }
   });
+  attachStreams(es);
   es.onmessage = (e) => { streamRetry = 2000; onSnapshot(e); };
   es.onerror = () => {
     if (es.readyState !== EventSource.CLOSED) return;   // the network blinked — the browser will come back by itself
@@ -2019,7 +2036,15 @@ renderTitle();
 
 // The modules come up before the first frame: their things have to get into the plan at
 // once, or the first pass will draw the office without them and it will flicker.
+// Nothing is asked of the office before it knows who is asking. For the owner
+// this changes nothing; for a guest it is the difference between an office and
+// an empty room.
+await admission;
 await loadModules();
+// The modules arrive later than the first stream, so their listeners are hung on
+// the open one now. Without this their events would be silently lost until the
+// network happened to blink and the stream was reopened.
+if (es) attachStreams(es);
 // Rebuild the static: the hint line at the bottom is assembled once at start-up, while the
 // keys of the modules arrive later — without this a free build and a paid one would show
 // the same hint.

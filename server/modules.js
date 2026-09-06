@@ -31,7 +31,7 @@ export function moduleAll() {
   return loaded.map((m) => ({ id: m.id, off: off.has(m.id), broken: !!m.error }));
 }
 
-export async function loadModules(root) {
+export async function loadModules(root, ctx = null) {
   const dir = path.join(root, 'modules');
   loaded = [];
   let entries = [];
@@ -70,6 +70,18 @@ export async function loadModules(root) {
       }
     }
     loaded.push(mod);
+  }
+  // Handing the office's own capabilities down, once, after everything is on
+  // disk. Optional on purpose: a module that draws a picture needs none of this,
+  // and the seam stays "is the folder there" for it. A module that stumbles here
+  // is marked broken rather than taking the office down with it — the same rule
+  // the rest of this loader lives by.
+  for (const m of loaded) {
+    if (!ctx || typeof m.server?.setup !== 'function') continue;
+    try { await m.server.setup(ctx); } catch (err) {
+      m.error = String((err && err.message) || err);
+      console.log(`модуль ${m.id} споткнулся на setup: ${m.error}`);
+    }
   }
   return loaded;
 }

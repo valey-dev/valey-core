@@ -1650,8 +1650,9 @@ const treeCard = (n) => {
 // with the digits as soon as V returns the flat view, and the bottom line says
 // so — a mode may take the keys, but it has to admit that it did.
 //
-// Design: Figma, WIP «Дерево модулей: варианты представления», six direction
-// frames plus the two switch frames.
+// Design: Figma, Prod, section 22 — both views at 100% and at 175%. The six
+// direction frames and the rejected variants B and B-prime are on Legacy: that
+// is where «why is it like this?» is answered.
 let treeWide = false;
 let treeDir = 'work';
 
