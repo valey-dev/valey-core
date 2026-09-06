@@ -1002,6 +1002,17 @@ body.titling #hud{visibility:hidden}
 .stand-what{color:var(--ink); font-size:12px; margin:3px 0 4px}
 .stand-where{font-size:10px; opacity:.8}
 .stand-bad{color:var(--bad); font-size:10px; margin-top:3px}
+/* Свёрнутая табличка. «~» прячет её в ярлык того же жёлтого цвета: угол этажа
+   освобождается, но стенд остаётся подписанным — спутать его с обычным офисом
+   по-прежнему нельзя, а ради этого табличка и заведена. Ярлык ловит мышь сам:
+   у #stand pointer-events сняты целиком, и без этой строки развернуть его
+   можно было бы только клавишей. */
+#standtab{position:fixed; top:8px; left:8px; z-index:60; display:none; cursor:pointer;
+  background:rgba(20,13,8,.92); border:2px solid var(--warn); color:var(--warn);
+  font:9px/1 var(--mono, monospace); letter-spacing:.18em; padding:6px 8px}
+#standtab:hover{background:var(--warn); color:var(--bg-deep)}
+body.stand-folded #stand{display:none}
+body.stand-folded #standtab{display:block}
 /* ---- диф ---- */
 .gitbody.diff .gfiles{flex:0 0 240px; overflow:auto; padding:6px 0}
 .gfile{display:flex; gap:8px; padding:4px 10px; font-size:11px; color:var(--ink-dim); cursor:pointer}
