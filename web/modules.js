@@ -28,7 +28,7 @@ import { define as definePlaces } from './places.js';
 // place ids it declared, and the keys panel draws that board instead of the floor.
 // Without it the office would have to know which module owns what, which is the
 // one thing the module system exists to avoid.
-const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'action', 'esc', 'tick', 'hud', 'lang', 'help', 'busy', 'note', 'place'];
+const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'action', 'esc', 'tick', 'hud', 'lang', 'busy', 'note', 'place'];
 const hooks = Object.fromEntries(HOOKS.map(h => [h, []]));
 const dicts = [];
 let ids = [];

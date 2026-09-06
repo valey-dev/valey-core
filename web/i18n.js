@@ -27,11 +27,9 @@ const DICT = {
     'hud.round': 'Tab — обход',
     'hud.zoomAuto': ' авто',
     'hud.zoomTight': ' тесно',
-    'hud.zoomMax': ' макс',
     'hud.skyTitle': 'погода {source} · P — настроить',
-    'hud.zoomTitle': 'масштаб игры: + увеличить, 0 — по окну, Ctrl+колесо',
-    'hud.zoomTitleTight': ' · окно мало даже для ×6',
-    'hud.zoomTitleClamped': ' · ×{n} — больше не влезает',
+    'hud.zoomTitle': 'масштаб игры: + увеличить, 0 — считать по ширине окна, Ctrl+колесо',
+    'hud.zoomTitleTight': ' · окно узкое: мира видно меньше 400 пикселей',
 
     // -------------------------------------------------------------- the weather
     'sky.clear': 'ясно',
@@ -154,7 +152,10 @@ const DICT = {
     'toast.autoOn': 'Автообход включён — камеры идут по кругу',
     'toast.autoOff': 'Автообход выключен — переключай сам',
     'toast.badge': 'Карточка принята — SECURITY открыт',
-    'toast.zoomFloor': 'Мельче ×{n} не уходим — подсказка снизу перестаёт помещаться',
+    'toast.zoomFloor': 'Мельче ×{n} не уходим — пиксель перестаёт читаться',
+    'toast.zoomCeil': 'Крупнее ×{n} не уходим — мира видно уже совсем немного',
+    'toast.zoomSet': 'Масштаб ×{n}',
+    'toast.zoomAuto': 'Масштаб по ширине окна — ×{n}',
     'toast.freed': '{name} освободил{a} — ждёт тебя',
     'toast.lang': 'Офис говорит по-русски',
     'toast.kickWin': 'Настольный футбол {a}:{b} — твоя партия',
@@ -660,7 +661,6 @@ const DICT = {
     // Only the space bar needs one: TAB and SHIFT read as they are.
     'keycap.SPACE': 'ПРОБЕЛ',
     // The tail of the strip: what is not a key and therefore not in the registry.
-    'help.tail': 'SECURITY внизу — камеры по этажу (T — автообход) · ESC — назад',
     'doc.title': 'Valey — офис',
   },
 
@@ -672,11 +672,9 @@ const DICT = {
     'hud.round': 'Tab — round',
     'hud.zoomAuto': ' auto',
     'hud.zoomTight': ' tight',
-    'hud.zoomMax': ' max',
     'hud.skyTitle': 'weather {source} · P to set up',
-    'hud.zoomTitle': 'game scale: + to zoom in, 0 to fit the window, Ctrl+wheel',
-    'hud.zoomTitleTight': ' · the window is small even for ×6',
-    'hud.zoomTitleClamped': ' · ×{n} — no more fits',
+    'hud.zoomTitle': 'game scale: + to zoom in, 0 to count it from the width, Ctrl+wheel',
+    'hud.zoomTitleTight': ' · a narrow window: less than 400 pixels of world',
 
     'sky.clear': 'clear',
     'sky.clouds': 'cloudy',
@@ -790,7 +788,10 @@ const DICT = {
     'toast.autoOn': 'Cycling on — the cameras go round',
     'toast.autoOff': 'Cycling off — switch them yourself',
     'toast.badge': 'Card accepted — SECURITY is open',
-    'toast.zoomFloor': 'No smaller than ×{n} — the hint line stops fitting',
+    'toast.zoomFloor': 'No smaller than ×{n} — a pixel stops reading as a pixel',
+    'toast.zoomCeil': 'No larger than ×{n} — there is little world left to see',
+    'toast.zoomSet': 'Scale ×{n}',
+    'toast.zoomAuto': 'Scale from the window width — ×{n}',
     'toast.freed': '{name} is free — waiting on you',
     'toast.lang': 'The office speaks English now',
     'toast.kickWin': 'Foosball {a}:{b} — your round',
@@ -1276,7 +1277,6 @@ const DICT = {
     'keys.lgFree': 'free',
     'keys.hint': 'ESC to close',
     'keycap.SPACE': 'SPACE',
-    'help.tail': 'SECURITY below — floor cameras (T to cycle) · ESC back',
     'doc.title': 'Valey — the office',
   },
 };
