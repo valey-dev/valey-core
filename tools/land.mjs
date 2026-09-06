@@ -22,7 +22,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const ROOT = process.env.VALEY_REPO
+  ? path.resolve(process.env.VALEY_REPO)
+  : path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const git = (...a) => execFileSync('git', ['-C', ROOT, ...a], { encoding: 'utf8' }).trim();
 const die = (m) => { console.error('land: ' + m); process.exit(1); };
 const run = (cmd, args, cwd = ROOT) => {
@@ -88,10 +90,15 @@ const sweep = () => {
   try { git('branch', '-D', tmpBranch); } catch { /* the branch may not be there */ }
 };
 
-const args = [path.join(dir, 'tools/release.mjs')];
+// The release tool is the one standing next to this file, not a copy inside the
+// temporary worktree: a second repository released by these tools has its own
+// stands and its own changelog but no copy of the tooling, and pointing
+// VALEY_REPO at the worktree is the whole reason four files were not duplicated.
+const args = [fileURLToPath(new URL('release.mjs', import.meta.url))];
 if (kind) args.push(kind);
 if (dry) args.push('--dry'); else args.push('--ship');
-const r = spawnSync(process.execPath, args, { cwd: dir, stdio: 'inherit' });
+const r = spawnSync(process.execPath, args,
+  { cwd: dir, stdio: 'inherit', env: { ...process.env, VALEY_REPO: dir } });
 if (r.status !== 0) {
   if (dry) { sweep(); die('сухой прогон релиза не прошёл'); }
   // A real run that got as far as failing keeps its tree: the merge has already
