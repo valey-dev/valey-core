@@ -10,6 +10,9 @@ import { theme, applyTheme, resetTheme, PRESETS, ui, UI_STEPS, applyUiScale } fr
 import { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } from './notes.js';
 import { esc } from './esc.js';
 import { owned } from './owned.js';
+// The standup catches its own key by the physical code rather than by the
+// letter — see rosterKey below.
+import { codeOf } from './keymap.js';
 
 const $ = (s) => document.querySelector(s);
 const el = { hud: null, dialog: null, viewer: null, roster: null, bag: null, toasts: null };
@@ -1207,7 +1210,6 @@ export function viewerOpen() {
   if (chatView && $('#chatlog')) return 'transcript';
   return gallery.mode === 'single' ? 'single' : 'gallery';
 }
-export function rosterOpen() { return !!(el.roster && !el.roster.hidden); }
 export function liftOpen() { return !!(el.lift && !el.lift.hidden); }
 // The tab the card is reading. In «поговорить» the cursor sits in the field, and
 // that is a different place from the card itself: there the letters type.
@@ -1292,79 +1294,243 @@ export function viewerKey(raw, big = false) {
   return false;
 }
 
-// ------------------------------------------------------- morning round (Tab)
-// Rebuilt only when the list itself changes; otherwise the rows are patched in
-// place, so the scroll position survives the two-second refresh.
+// --------------------------------------------------------- the standup (Tab)
+// Who is on what — everybody at once, by teams. Frames: Figma, the section
+// «WIP — Планёрка: кто над чем», accepted on 6 September 2026.
+//
+// This is the morning round's place, and the standup does not stand next to it
+// — it replaces it. The round showed only those with `status` awaiting and
+// dimmed the ones already visited: of the nine people in the office three were
+// on the screen, and those faded as you walked. That answers "who do I go to",
+// while what is asked of the office is the other question — "what is the team
+// on". A panel that hides half the floor cannot answer the second one, so this
+// is the whole floor rather than a filter.
+//
+// The task comes from the tail of the report rather than from the tools:
+// reportTail() in server/agents.js parses «Текущая фича/задача», «Статус» and
+// «Что нужно от меня» and puts them in the snapshot as `task`. This panel
+// counts nothing new — it is the first place that shows it about everyone.
+//
+// Whoever does not report in three lines stands here with no task: the chat
+// name, the last thing said, what he is doing now. Inventing a task for him is
+// out of the question — the task is what this is opened for, and the lie would
+// sit exactly where the eye goes.
+
+const CARD_STATE = (a) => (a.status === 'awaiting' ? 'wait' : a.status === 'working' ? 'work' : 'idle');
+const CARD_ORDER = { wait: 0, work: 1, idle: 2 };
+
+/**
+ * The teams in the order their rooms stand on the floor. The order is held by
+ * the layout — a slot belongs to a project for as long as the project lives —
+ * and it is held there for the very reason it is wanted here: a board that
+ * reshuffles every two seconds cannot be read. A project whose room has not
+ * been built yet goes last, alphabetically, rather than disappearing.
+ */
+export function standupTeams(agents, rooms = []) {
+  const by = new Map();
+  for (const a of agents) {
+    if (!by.has(a.project)) by.set(a.project, []);
+    by.get(a.project).push(a);
+  }
+  const order = (rooms || []).map((r) => r.key);
+  const place = (p) => { const i = order.indexOf(p); return i < 0 ? order.length : i; };
+  return [...by.keys()]
+    .sort((x, y) => place(x) - place(y) || String(x).localeCompare(String(y)))
+    .map((project) => ({
+      project,
+      // Those waiting rise to the top — the only reordering inside a team, and
+      // it is about the work. Below them the desk seat decides: a seat belongs
+      // to a session, so the order holds by itself.
+      list: by.get(project).slice().sort((p, q) =>
+        CARD_ORDER[CARD_STATE(p)] - CARD_ORDER[CARD_STATE(q)]
+        || (p.seat || 0) - (q.seat || 0)
+        || String(p.name).localeCompare(String(q.name))),
+      waiting: by.get(project).filter((a) => a.status === 'awaiting').length,
+    }));
+}
+
+/**
+ * The lines of one card. Kept apart from the markup because what is decided
+ * here is not layout: it is what to show instead of a task when there is none,
+ * and when a task stops counting as "now".
+ */
+export function standupCard(a) {
+  const t = a.task && a.task.what ? a.task : null;
+  return {
+    state: CARD_STATE(a),
+    reported: !!t,
+    // An empty string is a string too: on the live floor there was a card with
+    // no tail, no chat name, and a last reply that cleaned down to nothing —
+    // and the board carried a lone «· без отчёта» with no line in front of it.
+    task: (t ? t.what : (a.title || clean(a.lastSaid).slice(0, 60)) || '').trim(),
+    // With no report the line is dim always: it is not a task, it is what could
+    // be found instead of one. Only a real task goes cold — said an hour ago
+    // and silent since.
+    cold: !t || (a.status !== 'working' && (a.idleFor || 0) > COLD_TASK),
+    status: t ? (t.status || '') : '',
+    need: t ? (t.need || '') : '',
+    now: a.status === 'working' ? actText(a) : '',
+  };
+}
+
+const cardToken = (a) => {
+  const when = ago(a.idleFor);
+  const s = CARD_STATE(a);
+  if (s === 'work') return '● ' + tr('status.working');
+  return (s === 'wait' ? '⚑ ' : '○ ') + tr('status.' + (s === 'wait' ? 'awaiting' : 'idle'))
+    + (when ? ' · ' + when : '');
+};
+const cardFoot = (c) => (c.now ? '▸ ' + c.now : c.status ? tr('task.status', { s: c.status }) : '');
+const headLine = (teams, people, waiting) => [
+  tr('standup.title'),
+  tr('standup.people', { n: people }),
+  tr('standup.teams', { n: teams }),
+  waiting ? tr('standup.waiting', { n: waiting }) : tr('standup.nobodyWaits'),
+].join(' · ');
+
+// Rebuilding the whole panel is only expensive to the eye: it is live, the
+// snapshot arrives every two seconds, and swapping the markup under a reading
+// person buys nothing. So the key is made of the cast and the states — of what
+// the cards themselves are built from — and the words inside them are patched
+// in place.
 let rosterSig = '';
+const cardSig = (a) => {
+  const c = standupCard(a);
+  return [a.id, c.state, c.need ? '!' : '', S.visited.has(a.id) ? '✓' : ''].join('');
+};
+
+const cardHtml = (a) => {
+  const c = standupCard(a);
+  const foot = cardFoot(c);
+  return `<div class="pcard ${c.state}" role="button" data-id="${esc(a.id)}">
+    <canvas class="pface" width="28" height="30" data-face="${esc(a.id)}"></canvas>
+    <span class="pname">${S.visited.has(a.id) ? '✓ ' : ''}${esc(a.name)}</span>
+    <span class="ptok">${esc(cardToken(a))}</span>
+    <span class="pmeta">${esc(roleText(a))}${a.branch ? ' · ' + esc(a.branch) : ''}</span>
+    <span class="ptask${c.cold ? ' cold' : ''}">${esc(c.task || tr('standup.untitled'))}${
+      c.reported ? '' : ` <i>· ${tr('standup.noReport')}</i>`}</span>
+    <span class="pfoot${c.now ? ' now' : ''}">${esc(foot)}</span>
+    ${c.need ? `<span class="pneed">⚑ ${tr('task.need', { s: esc(c.need) })}</span>` : ''}
+    <button class="plead" data-go="${esc(a.id)}" title="${tr('standup.lead')}">⇢</button>
+  </div>`;
+};
 
 export function renderRoster() {
-  const waiting = S.agents.filter((a) => a.status === 'awaiting');
-  const byRoom = new Map();
-  for (const a of waiting) {
-    if (!byRoom.has(a.project)) byRoom.set(a.project, []);
-    byRoom.get(a.project).push(a);
-  }
-  const done = waiting.filter((a) => S.visited.has(a.id)).length;
+  const teams = standupTeams(S.agents, S.layout && S.layout.projectRooms);
+  const waiting = S.agents.filter((a) => a.status === 'awaiting').length;
   el.roster.hidden = false;
 
-  const key = [...byRoom.entries()].map(([room, list]) =>
-    room + ':' + list.map((a) => a.id + (S.visited.has(a.id) ? '✓' : '')).join(',')).join('|');
-
-  if (key === rosterSig && el.roster.querySelector('.rbody')) {
-    patchRoster(waiting, done);
-    return;
-  }
+  const key = teams.map((t) => t.project + ':' + t.list.map(cardSig).join(',')).join('|');
+  if (key === rosterSig && el.roster.querySelector('.rbody')) { patchRoster(teams, waiting); return; }
   rosterSig = key;
 
   const body = el.roster.querySelector('.rbody');
   const scroll = body ? body.scrollTop : 0;
 
-  el.roster.innerHTML = `<div class="rwrap">
-    <div class="vhead"><span id="rcount">${tr('round.title', { done, n: waiting.length })}</span><button id="rx">✕</button></div>
-    <div class="rbody">${[...byRoom.entries()].map(([room, list]) => `
-      <div class="rgroup"><h4>▣ ${esc(room)}</h4>${list.map((a) => `
-        <div class="rrow ${S.visited.has(a.id) ? 'done' : ''}" data-id="${esc(a.id)}">
-          <span class="rname">${S.visited.has(a.id) ? '✓' : '·'} ${esc(a.name)}</span>
-          <span class="rwhat"><b>${esc(a.title || tr('round.untitled'))}</b>
-            <i>${esc(clean(a.lastSaid).slice(0, 60) || actText(a))} · ${ago(a.idleFor)}</i></span>
-          <button class="go" data-go="${esc(a.id)}">${tr('round.lead')}</button>
-        </div>`).join('')}</div>`).join('') || `<p class="empty">${tr('round.nobody')}</p>`}
-    </div></div>`;
+  el.roster.innerHTML = `<div class="rwrap pwrap">
+    <div class="vhead"><span id="rcount">${headLine(teams.length, S.agents.length, waiting)}</span><button id="rx">✕</button></div>
+    <div class="rbody">${teams.length ? `<div class="pcols">${teams.map((t) => `
+      <div class="pcol"><h4>▣ ${esc(t.project)}<i>${t.list.length}${t.waiting ? ' · ⚑' + t.waiting : ''}</i></h4>
+        ${t.list.map(cardHtml).join('')}</div>`).join('')}</div>`
+    : `<p class="empty">${tr('standup.nobody')}<span>${tr('standup.nobodyWhy')}</span></p>`}</div>
+    <p class="pkeys">${tr('standup.keys')}</p>
+  </div>`;
 
   const fresh = el.roster.querySelector('.rbody');
   if (fresh) fresh.scrollTop = scroll;
 
   $('#rx').onclick = closeRoster;
-  el.roster.querySelectorAll('[data-go]').forEach((b) => b.onclick = (e) => {
-    e.stopPropagation();
+  el.roster.querySelectorAll('.pcard').forEach((c) => c.onclick = () => openFromStandup(c.dataset.id));
+  el.roster.querySelectorAll('.plead').forEach((b) => b.onclick = (e) => {
+    e.stopPropagation();                    // a button inside a card: lead me, not open
     api.guideTo(b.dataset.go);
     closeRoster();
   });
+  paintFaces();
   rosterRing.paint();
 }
 
-function patchRoster(waiting, done) {
+// The portrait is the one from the desk and is drawn by the same code: a person
+// is recognised by it rather than by his name — there are more names on the
+// floor than a memory holds faces.
+function paintFaces() {
+  if (!S.looks) return;
+  el.roster.querySelectorAll('canvas[data-face]').forEach((cv) => {
+    if (!cv.getContext) return;             // a stand's stand-in DOM: nothing to draw with
+    const look = S.looks.get(cv.dataset.face);
+    if (!look) return;
+    const g = cv.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    g.clearRect(0, 0, 28, 30);
+    drawPerson(g, 14, 29, look, { pose: 'stand', frame: 0 });
+  });
+}
+
+function patchRoster(teams, waiting) {
   const count = $('#rcount');
-  const label = tr('round.title', { done, n: waiting.length });
+  const label = headLine(teams.length, S.agents.length, waiting);
   if (count && count.textContent !== label) count.textContent = label;
-  for (const a of waiting) {
-    const row = el.roster.querySelector(`.rrow[data-id="${a.id}"]`);
-    if (!row) continue;
-    const title = row.querySelector('b');
-    const line = row.querySelector('i');
-    const t = a.title || tr('round.untitled');
-    const l = `${clean(a.lastSaid).slice(0, 60) || actText(a)} · ${ago(a.idleFor)}`;
-    if (title && title.textContent !== t) title.textContent = t;
-    if (line && line.textContent !== l) line.textContent = l;
+  for (const t of teams) for (const a of t.list) {
+    const card = el.roster.querySelector(`.pcard[data-id="${a.id}"]`);
+    if (!card) continue;
+    const c = standupCard(a);
+    const put = (sel, text) => {
+      const n = card.querySelector(sel);
+      if (n && n.textContent !== text) n.textContent = text;
+    };
+    put('.ptok', cardToken(a));
+    put('.pfoot', cardFoot(c));
+    if (c.need) put('.pneed', '⚑ ' + tr('task.need', { s: c.need }));
+    // The task line is two pieces — the task and the "no report" aside — so
+    // replacing its text would drop the second one. Whether the aside is there
+    // at all is part of the key, so a card that gains one is rebuilt, not
+    // patched; here only the task itself can have changed.
+    const task = card.querySelector('.ptask');
+    const first = task && task.firstChild;
+    if (first && first.textContent !== c.task) first.textContent = c.task;
   }
 }
 
-// Обход открывается клавишей TAB и до сих пор требовал мыши, чтобы хоть что-то
-// в нём нажать. Действие у панели ровно одно — «вести», — поэтому фокус ходит
-// по этим кнопкам и ни по чему больше.
-const rosterRing = focusRing(() => el.roster, '.go');
+// Open a person's card without walking to the desk. The standup is "walked up
+// to everyone at once"; sending you on foot afterwards answers "go and look" to
+// the question the panel has just closed.
+function openFromStandup(id) {
+  const a = S.agents.find((x) => x.id === id);
+  if (!a) { renderRoster(); return; }       // gone while the panel was open
+  closeRoster();
+  api.openAgent(a.id);
+}
+
+// The ring walks the cards: up and down inside a column, sideways between
+// columns. A card is one thing rather than a row of buttons, so in the ring it
+// is one thing too.
+const rosterRing = focusRing(() => el.roster, '.pcard', { cols: '.pcol' });
 export function closeRoster() { el.roster.hidden = true; rosterSig = ''; rosterRing.reset(); }
-export function rosterKey(raw) { return rosterRing.key(raw, el.roster && !el.roster.hidden); }
+export function rosterOpen() { return !!(el.roster && !el.roster.hidden); }
+
+/**
+ * The standup's keys. Arrows, ENTER and ESC are the shared panel machinery;
+ * one is its own: G leads you to whoever you are standing on.
+ *
+ * The event arrives whole rather than as a single letter, because it carries
+ * the physical key code and that is what «вести» is caught by. Otherwise on
+ * "ЙЦУКЕН" this is the letter «п», and it would have to be written in as a
+ * pair — the very thing web/keymap.js removed. A plain string comes from the
+ * gamepad and from the stands, which have no layout at all.
+ */
+export function rosterKey(raw) {
+  if (!rosterOpen()) return false;
+  const code = raw && typeof raw === 'object' ? codeOf(raw) : null;
+  const key = String(raw && typeof raw === 'object' ? (raw.key || '') : raw).toLowerCase();
+  if (code === 'KeyG' || (!code && key === 'g')) {
+    const cur = el.roster.querySelector('.pcard.focus');
+    if (!cur) return true;
+    api.guideTo(cur.dataset.id);
+    closeRoster();
+    return true;
+  }
+  return rosterRing.key(key, true);
+}
 
 // -------------------------------------------------------------------- инвентарь
 // Панель «Как ты выглядишь» переехала сюда целиком и стала вкладкой «на себе»:
@@ -2314,6 +2480,7 @@ function bindResults() {
 // экране почти всегда короткий и пронумерован глазами и без нас.
 //   numbers: true          — по всем пунктам кольца
 //   numbers: '.rst'        — только по этим (в радио цифра — волна, а не ручка)
+// opts.cols — the mirror of opts.rows for a panel laid out in columns.
 //   byData: 'n'            — цифра ищет пункт с data-n="цифра", а не N-й по счёту:
 //                            в лифте «3» это третий этаж, даже если он второй в
 //                            списке.
@@ -2388,6 +2555,32 @@ export function focusRing(nodeOf, selector, opts = {}) {
           if (down !== undefined) {
             const row = rows[(at + down + rows.length) % rows.length];
             idx = l.indexOf(row[Math.min(pos, row.length - 1)]);
+            paint(); return true;
+          }
+        }
+      }
+
+      // A panel laid out in columns is the same thing on its side: up and down
+      // walk inside a column, sideways carries you to the same place in the
+      // next one. The standup is read down a team, and the down arrow has to
+      // stay inside it.
+      if (opts.cols) {
+        const cols = [...nodeOf().querySelectorAll(opts.cols)]
+          .map((c) => l.filter((b) => c.contains(b)))
+          .filter((c) => c.length);
+        const at = cols.findIndex((c) => c.includes(cur));
+        if (at >= 0) {
+          const pos = cols[at].indexOf(cur);
+          const down = { arrowup: -1, arrowdown: 1 }[key];
+          if (down !== undefined) {
+            const col = cols[at];
+            idx = l.indexOf(col[(pos + down + col.length) % col.length]);
+            paint(); return true;
+          }
+          const side = { arrowleft: -1, arrowright: 1 }[key];
+          if (side !== undefined) {
+            const col = cols[(at + side + cols.length) % cols.length];
+            idx = l.indexOf(col[Math.min(pos, col.length - 1)]);
             paint(); return true;
           }
         }
