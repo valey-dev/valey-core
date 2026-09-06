@@ -73,6 +73,12 @@ globalThis.window = globalThis;
 globalThis.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 globalThis.addEventListener = () => {};
 
+// The stand reads the office in Russian, and says so out loud: since 6 September
+// 2026 the office comes up in the language of the device, and Node's is `en-US`.
+// The checks below compare against Russian captions, and which language they get
+// must not depend on the machine they run on.
+(await import('../web/i18n.js')).setLang('ru');
+
 const UI = await import('../web/ui.js');
 const state = { agents: [], looks: new Map(), settings: {}, delivery: {}, visited: new Set(),
   me: { skin: '#e8ad7e', hair: '#3a2a20', shirt: '#c25a4b', pants: '#3f4a63', boots: '#2a2118',

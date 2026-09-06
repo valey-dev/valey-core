@@ -1145,6 +1145,10 @@ function paintHeadFocus() {
 // the gallery for the room, so one caption cannot serve both.
 export function viewerOpen() {
   if (!el.viewer || el.viewer.hidden) return null;
+  // Three screens share this one element, and they take different keys. The
+  // transcript is the one worth telling apart by name: C copies there, where in
+  // the office it opens the wardrobe.
+  if (chatView && $('#chatlog')) return 'transcript';
   return gallery.mode === 'single' ? 'single' : 'gallery';
 }
 export function rosterOpen() { return !!(el.roster && !el.roster.hidden); }

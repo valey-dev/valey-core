@@ -13,9 +13,40 @@
 // drift apart between the languages.
 
 const listeners = new Set();
-let LANG = 'ru';
 
 export const LANGS = ['ru', 'en'];
+
+// Which language a device is asking for. Until 6 September 2026 the office
+// simply started in Russian and waited to be switched: written by a Russian
+// speaker for himself, it read as a bug to everybody else, and it is the first
+// thing a stranger sees. The repository is going public, so the default cannot
+// stay a private habit.
+//
+// Russian only when the device asks for Russian; English for everything else,
+// including a device asking for a third language the office does not speak. The
+// tag is matched on its primary subtag — `ru-RU`, `ru-KZ` and plain `ru` are one
+// language here, and a region the office does not distinguish must not decide
+// the answer.
+export function pickLang(tags) {
+  for (const tag of tags || []) {
+    const base = String(tag).toLowerCase().split('-')[0];
+    if (LANGS.includes(base)) return base;
+  }
+  return 'en';
+}
+
+// `languages` is the ordered list the person actually set; `language` is one
+// value and is the fallback for a browser without the list. Node has a
+// `navigator` too but not always a locale, hence the guard: the dictionary is
+// imported by the stands, where there is no browser at all.
+export function deviceLang() {
+  if (typeof navigator === 'undefined') return 'en';
+  const list = navigator.languages && navigator.languages.length
+    ? navigator.languages : [navigator.language];
+  return pickLang(list);
+}
+
+let LANG = deviceLang();
 
 const DICT = {
   ru: {
@@ -659,15 +690,17 @@ const DICT = {
     'place.floor': 'на этаже',
     'place.cooler': 'у кулера', 'place.cooler.space': 'попить',
     'place.card': 'в карточке агента', 'place.card.note': 'записка',
-    'place.talk': 'разговор с агентом', 'place.talk.send': 'отправить',
-    'place.talk.shift': 'с ENTER — строка', 'place.talk.reply': 'к ответу',
     'place.round': 'обход — кто где', 'place.round.go': 'вести', 'place.round.row': 'строка',
     'place.viewer': 'просмотрщик файла', 'place.viewer.back': 'в галерею',
-    'place.viewer.reread': 'перечитать', 'place.viewer.loupe': 'лупа',
+    'place.viewer.reread': 'обновить', 'place.viewer.loupe': 'лупа',
     'place.viewer.buttons': 'кнопки', 'place.viewer.file': 'файл',
     'place.cctv': 'пультовая · камеры', 'place.cctv.away': 'отойти',
     'place.cctv.auto': 'автообход', 'place.cctv.cam': 'камера',
     'place.lift': 'лифт', 'place.lift.go': 'ехать', 'place.lift.floor': 'этаж',
+    'place.transcript': 'разговор целиком', 'place.transcript.scroll': 'листать',
+    'place.transcript.page': 'страница', 'place.transcript.top': 'в начало',
+    'place.transcript.end': 'в конец', 'place.copy': 'копия',
+    'place.gallery': 'доска работ', 'place.gallery.open': 'открыть', 'place.gallery.pick': 'выбрать',
     'place.panel': 'в панели', 'place.item': 'пункт',
     'place.close': 'закрыть', 'place.press': 'нажать', 'place.focus': 'фокус',
     'keys.lgOff': 'не отсюда', 'keys.onlyHere': 'горит то, что работает здесь',
@@ -1298,15 +1331,17 @@ const DICT = {
     'place.floor': 'on the floor',
     'place.cooler': 'at the cooler', 'place.cooler.space': 'drink',
     'place.card': 'in the agent card', 'place.card.note': 'a note',
-    'place.talk': 'talking to an agent', 'place.talk.send': 'send',
-    'place.talk.shift': 'with ENTER — a new line', 'place.talk.reply': 'to the reply',
     'place.round': 'the round — who is where', 'place.round.go': 'lead me there', 'place.round.row': 'row',
     'place.viewer': 'the file viewer', 'place.viewer.back': 'back to the gallery',
-    'place.viewer.reread': 'reread', 'place.viewer.loupe': 'loupe',
+    'place.viewer.reread': 'refresh', 'place.viewer.loupe': 'loupe',
     'place.viewer.buttons': 'buttons', 'place.viewer.file': 'file',
     'place.cctv': 'the control room · cameras', 'place.cctv.away': 'step away',
     'place.cctv.auto': 'cycling', 'place.cctv.cam': 'camera',
     'place.lift': 'the lift', 'place.lift.go': 'go', 'place.lift.floor': 'floor',
+    'place.transcript': 'the whole conversation', 'place.transcript.scroll': 'scroll',
+    'place.transcript.page': 'a page', 'place.transcript.top': 'to the top',
+    'place.transcript.end': 'to the end', 'place.copy': 'a copy',
+    'place.gallery': 'the board of works', 'place.gallery.open': 'open', 'place.gallery.pick': 'pick',
     'place.panel': 'in a panel', 'place.item': 'item',
     'place.close': 'close', 'place.press': 'press', 'place.focus': 'focus',
     'keys.lgOff': 'not from here', 'keys.onlyHere': 'lit: what works here',
@@ -1357,12 +1392,21 @@ export function t(key, vars) {
   return s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? String(vars[k]) : m));
 }
 
+// 'auto' — nobody has chosen yet, so the device decides. Anything unknown lands
+// there too: a settings file edited by hand should give the office a language it
+// can read rather than a key nobody switched.
+//
+// The page attributes are set even when the language did not change, because the
+// document starts out language-neutral: index.html carries no Russian title to
+// be corrected, and something has to write the first one. The listeners are what
+// the return value is about, and they still only fire on a real change.
 export function setLang(l) {
-  const next = LANGS.includes(l) ? l : 'ru';
-  if (next === LANG) return false;
+  const next = LANGS.includes(l) ? l : deviceLang();
+  const changed = next !== LANG;
   LANG = next;
   document.documentElement.lang = LANG;
   document.title = t('doc.title');
+  if (!changed) return false;
   for (const fn of listeners) { try { fn(LANG); } catch { /* one listener does not bring the others down */ } }
   return true;
 }

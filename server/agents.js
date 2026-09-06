@@ -518,7 +518,7 @@ function applyLine(st, line) {
 const RU_MALE = [
   'Гоша', 'Тимка', 'Борис', 'Федя', 'Рома', 'Клим', 'Сеня', 'Гриша', 'Лёва', 'Пётр',
   'Юра', 'Стёпа', 'Кузя', 'Матвей', 'Игнат', 'Савва', 'Захар', 'Митя', 'Прохор', 'Ося',
-  'Никита', 'Артём', 'Слава', 'Тихон', 'Costa', 'Ваня', 'Вова', 'Дима', 'Коля', 'Миша',
+  'Никита', 'Артём', 'Слава', 'Тихон', 'Веня', 'Ваня', 'Вова', 'Дима', 'Коля', 'Миша',
   'Паша', 'Саша', 'Серёжа', 'Толя', 'Костя', 'Лёша', 'Витя', 'Гена', 'Игорь', 'Олег',
   'Глеб', 'Марк', 'Тимур', 'Руслан', 'Данила', 'Егор', 'Илья', 'Кирилл', 'Максим', 'Антон',
   'Денис', 'Андрей', 'Сева', 'Стас', 'Влад', 'Гера', 'Ефим', 'Лука', 'Макар', 'Мирон',
@@ -595,6 +595,13 @@ export const nameSample = (id = 'ru', n = 4) => packOf(id).names.slice(0, n);
 
 // Which pack is actually in force. 'auto' follows the office language: a fresh
 // office in English gets English names, and nobody has to be taught that.
+//
+// The office language can itself be 'auto' — a fresh install nobody has opened
+// yet, since 6 September 2026 — and then neither lookup matches and the names
+// come out Russian. That lasts until the first page load, which resolves the
+// language from the device and writes it here; the pack changes with it and the
+// office renames itself on the next tick. Nobody has learned those names in the
+// meantime: an office with no visitor has no reader.
 export const effectivePack = ({ namePack = 'auto', lang = 'ru' } = {}) =>
   (PACKS[namePack] ? namePack : (PACKS[lang] ? lang : 'ru'));
 
