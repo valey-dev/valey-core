@@ -161,7 +161,19 @@ function openRadio() {
 // should be.
 // numbers: '.rst' — a digit chooses a wave rather than a knob. It arrived from main
 // together with the shared support for digits in the focus ring.
-const radioRing = focusRing(() => el.radio, '.radioknobs button, .rst, .rdel, #radiovol, #radiouri, .radioauth button', { numbers: '.rst' });
+const RING = '.radioknobs button, .rst, .rdel, #radiovol, #radiouri, .radioauth button';
+const radioRing = focusRing(() => el.radio, RING, { numbers: '.rst' });
+
+// Put the ring on a given wave, by its number in the list. Used after a wave is
+// added: the one just caught is the one now playing, and it is what the hand
+// should be on.
+function ringToWave(n) {
+  if (!el.radio) return;
+  const all = [...el.radio.querySelectorAll(RING)];
+  const wave = all.filter((b) => b.classList.contains('rst'))[n];
+  const at = wave ? all.indexOf(wave) : -1;
+  if (at >= 0) radioRing.at(at);
+}
 function closeRadio() { if (el.radio) el.radio.classList.remove('open'); radioRing.reset(); }
 function radioKey(raw) { return radioRing.key(raw, radioOpen()); }
 
@@ -214,12 +226,23 @@ function buildRadio() {
   $('#radioprev').onclick = () => radio.tune(radio.current - 1);
   $('#radionext').onclick = () => radio.tune(radio.current + 1);
   $('#radiovol').oninput = (e) => player.setVolume(Number(e.target.value) / 100);
+  // The field holds the real focus of the browser while it is being typed into, and
+  // web/main.js hands nothing from an INPUT to the office: neither the arrows nor
+  // Escape. So the field has to let go itself, or the panel becomes a room without a
+  // door — reported 6 September 2026: after Enter the arrows moved the caret, Escape
+  // did nothing, and the only way out was the mouse.
+  //
+  // Enter lets go and puts the ring on the wave just caught; Escape lets go and leaves
+  // the ring where it stood, so the next Escape closes the panel, as it does everywhere.
   $('#radiouri').onkeydown = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.target.blur(); radioRing.paint(); return; }
     if (e.key !== 'Enter') return;
     const uri = toUri(e.target.value);
     if (!uri) return toast(tr('radio.notSpotify'));
     radio.add(e.target.value.trim().slice(0, 40).replace(/^https?:\/\/[^/]+\//, '') || tr('radio.ownWave'), uri);
     e.target.value = '';
+    e.target.blur();
+    ringToWave(radio.current);
     toast(tr('radio.caught'));
   };
   radio.onChange = paintRadio;
