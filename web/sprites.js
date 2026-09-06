@@ -109,8 +109,21 @@ export function dressMe(me, code) {
 // A look saved by a previous version of the office knows about acc and about
 // beard-yes-no. We read it by the same rules as the hash, so that your own
 // character does not reset into a stranger after an update.
+// «ТЫ» and «YOU» are how the office addresses the person at the keyboard, and
+// until 5 September 2026 it kept the word as a name: the field wrote it back
+// whenever it was cleared, and the default person was born with it. Those values
+// are still in people's browsers, and a stored self-label travels outward as a
+// real name — a stranger over somebody else's floor labelled YOU. They are
+// literals because that is what older versions wrote, in both languages, and
+// they have to be recognised whatever the office speaks now.
+export const SELF_LABELS = ['ТЫ', 'YOU'];
+export const isSelfLabel = (name) => SELF_LABELS.includes(String(name || '').trim().toUpperCase());
+
 export function normalizeLook(look) {
   const o = { ...look };
+  // The same job as acc and beard below: a shape written by an older version is
+  // brought to what this one means.
+  if (isSelfLabel(o.name)) o.name = '';
   if (o.head === undefined) o.head = o.acc === 2 ? 'phones' : o.acc === 3 ? 'cap' : o.acc === 5 ? 'ball' : 'none';
   if (o.glasses === undefined) o.glasses = o.acc === 1;
   if (o.face === undefined) o.face = o.beard ? 'beard' : 'none';
@@ -121,6 +134,13 @@ export function normalizeLook(look) {
   if (o.jacket === undefined) o.jacket = null;
   if (o.tie === undefined) o.tie = null;
   if (o.bottom === undefined) o.bottom = 'pants';
+  // The haircut is defaulted with the rest, and that is not cosmetics. Hair is
+  // drawn only for style 0…4, and the office has no bald variant at all: the
+  // wardrobe offers five haircuts and lookOf picks from the same five. So a
+  // look without a style is a forgotten field rather than a decision, and it
+  // came out bald in silence. Found on 1 September 2026 across three frames of
+  // the host in a row, where it was blamed on the small scale.
+  if (o.style === undefined) o.style = 0;
   delete o.acc; delete o.beard;
   return o;
 }

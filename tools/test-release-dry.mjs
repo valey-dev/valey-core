@@ -16,19 +16,26 @@ const ok = (name, cond, got) => {
   else { bad += 1; console.log('УПАЛ  |', name, '→', String(got).slice(0, 300)); }
 };
 
-const r = spawnSync(process.execPath, [path.join(ROOT, 'tools/release.mjs'), 'patch', '--dry'],
+// No digit is passed on purpose: the range picks it since 5 September 2026, and
+// a hardcoded one turns this stand into an argument about semver instead of
+// about the cwd. It was `patch` for a day, and the day the check became
+// mechanical the stand went red three times over — the script was refusing a
+// digit too low for a range with a feature in it, which is exactly what it is
+// supposed to do.
+const r = spawnSync(process.execPath, [path.join(ROOT, 'tools/release.mjs'), '--dry'],
   { cwd: os.tmpdir(), encoding: 'utf8' });
-// Right after a release the range is empty, and the script says so and stops —
-// which is correct behaviour and used to fail this stand for a reason that has
-// nothing to do with its subject. Both answers prove the same thing: the script
+// Three answers are correct here, and all three prove the same thing: the script
 // looked at THIS repository and not at the temp directory it was called from.
-// Found on 5 September 2026, when v0.4.0 was cut and main went red on the spot.
-const spoke = /^## v\d+\.\d+\.\d+/m.test(r.stdout)
-  || /нет коммитов/.test(r.stderr + r.stdout);
-ok('сухой прогон из чужой папки не падает', r.status === 0 || /нет коммитов/.test(r.stderr), r.stderr || r.stdout);
+// A section means the range had something; «нет коммитов» is right after a
+// release; «выпускать нечего» is a range of refactors and chores only. The first
+// of those used to fail the stand for a reason that had nothing to do with its
+// subject — found 5 September 2026, when v0.4.0 was cut and main went red on the
+// spot.
+const empty = /нет коммитов|выпускать нечего/.test(r.stderr + r.stdout);
+const spoke = /^## v\d+\.\d+\.\d+/m.test(r.stdout) || empty;
+ok('сухой прогон из чужой папки не падает', r.status === 0 || empty, r.stderr || r.stdout);
 ok('и говорит о своём репозитории, а не о чужой папке', spoke, r.stdout + r.stderr);
-ok('и ничего не записывает',
-  /--dry: ничего не записано/.test(r.stdout) || /нет коммитов/.test(r.stderr + r.stdout), r.stdout);
+ok('и ничего не записывает', /--dry: ничего не записано/.test(r.stdout) || empty, r.stdout);
 
 console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
 process.exit(bad ? 1 : 0);

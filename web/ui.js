@@ -4,11 +4,12 @@ import { drawPerson, drawItem, dressMe, cycle, hash, SKIN, HAIR, SHIRT, PANTS, B
   SHIRT_WORK, BLOUSE, JACKET, TIE, CUTS, BOTTOMS } from './sprites.js';
 import { renderMarkdown } from './markdown.js';
 import { highlight, langOf } from './highlight.js';
-import { collect, moduleIds } from './modules.js';
+import { collect, first, moduleIds } from './modules.js';
 import { LIBRARY, TIERS, DIRS, SUBS, byId, children, colOf, inDir, dirTally } from './library.js';
 import { theme, applyTheme, resetTheme, PRESETS, ui, UI_STEPS, applyUiScale } from './theme.js';
 import { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } from './notes.js';
 import { esc } from './esc.js';
+import { owned } from './owned.js';
 
 const $ = (s) => document.querySelector(s);
 const el = { hud: null, dialog: null, viewer: null, roster: null, bag: null, toasts: null };
@@ -79,15 +80,15 @@ export function renderHud() {
   const room = S.currentRoom ? `<span class="chip room">▣ ${esc(S.currentRoom.title)}</span>` : `<span class="chip room">${tr('hud.corridor')}</span>`;
   const w = S.weather || { kind: 'clear' };
   const temp = w.temp != null ? ` ${Math.round(w.temp)}°` : '';
-  const z = S.zoom || { dev: 1, auto: true, clamped: false };
+  const z = S.zoom || { dev: 1, auto: true, tight: false };
   const place = w.label ? ` · ${esc(w.label)}` : '';
   el.hud.innerHTML = `<b>VALEY</b> · ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}
     <span class="chip sky" title="${tr('hud.skyTitle', { source: w.source === 'выдумана' ? tr('sky.made') : esc(w.source || '') })}">${WEATHER_ICON[w.kind] || '·'} ${tr('sky.' + w.kind)}${temp}${place}</span>
     ${room}<span class="chip work">⌨ ${working}</span><span class="chip wait">! ${waiting}</span>
     <span class="chip">👥 ${S.agents.length}</span>
     <span class="chip zoom${z.tight ? ' wait' : ''}" title="${tr('hud.zoomTitle')}${
-      z.tight ? tr('hud.zoomTitleTight') : z.clamped ? tr('hud.zoomTitleClamped', { n: z.dev }) : ''
-    }">⛶ ×${z.dev}${z.auto ? tr('hud.zoomAuto') : ''}${z.tight ? tr('hud.zoomTight') : z.clamped ? tr('hud.zoomMax') : ''}</span>
+      z.tight ? tr('hud.zoomTitleTight') : ''
+    }">⛶ ×${z.dev}${z.auto ? tr('hud.zoomAuto') : ''}${z.tight ? tr('hud.zoomTight') : ''}</span>
     ${S.pagerWaiting ? `<span class="chip wait" title="${tr('hud.pagerTitle')}">📟 ${S.pagerWaiting}</span>` : ''}
     <span class="chip dim">${S.soundOn ? '🔊' : '🔇'} M</span>
     ${collect('hud', S).map((c) => `<span class="chip ${esc(c.kind || 'dim')}" title="${esc(c.title || '')}">${esc(c.text || '')}</span>`).join('')}
@@ -119,6 +120,36 @@ export const ago = (sec) => sec == null || !Number.isFinite(sec) ? ''
 const metaLine = (a) => `${esc(a.project)}${a.branch ? ' · ' + esc(a.branch) : ''} · ${statusWord(a)}`
   + (a.status !== 'working' && a.idleFor > 300 ? tr('meta.spoke', { ago: ago(a.idleFor) }) : '');
 const chatLine = (a) => (a.title ? `<span class="chatname">💬 ${esc(a.title)}</span>` : '');
+// The report tail in the head. The task in the main colour, full width; the
+// status dim under it, with the session name riding along at its end — telling
+// two sessions of one project apart is all it was ever needed for. No tail and
+// the head looks as it did, because the report ends answers by this repository's
+// rule, not by Claude Code's.
+const COLD_TASK = 3600;   // seconds of silence after which the task is no longer "now"
+const taskRow = (a) => {
+  const t = a.task;
+  if (!t || !t.what) return chatLine(a);
+  const cold = a.status !== 'working' && (a.idleFor || 0) > COLD_TASK;
+  // The session name is not on its own blue line here, as it is without a task,
+  // but at the end of the status: it stops being the first thing read, and does
+  // not disappear. It sits in its own cell, because the status is clipped to fit
+  // and the name is not clippable — it is short, and it is the thing that
+  // identifies which of a project's two sessions this is.
+  const stat = t.status ? `<span class="tval">${tr('task.status', { s: esc(t.status) })}</span>` : '';
+  const sess = a.title ? `<span class="tsess">${stat ? '· ' : ''}💬 ${esc(a.title)}</span>` : '';
+  return `<p class="task${cold ? ' cold' : ''}">${esc(t.what)}</p>`
+    + (stat || sess ? `<p class="tstat">${stat}${sess}</p>` : '')
+    + (t.need ? `<p class="need">⚑ ${tr('task.need', { s: esc(t.need) })}</p>` : '');
+};
+
+// The same task in the conversation header: it on the left, the status on the
+// right. The session name is not repeated here — it is a row above, in its corner.
+const chatTask = (a) => {
+  const t = a && a.task;
+  if (!t || !t.what) return '';
+  return `<span class="task">${esc(t.what)}</span>`
+    + (t.status ? `<span class="tstat">${tr('task.status', { s: esc(t.status) })}</span>` : '');
+};
 // The server sends the key of an activity and leaves the ready Russian phrase for
 // compatibility: if there is no key, we show the phrase as it is.
 const FALLBACK_ARG = { edit: 'act.someCode', read: 'act.someFile' };
@@ -206,8 +237,10 @@ function patchDialog(a) {
   const set = (sel, html) => { const n = el.dialog.querySelector(sel); if (n && n.innerHTML !== html) n.innerHTML = html; };
   set('.meta', metaLine(a));
   set('.act', actLine(a));
-  const chat = el.dialog.querySelector('.chatname');
-  if (chat && a.title && chat.textContent !== `💬 ${a.title}`) chat.textContent = `💬 ${a.title}`;
+  // The task is rewritten by every answer, so its row moves as a whole rather
+  // than being patched piece by piece: between "you are needed" and its absence
+  // what changes is the set of rows, not the text.
+  set('.taskrow', taskRow(a));
 
   if (S.page === 'talk') {
     const said = clean(a.lastSaid) || tr('dlg.silent');
@@ -358,7 +391,7 @@ function buildDialog(a) {
     <div class="portrait"><canvas width="48" height="48" id="pf"></canvas></div>
     <div class="content">
       <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${esc(roleText(a))}</span>
-        <span class="meta">${metaLine(a)}</span>${chatLine(a)}</div>
+        <span class="meta">${metaLine(a)}</span><div class="taskrow">${taskRow(a)}</div></div>
       <div class="act">${actLine(a)}</div>
       <div class="body">${body}</div>
       <div class="acts">
@@ -1044,7 +1077,7 @@ export async function openFile(p, items = null, index = -1, title = '') {
   if (isImg) {
     inner = `<div class="zoomwrap"><img class="full" id="zimg" src="${url}"></div>`;
   } else {
-    const txt = await fetch(url).then((r) => r.ok ? r.text() : tr('gal.notServed') + r.status).catch((e) => e.message);
+    const txt = await fetch(url, { headers: owned() }).then((r) => r.ok ? r.text() : tr('gal.notServed') + r.status).catch((e) => e.message);
     if (mine !== viewToken) return;   // arrows moved on while this one was loading
     docKind = isMd ? 'md' : isHtml ? 'html' : null;
     mdSource = docKind ? txt : null;
@@ -1106,6 +1139,20 @@ function paintHeadFocus() {
 }
 
 // true means the key belonged to the viewer and the office should ignore it
+// Which screen is up, for the keys panel. It asks rather than guesses: only this
+// file knows that the viewer has two states — a wall of thumbnails and one open
+// file — and they are not the same place. ESC leaves the file for the gallery and
+// the gallery for the room, so one caption cannot serve both.
+export function viewerOpen() {
+  if (!el.viewer || el.viewer.hidden) return null;
+  return gallery.mode === 'single' ? 'single' : 'gallery';
+}
+export function rosterOpen() { return !!(el.roster && !el.roster.hidden); }
+export function liftOpen() { return !!(el.lift && !el.lift.hidden); }
+// The tab the card is reading. In «поговорить» the cursor sits in the field, and
+// that is a different place from the card itself: there the letters type.
+export function cardPage() { return S.page; }
+
 export function viewerKey(raw, big = false) {
   if (el.viewer.hidden) return false;
   const key = raw.toLowerCase();
@@ -1306,7 +1353,11 @@ const cellTitle = (f, v) => (f.key === 'tie' || f.key === 'jacket'
 const writeSlot = (f, v) => { if (f.set) f.set(v); else S.me[f.key] = v; };
 
 const FIELDS = [...COLORS, ...BODY];
-const TABS = ['self', 'things', 'office', 'tree'];
+// Keys take the last slot rather than the third one the first frame showed: the
+// tree is already there and working, and moving it for a new neighbour means
+// retraining a hand that has learned its digit. Decided 5 September 2026, frame
+// «Ключи в инвентаре · Ready for Dev».
+const TABS = ['self', 'things', 'office', 'tree', 'keys'];
 // Гость вкладку «дерево» не видит: у него чужой этаж, и из чего он собран —
 // не его вопрос.
 const tabs = () => (isGuest() ? TABS.filter((t) => t !== 'tree') : TABS);
@@ -1335,7 +1386,7 @@ const bodyRow = (f) => `<div class="drow"><button data-f="${f.key}" data-d="-1">
 const selfHtml = () => `<div class="dbody">
       <canvas id="me" width="72" height="86"></canvas>
       <div class="rows">
-        <label class="namerow">${tr('dress.name')} <input id="myname" maxlength="14" value="${S.me.name || tr('label.me')}"></label>
+        <label class="namerow">${tr('dress.name')} <input id="myname" maxlength="14" value="${esc(S.me.name || '')}" placeholder="${tr('label.me')}"></label>
         <p class="tally">${tr('dress.tally', { water: S.me.drinks || 0, coffee: S.me.coffees || 0 })}</p>
         <p class="dcap">${tr('dress.colors')}</p>
         ${colorFields().map(colorRow).join('')}
@@ -1355,6 +1406,161 @@ const thingsHtml = () => `<div class="bbody">
       </div>`).join('')}
       <p class="hint">${tr('bag.thingsNote')}</p>
     </div>`;
+
+// -------------------------------------------------------------- the keys tab
+// A shelf of the office's connections outward. The card is drawn by whoever
+// owns the key: the core draws its own (the CLI and the weather), modules draw
+// theirs through the 'keys' hook. Hardcoding them here would put the Figma card
+// on the shelf of a free build that has no easel behind it.
+//
+// A card hands in { id, name, state, word, icon(ctx), body(), bind(root) }.
+// state is 'on' | 'off' | 'bad': works, not connected, broken. Three words and
+// not two, because «not connected» is fixed by pasting a key and «not logged
+// in» by a trip to the terminal — merging them sends people to the wrong place.
+//
+// Frames: section «🔵 WIP — Ключи в инвентаре · Ready for Dev», 564:2 (Figma),
+// 565:74 (Claude CLI), 571:2 (Spotify).
+
+// The Claude CLI icon — a terminal window with three lines, as on the frame.
+function cliIcon(c) {
+  c.fillStyle = '#1c130d'; c.fillRect(0, 0, 48, 36);
+  c.fillStyle = '#8c7660';
+  c.fillRect(8, 12, 22, 3); c.fillRect(8, 19, 32, 3); c.fillRect(8, 26, 16, 3);
+}
+// Weather — a sun behind a cloud, the same one the window on the world draws.
+// The sun sits up and to the right so that it peeks out: hidden entirely, it
+// turned the icon into a grey blob — visible only on a real frame, never in the
+// markup.
+function skyIcon(c) {
+  c.fillStyle = '#1c130d'; c.fillRect(0, 0, 48, 36);
+  c.fillStyle = '#ffd166'; c.fillRect(28, 6, 11, 11);
+  c.fillStyle = '#c9b391';
+  c.fillRect(9, 20, 22, 7); c.fillRect(13, 16, 13, 5); c.fillRect(7, 23, 28, 4);
+}
+
+const cliState = () => {
+  const d = S.delivery || {};
+  if (d.available) return 'on';
+  return d.account && d.account.loggedIn === false ? 'bad' : 'off';
+};
+
+const coreKeys = () => [
+  {
+    id: 'cli',
+    name: 'Claude CLI',
+    state: cliState(),
+    word: () => tr('key.cli.' + cliState()),
+    icon: cliIcon,
+    body: () => {
+      const d = S.delivery || {};
+      const who = d.account && d.account.email ? `<p class="keynote">${tr('key.cli.who', { email: esc(d.account.email) })}</p>` : '';
+      return `<p class="keygives">${tr('key.cli.gives')}</p>
+        <div class="keycmd"><code>claude</code><span>${tr('key.cli.then')}</span><code>/login</code>
+          <span class="dim">${tr('key.cli.or')}</span><code>claude setup-token</code>
+          <button class="obtn" data-copy="claude">${tr('key.copy')}</button></div>
+        <p class="hint">${tr('key.cli.note')}</p>
+        ${who}
+        <div class="keyfoot"><span class="dim">${tr('key.cli.rechecks')}</span>
+          <button class="obtn" data-act="recheck">${tr('key.cli.check')}</button></div>`;
+    },
+    bind: (root) => {
+      const b = root.querySelector('[data-act="recheck"]');
+      if (b) b.onclick = async () => { await api.recheckCli(); renderBag(); };
+    },
+  },
+  {
+    id: 'sky',
+    name: tr('key.sky.name'),
+    state: (S.settings && S.settings.weather && S.settings.weather.enabled) ? 'on' : 'off',
+    word: () => tr('key.sky.' + ((S.settings && S.settings.weather && S.settings.weather.enabled) ? 'on' : 'off')),
+    icon: skyIcon,
+    // Weather is the one connection without a key: a pair of coordinates goes
+    // out, not a secret. Hence no field here, only the way to the window.
+    body: () => `<p class="keygives">${tr('key.sky.gives')}</p>
+      <p class="hint">${tr('key.sky.note')}</p>
+      <div class="keyfoot"><span class="dim">P</span>
+        <button class="obtn" data-act="sky">${tr('key.sky.open')}</button></div>`,
+    bind: (root) => {
+      const b = root.querySelector('[data-act="sky"]');
+      if (b) b.onclick = () => { closeBag(); renderSky(); };
+    },
+  },
+];
+
+// Shelf order: the core first, then modules in load order. The shelf is short
+// and must not be sorted by state — a card has to lie where it lay yesterday.
+const keyCards = () => [...coreKeys(), ...collect('keys')];
+let keyIdx = 0;
+
+const keysHtml = () => {
+  const cards = keyCards();
+  if (!cards.length) return `<div class="bbody"><p class="empty">${tr('key.none')}</p></div>`;
+  keyIdx = Math.max(0, Math.min(cards.length - 1, keyIdx));
+  const card = cards[keyIdx];
+  return `<div class="bbody keysbox">
+      <div class="keyshelf">
+        ${cards.map((k, i) => `<button class="keycard${i === keyIdx ? ' on' : ''}${k.state === 'on' ? '' : ' dimmed'}" data-i="${i}">
+          <canvas width="48" height="36"></canvas>
+          <span class="kname">${esc(k.name)}</span>
+          <span class="kword ${k.state}">${esc(k.word())}</span>
+        </button>`).join('')}
+        <span class="bhint">${tr('key.shelf')}</span>
+      </div>
+      <div class="keydetail${isGuest() ? ' guest' : ''}">
+        <div class="keyhead"><b>${esc(card.name)}</b><span class="kword ${card.state}">${esc(card.word())}</span></div>
+        ${card.body()}
+        ${isGuest() ? `<p class="hint">${tr('key.guest')}</p>` : ''}
+      </div>
+    </div>`;
+};
+
+function bindKeys() {
+  const cards = keyCards();
+  el.bag.querySelectorAll('.keycard canvas').forEach((cv, i) => {
+    const c = cv.getContext('2d');
+    c.imageSmoothingEnabled = false;
+    if (cards[i] && cards[i].icon) cards[i].icon(c);
+  });
+  el.bag.querySelectorAll('.keycard').forEach((b) => b.onclick = () => {
+    keyIdx = Number(b.dataset.i);
+    renderBag();
+  });
+  const detail = el.bag.querySelector('.keydetail');
+  if (!detail) return;
+  // A guest gets the cards to read and no controls at all: POST /api/settings
+  // answers him 403 anyway, and saying «the owner sets the keys up» beats
+  // letting him press a button and collect a refusal. Hidden by the class, so
+  // the fields fall out of the tab order too.
+  if (isGuest()) return;
+  // Copying is shared by every card: a command, a path, a Redirect URI. Without
+  // https the browser has no clipboard, and that has to show on the button
+  // rather than in the console.
+  detail.querySelectorAll('[data-copy]').forEach((b) => b.onclick = async () => {
+    const ok = await copyText(b.dataset.copy);
+    toast(tr(ok ? 'key.copied' : 'key.copyFailed'), ok ? '' : 'wait');
+  });
+  const card = cards[keyIdx];
+  if (card && card.bind) card.bind(detail);
+  paintBagFocus();
+}
+
+// Arrows walk the shelf, ⏎ hands focus to the card — from there it is Tab.
+function keysKey(key) {
+  const cards = keyCards();
+  if (!cards.length) return false;
+  const step = { arrowleft: -1, arrowright: 1, arrowup: -1, arrowdown: 1 }[key];
+  if (step !== undefined) {
+    keyIdx = (keyIdx + step + cards.length) % cards.length;
+    renderBag();
+    return true;
+  }
+  if (key === 'enter') {
+    const first = el.bag.querySelector('.keydetail input, .keydetail .obtn');
+    if (first) first.focus();
+    return true;
+  }
+  return false;
+}
 
 // Вкладка «офис». Дресс-код живёт здесь, потому что у него нет предмета в
 // офисе: погоду настраивают у окна, язык — у таблички, а «всем надеть
@@ -1711,7 +1917,9 @@ export function renderBag(tab) {
       ${tabs().map((t, i) => `<button class="btab${t === bagTab ? ' on' : ''}" data-tab="${t}">${tr('bag.tab.' + t)}<kbd>${i + 1}</kbd></button>`).join('')}
       <span class="bhint">${tr('bag.tabHint')}</span>
     </div>
-    ${bagTab === 'self' ? selfHtml() : bagTab === 'things' ? thingsHtml() : bagTab === 'tree' ? (treeWide ? wideHtml() : treeHtml()) : officeHtml()}
+    ${bagTab === 'self' ? selfHtml() : bagTab === 'things' ? thingsHtml()
+      : bagTab === 'tree' ? (treeWide ? wideHtml() : treeHtml())
+      : bagTab === 'keys' ? keysHtml() : officeHtml()}
   </div>`;
 
   $('#bx').onclick = closeBag;
@@ -1719,6 +1927,7 @@ export function renderBag(tab) {
   if (bagTab === 'self') bindSelf();
   else if (bagTab === 'things') bindThings();
   else if (bagTab === 'tree') { bindTree(); bindTreeView(); }
+  else if (bagTab === 'keys') bindKeys();
   else bindOffice();
 }
 
@@ -1766,7 +1975,9 @@ function bindSelf() {
     paint();
   };
   paint();
-  $('#myname').oninput = (e) => { S.me.name = e.target.value.toUpperCase().slice(0, 14) || tr('label.me'); api.saveMe(); };
+  // An empty field is an empty name, not the word «ТЫ» stored as one: that
+  // string used to travel outward and label a stranger YOU.
+  $('#myname').oninput = (e) => { S.me.name = e.target.value.toUpperCase().slice(0, 14); api.saveMe(); };
   paintBagFocus();
   const rowFields = () => [...colorFields(), ...BODY, bottomCut];
   el.bag.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => {
@@ -1830,6 +2041,9 @@ const catCells = (cat) => (cat ? [...cat.querySelectorAll('.bcell')] : []);
 function paintBagFocus() {
   if (bagTab === 'office') { officeRing.paint(); return; }
   if (bagTab === 'tree') return;      // выбранный узел и есть фокус, см. treeHtml()
+  // The key shelf lights itself: the class `on` on the picked card is also what
+  // draws its border. The focus ring has no business here.
+  if (bagTab === 'keys') return;
   if (bagTab === 'things') {
     const cats = bagCats();
     if (!cats.length) return;
@@ -1870,6 +2084,7 @@ export function bagKey(raw) {
   }
   if (bagTab === 'office') return officeRing.key(key, true);
   if (bagTab === 'tree') return treeKey(key);
+  if (bagTab === 'keys') return keysKey(key);
   return bagTab === 'things' ? thingsKey(key) : selfKey(key);
 }
 
@@ -2329,7 +2544,43 @@ export function closeInvite() { if (el.invite) el.invite.hidden = true; }
 
 export async function openInvite() {
   el.invite.hidden = false;
+  inviteSig = accessSig();
   await renderInvite();
+}
+
+// What the panel is showing right now, as one string. The snapshot arrives every
+// couple of seconds; redrawing on each of them would be honest and unusable —
+// the caret would jump out of «кого зовём» mid-word.
+const accessSig = () => {
+  const a = S.access || {};
+  return JSON.stringify([
+    (a.requests || []).map((r) => [r.id, r.state, r.who, r.agentId]),
+    (a.open || []).map((o) => [o.guestId, o.agentId]),
+  ]);
+};
+let inviteSig = '';
+
+// A request that arrives while the panel is open used to be invisible: the panel
+// was drawn when it opened and after every button in it, and by nothing else. It
+// sat in the snapshot, the owner sat looking at the panel, and the two never met
+// — found on a live build on 5 September 2026. Nothing was lost: the request
+// waits on the server until it is answered. It simply could not be seen without
+// closing the panel and opening it again.
+export async function syncInvite() {
+  if (!el.invite || el.invite.hidden) return;
+  const sig = accessSig();
+  if (sig === inviteSig) return;
+  inviteSig = sig;
+  // Whatever is being typed survives the redraw, caret included: the name is
+  // usually half-written exactly when somebody knocks.
+  const input = $('#invWho');
+  const typed = input ? { value: input.value, at: input.selectionStart, focused: document.activeElement === input } : null;
+  await renderInvite();
+  if (!typed) return;
+  const back = $('#invWho');
+  if (!back) return;
+  back.value = typed.value;
+  if (typed.focused) { back.focus(); try { back.setSelectionRange(typed.at, typed.at); } catch { /* поле могло сменить тип */ } }
 }
 
 async function renderInvite() {
@@ -2364,7 +2615,7 @@ async function renderInvite() {
   // Ответ сервера несёт свежий список — берём его сразу, не дожидаясь снимка:
   // тот приходит раз в 2.5 секунды, и всё это время нажатая кнопка выглядела
   // бы ненажатой.
-  const took = async (r) => { if (r && r.access) S.access = r.access; await renderInvite(); };
+  const took = async (r) => { if (r && r.access) S.access = r.access; inviteSig = accessSig(); await renderInvite(); };
   el.invite.querySelectorAll('[data-yes]').forEach((b) => {
     b.onclick = async () => took(await api.answerAccess(b.dataset.yes, true));
   });
@@ -2553,8 +2804,13 @@ export async function openTranscript(a, focusTs = null) {
   el.viewer.hidden = false;
   gallery = { items: [], title: '', sel: 0, mode: 'grid' };   // Esc отсюда закрывает, а не возвращает в чужую галерею
   chatView = { agent: a, msgs: [], token: 0, editing: null, pending: null, focusTs };
-  el.viewer.innerHTML = `<div class="vwrap"><div class="vhead">${tr('chat.title', { name: esc(a.name) })}
-      <span class="zhint" id="chatst">${esc(a.title || '')}</span><button id="vx">✕</button></div>
+  // The header in two rows: who is talking — what he is working on. The session
+  // name stays in the top right corner at the size it had, and service lines such
+  // as a postponed re-read appear in the same place.
+  el.viewer.innerHTML = `<div class="vwrap"><div class="vhead vhead2">
+      <span class="vrow">${tr('chat.title', { name: esc(a.name) })}
+        <span class="zhint" id="chatst">${esc(a.title || '')}</span><button id="vx">✕</button></span>
+      <span class="vrow vtask" id="chattask">${chatTask(a)}</span></div>
     <div class="single chatlog" id="chatlog"><p class="hint">${tr('chat.reading')}</p></div>
     <div class="vpath">${tr('chat.keys')}<span class="ncount" id="ncount"></span></div></div>`;
   $('#vx').onclick = closeViewer;
@@ -2620,6 +2876,15 @@ function paintChat(msgs, fresh = 0, force = false) {
         + (ed && !ed.id && ed.ts === m.ts ? noteEditor(m.ts, ed.text) : '')).join('')
     : loose + `<p class="empty">${tr('chat.empty')}</p>`;
   chatView.msgs = msgs;
+  // The conversation was opened with a snapshot of the agent, while the task is
+  // rewritten by every new answer: take the fresh one from the list, or the head
+  // freezes on whatever he was doing when the panel was opened.
+  const head = $('#chattask');
+  const live = (S.agents || []).find((x) => x.id === a.id) || a;
+  if (head) {
+    const html = chatTask(live);
+    if (head.innerHTML !== html) head.innerHTML = html;
+  }
   paintNoteCount();
   bindNoteControls();
   // Пришли из панели заметок — встаём на ту реплику, к которой она привязана,
@@ -2735,7 +3000,7 @@ const chatStatus = (text) => { const st = $('#chatst'); if (st) st.textContent =
 async function loadChat(fresh) {
   const a = chatView.agent;
   const mine = ++chatView.token;
-  const r = await fetch('/api/chat?id=' + encodeURIComponent(a.id))
+  const r = await fetch('/api/chat?id=' + encodeURIComponent(a.id), { headers: owned() })
     .then((x) => x.json()).catch((e) => ({ error: e.message }));
   if (!chatView || chatView.token !== mine || el.viewer.hidden) return;
   const box = $('#chatlog');
@@ -2807,17 +3072,42 @@ export function renderNotes() {
   const alive = new Set(S.agents.map((a) => a.id));
   const stamp = (ms) => new Date(ms).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
+  // A note whose address is not a session belongs to somebody else, and the
+  // core does not read it: it shows the address to every module and takes the
+  // first that answers. The answer carries a label for the button and what to
+  // do on a press. Nobody answered — the row says so, as it does for a closed
+  // chat, and the note still reads, because its line of context is stored.
+  const claims = new Map();
+  for (const n of hit) {
+    if (!n.anchor || n.anchor.kind === 'agent') continue;
+    const claim = first('note', n.key, n.ctx || {});
+    if (claim && typeof claim.open === 'function') claims.set(n.id, claim);
+  }
+
   const rows = [...groups.entries()].map(([project, list]) => `
     <div class="ngroup"><h4>${project ? '▣ ' + esc(project) : tr('notes.noProject')}</h4>
       ${list.map((n) => {
-        const live = alive.has(n.agentId);
+        const a = n.anchor || { kind: 'agent' };
+        const foreign = a.kind !== 'agent';
+        const live = !foreign && alive.has(n.agentId);
         const who = n.ctx && n.ctx.agent
           ? esc(n.ctx.agent) + (n.ctx.title ? ' · ' + esc(n.ctx.title) : '')
           : '';
-        const tail = live
-          ? `<button class="ngo" data-go="${n.agentId}" data-ts="${n.ts == null ? '' : n.ts}">${tr('notes.open')}</button>`
-          : `<span class="ndead">${tr('notes.closed')}</span>`;
-        const under = live ? who : (n.ctx && n.ctx.quote ? '«' + esc(n.ctx.quote) + '»' + (who ? ' · ' + who : '') : tr('notes.noCtx'));
+        const claim = claims.get(n.id);
+        const tail = foreign
+          ? (claim
+            ? `<button class="ngo" data-open="${n.id}">${esc(claim.label || tr('notes.open'))}</button>`
+            : `<span class="ndead">${tr('notes.noOpener')}</span>`)
+          : live
+            ? `<button class="ngo" data-go="${n.agentId}" data-ts="${n.ts == null ? '' : n.ts}">${tr('notes.open')}</button>`
+            : `<span class="ndead">${tr('notes.closed')}</span>`;
+        // Under the text goes what the note hangs on. For a foreign address it
+        // is the line its owner wrote when the note was made — the core has no
+        // words of its own for something it does not interpret, and a made-up
+        // phrasing would be a second truth about somebody else's anchor.
+        const under = foreign
+          ? (n.ctx && n.ctx.line ? esc(n.ctx.line) : tr('notes.noCtx'))
+          : live ? who : (n.ctx && n.ctx.quote ? '«' + esc(n.ctx.quote) + '»' + (who ? ' · ' + who : '') : tr('notes.noCtx'));
         return `<div class="nrow" data-note="${n.id}" data-agent="${n.agentId}">
           <div class="nline"><span class="ntext">${esc(n.text)}</span><i>${stamp(n.at)}</i></div>
           <div class="nmeta"><span>${under}</span>${tail}
@@ -2846,6 +3136,12 @@ export function renderNotes() {
     input.blur();
     notesRing.at(0);
   };
+  el.notes.querySelectorAll('[data-open]').forEach((b) => b.onclick = () => {
+    const claim = claims.get(b.dataset.open);
+    if (!claim) { renderNotes(); return; }     // the module left while the panel was open
+    closeNotes();
+    claim.open();
+  });
   el.notes.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => {
     const agent = S.agents.find((a) => a.id === b.dataset.go);
     if (!agent) { renderNotes(); return; }      // успел закрыться, пока смотрел

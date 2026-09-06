@@ -1,7 +1,7 @@
 // node tools/test-look.mjs — the agents' looks: the office is not reshuffled by
 // new slots. The stand walks the old allocation, rewritten here in full: if a
 // shift in web/sprites.js moves, the test sees it rather than taking it on trust.
-import { lookOf, normalizeLook, drawPerson, dressOf, dressMe, cycle, hash, SKIN, HAIR, SHIRT, PANTS, BOOTS, HEADS, FACES, HANDS,
+import { lookOf, normalizeLook, isSelfLabel, drawPerson, dressOf, dressMe, cycle, hash, SKIN, HAIR, SHIRT, PANTS, BOOTS, HEADS, FACES, HANDS,
   SHIRT_WORK, BLOUSE, JACKET, TIE, WORK_BOOTS } from '../web/sprites.js';
 
 const pick = (arr, n) => arr[Math.abs(n >>> 0) % arr.length];
@@ -63,17 +63,25 @@ if (seen.boots.size < 4) bad(`обувь: из четырёх цветов вс�
 if (seen.hands.size < 3) bad(`руки: из трёх значений встретилось ${seen.hands.size}`);
 
 // ---- a saved old look is read rather than turning the person into a stranger
-const legacy = { skin: '#ffdcb8', hair: '#3a2a20', shirt: '#4fa89a', pants: '#3f4a63', style: 2, acc: 1, beard: true, tall: 1, name: 'ТЫ' };
+// The name here is a real one on purpose: «ТЫ» stopped being a name on
+// 5 September 2026 and is shed by the same migration, which the block at the end
+// of this stand checks.
+const legacy = { skin: '#ffdcb8', hair: '#3a2a20', shirt: '#4fa89a', pants: '#3f4a63', style: 2, acc: 1, beard: true, tall: 1, name: 'ЛИЗА' };
 const m = normalizeLook(legacy);
 if (m.glasses !== true) bad('старый acc=1 не превратился в очки');
 if (m.head !== 'none') bad(`старый acc=1 надел на голову ${m.head}`);
 if (m.face !== 'beard') bad('старая борода потерялась');
 if (m.boots !== BOOTS[0]) bad('обуви без сохранённой не досталось значения по умолчанию');
 if (m.hands !== 'none') bad('в руке из ниоткуда взялся предмет');
-if (m.tall !== 1 || m.style !== 2 || m.name !== 'ТЫ') bad('перенос потерял то, что было сохранено');
+if (m.tall !== 1 || m.style !== 2 || m.name !== 'ЛИЗА') bad('перенос потерял то, что было сохранено');
 if ('acc' in m || 'beard' in m) bad('старые поля остались в look после переноса');
 // the switcher person's cap lived in acc=5 and must arrive as headwear
 if (normalizeLook({ acc: 5 }).head !== 'ball') bad('acc=5 не стал бейсболкой');
+// The haircut: a look built by hand arrives without a style, and hair is drawn
+// only for 0…4. The office has no bald variant — the wardrobe offers five
+// haircuts — so an empty style is a forgotten field, not a decision.
+if (normalizeLook({ skin: SKIN[0] }).style !== 0) bad('внешность без причёски осталась лысой');
+if (normalizeLook({ style: 3 }).style !== 3) bad('заданная причёска подменена умолчанием');
 
 // ---- the arrows in the panel: the ring closes, the tick became a list of two
 for (const list of [HEADS, FACES, HANDS, BOOTS, [0, 1], [false, true]]) {
@@ -204,6 +212,25 @@ for (const cut of ['plain', 'slim', 'stripe', 'bow']) {
 const legacyCtx = stub();
 drawPerson(legacyCtx, 20, 40, normalizeLook({ ...base, acc: 1, beard: true, tall: 0 }), { pose: 'stand' });
 if (!legacyCtx.rects.some((r) => r.c === '#cfe8ff')) bad('очки из старого acc=1 не нарисовались');
+
+// ---- the word «ТЫ» is not a name -------------------------------------------
+// Older versions stored it as one: the field wrote it back whenever it was
+// cleared. Such a person then walked into somebody else's office labelled YOU,
+// which is the one thing that cannot be true of another person. normalizeLook
+// does this migration alongside acc and beard, so a page picks it up on load.
+{
+  const shed = normalizeLook({ name: 'ТЫ', style: 0 });
+  const shedEn = normalizeLook({ name: 'you', style: 0 });
+  const kept = normalizeLook({ name: 'ЛИЗА', style: 0 });
+  const blank = normalizeLook({ style: 0 });
+  const say = (name, ok, got) => { if (ok) console.log('ok    |', name); else { failed++; console.log('ПЛОХО |', name, '→', JSON.stringify(got)); } };
+  say('«ТЫ» из памяти перестаёт быть именем', shed.name === '', shed.name);
+  say('и «you» тоже, в любом регистре', shedEn.name === '', shedEn.name);
+  say('настоящее имя переживает загрузку', kept.name === 'ЛИЗА', kept.name);
+  say('человек без имени остаётся без имени', blank.name === undefined || blank.name === '', blank.name);
+  say('isSelfLabel знает оба слова и не трогает прочие',
+    isSelfLabel('ТЫ') && isSelfLabel(' you ') && !isSelfLabel('ТЫСЯЧА') && !isSelfLabel(''), null);
+}
 
 console.log(failed ? `\nПРОВАЛЕНО: ${failed}` : 'ХОРОШО | внешность: сдвиги на месте, старые look читаются, слоты рисуются');
 process.exit(failed ? 1 : 0);

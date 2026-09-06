@@ -73,6 +73,27 @@ function makeBagOffice(n) {
   };
 }
 
+// The "keys" tab — a shelf of cards with the picked one opened underneath.
+// Arrows walk the shelf, ⏎ hands focus inside: that is what is checked here,
+// not the markup.
+function makeBagKeys(n) {
+  const cards = Array.from({ length: n }, () => node('keycard'));
+  const btn = node('obtn');
+  const detail = node('keydetail');
+  detail.querySelector = (sel) => (sel === '.keydetail input, .keydetail .obtn' ? btn : null);
+  detail.querySelectorAll = () => [];
+  // A real DOM answers a compound selector too — the panel asks with one for
+  // the first thing it can hand focus to. The stand-in has to answer the same
+  // way, or the stand is checking something the browser never does.
+  return {
+    hidden: false, innerHTML: '', cards, btn,
+    querySelector: (sel) => (sel === '.keydetail' ? detail
+      : sel === '.keydetail input, .keydetail .obtn' ? btn : null),
+    querySelectorAll: (sel) => (sel === '.keycard' ? cards
+      : sel === '.keydetail input, .keydetail .obtn' ? [btn] : []),
+  };
+}
+
 // A flat ring: the window on the world and the office colour are built the same way.
 function makeRing(items) {
   const btns = items.map((it) => node('', it));
@@ -284,10 +305,32 @@ bag = makeBagSelf(3);
 UI.bagKey('1');
 check('цифра 1 вернула на «на себе»', focusRow() === 0, focusRow());
 check('несуществующая вкладка не ловится', UI.bagKey('9') === false, 'поймана');
+check('шестой вкладки нет', UI.bagKey('6') === false, 'поймана');
+
+// The "keys" tab: a shelf. Arrows walk it and do not leak out of the panel, ⏎
+// hands focus to the card's first button — from there it is ordinary Tab.
+bag = makeBagKeys(3);
+check('ключи: цифра 5 открыла вкладку', UI.bagKey('5') === true, 'не обработана');
+check('стрелка по полке обработана', UI.bagKey('ArrowRight') === true, 'не обработана');
+check('и вверх-вниз тоже: полка одна, а стрелок четыре', UI.bagKey('ArrowDown') === true, 'не обработана');
+UI.bagKey('Enter');
+check('Enter отдаёт фокус карточке, а не жмёт её', bag.btn.focused === 1 && bag.btn.clicked === 0,
+  `${bag.btn.focused} / ${bag.btn.clicked}`);
+check('чужая клавиша с полки уходит в офис', UI.bagKey('q') === false, 'съедена');
+// A guest reads the cards and presses nothing: the class is what hides the
+// controls, and it also drops the fields out of the tab order.
+state.owner = false;
+UI.renderBag('keys');
+check('гость: карточка помечена как гостевая', /class="keydetail guest"/.test(bag.innerHTML), bag.innerHTML.slice(0, 60));
+check('и ему сказано, кто заводит ключи', /keys are set up|заводит хозяин/i.test(bag.innerHTML), 'молчит');
+state.owner = true;
+UI.renderBag('keys');
+check('хозяину гостевого класса нет', !/keydetail guest/.test(bag.innerHTML), 'есть');
 
 // The "office" tab: a row of buttons, and the down arrow has to walk along them.
 // Until 31 August 2026 it did nothing — the handler knew only two tabs out of
-// three, and the key went off into the office from under an open panel.
+// three, and the key went off into the office from under an open panel. Keys
+// took the last slot on 5 September 2026, so the office stayed on digit 3.
 bag = makeBagOffice(5);
 check('офис: цифра 3 открыла вкладку', UI.bagKey('3') === true, 'не обработана');
 check('вниз обработана', UI.bagKey('ArrowDown') === true, 'не обработана');

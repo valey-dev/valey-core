@@ -121,8 +121,8 @@ export const LIBRARY = [
                en: 'A closed door with a plate: a room is architecture, and an empty spot would be a hole in the wall.' } },
   { id: 'guest', dir: 'floor', tier: 'floor', row: 9, parent: 'door',
     name: { ru: 'Гости по ссылке', en: 'Guests by link' },
-    gives: { ru: 'Гость входит по ссылке и видит этаж; доступ к чему-либо — только с согласия хозяина, и ссылку можно погасить.',
-             en: 'A guest enters by link and sees the floor; access to anything — only with the owner’s consent, and the link can be revoked.' },
+    gives: { ru: 'Гость входит по ссылке, называет себя на входе и видит этаж; доступ к чему-либо — только с согласия хозяина, и ссылку можно погасить.',
+             en: 'A guest enters by link, gives a name at the door and sees the floor; access to anything — only with the owner’s consent, and the link can be revoked.' },
     without: { ru: 'Ссылку выдать некому: выдача и отзыв живут на нашей стороне.', en: 'There is nobody to issue the link to: issuing and revoking live on our side.' } },
 ];
 
