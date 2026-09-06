@@ -1,9 +1,9 @@
 // node tools/test-places.mjs — places, and what a key means in each of them.
 //
 // No browser and no DOM: like the key registry, this is pure functions on
-// purpose. What is checked is not "N is the notes" but the two claims the
-// contextual keyboard rests on — the floor still carries the registry, and an
-// open panel carries none of it.
+// purpose. What is checked is not "N is the notes" but the claim the contextual
+// keyboard rests on — a panel takes the keys it needs and the floor answers the
+// rest, except on the two screens that hear nothing at all.
 //
 // The expensive mistake this guards against is the quiet one: a place that lights
 // a key the office will not answer. A board that lies is worse than no board,
@@ -43,38 +43,68 @@ ok('у кулера ПРОБЕЛ — попить', keyIn('cooler', 'Space').cap
 ok('а C у кулера всё ещё одежда', keyIn('cooler', 'KeyC').caption === 'hint.bag', keyIn('cooler', 'KeyC'));
 
 // -------------------------------------------------------------- inside a panel
-// The claim the whole feature makes: over an open panel the floor is silent.
-ok('в карточке буква этажа не горит', keyIn('card', 'KeyC').lit === false, keyIn('card', 'KeyC'));
-ok('в карточке цифра — вкладка, по имени кнопки', keyIn('card', 'Digit1').caption === 'tab.talk', keyIn('card', 'Digit1'));
+// The claim, corrected on 6 September 2026: an open panel takes the keys it needs
+// and lets the rest through. The first cut dimmed the whole floor here — wrong in
+// the honest direction, and still wrong: B really does put you on a skateboard
+// with the card open, and a board that denies it stops being believed.
+ok('в карточке буква этажа горит: панель её не забрала',
+  keyIn('card', 'KeyC').lit === true && keyIn('card', 'KeyC').caption === 'hint.bag', keyIn('card', 'KeyC'));
+ok('а забранное панелью — по-своему', keyIn('card', 'Digit1').caption === 'tab.talk', keyIn('card', 'Digit1'));
 ok('и Esc назван так же, как кнопка', keyIn('card', 'Escape').caption === 'tab.close', keyIn('card', 'Escape'));
-ok('в разговоре SHIFT — это перевод строки, а не бег',
-  keyIn('talk', 'ShiftLeft').caption === 'place.talk.shift', keyIn('talk', 'ShiftLeft'));
-ok('в разговоре стрелка ведёт к ответу, а не ходит',
-  keyIn('talk', 'ArrowUp').caption === 'place.talk.reply', keyIn('talk', 'ArrowUp'));
-ok('в пультовой T — автообход, а не общая смена камер',
-  keyIn('cctv', 'KeyT').caption === 'place.cctv.auto', keyIn('cctv', 'KeyT'));
+
+// The one the owner named: C is the wardrobe in the office and copying here.
+ok('в транскрипте C — скопировать, а не одежда',
+  keyIn('transcript', 'KeyC').caption === 'place.copy', keyIn('transcript', 'KeyC'));
+ok('а B там всё ещё скейт', keyIn('transcript', 'KeyB').caption === 'hint.skate', keyIn('transcript', 'KeyB'));
+ok('и ПРОБЕЛ — страница, а не действие',
+  keyIn('transcript', 'Space').caption === 'place.transcript.page', keyIn('transcript', 'Space'));
 ok('в просмотрщике Z — лупа', keyIn('viewer', 'KeyZ').caption === 'place.viewer.loupe', keyIn('viewer', 'KeyZ'));
 ok('в лифте цифра — этаж', keyIn('lift', 'Digit2').caption === 'place.lift.floor', keyIn('lift', 'Digit2'));
+ok('в пультовой T — автообход, а не общая смена камер',
+  keyIn('cctv', 'KeyT').caption === 'place.cctv.auto', keyIn('cctv', 'KeyT'));
 
-// --------------------------------------------------------- the key that always works
-// The panel opens from anywhere; a place that dimmed its own key would be a
-// board nobody could have opened.
+// ------------------------------------------------------------------ swallowed
+// The viewer answers `true` for every key in its own list, handled or not. Those
+// reach nobody, so the board must not offer them: lighting ← «ходить» in the
+// transcript is a promise nothing keeps, and that is worse than a dim working key.
+ok('в транскрипте ← съедена и не горит', keyIn('transcript', 'ArrowLeft').lit === false, keyIn('transcript', 'ArrowLeft'));
+ok('а ↑ там работает', keyIn('transcript', 'ArrowUp').lit === true, keyIn('transcript', 'ArrowUp'));
+ok('в галерее R не горит, хотя на этаже это радио',
+  keyIn('gallery', 'KeyR').lit === false, keyIn('gallery', 'KeyR'));
+ok('съеденное не попадает и в список горящих',
+  !litCodes('transcript').includes('ArrowLeft'), litCodes('transcript').filter((c) => c.startsWith('Arrow')));
+
+// ---------------------------------------------------------------- deaf places
+// Two screens hear nothing below their own keys: the control room returns before
+// the dispatch, and with the cursor in a field onKey returns on its first line.
+ok('пультовая помечена глухой', get('cctv').deaf === true, get('cctv'));
+ok('и буква этажа там мертва', keyIn('cctv', 'KeyB').lit === false, keyIn('cctv', 'KeyB'));
+ok('разговор с курсором в поле — тоже глухой', get('talk').deaf === true, get('talk'));
+ok('в разговоре SHIFT — перевод строки, а не бег',
+  keyIn('talk', 'ShiftLeft').caption === 'place.talk.shift', keyIn('talk', 'ShiftLeft'));
+ok('и буква этажа мертва и там', keyIn('talk', 'KeyB').lit === false, keyIn('talk', 'KeyB'));
+
+// --------------------------------------------------------- the key that opens this
+// «?» answers wherever the office is listening at all — and nowhere it is not.
+// Claiming it works in a text field would send somebody pressing it.
 const opener = codesOf(ALWAYS)[0];
 for (const p of all_()) {
-  const r = keyIn(p.id, opener);
-  if (!r.lit) { bad += 1; console.log('УПАЛ  | «/» погашена в месте', p.id); }
+  const want = !p.deaf;
+  const got = keyIn(p.id, opener).lit;
+  if (got !== want) { bad += 1; console.log('УПАЛ  | «/» в месте', p.id, '→ горит', got, ', а надо', want); }
 }
-ok('«/» горит во всех местах', true, opener);
+ok('«/» горит везде, кроме глухих мест', true, opener);
 ok('и подписана своей подписью', keyIn('card', opener).caption === 'hint.keys', keyIn('card', opener));
 
 // ------------------------------------------------------------------ the counts
-// A panel place lights only what it named plus the opener; the floor lights the
-// whole registry. If these two ever came out equal, `registry` stopped working.
-ok('на этаже горит больше, чем в карточке', litCodes('floor').length > litCodes('card').length,
-  [litCodes('floor').length, litCodes('card').length]);
-ok('в карточке горит ровно объявленное плюс «/»',
-  litCodes('card').length === Object.keys(get('card').caps).length + codesOf(ALWAYS).length,
-  litCodes('card').length);
+// A place carrying the registry lights the floor plus what it took; a deaf one
+// lights only what it took. Equal counts would mean `deaf` stopped working.
+ok('глухое место горит меньше этажа', litCodes('cctv').length < litCodes('floor').length,
+  [litCodes('cctv').length, litCodes('floor').length]);
+ok('в пультовой горит ровно объявленное',
+  litCodes('cctv').length === Object.keys(get('cctv').caps).length, litCodes('cctv').length);
+ok('в карточке горит этаж плюс её собственное',
+  litCodes('card').length > litCodes('floor').length, [litCodes('card').length, litCodes('floor').length]);
 
 // ------------------------------------------------------------- a place nobody knows
 // The office asks for a place it has not declared — a module that failed to come

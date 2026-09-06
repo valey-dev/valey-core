@@ -13,13 +13,29 @@
 //
 // Two kinds of place, and the difference is the whole design:
 //
-// **The floor and the things you stand next to** carry the registry — every
-// action in web/keymap.js works, with the caption it always has. A place like
-// this only overrides the odd key: at the cooler SPACE is «попить» rather than
-// the general «действие».
+// **Almost everywhere the floor still answers.** A panel takes the keys it needs
+// and lets the rest fall through: onKey asks the panel first, and whatever the
+// panel returns false for reaches the floor's dispatch below it. So with the
+// transcript open B is still the skateboard — and C is not the wardrobe, because
+// the transcript took it for copying. A place says what was taken; the registry
+// says the rest, and a key that moves in web/keymap.js moves here with it.
 //
-// **An open panel** carries nothing of the registry. The office is not
-// listening: the panel is. Such a place lists its keys and nothing else is lit.
+// The first cut of this file had panels light nothing at all. It was wrong in
+// the honest direction — it dimmed keys that work — but wrong is wrong: a board
+// that says B does nothing, when B puts you on a skateboard, teaches the reader
+// to stop believing it.
+//
+// **`mute` is for a key the panel swallows and does nothing with.** The viewer
+// answers `true` for every key in its own list, whether it handled it or not — so
+// in the transcript ← and → reach nobody: the office never sees them and the
+// transcript ignores them. Without `mute` the registry would light them «ходить»,
+// which is worse than dimming a working key: it is a promise that nothing keeps.
+//
+// **Two places are genuinely deaf**, and they are marked so. In the control room
+// the branch in onKey ends in an unconditional return, so nothing below it runs.
+// With the cursor in a text field onKey returns on its first line — even «?»
+// types itself there, which is why `deaf` also puts out the one key that is
+// otherwise always lit.
 //
 // Drawn from the approved frame «Контекстная клавиатура», nine boards, one per
 // place. The captions here are the captions there, which is why they are i18n
@@ -38,52 +54,96 @@ const PLACES = [
   { id: 'cooler', title: 'place.cooler', registry: true, caps: { Space: 'place.cooler.space' } },
 
   // ------------------------------------------------------- panels of the core
+  //
+  // Every one of these carries the registry: web/ui.js walks its panels through
+  // one shared focusRing, and that ring takes the arrows, ENTER, SPACE and — where
+  // the panel asked for them — the digits. It returns false for everything else,
+  // and everything else is the floor.
   {
     id: 'card',
     title: 'place.card',
+    registry: true,
     caps: {
       // The card's own tabs, by the names the buttons print — see web/ui.js.
       Digit1: 'tab.talk', Digit2: 'tab.work', Digit3: 'tab.task', Escape: 'tab.close',
-      Enter: 'place.press', Space: 'place.press', KeyN: 'place.card.note',
+      Enter: 'place.press', Space: 'place.press',
       ArrowUp: 'place.focus', ArrowDown: 'place.focus', ArrowLeft: 'place.focus', ArrowRight: 'place.focus',
     },
   },
   {
-    // The conversation is the reason this feature exists. The cursor is in the
-    // field, so the letters of the floor are not merely inactive — they type.
+    // Typing. onKey returns on its first line while a field has focus, so nothing
+    // here belongs to the office at all — these keys are the card's own DOM
+    // handlers. The one place where «?» cannot open this panel.
     id: 'talk',
     title: 'place.talk',
+    deaf: true,
     caps: {
       Escape: 'place.close', Enter: 'place.talk.send',
       ShiftLeft: 'place.talk.shift', ShiftRight: 'place.talk.shift',
-      KeyN: 'place.card.note',
       ArrowUp: 'place.talk.reply', ArrowDown: 'place.talk.reply',
     },
   },
   {
-    id: 'round',
-    title: 'place.round',
+    // Reading the whole answer. C is the one that surprises: in the office it is
+    // the wardrobe, here it copies the block you are reading, and a board that
+    // still said «одежда» would be wrong in the way that costs a click.
+    id: 'transcript',
+    title: 'place.transcript',
+    registry: true,
     caps: {
-      Escape: 'place.close', Tab: 'place.close',
-      Enter: 'place.round.go', Space: 'place.round.go',
-      ArrowUp: 'place.round.row', ArrowDown: 'place.round.row',
+      KeyC: 'place.copy', KeyN: 'place.card.note', KeyR: 'place.viewer.reread',
+      ArrowUp: 'place.transcript.scroll', ArrowDown: 'place.transcript.scroll',
+      PageUp: 'place.transcript.page', PageDown: 'place.transcript.page', Space: 'place.transcript.page',
+      Home: 'place.transcript.top', End: 'place.transcript.end',
+      Escape: 'place.close',
     },
+    // Swallowed by VIEWER_KEYS in web/ui.js and handled by nobody.
+    mute: ['ArrowLeft', 'ArrowRight'],
   },
   {
     id: 'viewer',
     title: 'place.viewer',
+    registry: true,
     caps: {
       Escape: 'place.viewer.back', KeyR: 'place.viewer.reread', KeyZ: 'place.viewer.loupe',
+      KeyC: 'place.copy',
       Enter: 'place.press', Space: 'place.press',
       ArrowUp: 'place.viewer.buttons', ArrowDown: 'place.viewer.buttons',
       ArrowLeft: 'place.viewer.file', ArrowRight: 'place.viewer.file',
     },
   },
   {
-    // Looking, not walking. F9 is here because a shot of a camera view is the
-    // one frame the control room is illustrated with.
+    id: 'gallery',
+    title: 'place.gallery',
+    registry: true,
+    caps: {
+      Escape: 'place.close', KeyC: 'place.copy',
+      Enter: 'place.gallery.open', Space: 'place.gallery.open',
+      ArrowUp: 'place.gallery.pick', ArrowDown: 'place.gallery.pick',
+      ArrowLeft: 'place.gallery.pick', ArrowRight: 'place.gallery.pick',
+    },
+    // R is the radio on the floor and Z is nothing here, but the viewer's own key
+    // list eats both before the office can see them.
+    mute: ['KeyR', 'KeyZ'],
+  },
+  {
+    id: 'round',
+    title: 'place.round',
+    registry: true,
+    caps: {
+      Escape: 'place.close', Tab: 'place.close',
+      Enter: 'place.round.go', Space: 'place.round.go',
+      ArrowUp: 'place.round.row', ArrowDown: 'place.round.row',
+      ArrowLeft: 'place.round.row', ArrowRight: 'place.round.row',
+    },
+  },
+  {
+    // Looking, not walking, and the only screen in the office that is deaf by
+    // construction: its branch in onKey ends in a return, so the dispatch under
+    // it never runs. F9 is above that branch, which is why it is here.
     id: 'cctv',
     title: 'place.cctv',
+    deaf: true,
     caps: {
       Escape: 'place.cctv.away', Enter: 'place.cctv.away', Space: 'place.cctv.away',
       KeyT: 'place.cctv.auto', F9: 'hint.shot',
@@ -93,11 +153,10 @@ const PLACES = [
   {
     // The panel with no board of its own. Every panel in this office is walked the
     // same way — arrows for focus, ENTER to press, digits to pick, ESC one step
-    // back — and that is what the layout frame's «В панелях» table says. A screen
-    // the frame does not name gets this rather than the floor: showing the floor's
-    // letters over an open panel is exactly the lie this feature removes.
+    // back — and that is what the layout frame's «В панелях» table says.
     id: 'panel',
     title: 'place.panel',
+    registry: true,
     caps: {
       Escape: 'place.close', Enter: 'place.press', Space: 'place.press',
       ArrowUp: 'place.focus', ArrowDown: 'place.focus', ArrowLeft: 'place.focus', ArrowRight: 'place.focus',
@@ -109,6 +168,7 @@ const PLACES = [
   {
     id: 'lift',
     title: 'place.lift',
+    registry: true,
     caps: {
       Escape: 'place.close', Enter: 'place.lift.go', Space: 'place.lift.go',
       Digit1: 'place.lift.floor', Digit2: 'place.lift.floor', Digit3: 'place.lift.floor',
@@ -130,7 +190,8 @@ export function define(list) {
       throw new Error(`places: у места должны быть id и title — пришло ${JSON.stringify(p)}`);
     }
     if (places.some((x) => x.id === p.id)) throw new Error(`places: место ${p.id} уже объявлено`);
-    places.push({ registry: false, caps: {}, ...p, caps: { ...(p.caps || {}) } });
+    places.push({ registry: false, deaf: false, caps: {}, mute: [], ...p,
+      caps: { ...(p.caps || {}) }, mute: [...(p.mute || [])] });
   }
   return places.length;
 }
@@ -162,12 +223,17 @@ export function keyIn(placeId, code) {
   const p = find(placeId);
   if (!p) return { lit: true, caption: null, action: null };
   const action = all().find((a) => a.codes.includes(code)) || null;
-  if (action && action.id === ALWAYS) return { lit: true, caption: action.hint, action };
+  // What the place took for itself wins over everything, including the opener:
+  // in the control room «/» is dead, and saying otherwise would send somebody
+  // pressing it.
   if (Object.prototype.hasOwnProperty.call(p.caps, code)) {
     return { lit: true, caption: p.caps[code], action };
   }
-  // Only the registry can light a key that the place did not name, and only
-  // where the place says the floor is still listening.
+  // Eaten by the screen and handled by nobody: dark, like a key that is not here.
+  if (p.mute.includes(code)) return { lit: false, caption: null, action };
+  // «?» answers everywhere the office is still listening at all.
+  if (action && action.id === ALWAYS) return { lit: !p.deaf, caption: p.deaf ? null : action.hint, action };
+  // And the floor answers wherever the panel let the key through.
   if (p.registry && action) return { lit: true, caption: action.hint || null, action };
   return { lit: false, caption: null, action };
 }
@@ -177,8 +243,9 @@ export function litCodes(placeId) {
   const p = find(placeId);
   if (!p) return [];
   const out = new Set(Object.keys(p.caps));
-  for (const c of codesOf(ALWAYS)) out.add(c);
+  if (!p.deaf) for (const c of codesOf(ALWAYS)) out.add(c);
   if (p.registry) for (const a of all()) for (const c of a.codes) out.add(c);
+  for (const c of p.mute) out.delete(c);
   return [...out];
 }
 
