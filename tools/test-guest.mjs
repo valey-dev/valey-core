@@ -100,6 +100,20 @@ try {
   ok('but you can see who was called and whether he entered',
     list.j.invites[0].name === 'Костя' && list.j.invites[0].used === true, list.j.invites[0]);
 
+  // ------------------------------------------------ what a guest may load at all
+  // The manifest decides, and the free build declares both of its modules open.
+  // So the thing this checks live is the other failure: filtering that keeps a
+  // guest from loading anything and empties the shared floor. The filter itself
+  // is checked over fixtures in tools/test-modules.mjs, where there is a module
+  // to hide.
+  const mineMods = await call('/api/modules', { as: 'owner', method: 'GET' });
+  const theirMods = await call('/api/modules', { as: 'guest', method: 'GET' });
+  ok('the owner gets the module list', mineMods.status === 200 && Array.isArray(mineMods.j), mineMods.status);
+  ok('and so does a guest, rather than a refusal', theirMods.status === 200 && Array.isArray(theirMods.j), theirMods.status);
+  const open = (r) => (r.j || []).map((m) => m.id).sort().join();
+  ok('the ones declared open reach a guest', open(theirMods) === open(mineMods), [open(mineMods), open(theirMods)]);
+  ok('and they have something to load with', (theirMods.j || []).every((m) => !!m.client), theirMods.j);
+
   // ------------------------------------------------------------- evicting
   const out = await call('/api/invite/revoke', { as: 'owner', body: { id: list.j.invites[0].id } });
   ok('the host cancels the invitation', out.status === 200, out.status);

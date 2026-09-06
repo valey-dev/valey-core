@@ -26,9 +26,22 @@ export function setModuleOff(id, value) {
   return true;
 }
 
-// Everything on disk, with its state — for the stand card.
+// Who is allowed to see a module: `"guests": "shown"` in the manifest, and
+// nothing else counts as yes.
+//
+// The default is «hidden», and that is the whole point. An invitation used to be
+// all or nothing: admitted() asks whether you were invited and stops there, so a
+// guest called in to watch the agents also got the easel with unreleased
+// designs, the git tree with branch names and the personnel files. A module that
+// forgets the line must not add itself to that list — the same reasoning that
+// makes the lists in .gitignore named rather than «everything not ours».
+const shownToGuests = (m) => m.manifest.guests === 'shown';
+
+// Everything on disk, with its state — for the stand card. `guests` rides along
+// so the office can say what an invited person sees without asking twice; a rule
+// nobody can read is a rule nobody trusts.
 export function moduleAll() {
-  return loaded.map((m) => ({ id: m.id, off: off.has(m.id), broken: !!m.error }));
+  return loaded.map((m) => ({ id: m.id, off: off.has(m.id), broken: !!m.error, guests: shownToGuests(m) ? 'shown' : 'hidden' }));
 }
 
 export async function loadModules(root, ctx = null) {
@@ -86,9 +99,14 @@ export async function loadModules(root, ctx = null) {
   return loaded;
 }
 
-// What goes to the client: only what it needs to build its imports.
-export function moduleList() {
-  return live().map(m => ({
+/**
+ * What goes to the client: only what it needs to build its imports.
+ *
+ * `forOwner` defaults to false on purpose. A caller who forgets the argument
+ * gets the guest's view — narrower than the truth, never wider.
+ */
+export function moduleList(forOwner = false) {
+  return live().filter((m) => forOwner || shownToGuests(m)).map(m => ({
     id: m.id,
     name: m.manifest.name || {},
     tier: m.manifest.tier || 'office',
@@ -153,9 +171,26 @@ export function moduleOnPatch(patch) {
 // module would drift from the original, and the hole would open quietly.
 // Added 6 September 2026 for the easel, which wanted to tell the owner — and
 // only the owner — where on his disk the settings file lies.
+//
+// A module a guest may not see is not asked at all: the filtered list keeps its
+// client off the page, and this keeps its data off the wire. Hiding only the
+// list would be theatre — /api/wip can be typed by hand.
+//
+// Skipped rather than refused, so a guest cannot tell a hidden module from a
+// module that is not installed. There is nothing to gain from telling them.
+//
+// Ownership is resolved at most once per request, and only when a hidden module
+// is actually in the way — that keeps the laziness the argument was made lazy
+// for. An office whose modules are all shown to guests never reads the settings
+// here at all.
 export async function moduleRoute(url, req, res, send, ctx = {}) {
+  let owner = null;
   for (const m of live()) {
     if (typeof m.server?.route !== 'function') continue;
+    if (!shownToGuests(m)) {
+      if (owner === null) owner = ctx.isOwner ? await ctx.isOwner() : false;
+      if (!owner) continue;
+    }
     if (await m.server.route(url, req, res, send, ctx)) return true;
   }
   return false;

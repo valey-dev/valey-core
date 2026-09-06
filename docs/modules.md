@@ -20,6 +20,7 @@ modules/mything/
   "id": "mything",
   "name": { "ru": "Моя вещь", "en": "My thing" },
   "tier": "core",
+  "guests": "shown",
   "client": "client.js",
   "style": "style.css",
   "server": "server.js"
@@ -27,6 +28,10 @@ modules/mything/
 ```
 
 `id` must equal the folder name — the path `/modules/<id>/` is built from it, and if they drift you get a module whose client cannot be downloaded.
+
+`guests` says whether somebody invited onto a shared floor may see this module. Only `"shown"` counts as yes; anything else, including a missing line, means the module is the owner's alone. It is left out of a guest's `/api/modules`, so its client is never downloaded and its keys, objects and panels never exist for them, and its routes are not offered the request either — hiding the list alone would be theatre, since a URL can be typed by hand.
+
+The default is closed on purpose. Until 6 September 2026 an invitation was all or nothing: a guest called in to watch the agents also got the easel with unreleased designs, the git tree with branch names and the personnel files. A module that forgets the line must not add itself to that list.
 
 ## The client half
 
