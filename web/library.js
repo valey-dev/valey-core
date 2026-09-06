@@ -132,7 +132,8 @@ export const LIBRARY = [
 //
 // A direction that has nothing paid in it says so instead of counting: clothes,
 // the cat, the radio and the weather are mood rather than tooling, and mood is
-// given away. Design: Figma, WIP «Дерево модулей: варианты представления».
+// given away. Design: Figma, Prod, section 22 — the tree, both views, both
+// office scales.
 export const DIRS = [
   { id: 'floor', name: { ru: 'ЭТАЖ', en: 'FLOOR' } },
   { id: 'people', name: { ru: 'АГЕНТЫ', en: 'AGENTS' } },
