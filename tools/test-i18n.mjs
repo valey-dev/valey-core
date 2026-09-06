@@ -10,8 +10,13 @@ globalThis.document = { documentElement: {}, title: '' };
 const warned = [];
 const warn = console.warn;
 console.warn = (...a) => { warned.push(a.join(' ')); warn(...a); };
-const { t, setLang, addDict } = await import('../web/i18n.js');
+const { t, setLang, addDict, pickLang, deviceLang } = await import('../web/i18n.js');
 console.warn = warn;
+
+// Since 6 September 2026 the office starts in the language of the device, so a
+// stand that wants Russian says so. Node reports `en-US`, and without this line
+// every Russian check below would be reading the English dictionary.
+setLang('ru');
 
 // The fixture is its own rather than a key borrowed from the office. There used
 // to be a line here about the easel's screens; the easel left for a module and
@@ -48,6 +53,42 @@ const en = (n) => t('test.screens', { n });
 ok('en: 1 — screen', en(1) === '1 screen', en(1));
 ok('en: 2 — screens', en(2) === '2 screens', en(2));
 ok('en: 0 — screens', en(0) === '0 screens', en(0));
+setLang('ru');
+
+// --------------------------------------------------- which language a device gets
+// Russian only for a Russian device, English for everything else. The office was
+// hard-coded to Russian until 6 September 2026, which read as a bug to everybody
+// who did not speak it — and it is the first thing a stranger sees.
+ok('русское устройство — русский офис', pickLang(['ru-RU', 'en-US']) === 'ru');
+ok('регион не решает: ru-KZ — тоже русский', pickLang(['ru-KZ']) === 'ru');
+ok('РЕГИСТР тега не решает', pickLang(['RU']) === 'ru');
+ok('английское устройство — английский офис', pickLang(['en-GB']) === 'en');
+// A third language the office does not speak must land on English, not on the
+// author's own language, and not on a key instead of text.
+ok('язык, которого офис не знает, — английский', pickLang(['de-DE', 'fr']) === 'en', pickLang(['de-DE', 'fr']));
+ok('порядок списка уважается: первым идёт то, что человек поставил первым',
+  pickLang(['en-US', 'ru-RU']) === 'en');
+ok('русский вторым в списке всё же выбирается, если первого офис не знает',
+  pickLang(['de', 'ru']) === 'ru');
+ok('устройства нет вовсе — английский', pickLang([]) === 'en' && pickLang(undefined) === 'en');
+ok('deviceLang отвечает одним из двух языков офиса', ['ru', 'en'].includes(deviceLang()), deviceLang());
+
+// 'auto' is what a fresh settings file says, and it must never reach the screen
+// as a language of its own: it resolves to the device, like anything unknown.
+setLang('auto');
+const selfOf = { ru: 'русский', en: 'English' };
+ok('«auto» — это язык устройства, а не третий язык', t('lang.self') === selfOf[deviceLang()], t('lang.self'));
+ok('«auto» ставит язык в документ', globalThis.document.documentElement.lang === deviceLang(),
+  globalThis.document.documentElement.lang);
+// index.html carries no title of its own since 6 September 2026, so the very
+// first setLang has to write one even when it changed nothing.
+globalThis.document.title = '';
+setLang('auto');
+ok('заголовок вкладки пишется и когда язык не менялся', globalThis.document.title === t('doc.title'),
+  globalThis.document.title);
+// Garbage in the settings file lands where 'auto' does, not on a blank office.
+setLang('клингонский');
+ok('неизвестный язык в настройках — тоже язык устройства', t('lang.self') === selfOf[deviceLang()], t('lang.self'));
 setLang('ru');
 
 // ------------------------------------------------ strings without forms are left alone
