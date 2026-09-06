@@ -54,7 +54,7 @@ const CORE = [
   { id: 'act.interact', codes: ['Space'], group: 'act', hint: 'hint.interact', more: 'hint.interactMore' },
   { id: 'act.skate', codes: ['KeyB'], group: 'act', hint: 'hint.skate' },
   { id: 'act.sound', codes: ['KeyM'], group: 'act', hint: 'hint.sound' },
-  { id: 'panel.round', codes: ['Tab'], group: 'panel', hint: 'hint.round' },
+  { id: 'panel.standup', codes: ['Tab'], group: 'panel', hint: 'hint.standup' },
   { id: 'panel.notes', codes: ['KeyN'], group: 'panel', hint: 'hint.notes' },
   { id: 'panel.bag', codes: ['KeyC'], group: 'panel', hint: 'hint.bag' },
   { id: 'panel.invite', codes: ['KeyI'], group: 'panel', hint: 'hint.invite', more: 'hint.inviteMore' },

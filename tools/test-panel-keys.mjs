@@ -14,12 +14,29 @@ let sky = null;
 let skin = null;
 let langPanel = null;
 
-function makeRoster(n) {
-  const gos = Array.from({ length: n }, () => node('go'));
+// The standup: columns of cards. The card is the focus target itself, and the
+// column is what the up-down arrows must stay inside, so the stand-in has to
+// know which cards belong to which column — that is the whole difference from a
+// flat ring, and the only thing worth checking here.
+function makeRoster(cols) {
+  const cards = [];
+  const columns = [].concat(cols).map((n, ci) => {
+    const mine = Array.from({ length: n }, (_, i) => {
+      const c = node('pcard');
+      c.dataset.id = `t${ci}-${i}`;
+      return c;
+    });
+    cards.push(...mine);
+    const col = node('pcol');
+    col.contains = (x) => mine.includes(x);
+    col.cards = mine;
+    return col;
+  });
   return {
-    hidden: false, innerHTML: '', gos,
-    querySelector: (sel) => (sel === '.rbody' ? node('rbody') : null),
-    querySelectorAll: (sel) => (sel === '.go' || sel === '[data-go]' ? gos : []),
+    hidden: false, innerHTML: '', cards, cols: columns,
+    querySelector: (sel) => (sel === '.rbody' ? node('rbody')
+      : sel === '.pcard.focus' ? (cards.find((c) => c.has('focus')) || null) : null),
+    querySelectorAll: (sel) => (sel === '.pcard' ? cards : sel === '.pcol' ? columns : []),
   };
 }
 
@@ -171,15 +188,21 @@ const { stub } = installDom({
 
 const UI = await import('../web/ui.js');
 
-const agents = (n) => Array.from({ length: n }, (_, i) => ({
-  id: 'a' + i, name: 'Агент ' + i, project: 'AI valey', status: 'awaiting',
+const agents = (n, project = 'AI valey') => Array.from({ length: n }, (_, i) => ({
+  id: 'a' + i, name: 'Агент ' + i, project, status: 'awaiting', seat: i,
   title: 'задача', lastSaid: 'ждёт', idleFor: 60, roleKey: 'code',
 }));
+// Two teams: the standup lays them out in columns, and the arrows mean
+// different things across a column and along one.
+const twoTeams = (a, b) => [
+  ...agents(a, 'team-a'),
+  ...agents(b, 'team-b').map((x, i) => ({ ...x, id: 'b' + i })),
+];
 // me is needed: the bag draws the little person and the slot labels out of it
 const state = { agents: [], looks: new Map(), settings: {}, delivery: {}, visited: new Set(),
   me: { skin: '#e8ad7e', hair: '#3a2a20', shirt: '#c25a4b', pants: '#3f4a63', boots: '#2a2118',
         style: 0, tall: 0, face: 'none', head: 'none', glasses: false, hands: 'none', name: 'ТЫ' } };
-roster = makeRoster(0);
+roster = makeRoster([]);
 notes = makeNotes(0);
 bag = makeBagSelf(0);
 sky = makeRing([]);
@@ -192,8 +215,11 @@ const PACKS = {
   ],
 };
 let savedPatch = null;
+let opened = null;
+let led = null;
 UI.initUI(state, {
-  guideTo: () => {}, saveMe: () => {},
+  guideTo: (id) => { led = id; }, saveMe: () => {},
+  openAgent: (id) => { opened = id; },
   names: async () => JSON.parse(JSON.stringify(PACKS)),
   saveSettings: async (patch) => { savedPatch = patch; return {}; },
   setLang: () => {},
@@ -205,31 +231,53 @@ const check = (name, ok, got) => {
   else { failed++; console.log('ПЛОХО |', name, '→', got); }
 };
 
-// ------------------------------------------------------------------- the round
+// ----------------------------------------------------------------- the standup
 const at = (list) => list.findIndex((b) => b.has('focus'));
 
-state.agents = agents(3);
-roster = makeRoster(3);
+state.agents = twoTeams(3, 2);
+roster = makeRoster([3, 2]);
 UI.renderRoster();
-check('обход: фокус встаёт на первую строку', at(roster.gos) === 0, at(roster.gos));
+check('планёрка: фокус встаёт на первую карточку', at(roster.cards) === 0, at(roster.cards));
 check('стрелка вниз обработана', UI.rosterKey('ArrowDown') === true, 'не обработана');
-check('и переводит на вторую', at(roster.gos) === 1, at(roster.gos));
+check('и идёт по своей команде, а не по всем подряд', at(roster.cards) === 1, at(roster.cards));
+check('стрелка вправо уносит в соседнюю команду', UI.rosterKey('ArrowRight') === true && at(roster.cards) === 4,
+  at(roster.cards));
+check('и держит место в колонке, а не падает на первую строку',
+  roster.cols[1].cards.indexOf(roster.cards[4]) === 1, at(roster.cards));
+// The short column is shorter: coming back sideways there is no third row to
+// stand on, and the focus stops at the last card rather than falling out.
+UI.rosterKey('ArrowDown');
+check('в конце короткой колонки закольцовано внутри неё', at(roster.cards) === 3, at(roster.cards));
+
+UI.rosterKey('ArrowLeft');
+check('влево возвращает в первую команду', at(roster.cards) === 0, at(roster.cards));
+UI.rosterKey('ArrowUp');
+check('вверх закольцовано по своей колонке', at(roster.cards) === 2, at(roster.cards));
+
 UI.rosterKey('Enter');
-check('Enter ведёт к выбранному, а не к первому', roster.gos[1].clicked === 1, roster.gos.map((b) => b.clicked).join(','));
+check('ENTER открывает ту карточку, на которой стоишь',
+  roster.cards[2].clicked === 1, roster.cards.map((b) => b.clicked).join(','));
 
-UI.rosterKey('ArrowUp'); UI.rosterKey('ArrowUp');
-check('список закольцован', at(roster.gos) === 2, at(roster.gos));
+// G is the standup's only key of its own, and it is caught by the physical code:
+// under "ЙЦУКЕН" that key types «п», and the office must not care.
+led = null;
+check('G обработана', UI.rosterKey({ key: 'п', code: 'KeyG' }) === true, 'не обработана');
+check('и ведёт к тому, на ком стоял фокус', led === 't0-2', led);
+check('панель при этом закрылась', UI.rosterOpen() === false, 'осталась открыта');
 
-// a closed panel must not take the arrows — otherwise after the very first round
-// the player stops walking around the office
-roster.hidden = true;
-check('закрытый обход стрелки не ест', UI.rosterKey('ArrowDown') === false, 'съел');
-
-// an empty round: nobody is waiting, there is nothing to press
-state.agents = [];
-roster = makeRoster(0);
+roster.hidden = false;
 UI.renderRoster();
-check('пустой обход стрелки не ест', UI.rosterKey('ArrowDown') === false, 'съел');
+// a closed panel must not take the arrows — otherwise after the very first
+// standup the player stops walking around the office
+roster.hidden = true;
+check('закрытая планёрка стрелки не ест', UI.rosterKey('ArrowDown') === false, 'съел');
+check('и G не ест', UI.rosterKey({ key: 'g', code: 'KeyG' }) === false, 'съел');
+
+// an empty standup: nobody is in the office, there is nothing to press
+state.agents = [];
+roster = makeRoster([]);
+UI.renderRoster();
+check('пустая планёрка стрелки не ест', UI.rosterKey('ArrowDown') === false, 'съел');
 check('и Enter не ест', UI.rosterKey('Enter') === false, 'съел');
 
 // ----------------------------------------------------------------- the notes

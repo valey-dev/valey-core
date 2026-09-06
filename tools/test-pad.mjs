@@ -65,7 +65,7 @@ const face = readPad(pad({ held: [0, 1, 2, 3] }));
 ok('A — пробел', has(face, ' '));
 ok('B — Escape', has(face, 'Escape'));
 ok('X — скейт (b)', has(face, 'b'));
-ok('Y — обход (Tab)', has(face, 'Tab'));
+ok('Y — планёрка (Tab)', has(face, 'Tab'));
 const trig = readPad(pad({ held: [6] }));
 ok('курок — Shift', has(trig, 'Shift'));
 ok('оба курка — один Shift, не два', readPad(pad({ held: [6, 7] })).down.size === 1);

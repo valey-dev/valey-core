@@ -220,6 +220,19 @@ UI.initUI(state, {
     body: JSON.stringify({ agentId, text, deliver, mode, resend }),
   }).then((r) => r.json()).catch((e) => ({ error: e.message })),
   guideTo: (id) => { state.waypoint = id; UI.toast(tr('toast.guide')); },
+  // The standup opens a card without walking to the desk: the panel is
+  // "walked up to everyone at once", and sending someone on foot after it
+  // answers "go and look" to the question it has just closed. Everything else
+  // is as it is after SPACE at a desk, down to the visited mark and the guide
+  // arrow being taken off.
+  openAgent: (id) => {
+    const a = state.agents.find((x) => x.id === id);
+    if (!a) return;
+    state.focus = a; state.page = 'talk'; state.typed = 0; state.dialogOpen = true;
+    state.visited.add(a.id);
+    if (state.waypoint === a.id) state.waypoint = null;
+    UI.renderDialog();
+  },
   // The bag does not repeat the language, colour and sound panels — it leads to them.
   lang: () => switchLang(),
   setLang: (code) => switchLang(code),
@@ -676,7 +689,10 @@ function onKey(e) {
   // The lift panel and the reception desk are the same: while they are open the arrows
   // walk the floors rather than the office.
   if (UI.liftKey(e.key)) { e.preventDefault(); return; }
-  if (UI.rosterKey(e.key)) { e.preventDefault(); return; }
+  // The standup is handed the whole event: its "lead me" is caught by the
+  // physical key code, not by a letter that is a different letter under
+  // another layout.
+  if (UI.rosterKey(e)) { e.preventDefault(); return; }
   // The action first, the raw key second: a module that declared its keys through
   // api.keys() answers an id rather than a letter. The old seam stays alive — the
   // modules nobody rewrote are held up by it.
@@ -750,7 +766,7 @@ function onKey(e) {
   if (act === 'zoom.out') { e.preventDefault(); return stepZoom(-1); }
   if (act === 'zoom.reset') { e.preventDefault(); return setZoom(0); }
 
-  if (act === 'panel.round') return toggle('roster', UI.renderRoster, UI.closeRoster);
+  if (act === 'panel.standup') return toggle('roster', UI.renderRoster, UI.closeRoster);
   // N from outside shows all the notes; inside a conversation the same key writes them
   if (act === 'panel.notes') return toggle('notes', UI.renderNotes, UI.closeNotes);
   // C opens the bag on "worn" — where this key has always led.
@@ -1410,7 +1426,7 @@ function currentPlace() {
   const viewer = UI.viewerOpen();
   if (viewer) return { single: 'viewer', transcript: 'transcript', gallery: 'gallery' }[viewer];
   if (UI.liftOpen() || state.lift.phase !== 'idle') return 'lift';
-  if (UI.rosterOpen()) return 'round';
+  if (UI.rosterOpen()) return 'standup';
   // One panel, two places: on «поговорить» the cursor is in the field, so the
   // letters type instead of opening anything. That is the state this whole
   // feature was asked for.

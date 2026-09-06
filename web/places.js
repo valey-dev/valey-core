@@ -120,14 +120,19 @@ const PLACES = [
     mute: ['KeyR', 'KeyZ'],
   },
   {
-    id: 'round',
-    title: 'place.round',
+    // The standup: cards stand in columns, so the arrows mean different
+    // things — down walks your own team, sideways carries you to the next.
+    // G leads you to whoever you are standing on, and it is the only key of
+    // this panel's own.
+    id: 'standup',
+    title: 'place.standup',
     registry: true,
     caps: {
       Escape: 'place.close', Tab: 'place.close',
-      Enter: 'place.round.go', Space: 'place.round.go',
-      ArrowUp: 'place.round.row', ArrowDown: 'place.round.row',
-      ArrowLeft: 'place.round.row', ArrowRight: 'place.round.row',
+      Enter: 'place.standup.open', Space: 'place.standup.open',
+      KeyG: 'place.standup.go',
+      ArrowUp: 'place.standup.card', ArrowDown: 'place.standup.card',
+      ArrowLeft: 'place.standup.team', ArrowRight: 'place.standup.team',
     },
   },
   {
