@@ -146,6 +146,8 @@ const DICT = {
     // The pager calls, the card asks. The words differ: on the pager «Ответить»
     // is about the call, in the card «Разрешить» is about the command.
     'permit.askQ': '— Спрашивает тебя:',
+    'permit.noAnswer': 'не отвечу',
+    'permit.askNote': 'Нажатый вариант и есть ответ: он уходит агенту, и тот идёт дальше с ним. «В терминале» отдаёт вопрос обратно, если отвечать хочется там.',
     'pager.asks': 'спрашивает:',
     'pager.someone': 'агент',
     'pager.may': 'можно выполнить?',
@@ -155,6 +157,8 @@ const DICT = {
     'pager.more': 'ещё {n}',
     'pager.sec': '{n} с',
     'pager.min': '{n} мин',
+    'hud.workTitle': 'агенты за работой',
+    'hud.waitTitle': 'ждут твоего ответа · нажми или TAB — обход',
     'hud.pagerTitle': 'отложенные запросы · H — вернуть пейджер',
     'permit.q': '— Можно выполнить?',
     'permit.noDesc': 'без пояснения',
@@ -808,6 +812,8 @@ const DICT = {
     'toast.namePackPlain': 'Names: {pack}.',
     // ------------------------------------------------------ permission request
     'permit.askQ': '— Asks you:',
+    'permit.noAnswer': 'no answer',
+    'permit.askNote': 'The option you press is the answer: it goes to the agent and it carries on with it. «In the terminal» hands the question back, if you would rather answer there.',
     'pager.asks': 'asks:',
     'pager.someone': 'an agent',
     'pager.may': 'may I run?',
@@ -817,6 +823,8 @@ const DICT = {
     'pager.more': '{n} more',
     'pager.sec': '{n}s',
     'pager.min': '{n} min',
+    'hud.workTitle': 'agents at work',
+    'hud.waitTitle': 'waiting for your answer \u00b7 press it, or TAB for the round',
     'hud.pagerTitle': 'deferred requests \u00b7 H brings the pager back',
     'permit.q': '\u2014 May I run this?',
     'permit.noDesc': 'no description given',

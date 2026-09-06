@@ -84,7 +84,14 @@ export function renderHud() {
   const place = w.label ? ` · ${esc(w.label)}` : '';
   el.hud.innerHTML = `<b>VALEY</b> · ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}
     <span class="chip sky" title="${tr('hud.skyTitle', { source: w.source === 'выдумана' ? tr('sky.made') : esc(w.source || '') })}">${WEATHER_ICON[w.kind] || '·'} ${tr('sky.' + w.kind)}${temp}${place}</span>
-    ${room}<span class="chip work">⌨ ${working}</span><span class="chip wait">! ${waiting}</span>
+    ${room}<span class="chip work" title="${tr('hud.workTitle')}">⌨ ${working}</span>${waiting
+      // A bare number in the corner is read as «three messages» and pressed at:
+      // on 6 September 2026 it was mistaken for the pager badge, and H — which
+      // brings the pager back — did nothing, because there was nothing to bring.
+      // The counter says what it counts and opens the round, where those very
+      // agents are listed.
+      ? `<button id="waitChip" class="chip wait" title="${tr('hud.waitTitle')}">! ${waiting}</button>`
+      : ''}
     <span class="chip">👥 ${S.agents.length}</span>
     <span class="chip zoom${z.tight ? ' wait' : ''}" title="${tr('hud.zoomTitle')}${
       z.tight ? tr('hud.zoomTitleTight') : ''
@@ -101,6 +108,8 @@ export function renderHud() {
   // and hard to find afterwards.
   const chip = $('#pagerChip');
   if (chip) chip.onclick = () => api.recallPager();
+  const wait = $('#waitChip');
+  if (wait) wait.onclick = () => api.openRound();
 }
 
 // ------------------------------------------------------------------- dialog
@@ -392,21 +401,28 @@ function buildDialog(a) {
             // The note under an option is the half a person decides on. It is
             // shown dimmer than the label rather than hidden behind a hover:
             // a comment you have to go looking for is a comment nobody read.
-            ? `<ul class="qopts">${p.question.options.map((o) => {
+            ? `<div class="qopts">${p.question.options.map((o, i) => {
               const label = typeof o === 'string' ? o : (o.label || '');
               const note = typeof o === 'string' ? '' : (o.note || '');
-              return `<li><b>${esc(label)}</b>${note ? `<span>${esc(note)}</span>` : ''}</li>`;
-            }).join('')}</ul>`
+              return `<button class="qopt" data-opt="${i}"><b>${esc(label)}</b>${
+                note ? `<span>${esc(note)}</span>` : ''}</button>`;
+            }).join('')}</div>`
             : '')
           : `<pre class="cmd">${esc(p.command)}</pre>`}
         ${p.rule ? `<p class="hint">${tr('permit.rule', { rule: esc(p.rule) })}</p>` : ''}
         <div class="prow">
-          <button data-a="allow" class="primary">${tr('permit.allow')} <kbd>⏎</kbd></button>
-          <button data-a="always" ${p.rule ? '' : 'disabled'}>${tr('permit.always')}</button>
-          <button data-a="deny">${tr('permit.deny')}</button>
-          <button data-a="terminal">${tr('permit.terminal')}</button>
+          ${p.question
+            // A question has nothing to allow and no rule to write, so the row
+            // under it is two: refuse to answer, or go and answer in the
+            // terminal. The answer itself is the option above.
+            ? `<button data-a="deny">${tr('permit.noAnswer')}</button>
+               <button data-a="terminal">${tr('permit.terminal')}</button>`
+            : `<button data-a="allow" class="primary">${tr('permit.allow')} <kbd>⏎</kbd></button>
+               <button data-a="always" ${p.rule ? '' : 'disabled'}>${tr('permit.always')}</button>
+               <button data-a="deny">${tr('permit.deny')}</button>
+               <button data-a="terminal">${tr('permit.terminal')}</button>`}
         </div>
-        <p class="hint">${tr('permit.note')}</p>`;
+        <p class="hint">${tr(p.question ? 'permit.askNote' : 'permit.note')}</p>`;
     }
   }
 
@@ -533,6 +549,23 @@ function bindPermit(a) {
     e.preventDefault();
     el.dialog.querySelector('.prow [data-a="deny"]')?.click();
   };
+  // An option is the answer. The hook has no field for one — it returns allow or
+  // deny with a message — so the words travel as the message of a deny: the tool
+  // call is refused and the agent reads what was said. The word «deny» stays
+  // inside the protocol; the card calls it «ответить».
+  for (const b of [...el.dialog.querySelectorAll('.qopt')]) {
+    b.onclick = async () => {
+      if (!p || !p.question) return;
+      const o = p.question.options[Number(b.dataset.opt)];
+      if (!o) return;
+      const label = typeof o === 'string' ? o : (o.label || '');
+      const note = typeof o === 'string' ? '' : (o.note || '');
+      for (const x of el.dialog.querySelectorAll('.qopt, .prow button')) x.disabled = true;
+      await api.answerPermit(p.id, 'deny', note ? `${label} — ${note}` : label);
+      denying = false;
+      renderDialog();
+    };
+  }
   for (const b of rows) {
     b.onclick = async () => {
       const act = b.dataset.a;
@@ -666,7 +699,7 @@ const readLink = () => el.dialog.querySelector('#readAll');
 // means — the one button in the office the keyboard could not reach. The tabs
 // are never open at the same time, so the selectors can share one list.
 const bodyRows = () => [...el.dialog.querySelectorAll(
-  '.files li, .notes [data-retry], .notes [data-send], .notes [data-edit], .notes [data-del], .prow button, #askAccess')];
+  '.files li, .notes [data-retry], .notes [data-send], .notes [data-edit], .notes [data-del], .prow button, #askAccess, .qopt')];
 
 // Стрелка вверх на оборванном ответе уводит фокус на «дочитать»: длинную реплику
 // всё равно читают целиком, и тянуться за ней мышью — лишний шаг.
