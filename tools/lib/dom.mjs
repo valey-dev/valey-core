@@ -1,3 +1,5 @@
+import { setLang } from '../../web/i18n.js';
+
 // A stand-in DOM for the stands that check panels without a browser.
 //
 // There were six copies of this little machine, and they had drifted: one node
@@ -158,5 +160,28 @@ export function installDom({ byId = {}, find = null, storage = null, location = 
   // because the entrance prints the office address, and it must print the real
   // one.
   globalThis.location = { origin: 'http://localhost:5177', host: 'localhost:5177', hash: '', search: '', ...(location || {}) };
+  standLang();
   return { stub, lookup };
+}
+
+// The stands read the office in Russian, and say so out loud.
+//
+// Since 6 September 2026 the office comes up in the language of the device, and
+// a stand has one too: Node reports `en-US`, so four stands went red the moment
+// the default changed — they compare against Russian captions, which is fair,
+// because that is the office they were written against. What is not fair is
+// letting the machine's locale decide: on a runner set to English the same
+// stands would have gone red without a single line of the office changing.
+//
+// So it is pinned here rather than in each stand: the harness is what every
+// keyboard stand already shares, and a stand that wants the other language calls
+// setLang itself, after installDom.
+//
+// The call is synchronous, and it has to be: a dynamic import would settle a
+// tick later, by which time the stand has already rendered its panel in whatever
+// language the machine happened to have. Importing i18n.js at the top of this
+// file is safe — it reads the device as it loads but writes nothing into
+// `document` until setLang is called, which is here, after the document exists.
+function standLang() {
+  setLang('ru');
 }

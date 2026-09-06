@@ -4,6 +4,58 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.17.0 — 6 September 2026
+
+### Added
+
+- **pager:** an option of a question is pressed, by mouse or by keyboard (f3ea532)
+
+### Fixed
+
+- **permit:** the canonical office is named, and every other one says it is not (4cfc8a4)
+- **pager:** the sentence under an option travels with it (358ed45)
+## v0.16.0 — 6 September 2026
+
+### Added
+
+- **stand:** «~» folds the test plaque into a small tab (8218ad1)
+## v0.15.0 — 6 September 2026
+
+### Added
+
+- **radio:** S starts and stops the music from anywhere in the office (94adc4b)
+## v0.14.3 — 6 September 2026
+
+### Fixed
+
+- **radio:** the field for a new wave gives the keys back to the office (ad54100)
+- **radio:** the focused row keeps the panel's padding under it (9b93136)
+- **radio:** three waves no longer hang out of the panel at 175% (ce4c46d)
+## v0.14.2 — 6 September 2026
+
+### Fixed
+
+- **pager:** Esc closes what is in front, and a question is shown as a question (3158fd8)
+- **pager:** the badge in the corner can be pressed, and the version stand stops crying wolf (7b84260)
+## v0.14.1 — 6 September 2026
+
+### Fixed
+
+- **keys:** typing in a field is a line on the card's board, not a place of its own (5613070)
+- **keys:** the lift takes all four arrows, not two (171fe62)
+- **keys:** two captions broke mid-word on a narrow cap (8f29f15)
+- **plan:** the floor keeps answering with the plan open, and the board says so (4ccf04c)
+- **keys:** the board lights the floor wherever the floor still answers (911bd33)
+## v0.14.0 — 6 September 2026
+
+### Added
+
+- **lang:** the office comes up in the language of the device, not in Russian (de46eb2)
+
+### Fixed
+
+- **names:** «Костя» in the Russian pack was typed on the wrong layout (902d0b4)
+- **title:** the entrance menu is laid out after the canvas, not before it (d150a16)
 ## v0.13.0 — 6 September 2026
 
 ### Added

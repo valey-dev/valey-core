@@ -176,6 +176,21 @@ async function saveSettings(patch) {
   return r;
 }
 
+// A fresh office has no language yet — settings say 'auto', every tab resolves it
+// from its own device, and the server, which has no device, would keep handing out
+// Russian names to an English office. So the first page to arrive writes down what
+// it resolved, and the office has one language from then on, switchable by the
+// figure in the corridor like any other.
+//
+// A guest cannot write the settings and does not try: the office is not theirs to
+// name, and their own tab is already in their own language either way. Failures
+// are ignored for the same reason — this is a default being recorded, not work
+// somebody is waiting on.
+function pinLang(settings) {
+  if (!settings || settings.lang === lang() || !state.owner) return;
+  saveSettings({ lang: lang() }).catch(() => {});
+}
+
 // One entrance for both sources: the event and the snapshot. The counter of deferred
 // ones lives in the state, because it is drawn by the header rather than by the pager.
 function takePermits(list) {
@@ -191,6 +206,12 @@ initPager(state, {
 });
 
 UI.initUI(state, {
+  // The badge in the corner presses the same thing H does. It lives here rather
+  // than in the pager's callbacks because it is the HUD that calls it, and the two
+  // objects are different `api`.
+  recallPager: () => { if (recall()) { state.pagerWaiting = waitingCount(); UI.renderHud(); } },
+  // The waiting counter opens the round: those agents are exactly what it lists.
+  openRound: () => toggle('roster', UI.renderRoster, UI.closeRoster),
   close: closeAll,
   saveMe: () => {
     localStorage.setItem('valey-me', JSON.stringify(state.me));
@@ -201,6 +222,19 @@ UI.initUI(state, {
     body: JSON.stringify({ agentId, text, deliver, mode, resend }),
   }).then((r) => r.json()).catch((e) => ({ error: e.message })),
   guideTo: (id) => { state.waypoint = id; UI.toast(tr('toast.guide')); },
+  // The standup opens a card without walking to the desk: the panel is
+  // "walked up to everyone at once", and sending someone on foot after it
+  // answers "go and look" to the question it has just closed. Everything else
+  // is as it is after SPACE at a desk, down to the visited mark and the guide
+  // arrow being taken off.
+  openAgent: (id) => {
+    const a = state.agents.find((x) => x.id === id);
+    if (!a) return;
+    state.focus = a; state.page = 'talk'; state.typed = 0; state.dialogOpen = true;
+    state.visited.add(a.id);
+    if (state.waypoint === a.id) state.waypoint = null;
+    UI.renderDialog();
+  },
   // The bag does not repeat the language, colour and sound panels — it leads to them.
   lang: () => switchLang(),
   setLang: (code) => switchLang(code),
@@ -290,7 +324,7 @@ const admission = knock().then((entered) => {
 });
 
 fetch('/api/settings', { headers: owned() }).then((r) => r.json()).then((r) => {
-  if (r.settings) { state.settings = r.settings; setLang(r.settings.lang); paintSign(); }
+  if (r.settings) { state.settings = r.settings; setLang(r.settings.lang); pinLang(r.settings); paintSign(); }
   if (r.packs) state.packs = r.packs;
   if (r.weather) applyWeather(r.weather);
   UI.renderHud();
@@ -601,6 +635,10 @@ const onSnapshot = (e) => {
     if (wornCode !== dressCode()) dressAll();
     // the language could have been switched by somebody in a neighbouring tab — we catch up
     setLang(data.settings.lang);
+    // And here too, not only on the boot fetch: that one races with whoami, so on a
+    // fresh office the page can learn the settings before it knows it is the owner,
+    // and the language would stay unresolved until the next reload.
+    pinLang(data.settings);
     paintSign();
     if (changed && !document.getElementById('sky').hidden) UI.renderSky();
   }
@@ -653,7 +691,10 @@ function onKey(e) {
   // The lift panel and the reception desk are the same: while they are open the arrows
   // walk the floors rather than the office.
   if (UI.liftKey(e.key)) { e.preventDefault(); return; }
-  if (UI.rosterKey(e.key)) { e.preventDefault(); return; }
+  // The standup is handed the whole event: its "lead me" is caught by the
+  // physical key code, not by a letter that is a different letter under
+  // another layout.
+  if (UI.rosterKey(e)) { e.preventDefault(); return; }
   // The action first, the raw key second: a module that declared its keys through
   // api.keys() answers an id rather than a letter. The old seam stays alive — the
   // modules nobody rewrote are held up by it.
@@ -681,7 +722,11 @@ function onKey(e) {
   // The pager holds its two keys while there is no card: Enter answers, Esc defers. An
   // open card takes them for itself — it is on top, and it already has both "allow" and
   // "close".
-  if (!state.dialogOpen && pagerKey(e.key)) { e.preventDefault(); return; }
+  // Esc closes the thing in front of you and nothing else. The pager sits in the
+  // corner under every panel, and until 6 September 2026 it took Esc and Enter
+  // whenever it was open: closing a panel deferred a request nobody meant to
+  // defer, and the badge in the corner was the only trace of it.
+  if (!aboveThePager() && pagerKey(e.key)) { e.preventDefault(); return; }
 
   // Esc on "deny with a note" is a step back to the buttons rather than closing the card:
   // the person pressed deny and has not sent anything yet.
@@ -723,7 +768,7 @@ function onKey(e) {
   if (act === 'zoom.out') { e.preventDefault(); return stepZoom(-1); }
   if (act === 'zoom.reset') { e.preventDefault(); return setZoom(0); }
 
-  if (act === 'panel.round') return toggle('roster', UI.renderRoster, UI.closeRoster);
+  if (act === 'panel.standup') return toggle('roster', UI.renderRoster, UI.closeRoster);
   // N from outside shows all the notes; inside a conversation the same key writes them
   if (act === 'panel.notes') return toggle('notes', UI.renderNotes, UI.closeNotes);
   // C opens the bag on "worn" — where this key has always led.
@@ -1313,6 +1358,17 @@ function tickLift(now) {
   if (st.andOpen) { st.andOpen = false; openLiftPanel(); }
 }
 
+// What stands in front of the pager. Deliberately the same list closeAll() walks
+// rather than panelsOpen(): panelsOpen answers «can the person walk», and it does
+// not know about the notes or the wardrobe, so the pager would still have stolen
+// Esc from those two. One question, one list.
+const ABOVE_PAGER = ['viewer', 'roster', 'bag', 'sky', 'skin', 'notes', 'lift', 'invite', 'lang'];
+function aboveThePager() {
+  if (titleOpen() || state.dialogOpen || state.cctv.on || state.lift.phase !== 'idle') return true;
+  if (keysOpen() || collect('busy').some(Boolean)) return true;
+  return ABOVE_PAGER.some((id) => { const n = document.getElementById(id); return n && !n.hidden; });
+}
+
 function closeAll() {
   if (state.lift.phase !== 'idle') return;
   if (!document.getElementById('lift').hidden) return UI.closeLift();
@@ -1370,13 +1426,13 @@ function currentPlace() {
   // The viewer is two places. A wall of thumbnails is walked like any panel; one
   // open file has its own keys, and ESC out of it goes back to the wall.
   const viewer = UI.viewerOpen();
-  if (viewer) return viewer === 'single' ? 'viewer' : 'panel';
+  if (viewer) return { single: 'viewer', transcript: 'transcript', gallery: 'gallery' }[viewer];
   if (UI.liftOpen() || state.lift.phase !== 'idle') return 'lift';
-  if (UI.rosterOpen()) return 'round';
+  if (UI.rosterOpen()) return 'standup';
   // One panel, two places: on «поговорить» the cursor is in the field, so the
   // letters type instead of opening anything. That is the state this whole
   // feature was asked for.
-  if (state.dialogOpen) return UI.cardPage() === 'talk' ? 'talk' : 'card';
+  if (state.dialogOpen) return 'card';
   // A module that owns the screen names its own place; the core does not know
   // module ids and must not learn them.
   const mine = first('place');
@@ -2035,6 +2091,13 @@ initTitle(state, {
   setName(name) { state.me.name = name; localStorage.setItem('valey-me', JSON.stringify(state.me)); },
 });
 document.body.classList.add('titling');
+// The canvas gets its size before the menu goes looking for its place. #title is
+// positioned from the canvas box, so a menu laid out before the first fit() stands
+// on a canvas that is still the wrong size and jumps as soon as fit() runs — the
+// flash everyone sees on the way in. The HUD is drawn first for the same reason:
+// fit() measures it to decide how much room the office gets.
+UI.renderHud();
+refit();
 renderTitle();
 
 // The modules come up before the first frame: their things have to get into the plan at
@@ -2062,6 +2125,4 @@ await initStand();
 // We catch up once; the point has to be idempotent.
 if (state.layout) collect('layout', state.layout, state);
 
-refit();
-UI.renderHud();
 rafId = requestAnimationFrame(loop);

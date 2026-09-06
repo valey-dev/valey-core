@@ -66,7 +66,18 @@ globalThis.location = { origin: 'http://localhost:5177', host: 'localhost:5177',
 globalThis.document = {
   querySelector: (s) => (s === '#title' ? overlay : null),
   getElementById: (id) => (id === 'game' ? canvas : null),
+  // The page carries its language and its tab title, and setLang writes both.
+  // Until 6 September 2026 it wrote them only when the language changed, so a
+  // stand already in Russian never reached this line and could do without the
+  // two fields.
+  documentElement: {}, title: '',
 };
+
+// The stand reads the office in Russian, and says so out loud: since 6 September
+// 2026 the office comes up in the language of the device, and Node's is `en-US`.
+// The checks below compare against Russian captions, and which language they get
+// must not depend on the machine they run on.
+(await import('../web/i18n.js')).setLang('ru');
 
 const { initTitle, renderTitle, titleKey, titleOpen, closeTitle, tickTitle } = await import('../web/title.js');
 

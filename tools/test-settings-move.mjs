@@ -91,7 +91,10 @@ const SAMPLE = { lang: 'en', names: { 's1': 'Петя', 's2': 'Лиза' }, secr
   const r = await mod.migrateSettings();
   ok('без старого файла переезд молчит', r.done === false && r.reason === 'nothing-to-move', r);
   const s = await mod.getSettings();
-  ok('и настройки берутся по умолчанию', s.lang === 'ru' && Object.keys(s.names).length === 0, s.lang);
+  // 'auto' is the language of an office nobody has opened yet: since 6 September
+  // 2026 the first page resolves it from the device and writes the answer back.
+  // A concrete language here would mean the defaults had been chosen for the user.
+  ok('и настройки берутся по умолчанию', s.lang === 'auto' && Object.keys(s.names).length === 0, s.lang);
 }
 
 // ------------------------------------------------------- a broken old file
@@ -104,7 +107,7 @@ const SAMPLE = { lang: 'en', names: { 's1': 'Петя', 's2': 'Лиза' }, secr
   const made = await fsp.readFile(path.join(dir, 'settings.json'), 'utf8').catch(() => null);
   ok('и мусор на новом месте не создаётся', made === null);
   const s = await mod.getSettings();
-  ok('офис при этом поднимается на умолчаниях', s.lang === 'ru');
+  ok('офис при этом поднимается на умолчаниях', s.lang === 'auto', s.lang);
 }
 
 // put the tree back exactly as the test found it

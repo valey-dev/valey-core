@@ -13,9 +13,52 @@
 // drift apart between the languages.
 
 const listeners = new Set();
-let LANG = 'ru';
 
 export const LANGS = ['ru', 'en'];
+
+// Which language a device is asking for. Until 6 September 2026 the office
+// simply started in Russian and waited to be switched: written by a Russian
+// speaker for himself, it read as a bug to everybody else, and it is the first
+// thing a stranger sees. The repository is going public, so the default cannot
+// stay a private habit.
+//
+// Russian only when the device asks for Russian; English for everything else,
+// including a device asking for a third language the office does not speak. The
+// tag is matched on its primary subtag — `ru-RU`, `ru-KZ` and plain `ru` are one
+// language here, and a region the office does not distinguish must not decide
+// the answer.
+export function pickLang(tags) {
+  for (const tag of tags || []) {
+    const base = String(tag).toLowerCase().split('-')[0];
+    if (LANGS.includes(base)) return base;
+  }
+  return 'en';
+}
+
+// `languages` is the ordered list the person actually set; `language` is one
+// value and is the fallback for a browser without the list. Node has a
+// `navigator` too but not always a locale, hence the guard: the dictionary is
+// imported by the stands, where there is no browser at all.
+export function deviceLang() {
+  if (typeof navigator === 'undefined') return 'en';
+  const list = navigator.languages && navigator.languages.length
+    ? navigator.languages : [navigator.language];
+  return pickLang(list);
+}
+
+// The device is asked only where there is a device. Node 22 has a `navigator` of
+// its own and answers `language` with the locale of the machine, so on
+// 6 September 2026 every stand that compares strings started reading them in
+// English on an en-US laptop: modules/bible/test-keys.mjs failed ten checks two
+// days after anybody had touched that module, and the module was fine. A default
+// that depends on whose computer runs the check is not a default.
+//
+// Node introduces itself in its user agent, and that is the honest way to tell a
+// browser from a stand — better than looking for `document`, which the stands
+// install themselves.
+const inBrowser = typeof navigator !== 'undefined'
+  && !/^Node\.js/.test(String(navigator.userAgent || ''));
+let LANG = inBrowser ? deviceLang() : 'ru';
 
 const DICT = {
   ru: {
@@ -24,7 +67,7 @@ const DICT = {
 
     // --------------------------------------------------------------- the header
     'hud.corridor': 'коридор',
-    'hud.round': 'Tab — обход',
+    'hud.round': 'Tab — планёрка',
     'hud.zoomAuto': ' авто',
     'hud.zoomTight': ' тесно',
     'hud.skyTitle': 'погода {source} · P — настроить',
@@ -114,6 +157,10 @@ const DICT = {
     // ------------------------------------------------------- a permission request
     // The pager calls, the card asks. The words differ: on the pager «Ответить»
     // is about the call, in the card «Разрешить» is about the command.
+    'permit.askQ': '— Спрашивает тебя:',
+    'permit.noAnswer': 'не отвечу',
+    'permit.askNote': 'Нажатый вариант и есть ответ: он уходит агенту, и тот идёт дальше с ним. «В терминале» отдаёт вопрос обратно, если отвечать хочется там.',
+    'pager.asks': 'спрашивает:',
     'pager.someone': 'агент',
     'pager.may': 'можно выполнить?',
     'pager.answer': 'Ответить',
@@ -122,6 +169,8 @@ const DICT = {
     'pager.more': 'ещё {n}',
     'pager.sec': '{n} с',
     'pager.min': '{n} мин',
+    'hud.workTitle': 'агенты за работой',
+    'hud.waitTitle': 'ждут твоего ответа · нажми или TAB — обход',
     'hud.pagerTitle': 'отложенные запросы · H — вернуть пейджер',
     'permit.q': '— Можно выполнить?',
     'permit.noDesc': 'без пояснения',
@@ -337,7 +386,7 @@ const DICT = {
     'rec.agents': '{n} {word}',
     'rec.agent.one': 'агент', 'rec.agent.few': 'агента', 'rec.agent.many': 'агентов',
     'rec.lead': 'проводить',
-    'rec.hint': 'Провожу к любому — он подсветится стрелкой, как в утреннем обходе.',
+    'rec.hint': 'Провожу к любому — он подсветится стрелкой, как в планёрке.',
     'skin.title': 'Цвет офиса',
     'skin.hue': 'тон', 'skin.sat': 'насыщенность', 'skin.accent': 'акцент',
     'skin.textSize': 'размер текста',
@@ -428,10 +477,17 @@ const DICT = {
     'dlg.readOnArrow': '↑ дочитать — здесь оборвано, дальше ещё {n} символов →',
 
     // -------------------------------------------- the round, the look, the weather
-    'round.title': 'Утренний обход · {done} из {n}',
-    'round.untitled': '(без названия)',
-    'round.lead': 'вести',
-    'round.nobody': 'Никто не ждёт. Редкий день.',
+    'standup.title': 'ПЛАНЁРКА',
+    'standup.people': 'one:{n} человек|few:{n} человека|many:{n} человек',
+    'standup.teams': 'one:{n} команда|few:{n} команды|many:{n} команд',
+    'standup.waiting': 'one:{n} ждёт тебя|few:{n} ждут тебя|many:{n} ждут тебя',
+    'standup.nobodyWaits': 'никто не ждёт',
+    'standup.untitled': '(без названия)',
+    'standup.noReport': 'без отчёта',
+    'standup.lead': 'вести',
+    'standup.nobody': 'Ни одной живой сессии.',
+    'standup.nobodyWhy': 'Планёрка показывает то, что открыто прямо сейчас, — запусти агента, и он встанет в колонку своего проекта. Задача в карточке берётся из его же отчёта: пока агент не назвал её тремя строками, доска покажет имя чата и чем он занят, но не задачу.',
+    'standup.keys': '↑ ↓ ← → карточка · ENTER — открыть · G — вести · ESC',
     'bag.title': 'Инвентарь',
     'bag.tab.self': 'на себе', 'bag.tab.things': 'вещи',
     'bag.tabHint': 'цифры — вкладки · C и I — открыть',
@@ -647,7 +703,7 @@ const DICT = {
     'hint.interact': 'действие',
     'hint.interactMore': 'поговорить, попить, нажать выбранное; на доске без соседей — прыжок',
     'hint.skate': 'скейт',
-    'hint.sound': 'звук', 'hint.round': 'обход', 'hint.notes': 'заметки',
+    'hint.sound': 'звук', 'hint.standup': 'планёрка', 'hint.notes': 'заметки',
     'hint.bag': 'одежда',
     'hint.invite': 'гости', 'hint.inviteMore': 'пригласить',
     'hint.sky': 'окно в мир', 'hint.skin': 'цвет офиса',
@@ -659,15 +715,18 @@ const DICT = {
     'place.floor': 'на этаже',
     'place.cooler': 'у кулера', 'place.cooler.space': 'попить',
     'place.card': 'в карточке агента', 'place.card.note': 'записка',
-    'place.talk': 'разговор с агентом', 'place.talk.send': 'отправить',
-    'place.talk.shift': 'с ENTER — строка', 'place.talk.reply': 'к ответу',
-    'place.round': 'обход — кто где', 'place.round.go': 'вести', 'place.round.row': 'строка',
+    'place.standup': 'планёрка — кто над чем', 'place.standup.open': 'открыть',
+    'place.standup.go': 'вести', 'place.standup.card': 'карточка', 'place.standup.team': 'команда',
     'place.viewer': 'просмотрщик файла', 'place.viewer.back': 'в галерею',
-    'place.viewer.reread': 'перечитать', 'place.viewer.loupe': 'лупа',
+    'place.viewer.reread': 'обновить', 'place.viewer.loupe': 'лупа',
     'place.viewer.buttons': 'кнопки', 'place.viewer.file': 'файл',
     'place.cctv': 'пультовая · камеры', 'place.cctv.away': 'отойти',
     'place.cctv.auto': 'автообход', 'place.cctv.cam': 'камера',
     'place.lift': 'лифт', 'place.lift.go': 'ехать', 'place.lift.floor': 'этаж',
+    'place.transcript': 'разговор целиком', 'place.transcript.scroll': 'листать',
+    'place.transcript.page': 'страница', 'place.transcript.top': 'в начало',
+    'place.transcript.end': 'в конец', 'place.copy': 'копия',
+    'place.gallery': 'доска работ', 'place.gallery.open': 'открыть', 'place.gallery.pick': 'выбрать',
     'place.panel': 'в панели', 'place.item': 'пункт',
     'place.close': 'закрыть', 'place.press': 'нажать', 'place.focus': 'фокус',
     'keys.lgOff': 'не отсюда', 'keys.onlyHere': 'горит то, что работает здесь',
@@ -691,7 +750,7 @@ const DICT = {
     'lang.other': 'русский',
 
     'hud.corridor': 'corridor',
-    'hud.round': 'Tab — round',
+    'hud.round': 'Tab — the standup',
     'hud.zoomAuto': ' auto',
     'hud.zoomTight': ' tight',
     'hud.skyTitle': 'weather {source} · P to set up',
@@ -772,6 +831,10 @@ const DICT = {
     'toast.namePack': 'Names: {pack}. All {n} renamed — {from} is now {to}.',
     'toast.namePackPlain': 'Names: {pack}.',
     // ------------------------------------------------------ permission request
+    'permit.askQ': '— Asks you:',
+    'permit.noAnswer': 'no answer',
+    'permit.askNote': 'The option you press is the answer: it goes to the agent and it carries on with it. «In the terminal» hands the question back, if you would rather answer there.',
+    'pager.asks': 'asks:',
     'pager.someone': 'an agent',
     'pager.may': 'may I run?',
     'pager.answer': 'Answer',
@@ -780,6 +843,8 @@ const DICT = {
     'pager.more': '{n} more',
     'pager.sec': '{n}s',
     'pager.min': '{n} min',
+    'hud.workTitle': 'agents at work',
+    'hud.waitTitle': 'waiting for your answer \u00b7 press it, or TAB for the round',
     'hud.pagerTitle': 'deferred requests \u00b7 H brings the pager back',
     'permit.q': '\u2014 May I run this?',
     'permit.noDesc': 'no description given',
@@ -993,7 +1058,7 @@ const DICT = {
     'rec.agents': '{n} {word}',
     'rec.agent.one': 'agent', 'rec.agent.few': 'agents', 'rec.agent.many': 'agents',
     'rec.lead': 'take me',
-    'rec.hint': 'I will take you to any of them — they light up with an arrow, as in the morning round.',
+    'rec.hint': 'I will take you to any of them — they light up with an arrow, as in the standup.',
     'skin.title': 'Office colour',
     'skin.hue': 'hue', 'skin.sat': 'saturation', 'skin.accent': 'accent',
     'skin.textSize': 'text size',
@@ -1079,10 +1144,17 @@ const DICT = {
     'dlg.readOnArrow': '↑ read on — cut off here, {n} characters more →',
 
     // ------------------------------------------ the round, your look, weather
-    'round.title': 'Morning round · {done} of {n}',
-    'round.untitled': '(untitled)',
-    'round.lead': 'lead me',
-    'round.nobody': 'Nobody is waiting. A rare day.',
+    'standup.title': 'THE STANDUP',
+    'standup.people': 'one:{n} person|other:{n} people',
+    'standup.teams': 'one:{n} team|other:{n} teams',
+    'standup.waiting': 'one:{n} waiting for you|other:{n} waiting for you',
+    'standup.nobodyWaits': 'nobody is waiting',
+    'standup.untitled': '(untitled)',
+    'standup.noReport': 'no report',
+    'standup.lead': 'lead me',
+    'standup.nobody': 'Not a single live session.',
+    'standup.nobodyWhy': 'The standup shows what is open right now — start an agent and he takes his place in his project column. The task on a card comes from his own report: until he names it in three lines, the board shows the chat name and what he is doing, but not the task.',
+    'standup.keys': '↑ ↓ ← → card · ENTER opens · G leads you there · ESC',
     'bag.title': 'Inventory',
     'bag.tab.self': 'on you', 'bag.tab.things': 'things',
     'bag.tabHint': 'digits — tabs · C and I — open',
@@ -1288,7 +1360,7 @@ const DICT = {
     'hint.interact': 'action',
     'hint.interactMore': 'talk, drink, press what is chosen; on the board with nobody near — an ollie',
     'hint.skate': 'skateboard',
-    'hint.sound': 'sound', 'hint.round': 'the round', 'hint.notes': 'notes',
+    'hint.sound': 'sound', 'hint.standup': 'the standup', 'hint.notes': 'notes',
     'hint.bag': 'clothes',
     'hint.invite': 'guests', 'hint.inviteMore': 'invite them in',
     'hint.sky': 'window on the world', 'hint.skin': 'office colour',
@@ -1298,15 +1370,18 @@ const DICT = {
     'place.floor': 'on the floor',
     'place.cooler': 'at the cooler', 'place.cooler.space': 'drink',
     'place.card': 'in the agent card', 'place.card.note': 'a note',
-    'place.talk': 'talking to an agent', 'place.talk.send': 'send',
-    'place.talk.shift': 'with ENTER — a new line', 'place.talk.reply': 'to the reply',
-    'place.round': 'the round — who is where', 'place.round.go': 'lead me there', 'place.round.row': 'row',
+    'place.standup': 'the standup — who is on what', 'place.standup.open': 'open',
+    'place.standup.go': 'lead me there', 'place.standup.card': 'card', 'place.standup.team': 'team',
     'place.viewer': 'the file viewer', 'place.viewer.back': 'back to the gallery',
-    'place.viewer.reread': 'reread', 'place.viewer.loupe': 'loupe',
+    'place.viewer.reread': 'refresh', 'place.viewer.loupe': 'loupe',
     'place.viewer.buttons': 'buttons', 'place.viewer.file': 'file',
     'place.cctv': 'the control room · cameras', 'place.cctv.away': 'step away',
     'place.cctv.auto': 'cycling', 'place.cctv.cam': 'camera',
     'place.lift': 'the lift', 'place.lift.go': 'go', 'place.lift.floor': 'floor',
+    'place.transcript': 'the whole conversation', 'place.transcript.scroll': 'scroll',
+    'place.transcript.page': 'a page', 'place.transcript.top': 'to the top',
+    'place.transcript.end': 'to the end', 'place.copy': 'a copy',
+    'place.gallery': 'the board of works', 'place.gallery.open': 'open', 'place.gallery.pick': 'pick',
     'place.panel': 'in a panel', 'place.item': 'item',
     'place.close': 'close', 'place.press': 'press', 'place.focus': 'focus',
     'keys.lgOff': 'not from here', 'keys.onlyHere': 'lit: what works here',
@@ -1357,12 +1432,21 @@ export function t(key, vars) {
   return s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? String(vars[k]) : m));
 }
 
+// 'auto' — nobody has chosen yet, so the device decides. Anything unknown lands
+// there too: a settings file edited by hand should give the office a language it
+// can read rather than a key nobody switched.
+//
+// The page attributes are set even when the language did not change, because the
+// document starts out language-neutral: index.html carries no Russian title to
+// be corrected, and something has to write the first one. The listeners are what
+// the return value is about, and they still only fire on a real change.
 export function setLang(l) {
-  const next = LANGS.includes(l) ? l : 'ru';
-  if (next === LANG) return false;
+  const next = LANGS.includes(l) ? l : deviceLang();
+  const changed = next !== LANG;
   LANG = next;
   document.documentElement.lang = LANG;
   document.title = t('doc.title');
+  if (!changed) return false;
   for (const fn of listeners) { try { fn(LANG); } catch { /* one listener does not bring the others down */ } }
   return true;
 }

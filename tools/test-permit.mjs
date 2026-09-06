@@ -221,6 +221,45 @@ try {
   console.log('УПАЛ  | исключение →', e.message);
 }
 
+// ---- a question is a question, not a wall of braces --------------------------
+// Claude Code asks the person through the same channel it asks for permission,
+// and the input of such a request has no command in it. Until 6 September 2026
+// commandOf fell through to JSON.stringify, so the pager showed a line of braces
+// and the owner could see that something was being asked and not what.
+{
+  const P2 = await import('../server/permit.js');
+  // Asked before anything is called: a missing export should read as a failed
+  // check, not as a stack trace on line 231.
+  const has = typeof P2.questionOf === 'function';
+  ok('офис умеет читать вопрос', has, typeof P2.questionOf);
+  const nested = has && P2.questionOf({ questions: [{ header: 'Где хаб', question: 'Где живёт хаб?',
+    options: [{ label: 'у нас', description: 'хаб у нас, платит владелец' },
+      { label: 'у покупателя', description: 'ставит сам, мы не платим' }] }] });
+  ok('вопрос читается из списка', nested && nested.text === 'Где живёт хаб?', nested);
+  ok('и варианты приезжают с ним',
+    nested && nested.options.map((o) => o.label).join('|') === 'у нас|у покупателя', nested && nested.options);
+  // The sentence under an option is what the choice is made on; a label alone
+  // says «после демо» and nothing about what that costs.
+  ok('и комментарий под вариантом не теряется',
+    nested && nested.options[0].note === 'хаб у нас, платит владелец', nested && nested.options[0]);
+  const flat = has && P2.questionOf({ question: 'Так тоже спрашивают?', options: ['да', 'нет'] });
+  ok('одиночный вопрос читается так же', flat && flat.text === 'Так тоже спрашивают?', flat);
+  ok('строки в вариантах не теряются', flat && flat.options.length === 2, flat && flat.options);
+  ok('вариант строкой остаётся вариантом, просто без комментария',
+    flat && flat.options[0].label === 'да' && flat.options[0].note === '', flat && flat.options[0]);
+  ok('команда — не вопрос', has && P2.questionOf({ command: 'ls' }) === null, has && P2.questionOf({ command: 'ls' }));
+
+  const asked = P2.ask({ session_id: 'sess-q', tool_name: 'AskUserQuestion',
+    tool_input: { questions: [{ question: 'Мержим?', options: [{ label: 'да' }, { label: 'позже' }] }] } },
+    { audience: true });
+  const shown = P2.permits().find((x) => x.tool === 'AskUserQuestion');
+  ok('в заявке стоит текст вопроса, а не JSON', shown && shown.command === 'Мержим?', shown && shown.command);
+  ok('и фигурных скобок в ней нет', shown && !/[{}]/.test(shown.command), shown && shown.command);
+  ok('варианты доезжают до офиса', shown && shown.question && shown.question.options.length === 2, shown && shown.question);
+  P2.answer(shown.id, { decision: 'allow' });
+  await asked.verdict;
+}
+
 await stop();
 console.log(bad ? `\n${bad} ПРОВАЛ(ов)` : '\nвсё зелено');
 process.exit(bad ? 1 : 0);

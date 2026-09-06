@@ -44,6 +44,7 @@ const DICT = {
   ru: {
     // The caption on its cap in the keys panel: a module's key is the module's business
     'radio.hint': 'радио',
+    'radio.playKey': 'пуск/пауза',
     'hud.radioTitle': 'радио — R',
     'hint.radioOn': '[ ПРОБЕЛ ] радио играет',
     'hint.radio': '[ ПРОБЕЛ ] включить радио',
@@ -118,6 +119,7 @@ const DICT = {
   },
   en: {
     'radio.hint': 'radio',
+    'radio.playKey': 'play/pause',
     'hud.radioTitle': 'radio — R',
     'hint.radioOn': '[ SPACE ] radio is playing',
     'hint.radio': '[ SPACE ] switch the radio on',
@@ -219,8 +221,35 @@ function openRadio() {
 // should be.
 // numbers: '.rst' — a digit chooses a wave rather than a knob. It arrived from main
 // together with the shared support for digits in the focus ring.
-const radioRing = focusRing(() => el.radio, '.radioknobs button, .rst, .rdel, #radiovol, #radiouri, .radioauth button', { numbers: '.rst' });
+const RING = '.radioknobs button, .rst, .rdel, #radiovol, #radiouri, .radioauth button';
+const radioRing = focusRing(() => el.radio, RING, { numbers: '.rst' });
+
+// Put the ring on a given wave, by its number in the list. Used after a wave is
+// added: the one just caught is the one now playing, and it is what the hand
+// should be on.
+function ringToWave(n) {
+  if (!el.radio) return;
+  const all = [...el.radio.querySelectorAll(RING)];
+  const wave = all.filter((b) => b.classList.contains('rst'))[n];
+  const at = wave ? all.indexOf(wave) : -1;
+  if (at >= 0) radioRing.at(at);
+}
 function closeRadio() { if (el.radio) el.radio.classList.remove('open'); radioRing.reset(); }
+
+// Start or stop the music, with the panel open or closed. The player lives inside the
+// panel's frame, so with the receiver never opened this session there is nothing to
+// toggle: then the first press builds the panel without showing it and wakes the player,
+// and says so — the second press plays. The word is needed because with the panel closed
+// the only other sign of life is the note in the corner of the HUD.
+function playPause() {
+  if (!radio.sdk && !radio.controller) {
+    buildRadio();
+    radio.attach($('#radioslot'));
+    toast(tr('radio.waking'));
+    return;
+  }
+  if (!radio.toggle()) toast(tr('radio.waking'));
+}
 function radioKey(raw) { return radioRing.key(raw, radioOpen()); }
 
 // The panel is repainted on every event of the player, and the list of waves is rebuilt
@@ -268,16 +297,27 @@ function buildRadio() {
     </div></div>`;
 
   $('#radiox').onclick = closeRadio;
-  $('#radiotoggle').onclick = () => { if (!radio.toggle()) toast(tr('radio.waking')); };
+  $('#radiotoggle').onclick = () => playPause();
   $('#radioprev').onclick = () => radio.tune(radio.current - 1);
   $('#radionext').onclick = () => radio.tune(radio.current + 1);
   $('#radiovol').oninput = (e) => player.setVolume(Number(e.target.value) / 100);
+  // The field holds the real focus of the browser while it is being typed into, and
+  // web/main.js hands nothing from an INPUT to the office: neither the arrows nor
+  // Escape. So the field has to let go itself, or the panel becomes a room without a
+  // door — reported 6 September 2026: after Enter the arrows moved the caret, Escape
+  // did nothing, and the only way out was the mouse.
+  //
+  // Enter lets go and puts the ring on the wave just caught; Escape lets go and leaves
+  // the ring where it stood, so the next Escape closes the panel, as it does everywhere.
   $('#radiouri').onkeydown = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.target.blur(); radioRing.paint(); return; }
     if (e.key !== 'Enter') return;
     const uri = toUri(e.target.value);
     if (!uri) return toast(tr('radio.notSpotify'));
     radio.add(e.target.value.trim().slice(0, 40).replace(/^https?:\/\/[^/]+\//, '') || tr('radio.ownWave'), uri);
     e.target.value = '';
+    e.target.blur();
+    ringToWave(radio.current);
     toast(tr('radio.caught'));
   };
   radio.onChange = paintRadio;
@@ -595,9 +635,23 @@ export function register(a) {
   // The key is declared in the shared registry: `KeyR` is physical, so the Russian «К» is
   // the same key with no second branch. While the panel is open the arrows are its — and
   // that stays on the raw key, as in every panel.
-  api.keys([{ id: 'toggle', codes: ['KeyR'], group: 'panel', hint: 'radio.hint' }]);
+  // R opens the receiver; S starts and stops what it is playing, wherever you are.
+  // Two separate keys because they are two separate wishes: the panel is for choosing a
+  // wave, and «stop the music» is asked for with the panel closed — from the corridor,
+  // from an open transcript, from anywhere. Until 6 September 2026 the only answer to it
+  // was M, which mutes the whole office, so a person who wanted the music off also lost
+  // the doors, the footsteps and the kettle.
+  //
+  // S is free under both layouts, sits under the left hand while the right one is on the
+  // arrows, and reads as start/stop in both languages. It is `act` rather than `panel`:
+  // it does something in the world instead of opening a window.
+  api.keys([
+    { id: 'toggle', codes: ['KeyR'], group: 'panel', hint: 'radio.hint' },
+    { id: 'play', codes: ['KeyS'], group: 'act', hint: 'radio.playKey' },
+  ]);
   api.on('key', (raw) => radioKey(raw));
   api.on('action', (id) => {
+    if (id === 'radio.play') { playPause(); return true; }
     if (id !== 'radio.toggle') return false;
     radioOpen() ? closeRadio() : openRadio();
     return true;
