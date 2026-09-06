@@ -103,6 +103,8 @@ const PLACES = [
       Enter: 'place.press', Space: 'place.press',
       ArrowUp: 'place.viewer.buttons', ArrowDown: 'place.viewer.buttons',
       ArrowLeft: 'place.viewer.file', ArrowRight: 'place.viewer.file',
+      PageUp: 'place.viewer.page', PageDown: 'place.viewer.page',
+      Home: 'place.viewer.top', End: 'place.viewer.end',
     },
   },
   {
