@@ -2035,6 +2035,13 @@ initTitle(state, {
   setName(name) { state.me.name = name; localStorage.setItem('valey-me', JSON.stringify(state.me)); },
 });
 document.body.classList.add('titling');
+// The canvas gets its size before the menu goes looking for its place. #title is
+// positioned from the canvas box, so a menu laid out before the first fit() stands
+// on a canvas that is still the wrong size and jumps as soon as fit() runs — the
+// flash everyone sees on the way in. The HUD is drawn first for the same reason:
+// fit() measures it to decide how much room the office gets.
+UI.renderHud();
+refit();
 renderTitle();
 
 // The modules come up before the first frame: their things have to get into the plan at
@@ -2062,6 +2069,4 @@ await initStand();
 // We catch up once; the point has to be idempotent.
 if (state.layout) collect('layout', state.layout, state);
 
-refit();
-UI.renderHud();
 rafId = requestAnimationFrame(loop);
