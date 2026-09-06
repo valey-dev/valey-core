@@ -80,7 +80,7 @@ S.page = 'task'; UI.renderDialog();
 ok('карточка, «дать задание»: записка, ответ, ошибка, подсказка — текст', clean(panels.dialog.innerHTML), panels.dialog.innerHTML);
 
 UI.renderRoster();
-ok('обход: комната и имя — текст', clean(panels.roster.innerHTML), panels.roster.innerHTML);
+ok('планёрка: команда, имя и задача — текст', clean(panels.roster.innerHTML), panels.roster.innerHTML);
 
 UI.renderSky([{ lat: 1, lon: 2, label: EVIL, detail: EVIL }]);
 ok('окно в мир: место и результаты геокодера — текст', clean(panels.sky.innerHTML), panels.sky.innerHTML);

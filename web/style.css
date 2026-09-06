@@ -343,14 +343,56 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .rwrap{width:min(680px, calc(92vw / var(--ui, 1))); max-height:84vh; display:flex; flex-direction:column;
   background:var(--wood-dark); border:3px solid var(--frame); box-shadow:0 0 0 3px var(--bg-deep)}
 .rbody{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:10px 14px}
-.rgroup h4{margin:10px 0 4px; color:var(--lilac); font-size:12px; letter-spacing:.08em; font-weight:normal}
-.rrow{display:flex; align-items:center; gap:10px; padding:4px 6px; border-bottom:1px solid var(--wood-hi)}
-.rrow.done{opacity:.45}
-.rname{color:var(--warn); width:120px; flex:none; font-size:12px}
-.rwhat{flex:1; color:var(--muted); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.go{background:var(--wood); color:var(--ink); border:2px solid var(--frame); font:11px "JetBrains Mono", "Courier New",monospace;
-  padding:2px 8px; cursor:pointer}
-.go:hover{background:var(--wood-lit); color:var(--warn)}
+/* ---- планёрка: колонки по командам, карточка на человека ----
+   Каркас общий с заменённым обходом — .rwrap и .rbody те же, — а ширина своя:
+   три колонки по 300 просят тысячу. Делить на масштаб обязательно, и это тут
+   не осторожность, а третий случай подряд: vw внутри zoom меряется от окна и
+   умножается обратно, поэтому на 175% неделёная тысяча даёт панель во всё окно.
+   На 752, которые остаются от 94vw/1.75, колонок помещается две, третья
+   переносится вниз — flex-wrap делает это сам, без второго кадра в коде. */
+.pwrap{width:min(1000px, calc(94vw / var(--ui, 1)))}
+.pcols{display:flex; flex-wrap:wrap; align-items:flex-start; gap:12px}
+.pcol{flex:1 1 300px; min-width:0; max-width:340px}
+.pcol h4{display:flex; justify-content:space-between; align-items:baseline; gap:8px;
+  margin:2px 0 6px; padding-bottom:4px; border-bottom:1px solid var(--wood-hi);
+  color:var(--lilac); font-size:12px; letter-spacing:.08em; font-weight:normal}
+.pcol h4 i{flex:none; font-style:normal; font-size:10px; letter-spacing:0; color:var(--muted-dim)}
+/* Карточка — один предмет, а не строка с кнопками: кольцо фокуса ходит по ней
+   целиком, ⏎ открывает, G ведёт. ⇢ внутри — то же «вести» для мыши. */
+.pcard{position:relative; display:grid; width:100%; margin-bottom:8px; padding:8px 8px 8px 12px;
+  grid-template-columns:28px 1fr auto;
+  grid-template-areas:"face name tok" "face meta meta" "task task task" "foot foot lead" "need need need";
+  gap:2px 8px; align-items:baseline; text-align:left; cursor:pointer;
+  background:var(--field); color:var(--ink);
+  border:1px solid var(--wood-hi); border-left:3px solid var(--muted-dim);
+  font:12px "JetBrains Mono", "Courier New",monospace}
+.pcard.work{border-left-color:var(--accent)}
+.pcard.wait{border-left-color:var(--warn)}
+.pcard:hover{border-color:var(--frame-dim)}
+.pface{grid-area:face; align-self:start; image-rendering:pixelated}
+.pname{grid-area:name; color:var(--warn); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.ptok{grid-area:tok; font-size:10px; color:var(--muted); white-space:nowrap}
+.pcard.work .ptok{color:var(--accent)}
+.pcard.wait .ptok{color:var(--warn)}
+.pmeta{grid-area:meta; font-size:10px; color:var(--muted-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+/* Задача в две строки: одна режет фразу на полуслове, три превращают колонку
+   в текст. Остывшая и та, что подставлена вместо задачи, гаснут целиком. */
+.ptask{grid-area:task; margin-top:4px; color:var(--ink); line-height:1.35;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.ptask.cold{color:var(--muted)}
+.ptask i{font-style:normal; font-size:10px; color:var(--muted-dim)}
+.pfoot{grid-area:foot; font-size:10px; color:var(--ink-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.pfoot.now{color:var(--accent); opacity:.8}
+/* «Нужен ты» — строка отчёта, и она бывает в четыре строки: на живом этаже
+   6 сентября 2026 одна такая растянула карточку на треть панели и сломала ряд.
+   Два ряда — столько же, сколько у задачи: это метка «тут нужен ты», а не сам
+   текст просьбы, который целиком лежит в карточке человека. */
+.pneed{grid-area:need; margin-top:2px; font-size:10px; color:var(--warn); line-height:1.35;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.plead{grid-area:lead; align-self:center; background:none; border:none; padding:0 2px; cursor:pointer;
+  color:var(--muted-dim); font:12px "JetBrains Mono", "Courier New",monospace}
+.plead:hover{color:var(--warn)}
+.pkeys{flex:0 0 auto; margin:0; padding:6px 14px 8px; font-size:11px; color:var(--muted-dim)}
 /* Width is divided by the office scale, like the four panels above: vw inside
    zoom is measured against the window and then multiplied by the scale, so an
    undivided 94vw hands 175% a panel the width of the whole window. Written down
@@ -595,9 +637,6 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .need{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
   color:var(--warn); font-size:11px; background:var(--wood);
   padding:2px 8px; margin:3px 0 0 11px}
-.rwhat b{color:var(--ink); font-weight:normal}
-.rwhat i{display:block; color:var(--muted-dim); font-style:normal; font-size:10px}
-.rrow{align-items:flex-start}
 
 .ntail.warn{color:var(--warn)}
 .retry{background:var(--retry); color:var(--retry-ink); border:2px solid var(--retry-edge); font:10px "JetBrains Mono", "Courier New",monospace;
@@ -699,7 +738,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
    в офисе выглядит одинаково, в какой бы панели он ни стоял. */
 .liftbtn.focus, .recgo.focus{outline:2px solid var(--warn); outline-offset:-2px}
 /* Контур клавиатурного фокуса один на весь офис: панели модулей берут его же. */
-.rrow .go.focus{outline:2px solid var(--warn); outline-offset:-2px}
+.pcard.focus{outline:2px solid var(--warn); outline-offset:-2px}
 .ngo.focus, .ndel.focus{outline:2px solid var(--warn); outline-offset:-2px}
 .namerow.focus, .drow.focus, #skytoggle.focus, #skyq.focus, .skyhit.focus, #skygeo.focus,
 .swatch.focus, #skinhue.focus, #skinsat.focus, #skinacc.focus,
