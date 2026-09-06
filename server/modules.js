@@ -140,10 +140,23 @@ export function moduleOnPatch(patch) {
 }
 
 // Routes. The first to answer true takes the request.
-export async function moduleRoute(url, req, res, send) {
+//
+// The fifth argument is the office's own answer to «is this the owner», handed
+// in as a function rather than a computed flag: most module routes never ask,
+// and asking costs a read of the settings. A module that needs it awaits
+// ctx.isOwner() and refuses on its own.
+//
+// It is handed over rather than left for a module to work out, because the
+// office has exactly one such check and it is subtler than comparing a token:
+// it knows about private mode, about the address being local, and about the
+// middleman that makes a tunnel's guest look local. A copy of that inside a
+// module would drift from the original, and the hole would open quietly.
+// Added 6 September 2026 for the easel, which wanted to tell the owner — and
+// only the owner — where on his disk the settings file lies.
+export async function moduleRoute(url, req, res, send, ctx = {}) {
   for (const m of live()) {
     if (typeof m.server?.route !== 'function') continue;
-    if (await m.server.route(url, req, res, send)) return true;
+    if (await m.server.route(url, req, res, send, ctx)) return true;
   }
   return false;
 }

@@ -1120,7 +1120,12 @@ body.stand-folded #standtab{display:block}
 .keystep input{flex:1 1 200px; min-width:0; background:var(--bg-deep); color:var(--ink);
   border:1px solid var(--frame-dim); padding:5px 8px; font:12px "JetBrains Mono", monospace}
 .keystep .obtn{white-space:nowrap}
-.keyfoot{display:flex; align-items:center; gap:10px; margin-top:2px; font-size:11px; color:var(--muted)}
+/* Подвал карточки переносится, а кнопки — нет. Строка про «вписать можно
+   руками» длиннее, чем остаётся места рядом с двумя кнопками, и без переноса
+   она обрезалась краем панели, а «забыть токен» ломался пополам. */
+.keyfoot{display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:2px; font-size:11px; color:var(--muted)}
+.keyfoot .obtn{white-space:nowrap}
+.keyfoot span{flex:1 1 240px; min-width:0}
 /* Only the first button is pushed to the right — with margin-left:auto on every
    one of them three buttons would spread across the whole footer with the note
    lost between them. */

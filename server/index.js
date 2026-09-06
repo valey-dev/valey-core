@@ -945,7 +945,7 @@ async function handle(req, res) {
 
   // The modules' own routes. They come after every core route: a module extends
   // the office, it does not redefine it.
-  if (await moduleRoute(url, req, res, send)) return;
+  if (await moduleRoute(url, req, res, send, { isOwner: () => isOwner(req) })) return;
 
   // static; /callback is an OAuth return address: we serve the same office, and
   // the module that started that authorisation parses it. The branch stays in
