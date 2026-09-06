@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { snapshot, fileOwners, conversation, PACK_IDS, namePool, nameSample, effectivePack, previewPack } from './agents.js';
 import { realWeather, forgetWeather, geocode } from './weather.js';
 import { getSettings, patchSettings, publicSettings, ownerToken } from './settings.js';
-import { deliver, deliveryStatus, isBusy, MODES } from './deliver.js';
+import { deliver, deliveryStatus, forgetCli, isBusy, MODES } from './deliver.js';
 import { ask as askPermit, answer as answerPermit, permits, forgetGone } from './permit.js';
 import { releaseNudge } from './release.js';
 import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff } from './modules.js';
@@ -741,6 +741,13 @@ async function handle(req, res) {
     }
   }
 
+  // fresh=1 — forget the cached CLI answer and ask again. The cache lives a
+  // minute, which is right for the background; but somebody who has just been
+  // to the terminal and pressed «check now» should not have to wait it out.
+  if (url.pathname === '/api/delivery') {
+    if (url.searchParams.get('fresh') === '1') forgetCli();
+    return send(res, 200, await deliveryStatus());
+  }
   // A permission request from Claude Code. It comes from the hook on this same
   // machine and HANGS here until the owner answers: while it hangs there is no
   // dialog in the terminal. Only the owner can answer, so only he is let in to
@@ -781,7 +788,6 @@ async function handle(req, res) {
     return send(res, 200, { ok: true, ...done, permits: permits() });
   }
 
-  if (url.pathname === '/api/delivery') return send(res, 200, await deliveryStatus());
 
   // Where the office looks out of the window, and whether it looks at all.
   if (url.pathname === '/api/settings') {

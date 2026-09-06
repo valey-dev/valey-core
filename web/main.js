@@ -203,6 +203,12 @@ UI.initUI(state, {
     .then((r) => r.json()).catch((e) => ({ error: e.message, packs: [] })),
   sound: () => { state.soundOn = sound.toggle(); UI.renderHud(); return state.soundOn; },
   geocode: (q) => fetch('/api/geocode?q=' + encodeURIComponent(q)).then((r) => r.json()).catch((e) => ({ error: e.message })),
+  // The key card asks about the CLI again: somebody went to the terminal,
+  // logged in and came back, and the server's answer lives a minute — no
+  // reason to sit out that minute looking at «not logged in».
+  recheckCli: () => fetch('/api/delivery?fresh=1', { headers: owned() })
+    .then((r) => r.json()).then((d) => { state.delivery = d; return d; })
+    .catch((e) => ({ error: e.message })),
   saveSettings,
   invites: () => fetch('/api/invites', { headers: owned() })
     .then((r) => r.json()).catch((e) => ({ error: e.message, invites: [] })),
