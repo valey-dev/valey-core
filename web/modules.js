@@ -28,7 +28,10 @@ import { define as definePlaces } from './places.js';
 // place ids it declared, and the keys panel draws that board instead of the floor.
 // Without it the office would have to know which module owns what, which is the
 // one thing the module system exists to avoid.
-const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'action', 'esc', 'tick', 'hud', 'lang', 'busy', 'note', 'place'];
+// 'keys' — a card on the inventory's key shelf. A module hands in its own: the
+// key belongs to whoever uses it, and in a free build the Figma card must not
+// sit on the shelf on behalf of an easel that is not there.
+const HOOKS = ['sig', 'room', 'layout', 'near', 'draw', 'act', 'hint', 'key', 'action', 'esc', 'tick', 'hud', 'lang', 'busy', 'note', 'place', 'keys'];
 const hooks = Object.fromEntries(HOOKS.map(h => [h, []]));
 const dicts = [];
 let ids = [];
