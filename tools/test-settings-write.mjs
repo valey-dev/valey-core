@@ -26,7 +26,7 @@ try {
   // The module reads VALEY_SETTINGS on import, so the variable comes first.
   const file = path.join(dir, 'race.json');
   process.env.VALEY_SETTINGS = file;
-  const { getSettings, patchSettings } = await import('../server/settings.js');
+  const { getSettings, patchSettings, warnIfSharedSettingsWorktree } = await import('../server/settings.js');
   await getSettings();
   const N = 25;
   await Promise.all(Array.from({ length: N }, (_, i) => patchSettings({ lang: 'v' + i })));
@@ -36,6 +36,46 @@ try {
   const left = (await fsp.readdir(dir)).filter((f) => f.includes('.tmp-'));
   ok('no temporary files left', left.length === 0, left);
   ok('cache matches disk', (await getSettings()).lang === onDisk.lang, null);
+
+  // ------------------------------------------- another process changed it
+  const external = { lang: 'en', names: { outside: 'Kept' }, dress: { code: 'casual' } };
+  await fsp.writeFile(file, JSON.stringify(external, null, 2));
+  const conflicts = await Promise.allSettled([
+    patchSettings({ dress: { code: 'office' } }),
+    patchSettings({ lang: 'stale-queued-write' }),
+  ]);
+  const conflict = conflicts[0].status === 'rejected' ? conflicts[0].reason : null;
+  const afterConflict = JSON.parse(await fsp.readFile(file, 'utf8'));
+  ok('a newer file is not overwritten by the stale cache',
+    afterConflict.names.outside === 'Kept' && afterConflict.dress.code === 'casual', afterConflict);
+  ok('all writes already queued from the stale cache are refused',
+    conflicts.every((result) => result.status === 'rejected') && afterConflict.lang === 'en', conflicts);
+  ok('the refused save explains how to recover',
+    conflict && /changed after this process read it.*Reload and try again/.test(conflict.message), conflict && conflict.message);
+  const refreshed = await getSettings();
+  ok('after a conflict the next read reloads the external settings',
+    refreshed.lang === 'en' && refreshed.names.outside === 'Kept', refreshed);
+  await patchSettings({ dress: { code: 'office' } });
+  const afterRetry = JSON.parse(await fsp.readFile(file, 'utf8'));
+  ok('a retry after reload preserves the external data',
+    afterRetry.names.outside === 'Kept' && afterRetry.dress.code === 'office', afterRetry);
+
+  // ------------------------------------------------ worktree startup warning
+  const warnings = [];
+  const warning = warnIfSharedSettingsWorktree({
+    cwd: path.join(dir, '.claude', 'worktrees', 'stand'), env: {}, warn: (m) => warnings.push(m),
+  });
+  ok('a Claude worktree using personal settings warns at startup',
+    warnings.length === 1 && warning === warnings[0] && /VALEY_SETTINGS/.test(warning), warnings);
+  const isolated = warnIfSharedSettingsWorktree({
+    cwd: path.join(dir, '.claude', 'worktrees', 'stand'), env: { VALEY_SETTINGS: file }, warn: (m) => warnings.push(m),
+  });
+  ok('an explicitly isolated worktree stays quiet', isolated === null && warnings.length === 1, warnings);
+  const isolatedDir = warnIfSharedSettingsWorktree({
+    cwd: path.join(dir, '.claude', 'worktrees', 'stand'), env: { VALEY_CONFIG_DIR: dir }, warn: (m) => warnings.push(m),
+  });
+  ok('a worktree with an isolated config directory stays quiet',
+    isolatedDir === null && warnings.length === 1, warnings);
 
   // ---------------------------------------------------- the broken file
   // A separate process: the settings cache lives in the module and is not read twice.

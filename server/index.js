@@ -8,7 +8,9 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { snapshot, fileOwners, conversation, PACK_IDS, namePool, nameSample, effectivePack, previewPack } from './agents.js';
 import { realWeather, forgetWeather, geocode } from './weather.js';
-import { getSettings, patchSettings, publicSettings, ownerToken } from './settings.js';
+import {
+  getSettings, patchSettings, publicSettings, ownerToken, warnIfSharedSettingsWorktree,
+} from './settings.js';
 import { deliver, deliveryStatus, forgetCli, isBusy, MODES } from './deliver.js';
 import { ask as askPermit, answer as answerPermit, permits, forgetGone } from './permit.js';
 import { releaseNudge } from './release.js';
@@ -972,6 +974,7 @@ async function handle(req, res) {
  * one without the other is that very hole.
  */
 export async function start({ port = PORT, host = process.env.HOST } = {}) {
+  warnIfSharedSettingsWorktree();
   // Modules come before the first read of the settings: their defaults go into
   // the cache as it is built, and the cache is built once. Until 4 September
   // 2026 the order was the other way round, and a module's section appeared in
