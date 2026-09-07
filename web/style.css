@@ -171,13 +171,7 @@ kbd{color:var(--muted); font-size:10px}
 .vtask .tstat{display:block; flex:0 1 auto; min-width:0; max-width:42%; padding-left:0; letter-spacing:0;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .vtask:empty{display:none}
-/* scroll-padding repeats the padding above on purpose. scrollIntoView aligns a
-   card to the scrollport edge, which sits inside the container's own padding:
-   arrowing down to the last row parked it flush against the bottom, while the
-   same wheel scroll showed 14px of air under it. Two ways to reach the last
-   card looked like two different layouts. */
-.grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; padding:14px; overflow:auto;
-  scroll-padding:14px}
+.grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; padding:14px; overflow:auto}
 .grid figure{margin:0; cursor:pointer; background:var(--field); border:2px solid var(--wood); padding:6px}
 .grid figure:hover{border-color:var(--warn)}
 .thumb{height:96px; display:flex; align-items:center; justify-content:center; background:var(--bg-deep); color:var(--muted-dim); font-size:28px; overflow:hidden}
@@ -346,6 +340,24 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .rwrap{width:min(680px, calc(92vw / var(--ui, 1))); max-height:84vh; display:flex; flex-direction:column;
   background:var(--wood-dark); border:3px solid var(--frame); box-shadow:0 0 0 3px var(--bg-deep)}
 .rbody{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:10px 14px}
+
+/* Every scroller a focus ring walks repeats its own padding as scroll-padding.
+   scrollIntoView parks the element on the edge of the scrollport, and that edge
+   sits inside the padding — so arrowing to the last card left it flush against
+   the frame, while the wheel, reaching the same end, showed the padding under
+   it. Two ways to the bottom, two layouts; the panel read as cutting its own
+   content off.
+   Radio found this on 6 September 2026 and fixed it in its own stylesheet, the
+   easel hit the same thing on the feature grid the next day. It is not a quirk
+   of either panel: it follows from padding plus scrollIntoView, so the rule is
+   written once, here, over every core box that has both.
+   The list is exact rather than a wildcard. .body has only padding-right and
+   needs nothing; .tscroll and #skyresults have no padding at all; and a box no
+   ring walks would be carrying a promise nobody checks. */
+.grid{scroll-padding:14px}
+.single{scroll-padding:14px}
+.rbody{scroll-padding:10px 14px}
+.bbody, .dbody{scroll-padding:14px}
 /* ---- standup: team columns, one card per person ----
    It shares .rwrap and .rbody with the round it replaced, but has its own width:
    three 300 px columns ask for 1000. Dividing by scale is mandatory, not merely
