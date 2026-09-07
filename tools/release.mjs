@@ -17,6 +17,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { pickKind, check } from './release-kind.mjs';
+import { readFragments, checkNotes, assemble } from './notes.mjs';
 
 // The root comes from this file rather than from the cwd: git and the files have
 // to look at one repository. Until 4 September 2026 git went to the cwd while
@@ -47,6 +48,8 @@ const ship = argv.includes('--ship');
 // It has to be said out loud, in the command, rather than in the changelog after
 // the fact — so the guard below refuses and this flag is how you agree.
 const catchUp = argv.includes('--catch-up');
+// A release with a feature and no feature note is the one this flag lets through.
+const noNote = argv.includes('--no-note');
 // The digit is optional now. A bare `--ship` must not be read as one, so the
 // first argument is taken only when it is not a flag.
 const asked = argv.find((a) => !a.startsWith('--')) || null;
@@ -163,6 +166,20 @@ const section = lines.join('\n');
 
 console.log(section);
 console.log(`— ${commits.length} commits, ${other.length} without a section`);
+
+// The feature note. It is assembled out of fragments written in the feature
+// branches, so nothing is composed here — this is only the moment they are
+// collected under a version. The guard refuses on the dry run too: a check you
+// only meet on the real run is a check you meet too late.
+let fragments = [];
+try { fragments = readFragments(ROOT); } catch (err) { die(err.message); }
+const notes = checkNotes(ROOT, { kind, feats: picked.feats, fragments, allow: noNote });
+if (!notes.ok) die(notes.note);
+if (notes.bare) console.log('WARNING: cut without a feature note, on --no-note\n');
+if (fragments.length)
+  console.log(`\nfeature note ${tag}.md, from ${fragments.length} fragment${fragments.length > 1 ? 's' : ''}: ` +
+    fragments.map((f) => f.slug).join(', '));
+
 if (dry) { console.log('--dry: nothing was written'); process.exit(0); }
 
 // A release is a tag on `main` — nothing merges there that has not been accepted,
@@ -216,7 +233,10 @@ if (at < 0) die('CHANGELOG.md has no ## section to insert into');
 writeFileSync(changelogPath,
   changelog.slice(0, at + 1) + section + changelog.slice(at + 1));
 
-git('add', 'package.json', 'CHANGELOG.md');
+const added = ['package.json', 'CHANGELOG.md'];
+if (fragments.length) { assemble(ROOT, tag, date, fragments, section); added.push('notes'); }
+
+git('add', ...added);
 git('commit', '-m', `chore(release): ${tag}`);
 git('tag', '-a', tag, '-m', tag);
 console.log(`\ndone: ${tag} at ${git('rev-parse', '--short', 'HEAD')}`);

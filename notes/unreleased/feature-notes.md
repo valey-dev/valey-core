@@ -1,0 +1,10 @@
+---
+title: Every release now carries a feature note
+scope: notes
+---
+
+The changelog says what changed in one line per commit, and that is all it will ever say: it is generated from the commit subjects, so it cannot carry a screenshot, a key, or the sentence explaining why the old behaviour was annoying. Everything else about a release lived in whoever cut it.
+
+Now a feature ships with a fragment written in its own branch — `node tools/notes.mjs --new <slug>` — and the release collects the fragments into `notes/vX.Y.Z.md` with the changelog section embedded underneath. Cutting a release that carries a feature and no fragment is refused.
+
+Deliberately left out for now: pictures. The fragments will grow a shot recipe so a frame can be replayed at an old tag and give a real before-and-after, and that is the part that can fail on a tag whose rooms no longer exist. Prose first.
