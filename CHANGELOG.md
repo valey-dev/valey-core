@@ -4,6 +4,21 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.22.0 — 7 September 2026
+
+### Added
+
+- **git:** clean merged branches safely (0b9e56c)
+
+### Fixed
+
+- **git:** retry cleanup after worktrees go idle (875ff3d)
+- **release:** clean the merged branch after shipping (4174247)
+
+### Other
+
+- build(git): require a release tip on main pushes (3f07067)
+- ci(git): report merged branches left on origin (111cdac)
 ## v0.21.6 — 7 September 2026
 
 ### Fixed
