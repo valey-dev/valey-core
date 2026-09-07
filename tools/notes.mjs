@@ -100,7 +100,7 @@ export function checkNotes(root, { kind, feats, fragments, allow }) {
   const owed = kind === 'minor' || kind === 'major' || feats.length > 0;
   if (!owed || allow) return { ok: true, bare: owed };
   return { ok: false, note:
-    `this release carries ${feats.length || 'a feature'} and no feature note.\n` +
+    `this release carries ${feats.length ? `${feats.length} feature${feats.length > 1 ? 's' : ''}` : 'a feature'} and no feature note.\n` +
     `  A note is written in the branch that builds the feature, not here:\n` +
     `    node tools/notes.mjs --new <slug>\n` +
     '  A release that genuinely needs none goes out with --no-note.' };
