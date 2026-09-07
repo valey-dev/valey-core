@@ -23,10 +23,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const TOOL_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const ROOT = process.env.VALEY_REPO
   ? path.resolve(process.env.VALEY_REPO)
-  : path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+  : TOOL_ROOT;
 const git = (...a) => execFileSync('git', ['-C', ROOT, ...a], { encoding: 'utf8' }).trim();
+const toolGit = (...a) => execFileSync('git', ['-C', TOOL_ROOT, ...a], { encoding: 'utf8' }).trim();
 const die = (m) => { console.error('land: ' + m); process.exit(1); };
 const run = (cmd, args, cwd = ROOT) => {
   const r = spawnSync(cmd, args, { cwd, stdio: 'inherit' });
@@ -73,7 +75,22 @@ if (!dry) {
 // that HEAD be the commit main stands on, and does not care what the branch is
 // called any more.
 git('fetch', 'origin', '--tags', '--quiet');
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'valey-land-'));
+// A secondary repository is normally mounted next to the core files: its tests
+// import ../../web and its server-side stands expect the modules to be visible
+// at <core>/modules. A top-level /tmp worktree satisfies neither contract. Give
+// it a clean core host, keep the private checkout beside modules/, and link its
+// manifests into the host exactly as a normal two-repository checkout does.
+const secondary = path.resolve(ROOT) !== path.resolve(TOOL_ROOT);
+let hostDir = null;
+let dir;
+if (secondary) {
+  toolGit('fetch', 'origin', '--tags', '--quiet');
+  hostDir = fs.mkdtempSync(path.join(os.tmpdir(), 'valey-land-core-'));
+  toolGit('worktree', 'add', '--quiet', '--detach', hostDir, 'origin/main');
+  dir = path.join(hostDir, 'private-mods');
+} else {
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'valey-land-'));
+}
 const tmpBranch = `land/${Date.now()}`;
 // A dry run cuts from the head of the pull request rather than from main: main
 // does not have these commits yet, so a dry release there would always answer
@@ -82,6 +99,19 @@ const tmpBranch = `land/${Date.now()}`;
 const base = dry ? `origin/${info.headRefName}` : 'origin/main';
 console.log(`\nрелиз во временном дереве ${dir} (с ${base}):`);
 git('worktree', 'add', '--quiet', '-b', tmpBranch, dir, base);
+if (secondary) {
+  const moduleDir = path.join(hostDir, 'modules');
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const source = path.join(dir, entry.name);
+    if (!fs.existsSync(path.join(source, 'module.json'))) continue;
+    const target = path.join(moduleDir, entry.name);
+    // A free module can deliberately occupy the same id in core. The clean
+    // host wins in that case; every paid-only module is linked beside it.
+    if (fs.existsSync(target)) continue;
+    fs.symlinkSync(path.relative(moduleDir, source), target, 'dir');
+  }
+}
 // The tidying is called by hand rather than left to `finally`: die() ends the
 // process with process.exit, and that skips finally entirely. The first failing
 // dry run on 6 September 2026 left its worktree and branch behind for exactly
@@ -90,6 +120,9 @@ git('worktree', 'add', '--quiet', '-b', tmpBranch, dir, base);
 const sweep = () => {
   try { git('worktree', 'remove', '--force', dir); } catch { /* already gone, or held */ }
   try { git('branch', '-D', tmpBranch); } catch { /* the branch may not be there */ }
+  if (hostDir) {
+    try { toolGit('worktree', 'remove', '--force', hostDir); } catch { /* kept if still held */ }
+  }
 };
 
 // The release tool is the one standing next to this file, not a copy inside the
@@ -106,7 +139,8 @@ if (r.status !== 0) {
   if (dry) { sweep(); die('сухой прогон релиза не прошёл'); }
   // A real run that got as far as failing keeps its tree: the merge has already
   // happened, the release has not, and finishing it needs somewhere to stand.
-  die(`PR слит, но релиз не нарезан. Дерево ${dir} осталось — доделать там же:\n  node tools/release.mjs --ship`);
+  die(`PR слит, но релиз не нарезан. Дерево ${dir} осталось — доделать там же:\n` +
+    `  VALEY_REPO=${dir} node ${path.join(TOOL_ROOT, 'tools/release.mjs')} --ship`);
 }
 sweep();
 console.log(dry
