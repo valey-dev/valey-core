@@ -66,5 +66,26 @@ ok('a second repository builds its release page with the core tool',
   /path\.join\(TOOL_ROOT, 'tools\/gh-release\.mjs'\)/.test(release),
   'gh-release.mjs is being searched for inside the released repository again');
 
+// Cleanup is the tail of a successful release, not of the merge itself. A
+// failed release deliberately keeps its recovery tree, and a dry run must not
+// delete the branch it is trying to demonstrate.
+const releaseCall = land.indexOf('const r = spawnSync(process.execPath, args');
+const failureGate = land.indexOf('if (r.status !== 0)', releaseCall);
+const sweepCall = land.indexOf('sweep();', failureGate);
+const cleanupCall = land.indexOf("'tools/cleanup-merged.mjs'", sweepCall);
+ok('land cleans the PR branch only after the release success gate',
+  releaseCall >= 0 && failureGate > releaseCall && sweepCall > failureGate && cleanupCall > sweepCall,
+  { releaseCall, failureGate, sweepCall, cleanupCall });
+ok('dry runs skip branch cleanup',
+  /if \(!dry\) \{[\s\S]*?'tools\/cleanup-merged\.mjs'/.test(land.slice(sweepCall)),
+  'cleanup is not guarded by !dry');
+ok('a live worktree cleanup is queued and retried outside the landing process',
+  /'--apply', '--defer'/.test(land) && /'tools\/cleanup-pending\.mjs'/.test(land) &&
+    /'--watch', '300'/.test(land),
+  'the deferred cleanup has no retry worker');
+ok('a later landing retries cleanup markers that outlive the watcher',
+  /spawnSync\(process\.execPath, \[pendingCleanup, '--repo', ROOT\]/.test(land),
+  'land does not retry the persistent cleanup queue');
+
 console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

@@ -17,7 +17,7 @@
 // checked out in only one place, so a release used to mean walking into somebody
 // else's tree; and whoever runs this is usually standing on the branch that is
 // being merged, which stops being the place to cut from the moment it lands.
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -41,6 +41,13 @@ const catchUp = argv.includes('--catch-up');
 const kind = argv.find((a) => ['patch', 'minor', 'major'].includes(a)) || null;
 const rest = argv.filter((a) => !a.startsWith('--') && a !== kind);
 let pr = rest[0] || null;
+const pendingCleanup = path.join(TOOL_ROOT, 'tools/cleanup-pending.mjs');
+
+// A shell can legitimately keep a landed branch's worktree busy for longer
+// than the background retry window. Its marker remains in the shared git dir,
+// and every later landing gets another safe chance to finish that cleanup.
+spawnSync(process.execPath, [pendingCleanup, '--repo', ROOT],
+  { cwd: os.tmpdir(), stdio: 'inherit' });
 
 // ---------------------------------------------------------------- the request
 const gh = (...a) => execFileSync('gh', a, { encoding: 'utf8' }).trim();
@@ -143,6 +150,29 @@ if (r.status !== 0) {
     `  VALEY_REPO=${dir} node ${path.join(TOOL_ROOT, 'tools/release.mjs')} --ship`);
 }
 sweep();
+
+// GitHub removes the remote PR branch at merge time. The local ref belongs to
+// this clone, so the server cannot clean it: do that only after the release has
+// succeeded and main contains the exact PR head. A branch still checked out in
+// a live worktree is deliberately deferred; removing a directory from under the
+// shell or agent that called land would turn successful delivery into damage.
+if (!dry) {
+  console.log('\nbranch cleanup:');
+  const cleanup = spawnSync(process.execPath,
+    [path.join(TOOL_ROOT, 'tools/cleanup-merged.mjs'), info.headRefName,
+      '--repo', ROOT, '--apply', '--defer'],
+    { cwd: os.tmpdir(), stdio: 'inherit' });
+  if (cleanup.status !== 0 && cleanup.status !== 3) {
+    die(`release was published, but branch cleanup failed for ${info.headRefName}`);
+  }
+  if (cleanup.status === 3) {
+    const watcher = spawn(process.execPath,
+      [pendingCleanup, '--repo', ROOT, '--watch', '300'],
+      { cwd: os.tmpdir(), detached: true, stdio: 'ignore' });
+    watcher.unref();
+    console.log('deferred cleanup will retry for five minutes after this process exits');
+  }
+}
 console.log(dry
   ? '\n--dry: nothing was merged or released. Above is the section that would ship and the tests covering it.'
   : '\ndone: PR merged, version cut, and release published.');
