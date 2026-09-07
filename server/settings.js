@@ -46,6 +46,23 @@ export const PATHS = { dir: CONFIG_DIR, file: FILE, legacy: LEGACY };
 
 const exists = async (f) => { try { await fsp.access(f); return true; } catch { return false; } };
 
+// A Claude worktree without its own settings file writes to the same personal
+// config as the main office. That is occasionally intentional, but a stand
+// changing shared names, seats, or dress by accident is much more common and
+// much harder to spot than one explicit warning at startup.
+export function warnIfSharedSettingsWorktree({
+  cwd = process.cwd(), env = process.env, warn = console.warn,
+} = {}) {
+  const parts = path.resolve(cwd).split(path.sep);
+  const insideClaudeWorktree = parts.some((part, i) =>
+    part === '.claude' && parts[i + 1] === 'worktrees');
+  if (!insideClaudeWorktree || env.VALEY_SETTINGS || env.VALEY_CONFIG_DIR) return null;
+  const message = 'Settings warning: this .claude worktree is using the shared personal settings file. '
+    + 'Set VALEY_SETTINGS to an isolated file before running a stand.';
+  warn(message);
+  return message;
+}
+
 // A one-time move: the old file is copied to the new place and stays where it
 // was. If something is already at the new place, nothing is touched and it is
 // said out loud: silently picking one of two files full of agent names means
@@ -136,6 +153,34 @@ const DEFAULTS = {
 };
 
 let cache = null;
+let diskRevision;
+let writeGeneration = 0;
+
+// More than mtime alone: an atomic replacement changes the inode, while a
+// direct edit changes its size or nanosecond timestamp. The value is only an
+// equality token; no ordering between clocks is assumed.
+const revisionOf = async (file) => {
+  try {
+    const s = await fsp.stat(file, { bigint: true });
+    return `${s.dev}:${s.ino}:${s.size}:${s.mtimeNs}`;
+  } catch (e) {
+    if (e.code === 'ENOENT') return null;
+    throw e;
+  }
+};
+
+const readWithRevision = async (file) => {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const before = await revisionOf(file);
+    let raw = null;
+    try { raw = await fsp.readFile(file, 'utf8'); } catch (e) {
+      if (e.code !== 'ENOENT') throw e;
+    }
+    const after = await revisionOf(file);
+    if (before === after) return { raw, revision: after };
+  }
+  throw new Error(`Settings changed repeatedly while being read: ${file}`);
+};
 
 // The token is created once and lives in the file. Without it the office
 // cannot tell an owner from a guest, so it must exist before the first request.
@@ -160,8 +205,9 @@ export async function getSettings() {
   // agents' names, the owner token and the invitations vanished without a line
   // in the log. Now a broken file is set aside as a copy next to it, and that
   // is said out loud.
-  let raw = null;
-  try { raw = await fsp.readFile(FILE, 'utf8'); } catch { /* first start */ }
+  const current = await readWithRevision(FILE);
+  const raw = current.raw;
+  diskRevision = current.revision;
   let saved = null;
   if (raw !== null) {
     try { saved = JSON.parse(raw); } catch (e) {
@@ -246,11 +292,30 @@ export async function patchSettings(patch) {
 let writing = Promise.resolve();
 function persist() {
   const text = JSON.stringify(cache, null, 2);
+  const generation = writeGeneration;
   writing = writing.catch(() => {}).then(async () => {
+    if (generation !== writeGeneration) {
+      throw new Error(`Settings were not saved because ${FILE} changed after this process read it. Reload and try again.`);
+    }
+    const expected = diskRevision;
+    const changed = async () => (await revisionOf(FILE)) !== expected;
+    const refuseStaleWrite = () => {
+      cache = null;
+      writeGeneration += 1;
+      throw new Error(`Settings were not saved because ${FILE} changed after this process read it. Reload and try again.`);
+    };
+    if (await changed()) refuseStaleWrite();
     await fsp.mkdir(path.dirname(FILE), { recursive: true });
     const tmp = `${FILE}.tmp-${process.pid}`;
-    await fsp.writeFile(tmp, text);
-    await fsp.rename(tmp, FILE);
+    try {
+      await fsp.writeFile(tmp, text);
+      // Catch an edit made while the temporary file was being written too.
+      if (await changed()) refuseStaleWrite();
+      await fsp.rename(tmp, FILE);
+      diskRevision = await revisionOf(FILE);
+    } finally {
+      await fsp.rm(tmp, { force: true });
+    }
   });
   return writing;
 }
