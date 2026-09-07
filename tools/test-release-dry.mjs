@@ -54,5 +54,17 @@ ok('land передаёт явный --catch-up релизному скрипт�
   /const catchUp = argv\.includes\('--catch-up'\)/.test(land) &&
   /if \(catchUp\) args\.push\('--catch-up'\)/.test(land), 'флаг потерян');
 
+// The modules repository borrows the core release suite. Its tests depend on
+// the ordinary two-repository layout, and its GitHub page builder belongs to
+// core too. Both paths failed only after a PR had merged, so guard them here.
+const release = readFileSync(path.join(ROOT, 'tools/release.mjs'), 'utf8');
+ok('временный релиз модулей получает чистый core-хост',
+  /toolGit\('worktree', 'add'.*hostDir, 'origin\/main'\)/.test(land) &&
+  /fs\.symlinkSync\(path\.relative\(moduleDir, source\), target, 'dir'\)/.test(land),
+  'release-worktree модулей снова оторван от core');
+ok('страница второго репозитория собирается инструментом core',
+  /path\.join\(TOOL_ROOT, 'tools\/gh-release\.mjs'\)/.test(release),
+  'gh-release.mjs снова ищется внутри выпускаемого репозитория');
+
 console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
 process.exit(bad ? 1 : 0);
