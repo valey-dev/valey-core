@@ -1537,7 +1537,7 @@ function openFromStandup(id) {
 // The ring walks the cards: up and down inside a column, sideways between
 // columns. A card is one thing rather than a row of buttons, so in the ring it
 // is one thing too.
-const rosterRing = focusRing(() => el.roster, '.pcard', { cols: '.pcol' });
+const rosterRing = focusRing(() => el.roster, '.pcard', { cols: '.pcol', noWrap: true });
 export function closeRoster() { el.roster.hidden = true; rosterSig = ''; rosterRing.reset(); }
 export function rosterOpen() { return !!(el.roster && !el.roster.hidden); }
 
@@ -2412,6 +2412,18 @@ export function bagKey(raw) {
   return bagTab === 'things' ? thingsKey(key) : selfKey(key);
 }
 
+// Where the next arrow press lands. Wrapping is the default and stays it: in the
+// lift, the language panel or the radio a list is a handful of items and a ring
+// is the shorter way round. In a list long enough to be scrolled it is not — you
+// arrow down to read to the end, and the last press throws you back to the top
+// with no way to tell that from a redraw. So a panel that scrolls asks for
+// noWrap and stops at the edge instead.
+// Declarations rather than const arrows: focusRing is called while this module
+// is still being evaluated — the standup builds its ring at line ~1540, above
+// this point — and a const would still be in its dead zone there.
+function stopAt(pos, by, len) { return Math.max(0, Math.min(len - 1, pos + by)); }
+function wrapAt(pos, by, len) { return (pos + by + len) % len; }
+
 function selfKey(key) {
   const list = bagRows();
   if (!list.length) return false;
@@ -2447,16 +2459,19 @@ function thingsKey(key) {
   const cats = bagCats();
   if (!cats.length) return false;
 
+  // Down the categories the shelf scrolls, so it stops at the last one rather
+  // than wrapping; sideways a category is four to eight cells that all fit at
+  // once, and there a ring is still the shorter way to the far end.
   const down = { arrowup: -1, arrowdown: 1 }[key];
   if (down !== undefined) {
-    bagIdx = (bagIdx + down + cats.length) % cats.length;
+    bagIdx = stopAt(bagIdx, down, cats.length);
     paintBagFocus();
     return true;
   }
   const side = { arrowleft: -1, arrowright: 1 }[key];
   if (side !== undefined) {
     const cells = catCells(cats[bagIdx]);
-    if (cells.length) cellIdx = (cellIdx + side + cells.length) % cells.length;
+    if (cells.length) cellIdx = wrapAt(cellIdx, side, cells.length);
     paintBagFocus();
     return true;
   }
@@ -2581,6 +2596,7 @@ function bindResults() {
 //   byData: 'n'            — find data-n="digit" instead of the Nth item: in the
 //                            lift, "3" is floor three even if it is second in the list.
 export function focusRing(nodeOf, selector, opts = {}) {
+  const stepTo = opts.noWrap ? stopAt : wrapAt;
   let idx = 0;
   const list = () => (nodeOf() ? [...nodeOf().querySelectorAll(selector)] : []);
   const paint = () => {
@@ -2669,7 +2685,7 @@ export function focusRing(nodeOf, selector, opts = {}) {
           const down = { arrowup: -1, arrowdown: 1 }[key];
           if (down !== undefined) {
             const col = cols[at];
-            idx = l.indexOf(col[(pos + down + col.length) % col.length]);
+            idx = l.indexOf(col[stepTo(pos, down, col.length)]);
             paint(); return true;
           }
           const side = { arrowleft: -1, arrowright: 1 }[key];
@@ -2682,7 +2698,7 @@ export function focusRing(nodeOf, selector, opts = {}) {
       }
 
       const step = { arrowup: -1, arrowdown: 1, arrowleft: -1, arrowright: 1 }[key];
-      if (step !== undefined) { idx = (idx + step + l.length) % l.length; paint(); return true; }
+      if (step !== undefined) { idx = stepTo(idx, step, l.length); paint(); return true; }
       if (key === 'enter' || key === ' ') {
         if (!cur || cur.disabled) return true;
         // Give an input real focus, then let the browser type.
