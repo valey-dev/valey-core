@@ -240,7 +240,7 @@ UI.initUI(state, {
 let failed = 0;
 const check = (name, ok, got) => {
   if (ok) console.log('ok    |', name);
-  else { failed++; console.log('ПЛОХО |', name, '→', got); }
+  else { failed++; console.log('FAIL  |', name, '→', got); }
 };
 
 // ----------------------------------------------------------------- the standup
@@ -249,72 +249,72 @@ const at = (list) => list.findIndex((b) => b.has('focus'));
 state.agents = twoTeams(3, 2);
 roster = makeRoster([3, 2]);
 UI.renderRoster();
-check('планёрка: фокус встаёт на первую карточку', at(roster.cards) === 0, at(roster.cards));
-check('стрелка вниз обработана', UI.rosterKey('ArrowDown') === true, 'не обработана');
-check('и идёт по своей команде, а не по всем подряд', at(roster.cards) === 1, at(roster.cards));
-check('стрелка вправо уносит в соседнюю команду', UI.rosterKey('ArrowRight') === true && at(roster.cards) === 4,
+check('planning meeting: focus is on the first card', at(roster.cards) === 0, at(roster.cards));
+check('down arrow processed', UI.rosterKey('ArrowDown') === true, 'не обработана');
+check('and follows his own command, and not everyone else', at(roster.cards) === 1, at(roster.cards));
+check('the right arrow takes you to the neighboring team', UI.rosterKey('ArrowRight') === true && at(roster.cards) === 4,
   at(roster.cards));
-check('и держит место в колонке, а не падает на первую строку',
+check('and holds space in the column rather than falling to the first line',
   roster.cols[1].cards.indexOf(roster.cards[4]) === 1, at(roster.cards));
 // The short column is shorter: coming back sideways there is no third row to
 // stand on, and the focus stops at the last card rather than falling out.
 UI.rosterKey('ArrowDown');
-check('в конце короткой колонки закольцовано внутри неё', at(roster.cards) === 3, at(roster.cards));
+check('at the end of a short column looped inside it', at(roster.cards) === 3, at(roster.cards));
 
 UI.rosterKey('ArrowLeft');
-check('влево возвращает в первую команду', at(roster.cards) === 0, at(roster.cards));
+check('left returns to the first command', at(roster.cards) === 0, at(roster.cards));
 UI.rosterKey('ArrowUp');
-check('вверх закольцовано по своей колонке', at(roster.cards) === 2, at(roster.cards));
+check('looped up along its column', at(roster.cards) === 2, at(roster.cards));
 
 UI.rosterKey('Enter');
-check('ENTER открывает ту карточку, на которой стоишь',
+check('ENTER opens the card you are on',
   roster.cards[2].clicked === 1, roster.cards.map((b) => b.clicked).join(','));
 
 // G is the standup's only key of its own, and it is caught by the physical code:
 // under "ЙЦУКЕН" that key types «п», and the office must not care.
 led = null;
-check('G обработана', UI.rosterKey({ key: 'п', code: 'KeyG' }) === true, 'не обработана');
-check('и ведёт к тому, на ком стоял фокус', led === 't0-2', led);
-check('панель при этом закрылась', UI.rosterOpen() === false, 'осталась открыта');
+check('G processed', UI.rosterKey({ key: 'п', code: 'KeyG' }) === true, 'не обработана');
+check('and leads to the one on whom the focus was', led === 't0-2', led);
+check('the panel then closed', UI.rosterOpen() === false, 'осталась открыта');
 
 roster.hidden = false;
 UI.renderRoster();
 // a closed panel must not take the arrows — otherwise after the very first
 // standup the player stops walking around the office
 roster.hidden = true;
-check('закрытая планёрка стрелки не ест', UI.rosterKey('ArrowDown') === false, 'съел');
-check('и G не ест', UI.rosterKey({ key: 'g', code: 'KeyG' }) === false, 'съел');
+check('closed planning meeting does not eat arrows', UI.rosterKey('ArrowDown') === false, 'съел');
+check('and G doesn\'t eat', UI.rosterKey({ key: 'g', code: 'KeyG' }) === false, 'съел');
 
 // an empty standup: nobody is in the office, there is nothing to press
 state.agents = [];
 roster = makeRoster([]);
 UI.renderRoster();
-check('пустая планёрка стрелки не ест', UI.rosterKey('ArrowDown') === false, 'съел');
-check('и Enter не ест', UI.rosterKey('Enter') === false, 'съел');
+check('empty planner doesn\'t eat arrows', UI.rosterKey('ArrowDown') === false, 'съел');
+check('and Enter doesn\'t eat', UI.rosterKey('Enter') === false, 'съел');
 
 // ----------------------------------------------------------------- the notes
 notes = makeNotes(2);            // two notes: each has "open" and ✕
 UI.renderNotes();
 const nb = notes.btns;
-check('заметки: фокус встаёт на первую кнопку', at(nb) === 0, at(nb));
-check('стрелка вниз идёт на ✕ той же строки', UI.notesKey('ArrowDown') === true && at(nb) === 1, at(nb));
+check('notes: focus is on the first button', at(nb) === 0, at(nb));
+check('the down arrow goes to the ✕ of the same line', UI.notesKey('ArrowDown') === true && at(nb) === 1, at(nb));
 UI.notesKey('ArrowDown');
-check('и дальше — на следующую заметку', at(nb) === 2 && nb[2].has('ngo'), at(nb));
+check('and further - to the next note', at(nb) === 2 && nb[2].has('ngo'), at(nb));
 UI.notesKey('Enter');
-check('Enter нажимает выбранную кнопку', nb[2].clicked === 1, nb.map((b) => b.clicked).join(','));
-check('и только её', nb.filter((b) => b.clicked).length === 1, nb.filter((b) => b.clicked).length);
+check('Enter presses the selected button', nb[2].clicked === 1, nb.map((b) => b.clicked).join(','));
+check('and only her', nb.filter((b) => b.clicked).length === 1, nb.filter((b) => b.clicked).length);
 
 UI.notesKey('ArrowUp'); UI.notesKey('ArrowUp'); UI.notesKey('ArrowUp');
-check('кольцо замкнуто', at(nb) === 3, at(nb));
+check('the ring is closed', at(nb) === 3, at(nb));
 
 // a closed panel does not take the keys
 UI.closeNotes();
-check('закрытые заметки стрелки не едят', UI.notesKey('ArrowDown') === false, 'съели');
+check('closed notes arrows don\'t eat', UI.notesKey('ArrowDown') === false, 'съели');
 
 // an empty panel: there is nothing to press, the arrows have to go to the office
 notes = makeNotes(0);
 UI.renderNotes();
-check('пустые заметки стрелки не едят', UI.notesKey('ArrowDown') === false, 'съели');
+check('empty notes arrows don\'t eat', UI.notesKey('ArrowDown') === false, 'съели');
 
 // --------------------------------------------------------------- the bag
 // The "worn" tab is the former panel C, word for word: up and down the slots,
@@ -323,24 +323,24 @@ bag = makeBagSelf(3);            // the name row plus three slots
 const rows = bag.rows;
 const focusRow = () => rows.findIndex((r) => r.has('focus'));
 UI.bagKey('ArrowDown');
-check('на себе: фокус пошёл со строки имени на первый слот', focusRow() === 1, focusRow());
-check('и подсвечена ровно одна строка', rows.filter((r) => r.has('focus')).length === 1, rows.filter((r) => r.has('focus')).length);
+check('on yourself: focus went from the name line to the first slot', focusRow() === 1, focusRow());
+check('and exactly one line is highlighted', rows.filter((r) => r.has('focus')).length === 1, rows.filter((r) => r.has('focus')).length);
 UI.bagKey('ArrowRight');
-check('вправо жмёт ▶ этого слота, а не уводит', rows[1].next.clicked === 1 && rows[1].has('focus'), `${rows[1].next.clicked}`);
+check('to the right presses ▶ of this slot, but does not move', rows[1].next.clicked === 1 && rows[1].has('focus'), `${rows[1].next.clicked}`);
 UI.bagKey('ArrowLeft');
-check('влево жмёт ◀ того же слота', rows[1].prev.clicked === 1, rows[1].prev.clicked);
-check('соседний слот не тронут', rows[2].next.clicked === 0 && rows[2].prev.clicked === 0, 'тронут');
+check('to the left presses ◀ of the same slot', rows[1].prev.clicked === 1, rows[1].prev.clicked);
+check('the adjacent slot is not touched', rows[2].next.clicked === 0 && rows[2].prev.clicked === 0, 'тронут');
 UI.bagKey('Enter');
-check('Enter на слоте делает то же, что ▶', rows[1].next.clicked === 2, rows[1].next.clicked);
+check('Enter on a slot does the same as ▶', rows[1].next.clicked === 2, rows[1].next.clicked);
 
 // the name is an input: Enter has to give it the focus, or it cannot be typed from the keyboard
 UI.bagKey('ArrowUp');
 UI.bagKey('Enter');
-check('Enter на имени отдаёт полю фокус', rows[0].input.focused === 1, rows[0].input.focused);
+check('Enter on the name gives the field focus', rows[0].input.focused === 1, rows[0].input.focused);
 
 // The tabs: a digit switches, and the arrows mean something else afterwards.
 bag = makeBagThings([3, 2]);
-check('цифра 2 обработана панелью', UI.bagKey('2') === true, 'не обработана');
+check('number 2 processed by panel', UI.bagKey('2') === true, 'не обработана');
 const cells = bag.cells;
 const focusCell = () => {
   for (let r = 0; r < cells.length; r++) {
@@ -349,80 +349,80 @@ const focusCell = () => {
   }
   return 'нигде';
 };
-check('вещи: фокус встал на первую клетку', focusCell() === '0:0', focusCell());
+check('things: focus is on the first cell', focusCell() === '0:0', focusCell());
 UI.bagKey('ArrowRight'); UI.bagKey('ArrowRight');
-check('вправо ходит по клеткам ряда', focusCell() === '0:2', focusCell());
+check('walks to the right along the cells of the row', focusCell() === '0:2', focusCell());
 UI.bagKey('ArrowDown');
-check('вниз меняет ряд и поджимает клетку под его длину', focusCell() === '1:1', focusCell());
+check('down changes the row and presses the cell to its length', focusCell() === '1:1', focusCell());
 UI.bagKey('Enter');
-check('Enter надевает выбранное', cells[1][1].clicked === 1, cells[1][1].clicked);
-check('подсвечена ровно одна клетка', cells.flat().filter((c) => c.has('focus')).length === 1,
+check('Enter puts on the selected one', cells[1][1].clicked === 1, cells[1][1].clicked);
+check('exactly one cell is highlighted', cells.flat().filter((c) => c.has('focus')).length === 1,
   cells.flat().filter((c) => c.has('focus')).length);
-check('вправо по кругу возвращает в начало ряда', (UI.bagKey('ArrowRight'), focusCell()) === '1:0', focusCell());
+check('to the right in a circle returns to the beginning of the row', (UI.bagKey('ArrowRight'), focusCell()) === '1:0', focusCell());
 
 // back to "worn": the focus starts over there rather than remembering a cell of the grid
 bag = makeBagSelf(3);
 UI.bagKey('1');
-check('цифра 1 вернула на «на себе»', focusRow() === 0, focusRow());
-check('несуществующая вкладка не ловится', UI.bagKey('9') === false, 'поймана');
-check('шестой вкладки нет', UI.bagKey('6') === false, 'поймана');
+check('the number 1 returned to “on itself”', focusRow() === 0, focusRow());
+check('non-existent tab is not caught', UI.bagKey('9') === false, 'поймана');
+check('there is no sixth tab', UI.bagKey('6') === false, 'поймана');
 
 // The "keys" tab: a shelf of two floors. Left and right walk the cards, down
 // steps into the open card, and up out of its first row comes back to the shelf.
 // The office is walked with the keyboard: a card whose buttons need a mouse is
 // a card nobody sets up.
 bag = makeBagKeys(3);
-check('ключи: цифра 5 открыла вкладку', UI.bagKey('5') === true, 'не обработана');
-check('стрелка по полке обработана', UI.bagKey('ArrowRight') === true, 'не обработана');
-check('вверх с полки никуда не уводит', UI.bagKey('ArrowUp') === true, 'не обработана');
+check('keys: number 5 opened a tab', UI.bagKey('5') === true, 'не обработана');
+check('shelf arrow processed', UI.bagKey('ArrowRight') === true, 'не обработана');
+check('doesn\'t lead anywhere up from the shelf', UI.bagKey('ArrowUp') === true, 'не обработана');
 UI.bagKey('ArrowDown');
-check('вниз завела внутрь карточки', bag.btn.classList.contains('focus'), 'фокус не встал');
+check('brought it down inside the card', bag.btn.classList.contains('focus'), 'фокус не встал');
 UI.bagKey('Enter');
-check('Enter внутри карточки жмёт кнопку', bag.btn.clicked === 1, `${bag.btn.clicked}`);
+check('Enter presses the button inside the card', bag.btn.clicked === 1, `${bag.btn.clicked}`);
 UI.bagKey('ArrowDown');
-check('вниз перешло во вторую строку', bag.btn2.classList.contains('focus'), 'фокус не переехал');
+check('moved down to the second line', bag.btn2.classList.contains('focus'), 'фокус не переехал');
 UI.bagKey('ArrowUp');
-check('вверх вернулось в первую', bag.btn.classList.contains('focus'), 'фокус не вернулся');
+check('up returned to first', bag.btn.classList.contains('focus'), 'фокус не вернулся');
 UI.bagKey('ArrowUp');
-check('вверх из первой строки вышло на полку', !bag.btn.classList.contains('focus'), 'застряло в карточке');
-check('и полка снова слушает стрелки вбок', UI.bagKey('ArrowRight') === true, 'не обработана');
-check('чужая клавиша с полки уходит в офис', UI.bagKey('q') === false, 'съедена');
+check('up from the first line went onto the shelf', !bag.btn.classList.contains('focus'), 'застряло в карточке');
+check('and the shelf again listens to the arrows to the side', UI.bagKey('ArrowRight') === true, 'не обработана');
+check('someone else\'s key goes off the shelf into the office', UI.bagKey('q') === false, 'съедена');
 // A guest reads the cards and presses nothing: the class is what hides the
 // controls, and it also drops the fields out of the tab order.
 state.owner = false;
 UI.renderBag('keys');
-check('гость: карточка помечена как гостевая', /class="keydetail guest"/.test(bag.innerHTML), bag.innerHTML.slice(0, 60));
-check('и ему сказано, кто заводит ключи', /keys are set up|заводит хозяин/i.test(bag.innerHTML), 'молчит');
+check('guest: the card is marked as guest', /class="keydetail guest"/.test(bag.innerHTML), bag.innerHTML.slice(0, 60));
+check('and he is told who starts the keys', /keys are set up|заводит хозяин/i.test(bag.innerHTML), 'молчит');
 state.owner = true;
 UI.renderBag('keys');
-check('хозяину гостевого класса нет', !/keydetail guest/.test(bag.innerHTML), 'есть');
+check('the owner has no guest class', !/keydetail guest/.test(bag.innerHTML), 'есть');
 
 // The "office" tab: a row of buttons, and the down arrow has to walk along them.
 // Until 31 August 2026 it did nothing — the handler knew only two tabs out of
 // three, and the key went off into the office from under an open panel. Keys
 // took the last slot on 5 September 2026, so the office stayed on digit 3.
 bag = makeBagOffice(5);
-check('офис: цифра 3 открыла вкладку', UI.bagKey('3') === true, 'не обработана');
-check('вниз обработана', UI.bagKey('ArrowDown') === true, 'не обработана');
-check('и переводит на вторую кнопку', bag.btns[1].has('focus'), 'фокус не там');
-check('подсвечена ровно одна', bag.btns.filter((b) => b.has('focus')).length === 1,
+check('office: number 3 opened a tab', UI.bagKey('3') === true, 'не обработана');
+check('down processed', UI.bagKey('ArrowDown') === true, 'не обработана');
+check('and transfers to the second button', bag.btns[1].has('focus'), 'фокус не там');
+check('exactly one is highlighted', bag.btns.filter((b) => b.has('focus')).length === 1,
   bag.btns.filter((b) => b.has('focus')).length);
 UI.bagKey('Enter');
-check('Enter нажимает то, на чём стоишь', bag.btns[1].clicked === 1, bag.btns[1].clicked);
+check('Enter presses what you\'re standing on', bag.btns[1].clicked === 1, bag.btns[1].clicked);
 UI.bagKey('ArrowUp');
-check('вверх возвращает на первую', bag.btns[0].has('focus'), 'не вернулась');
+check('up returns to first', bag.btns[0].has('focus'), 'не вернулась');
 
 UI.closeBag();
-check('закрытый инвентарь стрелки не ест', UI.bagKey('ArrowDown') === false, 'съело');
+check('closed inventory arrows do not eat', UI.bagKey('ArrowDown') === false, 'съело');
 
 // ------------------------------------------- the window on the world and the office colour (the ring)
 sky = makeRing([{ id: 'skytoggle' }, { id: 'skyq', tagName: 'INPUT' }, { id: 'skygeo' }]);
-check('окно в мир: стрелка обработана', UI.skyKey('ArrowDown') === true, 'нет');
+check('window to the world: arrow processed', UI.skyKey('ArrowDown') === true, 'нет');
 UI.skyKey('Enter');
-check('Enter на поле города отдаёт ему настоящий фокус', sky.btns[1].focused === 1, sky.btns[1].focused);
-check('и не жмёт его как кнопку', sky.btns[1].clicked === 0, sky.btns[1].clicked);
+check('Entering the city field gives it real focus', sky.btns[1].focused === 1, sky.btns[1].focused);
+check('and doesn’t press it like a button', sky.btns[1].clicked === 0, sky.btns[1].clicked);
 UI.closeSky();
-check('закрытое окно в мир стрелки не ест', UI.skyKey('ArrowDown') === false, 'съело');
+check('closed window to the world arrows do not eat', UI.skyKey('ArrowDown') === false, 'съело');
 
 // the hue slider: the sideways arrows turn it rather than lead the focus away
 skin = makeRing([
@@ -433,12 +433,12 @@ skin = makeRing([
 let hueSet = 0;
 skin.btns[1].oninput = () => { hueSet += 1; };
 UI.skinKey('ArrowDown');
-check('цвет офиса: дошли до ползунка', skin.btns[1].has('focus'), 'нет');
+check('office color: reached the slider', skin.btns[1].has('focus'), 'нет');
 UI.skinKey('ArrowRight');
-check('вправо крутит ползунок, а не уводит', skin.btns[1].has('focus') && Number(skin.btns[1].value) > 100, skin.btns[1].value);
-check('и дёргает его обработчик', hueSet === 1, hueSet);
+check('the slider rotates to the right, but does not move', skin.btns[1].has('focus') && Number(skin.btns[1].value) > 100, skin.btns[1].value);
+check('and its handler pulls', hueSet === 1, hueSet);
 UI.skinKey('ArrowDown');
-check('вниз с ползунка всё-таки уводит', !skin.btns[1].has('focus'), 'застряли');
+check('still leads down from the slider', !skin.btns[1].has('focus'), 'застряли');
 
 // ------------------------------------------------- the language and the agents' names
 // A panel of two rows: the interface and the names. A flat round would lie to
@@ -448,28 +448,28 @@ state.agents = [{ id: 'a0', name: 'Гоша' }, { id: 'a1', name: 'Марта' }
 langPanel = makeLang();
 await UI.openLang();
 const focused = () => langPanel.btns.findIndex((b) => b.has('focus'));
-check('язык: фокус встаёт на первую кнопку', focused() === 0, focused());
-check('стрелка вправо обработана', UI.langKey('ArrowRight') === true, 'нет');
-check('и ходит внутри строки интерфейса', focused() === 1, focused());
+check('language: focus is on the first button', focused() === 0, focused());
+check('right arrow processed', UI.langKey('ArrowRight') === true, 'нет');
+check('and walks inside the interface line', focused() === 1, focused());
 UI.langKey('ArrowDown');
-check('вниз уводит во вторую строку, столбец сохраняя', focused() === 3, focused());
-check('и это «Русские», а не «как язык офиса»', langPanel.btns[3].dataset.pack === 'ru');
+check('takes you down to the second row, keeping the column', focused() === 3, focused());
+check('and this is “Russian”, and not “like the language of the office”', langPanel.btns[3].dataset.pack === 'ru');
 
 // The price row: it has to change along with the focus, not on a press.
-check('на паке, который ничего не сменит, цены нет', langPanel.warn.hidden === true, langPanel.warn.textContent);
+check('there is no price for a package that will not replace anything', langPanel.warn.hidden === true, langPanel.warn.textContent);
 UI.langKey('ArrowRight');
-check('дошли до English', langPanel.btns[4].dataset.pack === 'en' && focused() === 4, focused());
-check('цена показана до нажатия', langPanel.warn.hidden === false, 'скрыта');
-check('и называет число и пример', /2/.test(langPanel.warn.textContent) && /Pete/.test(langPanel.warn.textContent),
+check('reached English', langPanel.btns[4].dataset.pack === 'en' && focused() === 4, focused());
+check('price shown before clicking', langPanel.warn.hidden === false, 'скрыта');
+check('and gives a number and an example', /2/.test(langPanel.warn.textContent) && /Pete/.test(langPanel.warn.textContent),
   langPanel.warn.textContent);
 UI.langKey('ArrowLeft');
-check('шаг назад цену убирает', langPanel.warn.hidden === true, langPanel.warn.textContent);
+check('a step back removes the price', langPanel.warn.hidden === true, langPanel.warn.textContent);
 
 UI.langKey('ArrowRight');
 UI.langKey('Enter');
-check('Enter жмёт то, на чём фокус', langPanel.btns[4].clicked === 1, langPanel.btns[4].clicked);
+check('Enter presses what the focus is on', langPanel.btns[4].clicked === 1, langPanel.btns[4].clicked);
 UI.closeLang();
-check('закрытая панель языка стрелки не ест', UI.langKey('ArrowDown') === false, 'съела');
+check('closed arrow tongue panel does not eat', UI.langKey('ArrowDown') === false, 'съела');
 
-console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
+console.log(failed ? `\nfailed: ${failed}` : '\nall matched');
 process.exit(failed ? 1 : 0);

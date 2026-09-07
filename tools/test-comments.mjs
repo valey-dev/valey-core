@@ -8,82 +8,60 @@
 // nine working trees on this machine did not even have the file. This stand
 // works on everyone: it runs in `npm test`, in CI and in the pre-commit hook.
 //
-// TODO is the half that has not been translated yet, file by file. It is the
-// point of the whole thing: a translated file can never go back, and the list
-// shrinking is the progress. An empty file in the list is an error too —
-// otherwise the list outlives the work and stops meaning anything.
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
 import { russianComments } from './lib/comments.mjs';
 
-// Still Russian. Delete a line when the file is translated; never add one —
-// with the single exception that put web/ui.js here on 6 September 2026, and it
-// is worth reading before anybody adds a second one.
-//
-// The list was empty because this stand said the whole repository was
-// translated. It was not: the machine could not see past a regex holding a
-// backtick — `.replace(/[*#`]/g, '')` on line 56 of web/ui.js — and read 21
-// comments in a file that has 556. The parser is fixed (tools/lib/comments.mjs);
-// what the fix uncovered is 291 Russian lines in the office's largest file,
-// never checked and never translated.
-//
-// They are not being translated in the same breath as the panel that found
-// them: these comments are where this project keeps its reasons, and a hurried
-// pass over three hundred of them would cost more than it buys. So the file
-// goes on the list, which is what the list is for, and the work is in
-// modules/BACKLOG.md.
-const TODO = new Set([
-  'web/ui.js',
-]);
-
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, got === undefined ? '' : '→ ' + got); }
+  else { bad += 1; console.log('FAIL  |', name, got === undefined ? '' : '→ ' + got); }
 };
 
 // The machine itself first: a checker that says "clean" about everything is
 // worse than none, and this one is easy to break — it has to tell a comment
 // from a string that merely looks like one.
-ok('русский комментарий виден', russianComments('// заметка\n').length === 1);
-ok('английский — нет', russianComments('// a note\n').length === 0);
-ok('строка, которую офис говорит вслух, — не комментарий',
+ok('a Russian comment is detected', russianComments('// заметка\n').length === 1);
+ok('an English comment is not', russianComments('// a note\n').length === 0);
+ok('a string spoken by the office is not a comment',
   russianComments("console.log('Гоша освободилась');\n").length === 0);
-ok('адрес со слэшами внутри строки — не комментарий',
+ok('slashes inside a string are not a comment',
   russianComments("const u = 'http://x/y'; // ссылка\n").length === 1);
-ok('цитата-улика внутри английского комментария остаётся',
+ok('quoted evidence inside an English comment may remain',
   russianComments('// the office wrote "Гоша освободилась" that day\n').length === 0);
-ok('блочный комментарий тоже считается', russianComments('/* уже мёртв */\n').length === 1);
-ok('многострочный блок отдаёт номер строки', russianComments('let a;\n/* one\n два */\n')[0].line === 3);
-ok('шаблонная строка с русским текстом — не комментарий',
+ok('a block comment is checked', russianComments('/* уже мёртв */\n').length === 1);
+ok('a multiline block reports its line number', russianComments('let a;\n/* one\n два */\n')[0].line === 3);
+ok('a template string with Russian text is not a comment',
   russianComments('const h = `<b>Кто внутри</b>`;\n').length === 0);
+ok('a comment after nested template literals is still checked',
+  russianComments('const h = `${ok ? `<b>${name}</b>` : ""}`;\n// сломано\n').length === 1);
+ok('a comment inside a template expression is checked',
+  russianComments('const h = `${(() => { /* сломано */ return name; })()}`;\n').length === 1);
+ok('a YAML hash comment is checked', russianComments('run: ok # сломано\n', 'hash').length === 1);
+ok('an HTML comment is checked', russianComments('<p>Привет</p><!-- сломано -->\n', 'html').length === 1);
+ok('an HTML text node is not a comment', russianComments('<p>Привет</p>\n', 'html').length === 0);
+ok('a comment in a Markdown code fence is checked',
+  russianComments('```sh\necho ok # сломано\n```\n', 'markdown').length === 1);
+ok('Markdown prose is not a comment', russianComments('Русский текст.\n', 'markdown').length === 0);
 
 // ------------------------------------------------------------------ the code
-const files = execSync('git ls-files "*.js" "*.mjs"', { encoding: 'utf8' })
+const files = execSync('git ls-files "*.js" "*.mjs" "*.css" "*.html" "*.svg" "*.yml" "*.yaml" "*.py" "*.md" ".gitignore"', { encoding: 'utf8' })
   .trim().split('\n').filter((f) => f && !f.startsWith('.claude/') && fs.existsSync(f));
-ok('файлы вообще нашлись', files.length > 50, files.length);
+ok('source files were found', files.length > 50, files.length);
 
-const left = [];
 for (const f of files) {
-  const hits = russianComments(fs.readFileSync(f, 'utf8'));
-  if (TODO.has(f)) {
-    if (hits.length) left.push([f, hits.length]);
-    else ok(`${f}: переведён — убери его из списка TODO в этом стенде`, false);
-    continue;
-  }
+  const syntax = /\.(?:yml|yaml|py)$/.test(f) || f === '.gitignore' ? 'hash'
+    : /\.md$/.test(f) ? 'markdown'
+    : /\.(?:html|svg)$/.test(f) ? 'html' : 'slash';
+  const hits = russianComments(fs.readFileSync(f, 'utf8'), syntax);
   if (hits.length) {
     bad += 1;
-    console.log(`УПАЛ  | ${f}: комментарии в коде на английском с 5 сентября 2026 (AGENTS.md)`);
+    console.log(`FAIL  | ${f}: code comments must be in English`);
     for (const h of hits.slice(0, 5)) console.log(`      | ${f}:${h.line}  ${h.text.slice(0, 88)}`);
-    if (hits.length > 5) console.log(`      | …и ещё ${hits.length - 5}`);
+    if (hits.length > 5) console.log(`      | …and ${hits.length - 5} more`);
   }
 }
-ok(`переведено: ${files.length - left.length} файлов из ${files.length}`, true);
-if (left.length) {
-  const total = left.reduce((n, [, c]) => n + c, 0);
-  console.log(`      | осталось ${total} строк в ${left.length} файлах, крупнейшие: `
-    + left.sort((a, b) => b[1] - a[1]).slice(0, 3).map(([f, n]) => `${f} (${n})`).join(', '));
-}
+ok(`checked ${files.length} source files`, true);
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

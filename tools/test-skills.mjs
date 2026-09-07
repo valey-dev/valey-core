@@ -14,7 +14,7 @@ import { applyLine, emptyState, SKILL_BRANCHES } from '../server/agents.js';
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    | ' + name);
-  else { bad++; console.log('УПАЛ  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
+  else { bad++; console.log('FAIL  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
 };
 
 const line = (name, input = {}) => JSON.stringify({
@@ -55,26 +55,26 @@ for (const [name, calls, branch] of cases) {
 // An image written by an ordinary Write is design, not code. The rule lives in
 // describeTool and is only checked here: without it every mock-up edit would go
 // to the developer and the designer would always sit at a dash.
-ok('правка картинки — дизайнер, хотя инструмент тот же',
+ok('image editing by a designer, although the tool is the same',
   feed([['Write', { file_path: '/p/logo.png' }]]).skills.design === 1);
 
 // ------------------------------------------------------------ the sum is not trimmed
 
 const long = feed(Array.from({ length: 200 }, () => ['Read', { file_path: '/p/a.js' }]));
-ok('двести чтений сосчитаны все', long.skills.archive === 200, long.skills.archive);
-ok('окно профессии при этом обрезано на шестидесяти', long.acts.length === 60, long.acts.length);
+ok('two hundred readings are all counted', long.skills.archive === 200, long.skills.archive);
+ok('the profession window is cut off at sixty', long.acts.length === 60, long.acts.length);
 
 // ----------------------------------------------------------------- small things
 
 const fresh = emptyState();
-ok('у новой сессии все семь веток на нуле',
+ok('the new session has all seven branches at zero',
   SKILL_BRANCHES.every((b) => fresh.skills[b] === 0) && Object.keys(fresh.skills).length === 7, fresh.skills);
 
 const mixed = feed([
   ['Read', { file_path: '/p/a.js' }], ['Read', { file_path: '/p/b.js' }],
   ['Edit', { file_path: '/p/a.js' }], ['Bash', { command: 'npm test' }],
 ]);
-ok('смешанная работа раскладывается по веткам',
+ok('mixed work is laid out on branches',
   mixed.skills.archive === 2 && mixed.skills.code === 1 && mixed.skills.qa === 1, mixed.skills);
 
 // A reply with no tool calls belongs to no branch: a grade is about what was
@@ -84,7 +84,7 @@ applyLine(talk, JSON.stringify({
   type: 'assistant', timestamp: new Date().toISOString(),
   message: { content: [{ type: 'text', text: 'готово' }] },
 }));
-ok('разговор не качает ничего', Object.values(talk.skills).every((n) => n === 0), talk.skills);
+ok('conversation doesn\'t download anything', Object.values(talk.skills).every((n) => n === 0), talk.skills);
 
 // --------------------------------------------------------------- the shift
 //
@@ -103,21 +103,21 @@ const shiftOf = (lines) => { const st = emptyState(); for (const l of lines) app
 const T0 = Date.parse('2026-09-06T10:00:00Z');
 const MIN = 60000;
 const said = shiftOf([spoke('раз', T0), spoke('два', T0 + MIN), spoke('три', T0 + 2 * MIN)]);
-ok('заходы считаются по репликам', said.turns === 3, said);
-ok('знаки складываются', said.chars === 'раз'.length + 'два'.length + 'три'.length, said.chars);
-ok('короткие паузы простоем не считаются', said.idleN === 0, said);
+ok('entries are counted based on replicas', said.turns === 3, said);
+ok('signs add up', said.chars === 'раз'.length + 'два'.length + 'три'.length, said.chars);
+ok('short pauses are not considered downtime', said.idleN === 0, said);
 
 const paused = shiftOf([spoke('до', T0), spoke('после', T0 + 40 * MIN), spoke('и ещё', T0 + 41 * MIN)]);
-ok('пауза длиннее десяти минут — это простой', paused.idleN === 1, paused);
-ok('и он посчитан в минутах, а не в репликах', Math.round(paused.idleMs / MIN) === 40, paused.idleMs);
+ok('a pause longer than ten minutes is a simple one', paused.idleN === 1, paused);
+ok('and it is counted in minutes, not in replicas', Math.round(paused.idleMs / MIN) === 40, paused.idleMs);
 
 const edge = shiftOf([spoke('a', T0), spoke('b', T0 + 10 * MIN)]);
-ok('ровно десять минут — ещё не простой', edge.idleN === 0, edge);
+ok('exactly ten minutes is not easy yet', edge.idleN === 0, edge);
 
 // A message with no text is a tool call: it adds no reply to the count, though
 // it does carry a stamp, so a gap is measured across it.
 const toolOnly = shiftOf([spoke('слово', T0), line('Read', { file_path: '/p/a.js' })]);
-ok('вызов инструмента не считается заходом', toolOnly.turns === 1, toolOnly);
+ok('calling a tool is not considered an entry', toolOnly.turns === 1, toolOnly);
 
-console.log(bad ? `\nПЛОХО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

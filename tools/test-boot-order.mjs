@@ -15,7 +15,7 @@ const src = readFileSync(new URL('../web/main.js', import.meta.url), 'utf8');
 let bad = 0;
 const ok = (what, cond, got) => {
   if (cond) { console.log('ok    | ' + what); return; }
-  bad++; console.log('УПАЛ  | ' + what + (got === undefined ? '' : ' → ' + JSON.stringify(got)));
+  bad++; console.log('FAIL  | ' + what + (got === undefined ? '' : ' → ' + JSON.stringify(got)));
 };
 
 // The first occurrence of each is the one that runs at startup, not inside a handler.
@@ -24,11 +24,11 @@ const hud = call('\nUI.renderHud();');
 const fit = call('\nrefit();');
 const title = call('\nrenderTitle();');
 
-ok('офис зовёт renderHud на старте', hud > 0, hud);
-ok('офис зовёт refit на старте', fit > 0, fit);
-ok('офис зовёт renderTitle на старте', title > 0, title);
-ok('холст считается до того, как рисуется меню входа', fit < title, { fit, title });
-ok('а HUD рисуется до того, как считается холст', hud < fit, { hud, fit });
+ok('the office calls renderHud at the start', hud > 0, hud);
+ok('the office calls for refit at the start', fit > 0, fit);
+ok('the office calls renderTitle at start', title > 0, title);
+ok('the canvas is counted before the login menu is drawn', fit < title, { fit, title });
+ok('and the HUD is drawn before the canvas is considered', hud < fit, { hud, fit });
 
-console.log(bad ? `\n${bad} упало` : '\nвсё цело');
+console.log(bad ? `\n${bad} упало` : '\nall intact');
 process.exit(bad ? 1 : 0);

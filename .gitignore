@@ -2,72 +2,65 @@
 node_modules/
 .settings.json
 
-# Отчёт о покрытии: c8 складывает сюда сырые данные V8 и html. Считается он
-# по требованию — `npm run coverage` и один шаг в CI, — а живёт ровно до
-# следующего прогона.
+# Coverage output: c8 puts raw V8 data and HTML here. It is generated on demand
+# by `npm run coverage` and one CI step, and lives only until the next run.
 coverage/
 
-# сборка лендинга для Cloudflare Pages — собирается на их стороне
+# Landing build for Cloudflare Pages, generated on their side.
 _site/
 
-# Чужие модули в modules/ — приватные, лежат в своём репозитории и приезжают
-# сюда символической ссылкой. Ядро их не хранит и не должно замечать: без этих
-# строк они висели бы в git status у каждого, кто их подключил, и однажды кто-то
-# добавил бы их сюда «чтобы не мешались».
+# Third-party modules under modules/ are private, live in their own repository,
+# and arrive here through a symlink. Core neither stores nor notices them:
+# otherwise they would appear in every connected checkout's status and one day
+# be added here just to silence it.
 /modules/*
 !/modules/radio/
 !/modules/plan/
 
-# Рулбук агентов не коммитится. 3 сентября 2026 он был добавлен в дерево —
-# довод стоял здесь же и он верный: worktree выкладывает только отслеживаемые
-# файлы, и агент в новой ветке стартовал с чистого листа. 5 сентября решение
-# отменено владельцем: правила описывают команду, а не офис, и клонирующий
-# ядро не должен получать чужой уклад молча. Ответ на worktree — не коммит:
-# в новое дерево файлы приезжают копией по списку ниже, а в новый клон их
-# ставит установщик — отдельный скрипт, который кладёт агентов, синхронизатор
-# и рутину, добровольно. С платным модулем библии он поедет сразу, в открытой
-# сборке останется возможностью, а не данностью.
+# The agent rulebook is not committed. It entered the tree on 3 September 2026
+# for a valid reason: worktrees contain only tracked files, so an agent on a new
+# branch started from nothing. The owner reversed that decision on 5 September:
+# rules describe the team, not the office, and cloning core must not silently
+# impose somebody else's practice. Worktrees are solved without a commit: files
+# are copied into new trees from the list below, while an installer voluntarily
+# puts agents, synchronisation, and routines into a new clone. The paid rulebook
+# module will bring it automatically; the open build keeps it optional.
 #
-# Файлы при этом остаются на диске и работают: под контроль они не попадают.
+# These files remain on disk and work; they simply stay untracked.
 AGENTS.md
 CLAUDE.md
 .claude/
 .githooks/
 
-# Чем эти файлы доезжают до worktree: `.worktreeinclude` — список, по которому
-# Claude Code копирует игнорируемые файлы в каждое новое дерево в момент его
-# создания. Проверено 4 сентября 2026 на свежесозданном worktree: AGENTS.md,
-# CLAUDE.md и .githooks/pre-commit приходят байт в байт, бит исполнения у хука
-# цел, а git status в новом дереве остаётся пустым — копии игнорируются.
+# How these files reach a worktree: `.worktreeinclude` tells Claude Code which
+# ignored files to copy when creating one. Verified on 4 September 2026 in a new
+# worktree: AGENTS.md, CLAUDE.md, and .githooks/pre-commit arrive byte-for-byte,
+# the hook keeps its executable bit, and git status stays clean because copies
+# remain ignored.
 #
-# Сам список тоже не коммитится: в нём перечислено ровно то, что стоит выше,
-# и коммит списка вернул бы в репозиторий ровно то, что 4 сентября из него
-# убрали.
+# The list itself is ignored: it names exactly what appears above, and committing
+# it would return to the repository what was removed on 4 September.
 #
-# Это копия, а не ссылка: правка AGENTS.md в основном чекауте не долетает до
-# уже созданных деревьев, и наоборот. `.githooks/` в списке потому, что
-# core.hooksPath относительный и ищет хуки рядом с собой, то есть в каждом
-# дереве свои. `.claude/` целиком в список не входит: внутри него лежат сами
-# worktree.
+# This is a copy, not a link: changing AGENTS.md in the main checkout does not
+# update existing worktrees, or vice versa. `.githooks/` is listed because
+# core.hooksPath is relative and finds hooks beside itself, one copy per tree.
+# `.claude/` as a whole is excluded because it contains the worktrees themselves.
 .worktreeinclude
 
-# Бэклог ядра — туда же и по той же причине. Заведён 3 сентября 2026 («у ядра
-# должен быть свой список»), убран 5-го: планирование живёт в приватном
-# репозитории вместе с остальной документацией, и это решено ещё при разделении.
-# Два списка на один проект расходятся молча — тот, что виден, начинают считать
-# полным.
+# Core's backlog follows for the same reason. Created on 3 September 2026, it
+# was removed on the 5th: planning belongs in the private repository with the
+# other internal documents, as decided when the repositories split. Two lists
+# for one project drift silently, and people mistake the visible one for complete.
 BACKLOG.md
 
-# Черновик ролика, который release.mjs пишет на каждом минорном релизе. Не
-# отслеживается нарочно: это заготовка для человека, а не часть продукта. Но
-# нерукотворный мусор в дереве блокировал следующий релиз — скрипт отказывается
-# работать на грязном дереве, и 5 сентября 2026 после v0.4.0 он заблокировал сам
-# себя: собственный вывод оказался тем самым «незакоммиченным».
+# Video draft written by release.mjs on every minor release. It is deliberately
+# untracked: material for a person, not product output. Generated debris once
+# blocked the next release because the script rejects dirty trees; after v0.4.0
+# on 5 September 2026 its own output became the uncommitted change blocking it.
 media/
 
-# Резервные копии рулбука, которые оставляют инструменты слияния и чужие
-# сессии: `AGENTS.md.orig`, `AGENTS.md.before-pushing-…`. Сам AGENTS.md уже
-# игнорируется — значит и его копии должны, иначе они всплывают в чужом
-# `git status` и по той же причине останавливают релиз.
+# Rulebook backups left by merge tools and other sessions, such as
+# `AGENTS.md.orig` and `AGENTS.md.before-pushing-…`. AGENTS.md is ignored, so its
+# copies must be too; otherwise they appear in another status and stop releases.
 AGENTS.md.*
 CLAUDE.md.*

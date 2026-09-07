@@ -15,19 +15,19 @@ import { node, installDom } from './lib/dom.mjs';
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, '→', typeof got === 'string' ? got.slice(0, 200) : JSON.stringify(got)); }
+  else { bad += 1; console.log('FAIL  |', name, '→', typeof got === 'string' ? got.slice(0, 200) : JSON.stringify(got)); }
 };
 
 // ------------------------------------------------------------- the function itself
-ok('esc закрывает все пять символов', esc(`<>&"'`) === '&lt;&gt;&amp;&quot;&#39;', esc(`<>&"'`));
-ok('esc переживает undefined и числа', esc(undefined) === '' && esc(0) === '0', [esc(undefined), esc(0)]);
+ok('esc closes all five characters', esc(`<>&"'`) === '&lt;&gt;&amp;&quot;&#39;', esc(`<>&"'`));
+ok('esc survives undefined and numbers', esc(undefined) === '' && esc(0) === '0', [esc(undefined), esc(0)]);
 
 // -------------------------------------------------------- the file headers
-ok('html из /api/file — вложение, не страница', fileHeaders('/x/a.html')['content-disposition'] === 'attachment', fileHeaders('/x/a.html'));
-ok('svg — тоже: он исполняет скрипты', fileHeaders('/x/a.SVG')['content-disposition'] === 'attachment', fileHeaders('/x/a.SVG'));
-ok('png — нет, картинку показывают как есть', !fileHeaders('/x/a.png')['content-disposition'], fileHeaders('/x/a.png'));
-ok('nosniff на всём', ['/a.png', '/a.html', '/a.weird'].every((p) => fileHeaders(p)['x-content-type-options'] === 'nosniff'), null);
-ok('неизвестное расширение — текст', fileType('/a.weird').startsWith('text/plain'), fileType('/a.weird'));
+ok('html from /api/file - attachment, not page', fileHeaders('/x/a.html')['content-disposition'] === 'attachment', fileHeaders('/x/a.html'));
+ok('svg - too: it executes scripts', fileHeaders('/x/a.SVG')['content-disposition'] === 'attachment', fileHeaders('/x/a.SVG'));
+ok('png - no, the picture is shown as is', !fileHeaders('/x/a.png')['content-disposition'], fileHeaders('/x/a.png'));
+ok('nosniff on everything', ['/a.png', '/a.html', '/a.weird'].every((p) => fileHeaders(p)['x-content-type-options'] === 'nosniff'), null);
+ok('unknown extension - text', fileType('/a.weird').startsWith('text/plain'), fileType('/a.weird'));
 
 // --------------------------------------------------------------- the panels
 // A string that closes an attribute in double quotes, opens a tag and hangs a
@@ -70,25 +70,25 @@ const S = {
 UI.initUI(S, { guideTo: () => {}, saveMe: () => {}, geocode: async () => ({ results: [] }), saveSettings: async () => ({}) });
 
 UI.renderHud();
-ok('HUD: комната и место — текст', clean(panels.hud.innerHTML), panels.hud.innerHTML);
+ok('HUD: room and location - text', clean(panels.hud.innerHTML), panels.hud.innerHTML);
 
 UI.renderDialog();
-ok('карточка, «поговорить»: имя, проект, ветка, роль — текст', clean(panels.dialog.innerHTML), panels.dialog.innerHTML);
+ok('card, “talk”: name, project, branch, role - text', clean(panels.dialog.innerHTML), panels.dialog.innerHTML);
 S.page = 'work'; UI.renderDialog();
-ok('карточка, «показать работу»: имя файла — текст', clean(panels.dialog.innerHTML), panels.dialog.innerHTML);
+ok('card, “show work”: file name - text', clean(panels.dialog.innerHTML), panels.dialog.innerHTML);
 S.page = 'task'; UI.renderDialog();
-ok('карточка, «дать задание»: записка, ответ, ошибка, подсказка — текст', clean(panels.dialog.innerHTML), panels.dialog.innerHTML);
+ok('card, “give a task”: note, answer, error, hint - text', clean(panels.dialog.innerHTML), panels.dialog.innerHTML);
 
 UI.renderRoster();
-ok('планёрка: команда, имя и задача — текст', clean(panels.roster.innerHTML), panels.roster.innerHTML);
+ok('planning meeting: team, name and task - text', clean(panels.roster.innerHTML), panels.roster.innerHTML);
 
 UI.renderSky([{ lat: 1, lon: 2, label: EVIL, detail: EVIL }]);
-ok('окно в мир: место и результаты геокодера — текст', clean(panels.sky.innerHTML), panels.sky.innerHTML);
+ok('window to the world: location and geocoder results - text', clean(panels.sky.innerHTML), panels.sky.innerHTML);
 
 UI.openGallery([{ path: '/tmp/' + EVIL, name: EVIL, image: true, agent: { name: EVIL, project: EVIL } }], EVIL);
-ok('доска: подписи — текст', clean(panels.viewer.innerHTML), panels.viewer.innerHTML);
-ok('доска: у картинки нет встроенного onerror — обработчик вешается кодом',
+ok('board: signatures - text', clean(panels.viewer.innerHTML), panels.viewer.innerHTML);
+ok('board: the image does not have a built-in onerror - the handler is added by code',
   !tags(panels.viewer.innerHTML).some((t) => /onerror/i.test(bare(t))), panels.viewer.innerHTML);
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

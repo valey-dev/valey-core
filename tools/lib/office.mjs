@@ -29,8 +29,8 @@ export const freePort = () => new Promise((resolve, reject) => {
 export async function fakeClaudeDir(dir, {
   sessionId = 'aaaaaaaa-0000-4000-8000-000000000001',
   cwd = '/Users/kolya/Projects/rocket-shop',
-  said = 'Готово: корзина считает скидку и тест на неё зелёный.',
-  asked = 'Посчитай скидку в корзине',
+  said = 'Done: the cart calculates the discount and its test is green.',
+  asked = 'Calculate the discount in the cart',
   file = '/Users/kolya/Projects/rocket-shop/src/cart.js',
 } = {}) {
   const claude = path.join(dir, 'claude');
@@ -96,7 +96,7 @@ export async function startOffice({ settings = {}, claudeDir = null, env = {}, r
     catch { await new Promise((r) => setTimeout(r, 100)); }
   }
   await stop();
-  throw new Error(`офис не поднялся на ${port}`);
+  throw new Error(`the office did not start on ${port}`);
 }
 
 // Waits for an agent to appear in the snapshot: the server does not assemble it
@@ -107,5 +107,5 @@ export async function waitForAgent(get, tries = 40, pause = 150) {
     if ((s.agents || []).length) return s;
     await new Promise((r) => setTimeout(r, pause));
   }
-  throw new Error('агент не появился в снимке офиса');
+  throw new Error('the agent did not appear in the office snapshot');
 }

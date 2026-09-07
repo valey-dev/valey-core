@@ -15,7 +15,7 @@
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
+  else { bad += 1; console.log('FAIL  |', name, '→', JSON.stringify(got)); }
 };
 
 const classes = new Set();
@@ -58,56 +58,56 @@ const { initStand } = await import('../web/stand.js');
 
 // ------------------------------------------------------------------ the plaque
 const s = await initStand();
-ok('табличка построилась', !!s && s.text === 'что проверяем', s && s.text);
-ok('и повешена на страницу вместе с ярлыком', document.body.children.length === 2,
+ok('sign built', !!s && s.text === 'что проверяем', s && s.text);
+ok('and hung on the page along with a label', document.body.children.length === 2,
   document.body.children.map((c) => c.id));
 const tab = document.body.children[1];
-ok('ярлык — кнопка с подписью «СТЕНД»', tab.id === 'standtab' && tab.textContent === 'СТЕНД', tab.textContent);
-ok('сама табличка говорит, чем её свернуть',
-  (document.body.children[0].children[0] || {}).textContent === 'ТЕСТОВЫЙ СТЕНД · ~ СВЕРНУТЬ',
+ok('label - a button labeled “STAND”', tab.id === 'standtab' && tab.textContent === 'STAND', tab.textContent);
+ok('the sign itself tells you how to roll it',
+  (document.body.children[0].children[0] || {}).textContent === 'TEST STAND · ~ COLLAPSE',
   (document.body.children[0].children[0] || {}).textContent);
-ok('развёрнута с самого начала', !classes.has('stand-folded'), [...classes]);
+ok('developed from the very beginning', !classes.has('stand-folded'), [...classes]);
 
 // ------------------------------------------------------------------- the key
 const key = listeners.find((l) => l.type === 'keydown');
-ok('слушатель клавиши повешен ровно один', listeners.length === 1 && !!key, listeners.length);
+ok('the key listener is hung exactly one', listeners.length === 1 && !!key, listeners.length);
 
 let prevented = 0;
 const press = (code, extra = {}) => key.fn({ code, preventDefault: () => { prevented += 1; }, ...extra });
 
 press('Backquote');
-ok('«~» сворачивает', classes.has('stand-folded'), [...classes]);
-ok('и клавиша не уходит дальше', prevented === 1, prevented);
+ok('"~" collapses', classes.has('stand-folded'), [...classes]);
+ok('and the key doesn\'t go any further', prevented === 1, prevented);
 press('Backquote');
-ok('второе нажатие разворачивает', !classes.has('stand-folded'), [...classes]);
+ok('second press expands', !classes.has('stand-folded'), [...classes]);
 
 press('KeyS');
-ok('чужая клавиша не трогает табличку', !classes.has('stand-folded'), [...classes]);
-ok('и не перехватывается', prevented === 2, prevented);
+ok('someone else\'s key does not touch the sign', !classes.has('stand-folded'), [...classes]);
+ok('and is not intercepted', prevented === 2, prevented);
 
 press('Backquote', { metaKey: true });
-ok('Cmd+« остаётся браузеру', !classes.has('stand-folded'), [...classes]);
+ok('Cmd+“ remains to the browser', !classes.has('stand-folded'), [...classes]);
 press('Backquote', { ctrlKey: true });
 press('Backquote', { altKey: true });
-ok('Ctrl и Alt тоже', !classes.has('stand-folded') && prevented === 2, [[...classes], prevented]);
+ok('Ctrl and Alt too', !classes.has('stand-folded') && prevented === 2, [[...classes], prevented]);
 
 press('Backquote', { target: { tagName: 'INPUT' } });
-ok('в поле ввода «~» печатается, а не сворачивает', !classes.has('stand-folded'), [...classes]);
+ok('in the input field "~" is printed rather than collapsed', !classes.has('stand-folded'), [...classes]);
 press('Backquote', { target: { tagName: 'TEXTAREA' } });
-ok('и в многострочном поле тоже', !classes.has('stand-folded'), [...classes]);
+ok('and in a multiline field too', !classes.has('stand-folded'), [...classes]);
 
 // ------------------------------------------------------------- between reloads
 press('Backquote');
-ok('свёрнутое состояние записано', store.get('valey-stand-folded') === '1', store.get('valey-stand-folded'));
+ok('the collapsed state is written', store.get('valey-stand-folded') === '1', store.get('valey-stand-folded'));
 classes.clear();
 document.body.children.length = 0;
 listeners.length = 0;
 await initStand();
-ok('после перезагрузки табличка осталась свёрнутой', classes.has('stand-folded'), [...classes]);
+ok('after the reboot the sign remained collapsed', classes.has('stand-folded'), [...classes]);
 const tab2 = document.body.children[1];
 tab2.onclick();
-ok('клик по ярлыку разворачивает', !classes.has('stand-folded'), [...classes]);
-ok('и это запомнено', !store.get('valey-stand-folded'), store.get('valey-stand-folded'));
+ok('Click on the shortcut to expand', !classes.has('stand-folded'), [...classes]);
+ok('and it\'s remembered', !store.get('valey-stand-folded'), store.get('valey-stand-folded'));
 
 // -------------------------------------------------------------- no stand at all
 classes.clear();
@@ -115,8 +115,8 @@ document.body.children.length = 0;
 listeners.length = 0;
 answer = { text: null };
 const none = await initStand();
-ok('без VALEY_STAND ничего не строится', none === null, none);
-ok('и клавиша не занята', listeners.length === 0, listeners.length);
+ok('without VALEY_STAND nothing is built', none === null, none);
+ok('and the key is not occupied', listeners.length === 0, listeners.length);
 
-console.log(bad ? `\n${bad} упало` : '\nвсё цело');
+console.log(bad ? `\nfailed: ${bad}` : '\nall intact');
 process.exit(bad ? 1 : 0);

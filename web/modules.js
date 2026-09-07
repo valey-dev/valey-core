@@ -93,7 +93,7 @@ export async function loadModules(callbacks = {}) {
       ids.push(m.id);
     } catch (err) {
       // Failing silently is not allowed: "the easel is gone" would otherwise be investigated by eye.
-      console.warn('модуль не встал:', m.id, err);
+      console.warn('module failed to start:', m.id, err);
       failed.push({ id: m.id, error: String((err && err.message) || err) });
     }
   }
@@ -104,7 +104,7 @@ function apiFor(id) {
   return {
     id,
     on(name, fn) {
-      if (!hooks[name]) throw new Error(`нет такой точки: ${name}`);
+      if (!hooks[name]) throw new Error(`unknown hook: ${name}`);
       hooks[name].push({ id, fn });
     },
     // A module's dictionary is poured into the common one at once: the keys are
@@ -171,7 +171,7 @@ export function collect(name, ...args) {
   const out = [];
   for (const h of hooks[name] || []) {
     let v;
-    try { v = h.fn(...args); } catch (err) { console.warn(`точка ${name} упала в ${h.id}:`, err); continue; }
+    try { v = h.fn(...args); } catch (err) { console.warn(`hook ${name} failed in ${h.id}:`, err); continue; }
     if (Array.isArray(v)) out.push(...v);
     else if (v != null && v !== false) out.push(v);
   }
@@ -181,7 +181,7 @@ export function collect(name, ...args) {
 export function first(name, ...args) {
   for (const h of hooks[name] || []) {
     let v;
-    try { v = h.fn(...args); } catch (err) { console.warn(`точка ${name} упала в ${h.id}:`, err); continue; }
+    try { v = h.fn(...args); } catch (err) { console.warn(`hook ${name} failed in ${h.id}:`, err); continue; }
     if (v) return v;
   }
   return null;

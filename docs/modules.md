@@ -96,7 +96,7 @@ export const observe = async (now, prev) => { journal.record(now, prev); };
 export async function route(url, req, res, send) {
   if (url.pathname !== '/api/mything') return false;
   send(res, 200, { ok: true });
-  return true;   // «я забрал этот запрос»
+  return true;   // "I claimed this request."
 }
 ```
 

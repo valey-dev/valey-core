@@ -32,7 +32,7 @@ const toolGit = (...a) => execFileSync('git', ['-C', TOOL_ROOT, ...a], { encodin
 const die = (m) => { console.error('land: ' + m); process.exit(1); };
 const run = (cmd, args, cwd = ROOT) => {
   const r = spawnSync(cmd, args, { cwd, stdio: 'inherit' });
-  if (r.status !== 0) die(`${cmd} ${args.join(' ')} — не вышло`);
+  if (r.status !== 0) die(`${cmd} ${args.join(' ')} failed`);
 };
 
 const argv = process.argv.slice(2);
@@ -46,27 +46,27 @@ let pr = rest[0] || null;
 const gh = (...a) => execFileSync('gh', a, { encoding: 'utf8' }).trim();
 if (!pr) {
   try { pr = JSON.parse(gh('pr', 'view', '--json', 'number')).number; }
-  catch { die('не понял, какой PR: ветка без него, а номером не сказали'); }
+  catch { die('could not determine the PR: this branch has none and no number was provided'); }
 }
 const info = JSON.parse(gh('pr', 'view', String(pr), '--json', 'number,title,state,mergeable,headRefName'));
-if (info.state !== 'OPEN') die(`PR #${info.number} уже ${info.state}`);
+if (info.state !== 'OPEN') die(`PR #${info.number} is already ${info.state}`);
 console.log(`PR #${info.number} — ${info.title}`);
-console.log(`ветка ${info.headRefName}, mergeable: ${info.mergeable}`);
+console.log(`branch ${info.headRefName}, mergeable: ${info.mergeable}`);
 
 // -------------------------------------------------------------- the stands
 // Before the merge rather than after: a local branch is free to fix, a merged one
 // is not. The release script runs them again before it pushes, and that is not a
 // duplicate — between the two there is a merge.
-console.log('\nстенды:');
+console.log('\ntests:');
 run(process.execPath, [path.join(ROOT, 'tools/run-tests.mjs')]);
 
 if (dry) {
-  console.log('\n--dry: до мержа и не дальше. Дальше было бы: слить PR, нарезать релиз во временном дереве, запушить, собрать страницу.');
+  console.log('\n--dry: stopping before merge. Next would be: merge the PR, cut a release in a temporary tree, push, and create the release page.');
 }
 
 // ---------------------------------------------------------------- the merge
 if (!dry) {
-  console.log('\nмерж:');
+  console.log('\nmerge:');
   run('gh', ['pr', 'merge', String(pr), '--merge']);
 }
 
@@ -97,7 +97,7 @@ const tmpBranch = `land/${Date.now()}`;
 // «no commits since the tag» and show nothing. The head is what main is about to
 // become, which is exactly what the run is meant to show.
 const base = dry ? `origin/${info.headRefName}` : 'origin/main';
-console.log(`\nрелиз во временном дереве ${dir} (с ${base}):`);
+console.log(`\nrelease in temporary tree ${dir} (from ${base}):`);
 git('worktree', 'add', '--quiet', '-b', tmpBranch, dir, base);
 if (secondary) {
   const moduleDir = path.join(hostDir, 'modules');
@@ -136,13 +136,13 @@ if (dry) args.push('--dry'); else args.push('--ship');
 const r = spawnSync(process.execPath, args,
   { cwd: dir, stdio: 'inherit', env: { ...process.env, VALEY_REPO: dir } });
 if (r.status !== 0) {
-  if (dry) { sweep(); die('сухой прогон релиза не прошёл'); }
+  if (dry) { sweep(); die('release dry run failed'); }
   // A real run that got as far as failing keeps its tree: the merge has already
   // happened, the release has not, and finishing it needs somewhere to stand.
-  die(`PR слит, но релиз не нарезан. Дерево ${dir} осталось — доделать там же:\n` +
+  die(`PR was merged, but the release was not cut. Tree ${dir} remains; finish there:\n` +
     `  VALEY_REPO=${dir} node ${path.join(TOOL_ROOT, 'tools/release.mjs')} --ship`);
 }
 sweep();
 console.log(dry
-  ? '\n--dry: ничего не слито и не выпущено. Выше — раздел, который уехал бы, и стенды, которые за него отвечают.'
-  : '\nготово: PR слит, версия нарезана и опубликована.');
+  ? '\n--dry: nothing was merged or released. Above is the section that would ship and the tests covering it.'
+  : '\ndone: PR merged, version cut, and release published.');

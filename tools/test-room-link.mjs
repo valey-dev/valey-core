@@ -14,7 +14,7 @@ import { buildLayout, pickRoom } from '../web/layout.js';
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
+  else { bad += 1; console.log('FAIL  |', name, '→', JSON.stringify(got)); }
 };
 
 const agents = [
@@ -24,24 +24,24 @@ const agents = [
 const L = buildLayout(agents);
 
 // ------------------------------------------------------------- service rooms
-ok('пультовая — по полному ключу', pickRoom(L, '__security')?.security === true, pickRoom(L, '__security')?.key);
-ok('и без подчёркиваний, как напечатает человек', pickRoom(L, 'security')?.security === true, pickRoom(L, 'security')?.key);
-ok('переговорка', pickRoom(L, 'meeting')?.meeting === true, pickRoom(L, 'meeting')?.key);
-ok('оранжерея', pickRoom(L, 'greenhouse')?.greenhouse === true, pickRoom(L, 'greenhouse')?.key);
+ok('control room - with full key', pickRoom(L, '__security')?.security === true, pickRoom(L, '__security')?.key);
+ok('and without underlining, as a person would type', pickRoom(L, 'security')?.security === true, pickRoom(L, 'security')?.key);
+ok('negotiation', pickRoom(L, 'meeting')?.meeting === true, pickRoom(L, 'meeting')?.key);
+ok('greenhouse', pickRoom(L, 'greenhouse')?.greenhouse === true, pickRoom(L, 'greenhouse')?.key);
 
 // ------------------------------------------------------------ project rooms
 const proj = pickRoom(L, 'carbonara');
-ok('старые ссылки по началу заголовка живы', !!proj && proj.title.startsWith('carbonara'), proj && proj.title);
-ok('и по ключу проекта тоже', pickRoom(L, L.projectRooms[0].key)?.key === L.projectRooms[0].key, L.projectRooms[0].key);
+ok('old links at the beginning of the title are still alive', !!proj && proj.title.startsWith('carbonara'), proj && proj.title);
+ok('and by the project key too', pickRoom(L, L.projectRooms[0].key)?.key === L.projectRooms[0].key, L.projectRooms[0].key);
 
 // ------------------------------------------------------------------ nothing
-ok('ничего не просили — ничего не нашли', pickRoom(L, '') === null && pickRoom(L, null) === null, null);
-ok('такой комнаты нет — null, а не первая попавшаяся', pickRoom(L, 'нетакой') === null, pickRoom(L, 'нетакой'));
-ok('без раскладки не падает', pickRoom(null, 'security') === null, null);
+ok('didn\'t ask for anything - didn\'t find anything', pickRoom(L, '') === null && pickRoom(L, null) === null, null);
+ok('there is no such room - null, not the first one available', pickRoom(L, 'нетакой') === null, pickRoom(L, 'нетакой'));
+ok('does not fall without layout', pickRoom(null, 'security') === null, null);
 
 // The key beats the title: if someone names a project «security», the address
 // must still lead to the control room — there is one of those and many projects.
-ok('ключ выигрывает у заголовка', pickRoom(L, 'security')?.service === true, pickRoom(L, 'security')?.key);
+ok('the key beats the title', pickRoom(L, 'security')?.service === true, pickRoom(L, 'security')?.key);
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

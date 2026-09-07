@@ -14,7 +14,7 @@
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
+  else { bad += 1; console.log('FAIL  |', name, '→', JSON.stringify(got)); }
 };
 
 // --------------------------------------------------------------- the stand-in DOM
@@ -62,69 +62,69 @@ const P = (id, agentId, command = 'git push') => ({
 
 // ------------------------------------------------------------------ the ring
 seePermits([P('a', 's1')]);
-ok('пейджер выехал', pagerOpen(), pager.hidden);
-ok('и позвонил один раз', beeps === 1, beeps);
-ok('на экране команда просящего', pager.innerHTML.includes('git push') && pager.innerHTML.includes('ТОНЯ'), pager.innerHTML.slice(0, 80));
+ok('pager went off', pagerOpen(), pager.hidden);
+ok('and called once', beeps === 1, beeps);
+ok('the requester\'s command appears on the screen', pager.innerHTML.includes('git push') && pager.innerHTML.includes('ТОНЯ'), pager.innerHTML.slice(0, 80));
 
 // The same list arrived again — the snapshot goes out every 2.5 seconds, and
 // none of them is a reason to ring.
 seePermits([P('a', 's1')]);
-ok('повторный снимок не звонит второй раз', beeps === 1, beeps);
+ok('re-shot doesn\'t ring a second time', beeps === 1, beeps);
 
 // ------------------------------------------------------------------- Enter
-ok('Enter отвечает', pagerKey('Enter') === true, null);
-ok('и открывает карточку того, кто спросил', opened.length === 1 && opened[0] === 'a', opened);
-ok('пейджер уехал — вопрос теперь в карточке', !pagerOpen(), pager.hidden);
-ok('закрытый пейджер клавиш не берёт', pagerKey('Enter') === false, null);
+ok('Enter answers', pagerKey('Enter') === true, null);
+ok('and opens the card of the one who asked', opened.length === 1 && opened[0] === 'a', opened);
+ok('the pager has left - the question is now on the card', !pagerOpen(), pager.hidden);
+ok('the closed pager does not accept keys', pagerKey('Enter') === false, null);
 
 // -------------------------------------------------------------------- Esc
 forgetPermit('a');
 beeps = 0;
 seePermits([P('b', 's1', 'npm publish')]);
-ok('новый запрос — новый звонок', beeps === 1 && pagerOpen(), { beeps, hidden: pager.hidden });
-ok('Esc откладывает', pagerKey('Escape') === true, null);
-ok('и пейджер уезжает', !pagerOpen(), pager.hidden);
-ok('в шапке остаётся счётчик', waitingCount() === 1, waitingCount());
-ok('шапку попросили перерисоваться', hudTicks === 1, hudTicks);
-ok('и сказали словами, кто ждёт', toasts.length === 1 && toasts[0].text.includes('Тоня'), toasts);
+ok('new request - new call', beeps === 1 && pagerOpen(), { beeps, hidden: pager.hidden });
+ok('Esc postpone', pagerKey('Escape') === true, null);
+ok('and the pager goes away', !pagerOpen(), pager.hidden);
+ok('the counter remains in the header', waitingCount() === 1, waitingCount());
+ok('the hat was asked to be redrawn', hudTicks === 1, hudTicks);
+ok('and said in words who is waiting', toasts.length === 1 && toasts[0].text.includes('Тоня'), toasts);
 
 // A deferred one does not ring on every snapshot — otherwise "later" means nothing.
 seePermits([P('b', 's1', 'npm publish')]);
-ok('отложенный молчит и не показывается', beeps === 1 && !pagerOpen(), { beeps, hidden: pager.hidden });
+ok('deferred is silent and does not appear', beeps === 1 && !pagerOpen(), { beeps, hidden: pager.hidden });
 
 // --------------------------------------------------------------------- H
-ok('H возвращает пейджер', recall() === true, null);
-ok('и он снова на экране', pagerOpen(), pager.hidden);
-ok('счётчик обнулился', waitingCount() === 0, waitingCount());
-ok('возвращать нечего — H не тратится', recall() === false, null);
+ok('H returns pager', recall() === true, null);
+ok('and he\'s on the screen again', pagerOpen(), pager.hidden);
+ok('the counter has reset to zero', waitingCount() === 0, waitingCount());
+ok('there is nothing to return - H is not spent', recall() === false, null);
 
 // --------------------------------------------------- a second asks while the first waits
 beeps = 0;
 seePermits([P('b', 's1', 'npm publish'), P('c', 's2', 'rm -rf tmp')]);
-ok('первым показан тот, кто спросил первым', pager.innerHTML.includes('ТОНЯ'), pager.innerHTML.slice(0, 60));
-ok('и видно, что он не один', pager.innerHTML.includes('1/2'), pager.innerHTML.slice(0, 200));
+ok('The one who asked first is shown first', pager.innerHTML.includes('ТОНЯ'), pager.innerHTML.slice(0, 60));
+ok('and it\'s clear that he\'s not alone', pager.innerHTML.includes('1/2'), pager.innerHTML.slice(0, 200));
 // The first of these two rang before the deferral and never left the list: one
 // signal per question is counted by the question, not by its appearing on screen.
-ok('уже звонивший не звонит снова', beeps === 0, beeps);
+ok('already called does not call again', beeps === 0, beeps);
 
 pagerKey('Escape');                                   // the first one was deferred
-ok('следующий выходит сам', pagerOpen() && pager.innerHTML.includes('ПЁТР'), pager.innerHTML.slice(0, 60));
+ok('the next one comes out on its own', pagerOpen() && pager.innerHTML.includes('ПЁТР'), pager.innerHTML.slice(0, 60));
 // The queue moved by hand rather than by a snapshot — and it still rings:
 // otherwise it "beeps every other time, depending on where it came from".
-ok('и звонит, потому что его ещё не звали', beeps === 1, beeps);
+ok('and calls because he hasn’t been called yet', beeps === 1, beeps);
 
 // ------------------------------------------- answered somewhere else
 // The request left the list while it lay deferred: it was answered from another
 // tab, or it expired. The counter has to notice, or an eternal "1" stays in the
 // header.
 seePermits([P('c', 's2', 'rm -rf tmp')]);
-ok('исчезнувший отложенный уходит из счётчика', waitingCount() === 0, waitingCount());
+ok('disappeared deferred leaves the counter', waitingCount() === 0, waitingCount());
 
 // And if it comes back with the same id, it is the same question, and there is no
 // point ringing again until it has disappeared: rung is cleared only along with
 // the list.
 seePermits([]);
-ok('пустой список гасит пейджер', !pagerOpen(), pager.hidden);
+ok('empty list turns off the pager', !pagerOpen(), pager.hidden);
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

@@ -1,12 +1,12 @@
-/* Приёмник и его панель — стили модуля. Каркас панели (.vwrap, .vhead)
-   остаётся ядру: рамка у панелей офиса одна на всех. */
+/* Receiver and panel module styles. Core owns the panel frame (.vwrap, .vhead),
+   which is shared by every office panel. */
 #radio{position:fixed; left:50%; top:50%; z-index:28;
   transform:translate(-50%,-50%) translateY(140vh); opacity:0; pointer-events:none;
   transition:transform .18s steps(4), opacity .18s}
 #radio.open{transform:translate(-50%,-50%); opacity:1; pointer-events:auto}
-/* Ширина делится на --ui там, где задаётся: vw внутри zoom меряется от окна и
-   потом умножается на масштаб, и ограничитель перестаёт ограничивать. Правка
-   приехала из main 2 сентября 2026 вместе с общим правилом zoom. */
+/* Divide width by --ui where set: vw inside zoom measures the window and is
+   multiplied by scale, making an undivided limit stop limiting. This arrived
+   from main on 2 September 2026 with the shared zoom rule. */
 .radiowrap{width:min(420px, calc(92vw / var(--ui, 1)))}
 /* The body scrolls, like .rbody in every other panel of the office. The frame
    is capped at 84vh, but until 6 September 2026 the body under it was not: with
@@ -77,9 +77,9 @@
   font:12px "JetBrains Mono", "Courier New",monospace; padding:4px 10px; cursor:pointer}
 .radiorow button:hover{background:var(--wood-lit); color:var(--warn)}
 .radiorow button.thin{border-color:var(--frame-dim); color:var(--muted)}
-/* Обводка фокуса на ручках приёмника. Была в общем правиле ядра вместе с
-   чужими селекторами: обводка одна на офис, а перечисление — у того, кто
-   рисует кнопки. */
+/* Focus outline for receiver controls. It once lived in a core rule beside
+   unrelated selectors. The outline is shared across the office, but whoever
+   draws the buttons owns their selector list. */
 .radioknobs button.focus, .rst.focus, .rdel.focus,
 #radiovol.focus, #radiouri.focus, .radioauth button.focus{
   outline:2px solid var(--warn); outline-offset:-2px}

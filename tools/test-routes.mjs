@@ -18,7 +18,7 @@ import { freePort } from './lib/office.mjs';
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, '→', typeof got === 'string' ? got.slice(0, 200) : JSON.stringify(got)); }
+  else { bad += 1; console.log('FAIL  |', name, '→', typeof got === 'string' ? got.slice(0, 200) : JSON.stringify(got)); }
 };
 
 const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-routes-'));
@@ -61,30 +61,30 @@ const req = (p, { method = 'GET', headers = {}, body } = {}) => new Promise((res
 try {
   // ------------------------------------------------------------- static files
   const home = await req('/');
-  ok('корень отдаёт страницу офиса', home.status === 200 && /<title/i.test(home.text), home.status);
+  ok('root gives the office page', home.status === 200 && /<title/i.test(home.text), home.status);
   const callback = await req('/callback');
-  ok('/callback — та же страница: адрес возврата OAuth живёт в ядре',
+  ok('/callback - same page: OAuth return address lives in the kernel',
     callback.status === 200 && callback.text === home.text, callback.status);
   const escape = await req('/../server/settings.json');
-  ok('путь наружу из web/ не отдают', escape.status === 403 || escape.status === 404, escape.status);
+  ok('the path out from the web/ is not given', escape.status === 403 || escape.status === 404, escape.status);
   const dots = await req('/%2e%2e/server/index.js');
-  ok('и в закодированном виде тоже', dots.status === 403 || dots.status === 404, dots.status);
+  ok('and in encoded form too', dots.status === 403 || dots.status === 404, dots.status);
   const missing = await req('/нет-такого.js');
-  ok('чего нет — 404 текстом, а не пустотой', missing.status === 404 && missing.text === 'not found', missing.status);
+  ok('what is not - 404 is text, not empty', missing.status === 404 && missing.text === 'not found', missing.status);
 
   // -------------------------------------------------------------- modules
   const mods = await req('/api/modules');
-  ok('список модулей — массив', mods.status === 200 && Array.isArray(mods.j), mods.j);
+  ok('list of modules - array', mods.status === 200 && Array.isArray(mods.j), mods.j);
   const modEscape = await req('/modules/../server/index.js');
-  ok('из папки модулей наружу тоже не выйти', modEscape.status === 403 || modEscape.status === 404, modEscape.status);
+  ok('You can\'t get out of the modules folder either', modEscape.status === 403 || modEscape.status === 404, modEscape.status);
 
   // -------------------------------------------------------------- the stand
   const stand = await req('/api/stand');
-  ok('без VALEY_STAND таблички нет', stand.status === 200 && stand.j.text === null, stand.j);
+  ok('without VALEY_STAND there is no sign', stand.status === 200 && stand.j.text === null, stand.j);
   const toggle = await req('/api/stand/toggle', {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-valey-owner': OWNER }, body: '{"id":"radio","off":true}',
   });
-  ok('и переключателя модулей — тоже', toggle.status === 404, toggle.status);
+  ok('and the module switch too', toggle.status === 404, toggle.status);
 
   // --------------------------------------------------------- /api/file
   const artifact = path.join(dir, 'работа.md');
@@ -104,56 +104,56 @@ try {
   }] });
 
   const notMine = await req('/api/file?path=' + encodeURIComponent('/etc/hosts'));
-  ok('файл не из транскрипта — 403', notMine.status === 403, notMine.status);
+  ok('file not from transcript - 403', notMine.status === 403, notMine.status);
   const mine = await req('/api/file?path=' + encodeURIComponent(artifact));
-  ok('артефакт агента отдают', mine.status === 200 && mine.text.includes('сделано'), mine.status);
-  ok('и с nosniff', mine.h['x-content-type-options'] === 'nosniff', mine.h);
+  ok('the agent\'s artifact is given away', mine.status === 200 && mine.text.includes('сделано'), mine.status);
+  ok('and with nosniff', mine.h['x-content-type-options'] === 'nosniff', mine.h);
   const html = await req('/api/file?path=' + encodeURIComponent(page));
-  ok('страницу агента отдают вложением, а не исполняют',
+  ok('the agent\'s page is given away as an attachment rather than executed',
     html.status === 200 && html.h['content-disposition'] === 'attachment', html.h);
   const big = await req('/api/file?path=' + encodeURIComponent(huge));
-  ok('девять мегабайт — 413, и файл не читается целиком', big.status === 413, big.status);
+  ok('nine megabytes - 413, and the entire file is not readable', big.status === 413, big.status);
   const vanished = await req('/api/file?path=' + encodeURIComponent(gone));
-  ok('пропавший файл — 404', vanished.status === 404, vanished.status);
+  ok('missing file - 404', vanished.status === 404, vanished.status);
 
   // ------------------------------------------------------- the network gate
   // Through a middleman means from outside. A closed office answers 404: a
   // scanner has no business learning that anyone lives here.
   const VIA = { 'x-forwarded-for': '203.0.113.7' };
   const closed = await req('/api/whoami', { headers: VIA });
-  ok('закрытый офис снаружи — 404', closed.status === 404 && closed.j.errorKey === 'err.notFound', closed.j);
+  ok('closed office outside - 404', closed.status === 404 && closed.j.errorKey === 'err.notFound', closed.j);
   const closedPage = await req('/', { headers: VIA });
-  ok('и страницы снаружи не видно', closedPage.status === 404, closedPage.status);
+  ok('and the page is not visible from the outside', closedPage.status === 404, closedPage.status);
 
   await patchSettings({ network: { external: true, token: NET } });
   const open = await req('/api/whoami', { headers: VIA });
-  ok('открытый офис снаружи просит токен', open.status === 401 && open.j.errorKey === 'err.needToken', open.j);
+  ok('open office outside asking for token', open.status === 401 && open.j.errorKey === 'err.needToken', open.j);
   const withToken = await req('/api/whoami', { headers: { ...VIA, authorization: 'Bearer ' + NET } });
-  ok('с токеном пускают', withToken.status === 200, withToken.status);
+  ok('they let you in with a token', withToken.status === 200, withToken.status);
 
   // ------------------------------------------- the token moves from the address into a cookie
   const viaQuery = await req('/?token=' + NET, { headers: VIA });
-  ok('страницу с токеном в адресе отдают редиректом', viaQuery.status === 302, viaQuery.status);
-  ok('и токен из адреса убран', viaQuery.h.location === '/', viaQuery.h.location);
-  ok('а в куке он есть, HttpOnly и SameSite',
+  ok('a page with a token in the address is redirected', viaQuery.status === 302, viaQuery.status);
+  ok('and the token is removed from the address', viaQuery.h.location === '/', viaQuery.h.location);
+  ok('and it is in the cookie, HttpOnly and SameSite',
     /valey_net=/.test(viaQuery.h['set-cookie']?.[0] || '')
       && /HttpOnly/i.test(viaQuery.h['set-cookie']?.[0] || '')
       && /SameSite=Lax/i.test(viaQuery.h['set-cookie']?.[0] || ''), viaQuery.h['set-cookie']);
   const apiQuery = await req('/api/whoami?token=' + NET, { headers: VIA });
-  ok('ручку по тому же токену отвечают сразу, без редиректа', apiQuery.status === 200, apiQuery.status);
+  ok('the handle using the same token is answered immediately, without redirecting', apiQuery.status === 200, apiQuery.status);
 
   await patchSettings({ network: { external: false } });
   const shutAgain = await req('/api/whoami', { headers: VIA });
-  ok('офис закрыли — снова 404', shutAgain.status === 404, shutAgain.status);
+  ok('the office was closed - again 404', shutAgain.status === 404, shutAgain.status);
   const home2 = await req('/api/whoami');
-  ok('а с этой машины он открыт, как и был', home2.status === 200 && home2.j.owner === true, home2.j);
+  ok('and from this machine it is open, as it was', home2.status === 200 && home2.j.owner === true, home2.j);
 } catch (e) {
   bad += 1;
-  console.log('УПАЛ  | стенд не доехал →', e.stack);
+  console.log('FAIL  | test did not complete →', e.stack);
 } finally {
   await new Promise((r) => server.close(r));
   await fsp.rm(dir, { recursive: true, force: true });
 }
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

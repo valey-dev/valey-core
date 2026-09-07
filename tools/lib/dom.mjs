@@ -42,7 +42,7 @@ export function node(cls = '', props = {}) {
   // machine would fail deep inside, on an `in`; better to say so at once and in
   // plain words.
   if (typeof props !== 'object' || props === null) {
-    throw new TypeError(`node(cls, props): вторым аргументом объект свойств, пришло ${JSON.stringify(props)}`);
+    throw new TypeError(`node(cls, props): the second argument must be a props object; received ${JSON.stringify(props)}`);
   }
   const classes = new Set(String(cls).split(' ').filter(Boolean));
   let scroll = 0;

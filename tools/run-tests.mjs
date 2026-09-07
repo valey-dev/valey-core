@@ -42,7 +42,7 @@ files.sort();
 
 const picked = only ? files.filter((f) => f.includes(only)) : files;
 if (!picked.length) {
-  console.error(only ? `нет стендов по «${only}»` : 'стендов не найдено');
+  console.error(only ? `no tests match “${only}”` : 'no tests found');
   process.exit(2);
 }
 
@@ -59,14 +59,14 @@ const failed = [];
 for (const file of picked) {
   const r = await run(file);
   // The stands were written at different times and mark a passing check
-  // differently: "ok    |", "  ок  ", and test-look with a single closing line.
+  // differently: "ok    |", "  ok  ", and test-look with a single closing line.
   // We count every form, and when none is found we stay quiet instead of saying
   // "0 checks": that would claim the stand checked nothing, while it checked in
   // its own way.
-  const checks = (r.out.match(/^(?:ok +\||\s*ок\s)/gm) || []).length;
-  const mark = r.code === 0 ? '  ok  ' : 'УПАЛ  ';
-  const count = checks ? `${String(checks).padStart(3)} проверок` : '   свой счёт';
-  console.log(`${mark}| ${file.padEnd(38)} ${count} · ${r.ms} мс`);
+  const checks = (r.out.match(/^(?:ok +\||\s*ok\s)/gm) || []).length;
+  const mark = r.code === 0 ? '  ok  ' : 'FAILED';
+  const count = checks ? `${String(checks).padStart(3)} checks` : ' custom count';
+  console.log(`${mark}| ${file.padEnd(38)} ${count} · ${r.ms} ms`);
   if (r.code !== 0) { failed.push(r); }
 }
 
@@ -76,5 +76,5 @@ if (failed.length) {
     console.log(r.out.trimEnd());
   }
 }
-console.log(`\n${picked.length} стендов, упало ${failed.length}`);
+console.log(`\n${picked.length} test files, ${failed.length} failed`);
 process.exit(failed.length ? 1 : 0);

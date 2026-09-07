@@ -21,7 +21,7 @@ export function proceduralWeather(date = new Date()) {
     kind,
     intensity: 0.4 + ((h >>> 7) % 60) / 100,
     wind: (((h >>> 13) % 200) - 100) / 100,
-    source: 'выдумана',
+    source: 'procedural',
   };
 }
 
@@ -35,7 +35,7 @@ export function fromWeatherCode(code, wind = 0) {
     : code <= 82 ? 'rain'
     : code <= 86 ? 'snow'
     : 'storm';
-  return { kind: k, intensity: 0.6, wind: Math.max(-1, Math.min(1, wind / 30)), source: 'настоящая' };
+  return { kind: k, intensity: 0.6, wind: Math.max(-1, Math.min(1, wind / 30)), source: 'real' };
 }
 
 // The names of the weather moved into the dictionary (sky.*): here they were a

@@ -53,18 +53,18 @@ async function agents() {
 
 const list = await agents();
 if (!list.length) {
-  console.log(`Офис на ${PORT} не отвечает или в нём никого. Запусти его и попробуй снова.`);
+  console.log(`The office on ${PORT} is not responding or is empty. Start it and try again.`);
   process.exit(1);
 }
 
-console.log(`Офис на ${PORT}, агентов: ${list.length}. Звоню ${N === 1 ? 'один раз' : `${N} раза`}.`);
-console.log('Открой офис в браузере и войди — без зрителя вопрос уйдёт обратно сразу.\n');
+console.log(`Office on ${PORT}, agents: ${list.length}. Calling ${N === 1 ? 'once' : `${N} times`}.`);
+console.log('Open the office in a browser and enter; without a viewer, the question returns immediately.\n');
 
 const calls = [];
 for (let i = 0; i < N; i++) {
   const who = list[i % list.length];
   const ask = ASKS[i % ASKS.length];
-  console.log(`→ ${who.name} спрашивает: ${ask.command}`);
+  console.log(`→ ${who.name} asks: ${ask.command}`);
   calls.push(fetch(BASE + '/api/permit', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -84,18 +84,18 @@ for (let i = 0; i < N; i++) {
   if (i + 1 < N) await new Promise((r) => setTimeout(r, 400));
 }
 
-console.log('\nЖду ответа из офиса…\n');
+console.log('\nWaiting for an answer from the office…\n');
 const WORD = {
-  allow: 'разрешил',
-  deny: 'отказал',
+  allow: 'allowed',
+  deny: 'denied',
 };
 for (const done of calls) {
   const { who, v } = await done;
   if (!v || !v.decision) {
-    console.log(`${who}: офис отошёл в сторону — «в терминале», истекло время или в офисе никого не было.`);
+    console.log(`${who}: the office stepped aside—the answer stayed in the terminal, timed out, or nobody was watching.`);
     continue;
   }
-  const always = (v.updatedPermissions || []).length ? ' и записал правило навсегда' : '';
+  const always = (v.updatedPermissions || []).length ? ' and saved the rule permanently' : '';
   console.log(`${who}: ${WORD[v.decision] || v.decision}${always}.`
-    + (v.message ? ` Записка: «${v.message}»` : ''));
+    + (v.message ? ` Note: “${v.message}”` : ''));
 }

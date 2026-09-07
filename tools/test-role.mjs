@@ -13,7 +13,7 @@ import { t, setLang, LANGS } from '../web/i18n.js';
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    | ' + name);
-  else { bad++; console.log('УПАЛ  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
+  else { bad++; console.log('FAIL  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
 };
 
 const now = Date.now();
@@ -25,69 +25,69 @@ const st = (spec, role = '', from = 0) => ({ acts: acts(spec, from), role });
 
 const longCode = st([['code', 40]], '', ROLE_WINDOW_MS + 60_000);
 longCode.acts.push(...acts([['design', 12]]));
-ok('час кода не держит дизайнера в разработчиках', inferRole(longCode).short === 'design', longCode.role);
+ok('an hour of code doesn\'t keep a designer from being a developer', inferRole(longCode).short === 'design', longCode.role);
 
 const stale = st([['code', 40]], '', ROLE_WINDOW_MS + 60_000);
 stale.acts.push(...acts([['design', 3]]));
-ok('трёх свежих макетов хватает против сорока старых правок',
+ok('three fresh layouts are enough against forty old edits',
    inferRole(stale).short === 'design', stale.role);
 
 // A slow session: the last action is outside the window but not yet stale.
 const slow = st([['plan', 4]], 'code', ROLE_WINDOW_MS + 5 * 60_000);
-ok('пауза в полчаса — профессия по хвосту, а не по всей истории',
+ok('a pause of half an hour - a profession in the tail, not in the whole story',
    inferRole(slow).short === 'plan', slow.role);
 
 // And silence that is truly old does not revisit the trade.
 const ancient = st([['design', 5]], 'code', ROLE_STALE_MS + 60_000);
-ok('протухшие действия не считаются', inferRole(ancient).short === 'code', ancient.role);
+ok('rotten actions do not count', inferRole(ancient).short === 'code', ancient.role);
 
 // --------------------------------------------------- reading does not make a coder
 
 const reader = st([['design', 6], ['read', 8]]);
-ok('дизайнер, читающий файлы, остаётся дизайнером', inferRole(reader).short === 'design', reader.role);
+ok('a designer who reads files remains a designer', inferRole(reader).short === 'design', reader.role);
 
 const digging = st([['read', 14]]);
-ok('одно чтение всё же читается как код', inferRole(digging).short === 'code', digging.role);
+ok('one reading still reads like code', inferRole(digging).short === 'code', digging.role);
 
 // --------------------------------------------------------------- hysteresis
 
 const nose = st([['code', 7], ['plan', 6]], 'code');
-ok('ноздря в ноздрю — профессия не мигает', inferRole(nose).short === 'code', nose.role);
+ok('neck and neck - the profession does not blink', inferRole(nose).short === 'code', nose.role);
 
 const moved = st([['code', 3], ['plan', 11]], 'code');
-ok('оторвался — профессия меняется', inferRole(moved).short === 'plan', moved.role);
+ok('broke away - profession changes', inferRole(moved).short === 'plan', moved.role);
 
 // ------------------------------------------ an empty session remembers the past
 
 const quiet = { acts: [], role: 'design' };
-ok('без действий держим последнюю профессию', inferRole(quiet).short === 'design');
-ok('без действий и без прошлого — разработчик', inferRole({ acts: [], role: '' }).short === 'code');
+ok('without action we keep the last profession', inferRole(quiet).short === 'design');
+ok('no action and no past - developer', inferRole({ acts: [], role: '' }).short === 'code');
 
 // ------------------------------------------- the tester and the release engineer
 
 const tester = st([['test', 8], ['code', 3]]);
-ok('тесты — это тестировщик, а не разработчик', inferRole(tester).short === 'qa', tester.role);
+ok('tests are for the tester, not the developer', inferRole(tester).short === 'qa', tester.role);
 
 const releaser = st([['build', 4], ['ship', 5], ['code', 3]]);
-ok('сборка и коммиты — релиз-инженер', inferRole(releaser).short === 'release', releaser.role);
+ok('build and commits - release engineer', inferRole(releaser).short === 'release', releaser.role);
 
 // The tester and the release engineer are different trades, and lumping them
 // together is not on: otherwise a test run before a rollout would always read as
 // a release.
 const both = st([['test', 6], ['build', 3]]);
-ok('тесты и сборка не суммируются в одну роль', inferRole(both).short === 'qa', both.role);
+ok('tests and build are not combined into one role', inferRole(both).short === 'qa', both.role);
 
 // Editing code between test runs must not outweigh the run itself.
 const mixed = st([['code', 6], ['test', 9]]);
-ok('правки между прогонами не отбирают тестировщика', inferRole(mixed).short === 'qa', mixed.role);
+ok('edits between runs do not select testers', inferRole(mixed).short === 'qa', mixed.role);
 
 // ---------------------------------------- the moods everything is counted from
 
-ok('Figma → дизайн', describeTool('mcp__figma__use_figma', {}).mood === 'design');
+ok('Figma → design', describeTool('mcp__figma__use_figma', {}).mood === 'design');
 ok('git commit → ship', describeTool('Bash', { command: 'git commit -m x' }).mood === 'ship');
-ok('grep → чтение', describeTool('Grep', {}).mood === 'read');
-ok('npm test → тесты', describeTool('Bash', { command: 'npm test' }).mood === 'test');
-ok('npm run build → сборка', describeTool('Bash', { command: 'npm run build' }).mood === 'build');
+ok('grep → read', describeTool('Grep', {}).mood === 'read');
+ok('npm test → tests', describeTool('Bash', { command: 'npm test' }).mood === 'test');
+ok('npm run build → build', describeTool('Bash', { command: 'npm run build' }).mood === 'build');
 
 // -------------------------------- a new trade with no label and no colour
 
@@ -100,9 +100,9 @@ for (const key of Object.keys(ROLES)) {
   for (const l of LANGS) {
     setLang(l);
     const word = t('role.' + key);
-    ok(`${l}: у роли ${key} есть подпись`, word && word !== 'role.' + key, word);
+    ok(`${l}: role ${key} has a signature`, word && word !== 'role.' + key, word);
   }
-  ok(`у роли ${key} есть свой цвет чипа`, css.includes('.role.r-' + key + '{'));
+  ok(`role ${key} has its own chip color`, css.includes('.role.r-' + key + '{'));
 }
 setLang('ru');
 

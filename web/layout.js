@@ -398,7 +398,7 @@ function buildMeeting(floorW, y) {
   const x = Math.round(floorW - MARGIN - MEET_W);
   const door = { x: x + 34, w: 36 };
   const room = {
-    key: '__meeting', title: 'ПЕРЕГОВОРКА', meeting: true,
+    key: '__meeting', title: 'MEETING ROOM', meeting: true,
     service: true, draw: 'meeting', lit: false,
     x, y, w: MEET_W, h: MEET_H, door,
     table: { x: x + 90, y: y + WALL + 34, w: 180, h: 44 },
@@ -486,7 +486,7 @@ function buildGreenhouse(floorW, y) {
   const x = Math.round(floorW / 2 - GREEN_W / 2);
   const door = { x: x + 188, w: 44 };
   const room = {
-    key: '__greenhouse', title: 'ОРАНЖЕРЕЯ', greenhouse: true,
+    key: '__greenhouse', title: 'GREENHOUSE', greenhouse: true,
     service: true, draw: 'greenhouse', lit: false,
     x, y, w: GREEN_W, h: GREEN_H, door,
     agents: [], desks: [], art: [], back: null, coffee: null,

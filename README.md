@@ -24,8 +24,8 @@ one is exactly the hole described above, so the two cannot be set apart.
 
 ```bash
 VALEY_EXTERNAL=1 npm start
-#   открыт наружу (0.0.0.0) — с другого устройства один раз с токеном:
-#   http://<адрес-этой-машины>:5177/?token=…
+#   exposed on 0.0.0.0 — from another device, once with a token:
+#   http://<this-machine-address>:5177/?token=…
 ```
 
 * **Loopback is always its own.** The browser on this machine knows nothing

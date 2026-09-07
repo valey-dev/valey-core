@@ -139,7 +139,7 @@ CORE.initUI(state, { guideTo: () => {} });
 let failed = 0;
 const check = (name, ok, got) => {
   if (ok) console.log('ok    |', name);
-  else { failed++; console.log('ПЛОХО |', name, '→', got); }
+  else { failed++; console.log('FAIL  |', name, '→', got); }
 };
 
 // Which of the buttons holds the focus — the same helper as in the core panels test.
@@ -167,15 +167,15 @@ try { UI.openRadio(); } catch { /* there is no player here and there must not be
 UI.repaintRadioFocus();
 
 const ctl = radioBox.ctl;
-check('радио: фокус встаёт на первую ручку', at(ctl) === 0, at(ctl));
-check('стрелка вправо обработана', UI.radioKey('ArrowRight') === true, 'не обработана');
-check('и переводит на «включить»', ctl[1].id === 'radiotoggle' && at(ctl) === 1, at(ctl));
+check('radio: focus is on the first knob', at(ctl) === 0, at(ctl));
+check('right arrow processed', UI.radioKey('ArrowRight') === true, 'не обработана');
+check('and switches to “enable”', ctl[1].id === 'radiotoggle' && at(ctl) === 1, at(ctl));
 UI.radioKey('Enter');
-check('Enter нажимает «включить»', ctl[1].clicked === 1, ctl[1].clicked);
+check('Enter presses “enable”', ctl[1].clicked === 1, ctl[1].clicked);
 
 // the waves and their crosses stand in the same ring: deleting a wave without a mouse has to work too
 UI.radioKey('ArrowRight'); UI.radioKey('ArrowRight');
-check('фокус доходит до списка волн', ctl[at(ctl)].has('rst'), at(ctl));
+check('focus comes to the list of waves', ctl[at(ctl)].has('rst'), at(ctl));
 
 // the volume: sideways it turns itself, up and down lead away from it
 const vol = ctl.find((b) => b.id === 'radiovol');
@@ -183,26 +183,26 @@ let volSet = 0;
 vol.oninput = () => { volSet += 1; };
 while (ctl[at(ctl)] !== vol) UI.radioKey('ArrowDown');
 UI.radioKey('ArrowRight');
-check('на громкости вправо крутит её, а не уводит', ctl[at(ctl)] === vol && Number(vol.value) === 55, `${vol.value}, фокус ${at(ctl)}`);
-check('и дёргает обработчик ползунка', volSet === 1, volSet);
+check('at volume, it turns it to the right, but does not move it away', ctl[at(ctl)] === vol && Number(vol.value) === 55, `${vol.value}, фокус ${at(ctl)}`);
+check('and pulls the slider handler', volSet === 1, volSet);
 UI.radioKey('ArrowLeft'); UI.radioKey('ArrowLeft');
-check('влево крутит обратно и не уходит ниже нуля не сразу', Number(vol.value) === 45, vol.value);
+check('turns back to the left and doesn’t go below zero right away', Number(vol.value) === 45, vol.value);
 UI.radioKey('ArrowDown');
-check('вниз с громкости всё-таки уводит', ctl[at(ctl)] !== vol, 'застряли');
+check('It still takes the volume down', ctl[at(ctl)] !== vol, 'застряли');
 
 // your own wave is an input field: Enter has to give it real focus rather than "press"
 // it, or typing into it from the keyboard is still impossible
 const uri = ctl.find((b) => b.id === 'radiouri');
 while (ctl[at(ctl)] !== uri) UI.radioKey('ArrowDown');
 UI.radioKey('Enter');
-check('Enter на своей волне отдаёт полю фокус', uri.focused === 1, uri.focused);
-check('и не жмёт его как кнопку', uri.clicked === 0, uri.clicked);
+check('Enter on its wave gives focus to the field', uri.focused === 1, uri.focused);
+check('and doesn’t press it like a button', uri.clicked === 0, uri.clicked);
 
 // a closed panel does not take the keys
 UI.closeRadio();
-check('закрытое радио стрелки не ест', UI.radioKey('ArrowDown') === false, 'съело');
+check('closed radio arrows do not eat', UI.radioKey('ArrowDown') === false, 'съело');
 
 
 
-console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
+console.log(failed ? `\nfailed: ${failed}` : '\nall matched');
 process.exit(failed ? 1 : 0);

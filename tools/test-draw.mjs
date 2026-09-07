@@ -44,7 +44,7 @@ const office = await import('../web/office.js');
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, '→', String(got)); }
+  else { bad += 1; console.log('FAIL  |', name, '→', String(got)); }
 };
 const survives = (name, fn) => {
   try { fn(); ok(name, true); } catch (e) { ok(name, false, e && e.message); }
@@ -61,31 +61,31 @@ const t = 1000;
 // no service flag, the drawing loop in main.js would pass it by silently and
 // wrongly.
 const boardless = L.rooms.filter((r) => !r.board);
-ok('комната без доски — только сервисная',
+ok('room without board - only service room',
   boardless.every((r) => r.service), boardless.map((r) => r.title));
-ok('и наоборот: у сервисных доски нет',
+ok('and vice versa: service desks do not have boards',
   L.rooms.filter((r) => r.service).every((r) => !r.board), null);
-ok('у каждой комнаты есть desks, пусть и пустые',
+ok('every room has desks, albeit empty ones',
   L.rooms.every((r) => Array.isArray(r.desks)), L.rooms.map((r) => typeof r.desks));
-ok('и art, пусть и пустой',
+ok('and art, albeit empty',
   L.rooms.every((r) => Array.isArray(r.art)), L.rooms.map((r) => typeof r.art));
-ok('у каждой есть дверь и точка у двери',
+ok('each has a door and a dot at the door',
   L.rooms.every((r) => r.door && r.doorPoint), null);
 
 // --------------------------------------------------------- the drawing itself
-survives('коридор рисуется', () => office.drawCorridor(ctx, L, t, 0.5, { kind: 'clear', intensity: 0.5, wind: 0 }));
-survives('свет по всему этажу', () => office.drawLight(ctx, L, t, 0.5));
-survives('лифт', () => office.drawLift(ctx, L, t, { floor: 1, open: 0, phase: 'idle' }));
-survives('стойки секретаря', () => office.drawReception(ctx, L, t));
+survives('the corridor renders', () => office.drawCorridor(ctx, L, t, 0.5, { kind: 'clear', intensity: 0.5, wind: 0 }));
+survives('lighting renders across the floor', () => office.drawLight(ctx, L, t, 0.5));
+survives('the lift renders', () => office.drawLift(ctx, L, t, { floor: 1, open: 0, phase: 'idle' }));
+survives('the reception desks render', () => office.drawReception(ctx, L, t));
 
 for (const r of L.rooms) {
   const who = r.title;
-  if (r.draw === 'security') { survives(`пультовая: ${who}`, () => office.drawSecurity(ctx, r, t, {})); continue; }
-  if (r.draw === 'meeting') { survives(`переговорка: ${who}`, () => office.drawMeeting(ctx, r, t)); continue; }
-  if (r.draw === 'greenhouse') { survives(`оранжерея: ${who}`, () => office.drawGreenhouse(ctx, r, t, {})); continue; }
-  survives(`комната: ${who}`, () => { office.drawRoom(ctx, r, t); office.drawRoomProps(ctx, r, t); });
-  survives(`доска: ${who}`, () => office.drawBoard(ctx, r, [], t, false));
-  for (const d of r.desks) survives(`стол ${who}#${d.i}`, () => office.drawDesk(ctx, d, null, t));
+  if (r.draw === 'security') { survives(`security room: ${who}`, () => office.drawSecurity(ctx, r, t, {})); continue; }
+  if (r.draw === 'meeting') { survives(`meeting room: ${who}`, () => office.drawMeeting(ctx, r, t)); continue; }
+  if (r.draw === 'greenhouse') { survives(`greenhouse: ${who}`, () => office.drawGreenhouse(ctx, r, t, {})); continue; }
+  survives(`room: ${who}`, () => { office.drawRoom(ctx, r, t); office.drawRoomProps(ctx, r, t); });
+  survives(`board: ${who}`, () => office.drawBoard(ctx, r, [], t, false));
+  for (const d of r.desks) survives(`desk ${who}#${d.i}`, () => office.drawDesk(ctx, d, null, t));
 }
 
 // The trap is written down right here: drawBoard on a service room must throw
@@ -97,8 +97,8 @@ for (const r of L.rooms) {
   const svc = L.rooms.find((r) => r.service);
   let threw = false;
   try { office.drawBoard(ctx, svc, [], t, false); } catch { threw = true; }
-  ok('drawBoard на сервисной комнате падает — значит её надо звать под проверкой',
-    threw, 'не упала: молчаливая доска у комнаты, где её нет');
+  ok('drawBoard in the service room crashes - which means it needs to be called under verification',
+    threw, 'did not throw: a missing board was silently accepted');
 }
 
 // --------------------------------------------------- a foreign look
@@ -117,22 +117,22 @@ for (const r of L.rooms) {
   const partial = sprites.normalizeLook({ boots: '#2a2118', head: 'cap' });
   let threw = false;
   try { sprites.drawPerson(ctx, 10, 10, partial, { pose: 'stand', frame: 0, dir: 1, bob: 0 }); } catch { threw = true; }
-  ok('голая половинчатая внешность роняет drawPerson — её нельзя рисовать как есть',
-    threw, 'не упала: значит ловушка ушла, и проверку ниже можно снимать');
+  ok('an incomplete look makes drawPerson throw because it cannot render as-is',
+    threw, 'did not throw: the trap is gone and the guard below can be removed');
 
   const whole = sprites.normalizeLook({ ...DEFAULT_ME, boots: '#2a2118', head: 'cap' });
-  survives('достроенная до умолчаний — рисуется', () => sprites.drawPerson(ctx, 10, 10, whole, { pose: 'walk', frame: 1, dir: -1, bob: 0 }));
-  survives('и пустая, достроенная до умолчаний, тоже', () => sprites.drawPerson(ctx, 10, 10, sprites.normalizeLook({ ...DEFAULT_ME }), { pose: 'stand', frame: 0, dir: 1, bob: 0 }));
+  survives('a partial look completed with defaults renders', () => sprites.drawPerson(ctx, 10, 10, whole, { pose: 'walk', frame: 1, dir: -1, bob: 0 }));
+  survives('an empty look completed with defaults renders too', () => sprites.drawPerson(ctx, 10, 10, sprites.normalizeLook({ ...DEFAULT_ME }), { pose: 'stand', frame: 0, dir: 1, bob: 0 }));
 }
 
 // The same walk main.js makes: the board is asked for only from those that have
 // one. If the guard there is ever removed, this is what falls over.
-survives('обход всех комнат так, как ходит main.js', () => {
+survives('all rooms render in the same traversal as main.js', () => {
   for (const r of L.rooms) {
     if (r.board) office.drawBoard(ctx, r, [], t, false);
     for (const d of r.desks) office.drawDesk(ctx, d, null, t);
   }
 });
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

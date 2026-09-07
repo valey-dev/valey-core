@@ -165,7 +165,7 @@ try {
   for (let i = 0; i < 60 && !ready; i++) {
     try { await fetch(`http://127.0.0.1:${PORT_CDP}/json/version`); ready = true; } catch { await wait(250); }
   }
-  if (!ready) throw new Error('Chrome не поднял отладочный порт — проверь CHROME_PATH');
+  if (!ready) throw new Error('Chrome did not open its debugging port; check CHROME_PATH');
 
   const target = await (await fetch(
     `http://127.0.0.1:${PORT_CDP}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' },
@@ -244,14 +244,14 @@ try {
     if (what === 'shift-F9') { await key('keyDown', 'F9', 8); await key('keyUp', 'F9', 8); await wait(600); continue; }
     if (what.startsWith('hold-')) {
       const k = alias(what.slice(5));
-      if (!VK[k]) throw new Error(`--keys: не знаю клавишу «${what.slice(5)}» в hold-`);
+      if (!VK[k]) throw new Error(`--keys: unknown key “${what.slice(5)}” in hold-`);
       await key('keyDown', k); await wait(Number(ms) || 800); await key('keyUp', k); continue;
     }
     const k = alias(what);
     // Sending an event without a keyCode in silence is a lie: the office will
     // not see it, and the frame comes out as if the key was pressed and changed
     // nothing.
-    if (!VK[k]) throw new Error(`--keys: не знаю клавишу «${what}». Известны: ${Object.keys(VK).map((x) => (x === ' ' ? 'Space' : x)).join(', ')}`);
+    if (!VK[k]) throw new Error(`--keys: unknown key “${what}”. Known keys: ${Object.keys(VK).map((x) => (x === ' ' ? 'Space' : x)).join(', ')}`);
     await key('keyDown', k); await key('keyUp', k);
     await wait(Number(ms) || 400);
   }
@@ -263,19 +263,19 @@ try {
   // frame so the output comes in the order things are checked in.
   if (evalJs) {
     const r = await send('Runtime.evaluate', { expression: evalJs, awaitPromise: true, returnByValue: true });
-    if (r.exceptionDetails) console.log('--eval упал:', r.exceptionDetails.text || r.exceptionDetails.exception?.description);
+    if (r.exceptionDetails) console.log('--eval failed:', r.exceptionDetails.text || r.exceptionDetails.exception?.description);
     else console.log('--eval:', JSON.stringify(r.result?.value ?? r.result?.description ?? null));
   }
 
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   await fs.mkdir(path.dirname(out), { recursive: true });
   await fs.writeFile(out, Buffer.from(shot.data, 'base64'));
-  console.log('снято:', out);
+  console.log('captured:', out);
 
   if (video) {
     await send('Page.stopScreencast');
     await Promise.all(frames.writes);
-    if (frames.length < 2) throw new Error('трансляция дала ' + frames.length + ' кадр(ов) — записывать нечего');
+    if (frames.length < 2) throw new Error(`the stream produced ${frames.length} frame(s); there is nothing to record`);
 
     // The list for the concat demuxer: every frame has its own duration, taken
     // from its timestamp. The last frame has no "until the next one", so it gets
@@ -303,17 +303,17 @@ try {
     });
     if (ok) {
       await fs.rm(framesDir, { recursive: true, force: true }).catch(() => {});
-      console.log(`записано: ${video} — ${frames.length} кадров, ${secs} с`);
+      console.log(`recorded: ${video} — ${frames.length} frames, ${secs} s`);
     } else {
       // ffmpeg is a convenience here rather than a dependency of the project:
       // without it you are left with the frames and the line that assembles them
       // anywhere.
-      console.log(`кадры: ${framesDir} — ${frames.length} шт, ${secs} с`);
-      console.log(`собрать:\n  cd ${framesDir} && ffmpeg -f concat -safe 0 -i frames.txt \\\n    -vf 'fps=30,crop=trunc(iw/2)*2:trunc(ih/2)*2' -c:v libx264 -crf 18 -pix_fmt yuv420p ${path.resolve(video)}`);
+      console.log(`frames: ${framesDir} — ${frames.length}, ${secs} s`);
+      console.log(`assemble:\n  cd ${framesDir} && ffmpeg -f concat -safe 0 -i frames.txt \\\n    -vf 'fps=30,crop=trunc(iw/2)*2:trunc(ih/2)*2' -c:v libx264 -crf 18 -pix_fmt yuv420p ${path.resolve(video)}`);
     }
   }
   await bye(0);
 } catch (err) {
-  console.error('не снялось:', err.message);
+  console.error('capture failed:', err.message);
   await bye(1);
 }

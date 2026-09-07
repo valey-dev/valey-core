@@ -40,16 +40,16 @@ export async function initStand() {
     d.textContent = text;
     box.appendChild(d);
   };
-  line('stand-tag', 'ТЕСТОВЫЙ СТЕНД · ~ СВЕРНУТЬ');
+  line('stand-tag', 'TEST STAND · ~ COLLAPSE');
   line('stand-what', s.text);
-  const where = [s.branch && `ветка ${s.branch}`, s.port && `порт ${s.port}`].filter(Boolean).join(' · ');
+  const where = [s.branch && `branch ${s.branch}`, s.port && `port ${s.port}`].filter(Boolean).join(' · ');
   if (where) line('stand-where', where);
   // The list of modules, as switches. A click puts a module out on the server and
   // reloads the page: half of a module's work lives in the client, and without the
   // reload the office would be left with the things it has already drawn.
   const all = s.all || [];
   if (!all.length) {
-    line('stand-where', 'модулей нет — бесплатная сборка');
+    line('stand-where', 'no modules — free build');
   } else {
     // The state in a word, not a tick. The first version showed ☑/☐, the buttons
     // stood shoulder to shoulder, and by the second check the module switched off
@@ -65,9 +65,9 @@ export async function initStand() {
       const name = document.createElement('b');
       name.textContent = m.id;
       const state = document.createElement('i');
-      state.textContent = m.broken ? 'СЛОМАН' : m.off ? 'ВЫКЛ' : 'вкл';
+      state.textContent = m.broken ? 'BROKEN' : m.off ? 'OFF' : 'on';
       b.append(name, state);
-      b.title = m.off ? `включить ${m.id}` : `выключить ${m.id}`;
+      b.title = m.off ? `enable ${m.id}` : `disable ${m.id}`;
       b.onclick = async () => {
         if (b.disabled) return;
         b.disabled = true;
@@ -87,10 +87,10 @@ export async function initStand() {
     box.appendChild(rows);
     // The same thing once more in words: a state named twice cannot be read backwards.
     const dead = all.filter((m) => m.off).map((m) => m.id);
-    line('stand-where', dead.length ? `выключены: ${dead.join(', ')}` : 'все модули включены');
+    line('stand-where', dead.length ? `disabled: ${dead.join(', ')}` : 'all modules enabled');
     // Without this line the panel lies: a module switched off here is still on
     // disk, and this is a check of how the office behaves, not of a build without it.
-    line('stand-fine', 'выключение — имитация: файлы на диске остаются');
+    line('stand-fine', 'disabling is simulated; files remain on disk');
   }
   // The tab that is left when the plaque is folded. It says the same first thing
   // the plaque says — this is a stand — and nothing else; everything else is one
@@ -98,8 +98,8 @@ export async function initStand() {
   const tab = document.createElement('button');
   tab.id = 'standtab';
   tab.type = 'button';
-  tab.textContent = 'СТЕНД';
-  tab.title = 'развернуть табличку стенда (~)';
+  tab.textContent = 'STAND';
+  tab.title = 'expand the stand label (~)';
 
   const fold = (on) => {
     document.body.classList.toggle('stand-folded', !!on);

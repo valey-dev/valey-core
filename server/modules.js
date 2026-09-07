@@ -80,7 +80,7 @@ export async function loadModules(root, ctx = null) {
     if (!ctx || typeof m.server?.setup !== 'function') continue;
     try { await m.server.setup(ctx); } catch (err) {
       m.error = String((err && err.message) || err);
-      console.log(`модуль ${m.id} споткнулся на setup: ${m.error}`);
+      console.log(`module ${m.id} failed during setup: ${m.error}`);
     }
   }
   return loaded;
@@ -135,7 +135,7 @@ export function modulePublic(s) {
 export function moduleOnPatch(patch) {
   for (const m of live()) {
     if (typeof m.server?.onPatch !== 'function') continue;
-    try { m.server.onPatch(patch); } catch (err) { console.log(`модуль ${m.id} споткнулся на настройках: ${err}`); }
+    try { m.server.onPatch(patch); } catch (err) { console.log(`module ${m.id} failed while applying settings: ${err}`); }
   }
 }
 
@@ -176,7 +176,7 @@ export async function moduleObserve(now, prev) {
   if (!seen.length) return;
   const done = await Promise.allSettled(seen.map((m) => m.server.observe(now, prev)));
   done.forEach((r, i) => {
-    if (r.status === 'rejected') console.log(`модуль ${seen[i].id} споткнулся на снимке: ${r.reason}`);
+    if (r.status === 'rejected') console.log(`module ${seen[i].id} failed while taking a snapshot: ${r.reason}`);
   });
 }
 

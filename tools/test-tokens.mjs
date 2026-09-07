@@ -51,7 +51,7 @@ const OUTSIDE = new Set(['--ui', '--mono', '--c', '--cap', '--u', '--edge']);
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, got === undefined ? '' : '→ ' + JSON.stringify(got)); }
+  else { bad += 1; console.log('FAIL  |', name, got === undefined ? '' : '→ ' + JSON.stringify(got)); }
 };
 
 // ------------------------------------------------------------- the machinery
@@ -92,21 +92,21 @@ function literals(src) {
   return out;
 }
 
-ok('литерал в правиле виден', literals('.a{color:#fff}').length === 1);
-ok('и знает своё правило', literals('.a{color:#fff}')[0].sel === '.a');
-ok('вложенное правило отдаёт внутренний селектор',
+ok('the literal is visible in the rule', literals('.a{color:#fff}').length === 1);
+ok('and knows his rule', literals('.a{color:#fff}')[0].sel === '.a');
+ok('nested rule returns internal selector',
   literals('@media (min-width:1px){.b{color:#abcdef}}')[0].sel === '.b');
-ok('цвет в комментарии — не цвет', literals('/* #c39bff */ .a{color:var(--x)}').length === 0);
-ok('id из хекс-букв — не цвет', literals('.facetext #facealbum{color:var(--x)}').length === 0);
-ok('номер строки настоящий', literals('.a{\n  color:#fff}')[0].line === 2);
-ok('несколько цветов в строке считаются по одному',
+ok('the color in the comment is not the color', literals('/* #c39bff */ .a{color:var(--x)}').length === 0);
+ok('id from hex letters - not color', literals('.facetext #facealbum{color:var(--x)}').length === 0);
+ok('line number is real', literals('.a{\n  color:#fff}')[0].line === 2);
+ok('several colors in a line are counted one at a time',
   literals('.a{color:#fff;border-color:#000}').length === 2);
 
 // -------------------------------------------------------------------- :root
 const root = css.match(/:root\{([\s\S]*?)\n\}/);
-ok('блок :root на месте', !!root);
+ok('the :root block is in place', !!root);
 const declared = new Set([...(root ? root[1] : '').matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
-ok(`в :root объявлено ${declared.size} переменных`, declared.size > 20, declared.size);
+ok(`${declared.size} variables are declared in :root`, declared.size > 20, declared.size);
 
 // ---------------------------------------------------------------- the check
 const found = literals(css).filter((h) => h.sel !== ':root');
@@ -120,18 +120,18 @@ const left = found.filter((h) => {
 
 if (left.length) {
   bad += 1;
-  console.log(`УПАЛ  | ${FILE}: цвет мимо :root — дай ему имя там (AGENTS.md, 5 сентября 2026)`);
+console.log(`FAIL  | ${FILE}: color is outside :root; name it there (AGENTS.md, 5 September 2026)`);
   for (const h of left.slice(0, 10)) console.log(`      | ${FILE}:${h.line}  ${h.sel} → ${h.hex}`);
-  if (left.length > 10) console.log(`      | …и ещё ${left.length - 10}`);
+if (left.length > 10) console.log(`      | …and ${left.length - 10} more`);
 } else {
-  ok(`${FILE}: хекс-литералов мимо :root нет`, true);
+  ok(`${FILE}: no hex literals past :root`, true);
 }
 
 // An exception that is no longer needed is a lie of the same size as a missing
 // one: it says a bug is still there when somebody has already fixed it.
 for (let i = 0; i < ALLOWED.length; i++) {
   const a = ALLOWED[i];
-  ok(`исключение ${a.sel} → ${a.hex} ещё нужно (${a.why})`, spare.includes(i));
+  ok(`exception ${a.sel} → ${a.hex} still needed (${a.why})`, spare.includes(i));
 }
 
 // ------------------------------------------------------- var() without a name
@@ -140,7 +140,7 @@ for (let i = 0; i < ALLOWED.length; i++) {
 // decision rather than a mistake.
 const used = new Set([...css.matchAll(/var\(\s*(--[\w-]+)/g)].map((m) => m[1]));
 const unknown = [...used].filter((n) => !declared.has(n) && !OUTSIDE.has(n));
-ok('каждый var() ведёт в :root или в известный список снаружи', unknown.length === 0, unknown);
+ok('each var() points to :root or to a known list outside', unknown.length === 0, unknown);
 
 // ------------------------------------------------------------------ theme.js
 // The office turns its whole brown palette from one hue, and it does it by
@@ -153,9 +153,9 @@ const painted = [
   ...[...js.matchAll(/\['(--[\w-]+)',/g)].map((m) => m[1]),
   ...[...js.matchAll(/setProperty\('(--[\w-]+)'/g)].map((m) => m[1]),
 ];
-ok(`theme.js красит ${new Set(painted).size} переменных`, painted.length > 15, painted.length);
+ok(`theme.js paints ${new Set(painted).size} variables`, painted.length > 15, painted.length);
 const orphans = [...new Set(painted)].filter((n) => !declared.has(n) && !OUTSIDE.has(n));
-ok('и каждая из них объявлена в :root', orphans.length === 0, orphans);
+ok('and each of them is declared in :root', orphans.length === 0, orphans);
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

@@ -28,35 +28,45 @@ export function comments(src) {
   const out = [];
   const s = String(src);
   let i = 0, line = 1;
-  // The last token character before the cursor: it is what tells `/` the regex
-  // from `/` the division, and nothing else in this file needs it.
-  let prev = null;
+  // Template expressions are code nested inside template text and may contain
+  // more templates in turn. Keeping that nesting explicit prevents an inner
+  // backtick from masquerading as the outer template's closing delimiter.
+  const stack = [{ type: 'code', depth: null, prev: null }];
   const at = (n) => s[i + n];
   while (i < s.length) {
     const c = s[i];
     if (c === '\n') { line += 1; i += 1; continue; }
+    const frame = stack[stack.length - 1];
+    if (frame.type === 'template') {
+      if (c === '\\') { i += 2; continue; }
+      if (c === '`') { stack.pop(); i += 1; continue; }
+      if (c === '$' && at(1) === '{') {
+        stack.push({ type: 'code', depth: 1, prev: null });
+        i += 2;
+        continue;
+      }
+      i += 1;
+      continue;
+    }
     // a string: to the closing quote, escapes honoured, single line
     if (c === '"' || c === "'") {
       i += 1;
       while (i < s.length && s[i] !== c && s[i] !== '\n') i += (s[i] === '\\' ? 2 : 1);
       i += 1;
+      frame.prev = 'x';
       continue;
     }
-    // a template literal: to the closing backtick, across lines; `${}` inside
-    // is not looked into, which is why a comment in an interpolation is missed
+    // Template text is skipped, while its `${...}` expressions return to code.
     if (c === '`') {
-      i += 1;
-      while (i < s.length && s[i] !== '`') {
-        if (s[i] === '\n') line += 1;
-        i += (s[i] === '\\' ? 2 : 1);
-      }
+      frame.prev = 'x';
+      stack.push({ type: 'template' });
       i += 1;
       continue;
     }
     // a regular expression: only where one can legally start — after an
     // operator, a bracket or nothing at all. `a / b` and `x[i] / 2` are
     // divisions and stay ordinary characters.
-    if (c === '/' && at(1) !== '/' && at(1) !== '*' && REGEX_OK.has(prev)) {
+    if (c === '/' && at(1) !== '/' && at(1) !== '*' && REGEX_OK.has(frame.prev)) {
       i += 1;
       let cls = false;
       while (i < s.length && s[i] !== '\n') {
@@ -67,7 +77,7 @@ export function comments(src) {
         else if (r === '/' && !cls) { i += 1; break; }
         i += 1;
       }
-      prev = '/';
+      frame.prev = '/';
       continue;
     }
     if (c === '/' && at(1) === '/') {
@@ -84,8 +94,67 @@ export function comments(src) {
       out.push({ line: from, text: s.slice(start, i) });
       continue;
     }
-    if (c !== ' ' && c !== '\t') prev = c;
+    if (frame.depth !== null) {
+      if (c === '{') frame.depth += 1;
+      if (c === '}') {
+        frame.depth -= 1;
+        if (frame.depth === 0) { stack.pop(); i += 1; continue; }
+      }
+    }
+    if (c !== ' ' && c !== '\t') frame.prev = c;
     i += 1;
+  }
+  return out;
+}
+
+/** Hash comments in YAML, Python, shell files and .gitignore. */
+export function hashComments(src) {
+  const out = [];
+  String(src).split('\n').forEach((raw, i) => {
+    let quote = null;
+    for (let at = 0; at < raw.length; at += 1) {
+      const c = raw[at];
+      if (quote) {
+        if (c === '\\') at += 1;
+        else if (c === quote) quote = null;
+        continue;
+      }
+      if (c === '"' || c === "'") { quote = c; continue; }
+      if (c === '#') { out.push({ line: i + 1, text: raw.slice(at) }); break; }
+    }
+  });
+  return out;
+}
+
+/** HTML/XML comments, with their starting line. */
+export function markupComments(src) {
+  const out = [];
+  const s = String(src);
+  const re = /<!--[\s\S]*?-->/g;
+  let m;
+  while ((m = re.exec(s))) {
+    out.push({ line: s.slice(0, m.index).split('\n').length, text: m[0] });
+  }
+  return out;
+}
+
+/** Comments inside fenced source examples, plus HTML comments in Markdown. */
+export function markdownComments(src) {
+  const out = markupComments(src);
+  const s = String(src);
+  const re = /```([^\n]*)\n([\s\S]*?)```/g;
+  let m;
+  while ((m = re.exec(s))) {
+    const lang = m[1].trim().toLowerCase();
+    const syntax = /^(?:ya?ml|py(?:thon)?|sh|bash|zsh)$/.test(lang) ? 'hash'
+      : /^(?:html|xml|svg)$/.test(lang) ? 'html'
+      : /^(?:js|javascript|mjs|css)$/.test(lang) ? 'slash' : null;
+    if (!syntax) continue;
+    const base = s.slice(0, m.index).split('\n').length;
+    const nested = syntax === 'hash' ? hashComments(m[2])
+      : syntax === 'html' ? [...markupComments(m[2]), ...comments(m[2])]
+      : comments(m[2]);
+    for (const c of nested) out.push({ line: base + c.line, text: c.text });
   }
   return out;
 }
@@ -97,11 +166,20 @@ const QUOTED = /«[^»]*»|"[^"]*"|'[^']*'|`[^`]*`|„[^“]*“/g;
 const CYRILLIC = /[а-яА-ЯёЁ]/;
 
 /** The comment lines of a file that carry Russian outside quotes. */
-export function russianComments(src) {
+export function russianComments(src, syntax = 'slash') {
   const hits = [];
-  for (const c of comments(src)) {
-    c.text.split('\n').forEach((raw, n) => {
-      if (CYRILLIC.test(raw.replace(QUOTED, ''))) hits.push({ line: c.line + n, text: raw.trim() });
+  const found = syntax === 'hash' ? hashComments(src)
+    : syntax === 'markup' ? markupComments(src)
+    : syntax === 'markdown' ? markdownComments(src)
+    : syntax === 'html' ? [...markupComments(src), ...comments(src)]
+    : comments(src);
+  for (const c of found) {
+    // Remove quotations before splitting into lines so a quoted example may
+    // span lines without turning its second line into a false violation.
+    const unquoted = c.text.replace(QUOTED, (q) => q.replace(/[^\n]/g, ' '));
+    const raw = c.text.split('\n');
+    unquoted.split('\n').forEach((line, n) => {
+      if (CYRILLIC.test(line)) hits.push({ line: c.line + n, text: raw[n].trim() });
     });
   }
   return hits;

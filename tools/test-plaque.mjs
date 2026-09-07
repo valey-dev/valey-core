@@ -48,7 +48,7 @@ const { lookOf } = await import('../web/sprites.js');
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    | ' + name);
-  else { bad++; console.log('УПАЛ  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
+  else { bad++; console.log('FAIL  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
 };
 
 // ------------------------------------------------------- the plaque itself
@@ -57,18 +57,18 @@ const ok = (name, cond, got) => {
   drawPlaque(ctx, PLAQUE, 'OPENING SOON', null);
   const boxes = ctx.calls.filter((c) => c.kind === 'rect');
   const board = boxes.find((c) => c.box[2] === PLAQUE.w && c.box[3] === PLAQUE.h);
-  ok('доска на месте и своего размера', !!board && board.box[0] === PLAQUE.x && board.box[1] === PLAQUE.y, board);
-  ok('рамка тёплого дерева, а не поля', board && board.color === '#8a5f3a', board && board.color);
+  ok('board in place and size', !!board && board.box[0] === PLAQUE.x && board.box[1] === PLAQUE.y, board);
+  ok('a frame of warm wood, not a field', board && board.color === '#8a5f3a', board && board.color);
   // The nails stick out above the frame, and that is part of the picture: the
   // cover of the form counts its safe area from them. Moved inside, and the
   // cover gets cropped through the living.
   const nails = boxes.filter((c) => c.box[1] === PLAQUE.y - NAIL_RISE && c.box[2] === 3);
-  ok('два гвоздя, и оба выше доски', nails.length === 2, nails);
+  ok('two nails, both higher than the board', nails.length === 2, nails);
   // The letters are set in pixels: rectangles, not fillText. Five-point type on
   // a 400×225 canvas is drawn in half-tones, and the office blows every half-tone
   // up into a square — on a real frame the caption was unreadable, letter by letter.
-  ok('строки набраны пикселями, а не шрифтом', !ctx.calls.some((c) => c.kind === 'text'), ctx.calls.filter((c) => c.kind === 'text'));
-  ok('нарисовано много мелких пятен — это и есть буквы', boxes.length > 60, boxes.length);
+  ok('lines are typed in pixels, not font', !ctx.calls.some((c) => c.kind === 'text'), ctx.calls.filter((c) => c.kind === 'text'));
+  ok('many small spots are drawn - these are the letters', boxes.length > 60, boxes.length);
 }
 
 // A line that is in no face at all falls back: a soapy caption is better than a
@@ -77,11 +77,11 @@ const ok = (name, cond, got) => {
   const ctx = recorder();
   let asked = null;
   drawPlaque(ctx, PLAQUE, '事務所', (c, s, x, y) => { asked = { s, x, y }; });
-  ok('чего не берёт шрифт — отдаётся запасному рисовальщику', asked && asked.s === '事務所', asked);
+  ok('What the font doesn’t take is given to a backup draftsman', asked && asked.s === '事務所', asked);
 }
 {
   const ctx = recorder();
-  ok('и без запасного не падает', (() => { try { drawPlaque(ctx, PLAQUE, '事務所', null); return true; } catch { return false; } })());
+  ok('and without a spare it doesn’t fall', (() => { try { drawPlaque(ctx, PLAQUE, '事務所', null); return true; } catch { return false; } })());
 }
 
 // ------------------------------------------------------- the slots outwards
@@ -97,8 +97,8 @@ const scene = (opts) => {
   const quiet = scene({ controls: false });
   // The language switch is the only thing on the entrance screen that can be
   // pressed. On a page nobody walks through, it promises what is not there.
-  ok('без controls сцена беднее', quiet.calls.length < plain.calls.length, [plain.calls.length, quiet.calls.length]);
-  ok('и подсказок в ней нет', !quiet.calls.some((c) => c.kind === 'text' && /ПРОБЕЛ|SPACE/.test(c.text || '')),
+  ok('without controls the scene is poorer', quiet.calls.length < plain.calls.length, [plain.calls.length, quiet.calls.length]);
+  ok('and there are no hints in it', !quiet.calls.some((c) => c.kind === 'text' && /ПРОБЕЛ|SPACE/.test(c.text || '')),
     quiet.calls.filter((c) => c.kind === 'text').map((c) => c.text));
 }
 
@@ -109,21 +109,21 @@ const scene = (opts) => {
   // it stays the name of the office on the door rather than turning into a second
   // logo of the page.
   const nameRows = (ctx) => ctx.calls.filter((c) => c.kind === 'rect' && c.box[1] >= PLAQUE.y + 3 && c.box[1] < PLAQUE.y + 13).length;
-  ok('имя на табличке не трогается', nameRows(own) === nameRows(dflt), [nameRows(own), nameRows(dflt)]);
+  ok('the name on the sign is not touched', nameRows(own) === nameRows(dflt), [nameRows(own), nameRows(dflt)]);
   const subRows = (ctx) => ctx.calls.filter((c) => c.kind === 'rect' && c.box[1] >= PLAQUE.y + 15 && c.box[1] < PLAQUE.y + 22).length;
-  ok('а нижняя строка меняется', subRows(own) !== subRows(dflt), [subRows(own), subRows(dflt)]);
+  ok('and the bottom line changes', subRows(own) !== subRows(dflt), [subRows(own), subRows(dflt)]);
 }
 
 {
   let got = null;
   const s = scene({ window: (ctx, WIN) => { got = { ...WIN }; ctx.fillStyle = '#123456'; ctx.fillRect(WIN.x, WIN.y, WIN.w, WIN.h); } });
-  ok('за стекло пускают чужого рисовальщика', !!got && got.w === 64 && got.h === 36, got);
-  ok('и он рисует именно там, где окно', s.calls.some((c) => c.color === '#123456'), null);
+  ok('someone else\'s draftsman is allowed behind the glass', !!got && got.w === 64 && got.h === 36, got);
+  ok('and he draws exactly where the window is', s.calls.some((c) => c.color === '#123456'), null);
   // The frame and the glazing bars stay shared: the window is part of this wall,
   // not a picture swapped out whole.
-  ok('рама и переплёт остаются наши',
+  ok('frame and binding remain ours',
     s.calls.some((c) => c.kind === 'rect' && c.box[2] === 2 && c.box[3] === 36 && c.color === '#8a6247'), null);
 }
 
-console.log(bad ? `\nПЛОХО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

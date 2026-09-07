@@ -20,7 +20,7 @@ const NET = 'tunnel-net-token-0001';
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
+  else { bad += 1; console.log('FAIL  |', name, '→', JSON.stringify(got)); }
 };
 
 const { base, stop } = await startOffice({
@@ -41,31 +41,31 @@ const BEARER = { ...VIA, authorization: 'Bearer ' + NET };
 
 try {
   const direct = await get('/api/whoami');
-  ok('своя машина — хозяин, как и была', direct.j && direct.j.owner === true, direct);
+  ok('own car - the owner, as it was', direct.j && direct.j.owner === true, direct);
 
   // ------------------------------------------------ a middleman is the outside
   for (const h of ['x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'forwarded']) {
     const via = await get('/api/whoami', { [h]: '203.0.113.7' });
-    ok(`через посредника (${h}) без токена — порог закрыт`, via.status === 401 && via.j.errorKey === 'err.needToken', via);
+    ok(`through an intermediary (${h}) without a token - the threshold is closed`, via.status === 401 && via.j.errorKey === 'err.needToken', via);
   }
   const bearer = await get('/api/whoami', BEARER);
-  ok('с сетевым токеном — пускают, но не хозяин', bearer.status === 200 && bearer.j.owner === false, bearer);
+  ok('with a network token - they let you in, but not the owner', bearer.status === 200 && bearer.j.owner === false, bearer);
   const look = await get('/api/state', BEARER);
-  ok('и смотреть офис в private с токеном можно — свойство одной Wi-Fi остаётся', look.status === 200, look.status);
+  ok('and you can view the office in private with a token - the property of one Wi-Fi remains', look.status === 200, look.status);
   const asOwner = await get('/api/whoami', { ...BEARER, 'x-valey-owner': OWNER });
-  ok('токен хозяина работает и через туннель — иначе хозяин не попадёт в свой офис снаружи',
+  ok('The owner\'s token also works through the tunnel - otherwise the owner will not get into his office from the outside',
     asOwner.j && asOwner.j.owner === true, asOwner);
 
   // ------------------------------------------------------------- the cookie
   const query = await get('/api/whoami?token=' + NET, VIA);
-  ok('токен строкой в адресе принимают один раз и запоминают кукой',
+  ok('the token string in the address is accepted once and remembered with a cookie',
     query.status === 200 && /valey_net=/.test(query.cookie || ''), query);
   const cookie = await get('/api/whoami', { ...VIA, cookie: 'valey_net=' + NET });
-  ok('и по куке пускают', cookie.status === 200, cookie.status);
+  ok('and they let you in according to cookies', cookie.status === 200, cookie.status);
   const badCookie = await get('/api/whoami', { ...VIA, cookie: 'valey_net=%E0%A4%A' });
-  ok('битый процент в куке — не токен, а не URIError на весь офис', badCookie.status === 401, badCookie.status);
+  ok('a broken percentage in a cookie is not a token, not a URIError for the entire office', badCookie.status === 401, badCookie.status);
   const still = await get('/api/whoami');
-  ok('и офис после неё жив', still.status === 200 && still.j.owner === true, still.status);
+  ok('and the office is alive after her', still.status === 200 && still.j.owner === true, still.status);
 
   // -------------------------------------------------- a closed office — 404
   // The owner closes the port from loopback; the gate reads the settings on every request.
@@ -73,17 +73,17 @@ try {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-valey-owner': OWNER },
     body: JSON.stringify({ network: { external: false } }),
   }).then((r) => r.status);
-  ok('хозяин закрывает офис', shut === 200, shut);
+  ok('the owner is closing the office', shut === 200, shut);
   const closed = await get('/api/whoami', BEARER);
-  ok('посреднику закрытый офис отвечает 404, даже с токеном: сканеру знать нечего', closed.status === 404, closed.status);
+  ok('the closed office responds to the intermediary with 404, even with a token: the scanner has nothing to know', closed.status === 404, closed.status);
   const home = await get('/api/whoami');
-  ok('а с этой машины офис открыт, как и был', home.status === 200 && home.j.owner === true, home.status);
+  ok('and from this machine the office is open as it was', home.status === 200 && home.j.owner === true, home.status);
 } catch (e) {
   bad += 1;
-  console.log('УПАЛ  | стенд не доехал →', e.message);
+  console.log('FAIL  | test did not complete →', e.message);
 } finally {
   await stop();
 }
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

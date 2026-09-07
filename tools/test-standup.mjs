@@ -21,7 +21,7 @@ setLang('ru');
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, got === undefined ? '' : '→ ' + JSON.stringify(got)); }
+  else { bad += 1; console.log('FAIL  |', name, got === undefined ? '' : '→ ' + JSON.stringify(got)); }
 };
 
 const agent = (o) => ({
@@ -40,12 +40,12 @@ const cast = [
   agent({ id: 'z1', project: 'zebra' }),
   agent({ id: 'n1', project: 'nomad' }),             // a project with no room yet
 ];
-ok('команды идут в порядке комнат на этаже, а не по алфавиту',
+ok('teams go in order of rooms on the floor, not alphabetically',
   UI.standupTeams(cast, floor).map((t) => t.project).join(',') === 'zebra,alpha,nomad',
   UI.standupTeams(cast, floor).map((t) => t.project));
-ok('проект без комнаты уходит в конец, а не пропадает',
+ok('a project without a room goes to the end, not disappears',
   UI.standupTeams(cast, floor).length === 3, names(UI.standupTeams(cast, floor)));
-ok('без раскладки вовсе — по алфавиту, и это тоже порядок',
+ok('no layout at all - alphabetical, and this is also the order',
   UI.standupTeams(cast, []).map((t) => t.project).join(',') === 'alpha,nomad,zebra',
   UI.standupTeams(cast, []).map((t) => t.project));
 
@@ -57,7 +57,7 @@ const team = [
   agent({ id: 'first', project: 'p', seat: 1 }),
   agent({ id: 'second', project: 'p', seat: 2 }),
 ];
-ok('внутри команды порядок по местам за столами',
+ok('within the team, order by place at the tables',
   UI.standupTeams(team, [])[0].list.map((a) => a.id).join(',') === 'first,second,third',
   UI.standupTeams(team, [])[0].list.map((a) => a.id));
 
@@ -66,10 +66,10 @@ const mixed = [
   agent({ id: 'idles', project: 'p', seat: 2, status: 'idle' }),
   agent({ id: 'waits', project: 'p', seat: 3, status: 'awaiting' }),
 ];
-ok('ждущий поднимается наверх, остальные держат места',
+ok('the person waiting goes upstairs, the rest keep their seats',
   UI.standupTeams(mixed, [])[0].list.map((a) => a.id).join(',') === 'waits,works,idles',
   UI.standupTeams(mixed, [])[0].list.map((a) => a.id));
-ok('и счётчик ждущих у команды свой', UI.standupTeams(mixed, [])[0].waiting === 1);
+ok('and the team has its own counter of those waiting', UI.standupTeams(mixed, [])[0].waiting === 1);
 
 // ------------------------------------------------------------- the card
 
@@ -77,42 +77,42 @@ const reported = UI.standupCard(agent({
   id: 'r', status: 'working',
   task: { what: 'Планёрка: колонки по командам', status: 'код пишется', need: '' },
 }));
-ok('задача берётся из хвоста отчёта', reported.task === 'Планёрка: колонки по командам', reported);
-ok('и помечена как настоящая', reported.reported === true && reported.cold === false, reported);
-ok('у работающего под задачей стоит, чем он занят сейчас', reported.now !== '', reported.now);
-ok('статус из отчёта доехал', reported.status === 'код пишется', reported.status);
+ok('the task is taken from the tail of the report', reported.task === 'Планёрка: колонки по командам', reported);
+ok('and marked as real', reported.reported === true && reported.cold === false, reported);
+ok('the person working has a task to determine what he is doing now', reported.now !== '', reported.now);
+ok('status from the report arrived', reported.status === 'код пишется', reported.status);
 
 const silent = UI.standupCard(agent({ id: 's', status: 'idle', idleFor: 300, title: 'Отладка курсов', lastSaid: 'посмотрю' }));
-ok('без хвоста вместо задачи имя чата', silent.task === 'Отладка курсов', silent);
-ok('и это честно названо не задачей', silent.reported === false, silent);
-ok('такая строка приглушена сразу, а не через час', silent.cold === true, silent);
-ok('и статуса у неё нет — выдумывать его неоткуда', silent.status === '' && silent.need === '', silent);
+ok('without a tail instead of a task chat name', silent.task === 'Отладка курсов', silent);
+ok('and this is honestly called not a task', silent.reported === false, silent);
+ok('this line is muted immediately, not after an hour', silent.cold === true, silent);
+ok('and she has no status - there’s nowhere to invent it from', silent.status === '' && silent.need === '', silent);
 
 const nothing = UI.standupCard(agent({ id: 'n', status: 'idle', lastSaid: 'просто реплика' }));
-ok('нет и имени чата — берётся последняя реплика', nothing.task === 'просто реплика', nothing);
+ok('there is no chat name - the last replica is taken', nothing.task === 'просто реплика', nothing);
 
 // An hour of silence is the line: what was said before it is no longer "now".
 // A working agent never goes cold, however long the task has been named — he is
 // visibly doing it.
 const hour = { what: 'Импорт выписки', status: 'готово', need: '' };
-ok('задача остывает через час молчания',
+ok('the task cools down after an hour of silence',
   UI.standupCard(agent({ id: 'c', status: 'idle', idleFor: 3601, task: hour })).cold === true);
-ok('и не остывает раньше',
+ok('and doesn\'t cool down before',
   UI.standupCard(agent({ id: 'c', status: 'idle', idleFor: 3599, task: hour })).cold === false);
-ok('у работающего не остывает вовсе',
+ok('the worker does not cool down at all',
   UI.standupCard(agent({ id: 'c', status: 'working', idleFor: 999999, task: hour })).cold === false);
 
 // «Что нужно от меня» is the flag on the card, and «Ничего» must not raise it —
 // the server already empties that field, and the panel must not invent one.
-ok('⚑ поднимается только когда в отчёте есть нужда',
+ok('⚑ raised only when there is a need for a report',
   UI.standupCard(agent({ id: 'f', task: { what: 'x', status: '', need: 'подтвердить мерж' } })).need === 'подтвердить мерж'
   && UI.standupCard(agent({ id: 'f', task: { what: 'x', status: '', need: '' } })).need === '');
 
 // States: the card's stripe and its token are chosen from this one word.
-ok('состояние карточки — ждёт, работает, отошёл',
+ok('card status - waiting, working, gone',
   UI.standupCard(agent({ id: 'w', status: 'awaiting' })).state === 'wait'
   && UI.standupCard(agent({ id: 'w', status: 'working' })).state === 'work'
   && UI.standupCard(agent({ id: 'w', status: 'idle' })).state === 'idle');
 
-console.log(bad ? `\nПЛОХО: ${bad}` : '\nвсё сошлось');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall matched');
 process.exit(bad ? 1 : 0);

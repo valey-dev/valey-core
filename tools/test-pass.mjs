@@ -22,12 +22,12 @@ const NO_PASS_NEEDED = ['/api/enter', '/api/whoami', '/api/stand'];
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, got === undefined ? '' : '→ ' + got); }
+  else { bad += 1; console.log('FAIL  |', name, got === undefined ? '' : '→ ' + got); }
 };
 
 const dir = path.join(process.cwd(), 'web');
 const files = readdirSync(dir).filter((f) => f.endsWith('.js'));
-ok('файлы клиента нашлись', files.length > 0, files.length);
+ok('client files found', files.length > 0, files.length);
 
 const missing = [];
 for (const file of files) {
@@ -47,7 +47,7 @@ for (const file of files) {
     missing.push(`${file}:${i + 1} ${url}`);
   });
 }
-ok('все вызовы к офису предъявляют пропуск', missing.length === 0, missing.join(' · '));
+ok('all calls to the office require a pass', missing.length === 0, missing.join(' · '));
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

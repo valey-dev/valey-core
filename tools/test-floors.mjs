@@ -14,7 +14,7 @@ const mk = (n) => Array.from({ length: n }, (_, i) => ({
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
+  else { bad += 1; console.log('FAIL  |', name, '→', JSON.stringify(got)); }
 };
 
 // ------------------------------------------------------------------ the floors
@@ -41,47 +41,47 @@ for (const n of [3, 6, 7, 9, 10, 12]) {
     seen.set(r.key, f);
   }
 }
-ok('этаж проекта не меняется, когда офис растёт', stable, drift);
+ok('the project floor does not change when the office grows', stable, drift);
 
 const L = buildLayout(mk(10));
 const lowest = Math.max(...L.projectRooms.map((r) => r.y));
-ok('первые три проекта стоят нижним рядом',
+ok('the first three projects are in the bottom row',
   ['p0', 'p1', 'p2'].every((k) => L.projectRooms.find((r) => r.key === k).y === lowest),
   L.projectRooms.map((r) => [r.key, r.y]));
-ok('сервисный ярус ниже всех комнат', L.security.y > lowest, [L.security.y, lowest]);
+ok('service level below all rooms', L.security.y > lowest, [L.security.y, lowest]);
 // The first floor is the service tier rather than the bottom row of projects.
 // It became so on 30 August 2026, when the meeting room appeared on the tier: it
 // read as a basement while all that was down there was a control room reachable
 // by a card, which nobody needed to ride to.
-ok('первый этаж — сервисный ярус',
-  L.lift.floors.some((f) => f.n === 1 && f.tier && f.rooms.includes('ПЕРЕГОВОРКА')),
+ok('first floor - service level',
+  L.lift.floors.some((f) => f.n === 1 && f.tier && f.rooms.includes('MEETING ROOM')),
   L.lift.floors.map((f) => [f.n, f.rooms]));
-ok('нижний ряд проектов — этаж 2',
+ok('bottom row of projects - floor 2',
   L.lift.floors.some((f) => f.n === 2 && f.rooms.includes('p0')),
   L.lift.floors.map((f) => [f.n, f.rooms]));
 // The roof with the greenhouse is the top floor, and the largest number too.
 // There used to be a literal five here: with the roof tier there is one floor
 // more, and a hard number checked the old world rather than the rule.
-ok('самый верхний этаж — крыша с оранжереей',
+ok('the top floor is a roof with a greenhouse',
   L.lift.floors[0].n === Math.max(...L.lift.floors.map((f) => f.n))
-  && L.lift.floors[0].rooms.includes('ОРАНЖЕРЕЯ'),
+  && L.lift.floors[0].rooms.includes('GREENHOUSE'),
   L.lift.floors.map((f) => [f.n, f.rooms]));
-ok('подвала больше нет', !L.lift.floors.some((f) => f.basement), null);
-ok('номера идут подряд без дыр',
+ok('there is no more basement', !L.lift.floors.some((f) => f.basement), null);
+ok('numbers are in a row without holes',
   L.lift.floors.map((f) => f.n).sort((a, b) => a - b).every((n, i) => n === i + 1),
   L.lift.floors.map((f) => f.n));
 // There are no projects on the tier, and the place the formula puts the desk in
 // is taken by the meeting room — and on the approved frame 401:2 there is no desk
 // there.
-ok('на сервисном ярусе стойки секретаря нет',
+ok('There is no secretary desk on the service level',
   !L.lift.reception.some((r) => r.n === 1), L.lift.reception.map((r) => r.n));
 
 // Whoever comes in starts at the bottom, by the lift, not under the roof: the
 // rooms are handed out in slot order rather than in drawing order.
-ok('вход по умолчанию — в комнату первого слота',
+ok('default entrance is to the room of the first slot',
   L.projectRooms[0].key === 'p0' && L.projectRooms[0].y === lowest,
   [L.projectRooms[0].key, L.projectRooms[0].y]);
-ok('кабина стоит на этаже 1, то есть у входа',
+ok('the cabin is located on floor 1, that is, at the entrance',
   L.lift.floors.find((f) => f.n === 1) !== undefined, null);
 
 // -------------------------------------------------- relative places
@@ -95,16 +95,16 @@ const after = buildLayout(mk(7));
 const moved = { ...p };
 applyAnchor(after, moved, a);
 const room2 = after.projectRooms.find((r) => r.key === 'p0');
-ok('якорь удержал человека в своей комнате',
+ok('an anchor kept a man in his room',
   moved.x === room2.x + 40 && moved.y === room2.y + 90,
   [moved, { x: room2.x, y: room2.y }]);
-ok('и без якоря он бы уехал', p.y !== moved.y, [p.y, moved.y]);
+ok('and without an anchor he would have left', p.y !== moved.y, [p.y, moved.y]);
 
 // In the corridor a person stands in no room, but the corridor moves along with
 // its row — holding on to the nearest room there is exactly right.
 const hall = { x: room.x + 20, y: room.y - 40 };
 const ha = anchorOf(before, hall);
-ok('в коридоре якорь цепляется за соседнюю комнату', ha && ha.key === 'p0', ha);
+ok('in the corridor the anchor clings to the next room', ha && ha.key === 'p0', ha);
 
 // The very case the anchor counts the corridor as part of its own floor for. A
 // fourth agent appears in a project on the top row, the row grows taller, and the
@@ -125,12 +125,12 @@ ok('в коридоре якорь цепляется за соседнюю ко
   const now = buildLayout(many(3));                       // the top row has grown
   const w0 = now.projectRooms.find((r) => r.key === 'p0');
   const w3 = now.projectRooms.find((r) => r.key === 'p3');
-  ok('подросший ряд сверху сдвигает нижний иначе, чем себя',
+  ok('the growing row on top moves the bottom row differently than itself',
     (w3.y - was.projectRooms.find((r) => r.key === 'p3').y) !== (w0.y - r0.y),
     [w3.y, w0.y]);
   const p2 = { ...stood };
   applyAnchor(now, p2, an);
-  ok('человек остался в коридоре своего этажа',
+  ok('the man remained in the corridor of his floor',
     an.key === 'p0' && p2.y === w0.y - 40, [an.key, p2.y, w0.y]);
 }
 
@@ -139,18 +139,18 @@ const sec = { x: before.security.x + 30, y: before.security.y + 60 };
 const sa = anchorOf(before, sec);
 const secMoved = { ...sec };
 applyAnchor(after, secMoved, sa);
-ok('на сервисном ярусе якорь держит тоже',
+ok('on the service tier the anchor also holds',
   sa.key === '__security' && secMoved.y === after.security.y + 60,
   [sa, secMoved.y, after.security.y]);
 
 // The project ended while the plan was being rebuilt: leaving them where they are
 // beats flinging them into the corner of the floor by a key that no longer exists.
 const gone = { x: 1, y: 2 };
-ok('исчезнувший проект оставляет человека на месте',
+ok('a missing project leaves a person in place',
   applyAnchor(after, gone, { key: 'нет такого', dx: 0, dy: 0 }) === false
   && gone.x === 1 && gone.y === 2, gone);
-ok('пустой якорь никого не двигает',
+ok('an empty anchor moves no one',
   applyAnchor(after, gone, null) === false && gone.x === 1, gone);
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

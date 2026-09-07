@@ -12,7 +12,7 @@ import { syncActors, tickActors } from '../web/actors.js';
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
+  else { bad += 1; console.log('FAIL  |', name, '→', JSON.stringify(got)); }
 };
 
 const mk = (n, extra = {}) => Array.from({ length: n }, (_, i) => ({
@@ -21,16 +21,16 @@ const mk = (n, extra = {}) => Array.from({ length: n }, (_, i) => ({
 
 const agents = mk(6);
 const L = buildLayout(agents);
-ok('стол есть в планировке', !!L.kicker && L.kicker.sides.length === 2, L.kicker);
-ok('и он стоит в курилке, слева от дивана', L.kicker.x < L.lounge.x && Math.abs(L.kicker.y - L.lounge.y) < 20,
+ok('there is a table in the layout', !!L.kicker && L.kicker.sides.length === 2, L.kicker);
+ok('and he is standing in the smoking room, to the left of the sofa', L.kicker.x < L.lounge.x && Math.abs(L.kicker.y - L.lounge.y) < 20,
   [L.kicker.x, L.kicker.y, L.lounge.x, L.lounge.y]);
-ok('сквозь стол не пройти', blocked(L, L.kicker.x, L.kicker.y - 4), null);
-ok('а сбоку от него — можно встать', !blocked(L, L.kicker.sides[0].x, L.kicker.sides[0].y),
+ok('you can\'t get through the table', blocked(L, L.kicker.x, L.kicker.y - 4), null);
+ok('and on the side of it you can stand', !blocked(L, L.kicker.sides[0].x, L.kicker.sides[0].y),
   L.kicker.sides[0]);
 
 const actors = new Map();
 syncActors(actors, agents, L);
-ok('все агенты на местах', actors.size === 6, actors.size);
+ok('all agents on site', actors.size === 6, actors.size);
 
 // The "go and play" roll is a Math.random() < 0.45 inside a rare branch. We
 // replace the generator with zero: then every "lucky?" check answers yes.
@@ -63,11 +63,11 @@ const run = (ms) => {
 run(600000);
 Math.random = realRandom;
 
-ok('за десять минут двое сошлись у стола', sawPair, sawPair);
-ok('троих у стола на двоих не бывает', maxKicking <= 2, maxKicking);
-ok('и на одну сторону вдвоём не встают', !sawWrongSeat, sawWrongSeat);
-ok('у стола стоят, а не сидят', !sawSitting, sawSitting);
-ok('и смотрят на стол', sawFacing, sawFacing);
+ok('in ten minutes the two met at the table', sawPair, sawPair);
+ok('There are no three people at a table for two', maxKicking <= 2, maxKicking);
+ok('and the two of them don’t stand on the same side', !sawWrongSeat, sawWrongSeat);
+ok('standing at the table rather than sitting', !sawSitting, sawSitting);
+ok('and look at the table', sawFacing, sawFacing);
 
 // Coming back from a game is checked by a separate, non-random run. Taking an
 // agent for that from the shared world above is not on: there are six of them
@@ -88,19 +88,19 @@ const until = (cond, ticks) => {
   for (let i = 0; i < ticks && !cond(); i++) { ts += 16; tickActors(soloActors, solo, Ls, 1, ts, () => {}); }
   return cond();
 };
-ok('одиночка дошёл до стола',
+ok('the loner reached the table',
   until(() => act.kicking && act.lounge && !act.path.length, 60000),
   [act.kicking, act.lounge, act.path.length, Math.round(act.x), Math.round(act.y)]);
-ok('и встал ровно на сторону стола',
+ok('and stood exactly on the side of the table',
   Math.abs(act.x - Ls.kicker.sides[act.seatIdx].x) < 2, [act.x, act.seatIdx]);
-ok('часы партии пошли с прихода, а не с решения', act.playUntil > ts, [act.playUntil, ts]);
+ok('the party\'s clock started with the arrival, not with the decision', act.playUntil > ts, [act.playUntil, ts]);
 
 act.playUntil = ts - 1;                 // the game is over
-ok('после партии агент вернулся за рабочий стол',
+ok('after the game the agent returned to his desk',
   until(() => !act.lounge && !act.path.length, 80000)
     && Math.hypot(act.x - home.x, act.y - home.y) < 3,
   [Math.round(act.x), Math.round(act.y), home]);
-ok('и место у стола освободил', !act.kicking && act.seatIdx == null, [act.kicking, act.seatIdx]);
+ok('and freed up space at the table', !act.kicking && act.seatIdx == null, [act.kicking, act.seatIdx]);
 Math.random = realRandom;
 
 // Whoever has run out of limit still gets the smoking spot, and the table does not get in his way.
@@ -111,10 +111,10 @@ syncActors(actors2, limited, L2);
 let t2 = 0;
 for (let i = 0; i < 8000; i++) { t2 += 16; tickActors(actors2, limited, L2, 1, t2, () => {}); }
 const parked = [...actors2.values()].filter((a) => a.lounge && !a.path.length);
-ok('все трое с кончившимся лимитом дошли до курилки', parked.length === 3, parked.length);
-ok('двое встали к столу, третий сел на диван',
+ok('all three with the limit ended reached the smoking room', parked.length === 3, parked.length);
+ok('two stood at the table, the third sat on the sofa',
   parked.filter((a) => a.kicking).length === 2 && parked.filter((a) => !a.kicking && a.state === 'sit').length === 1,
   parked.map((a) => [a.id, a.kicking, a.state]));
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

@@ -12,23 +12,23 @@ add('AI valey', 2); add('AJIRA', 1);
 
 const L = buildLayout(agents);
 let failed = 0;
-const bad = (msg) => { failed++; console.log('ПЛОХО |', msg); };
+const bad = (msg) => { failed++; console.log('FAIL  |', msg); };
 const overlaps = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x;
 
 // ---- one painting per room, and it follows the project
 for (const r of L.rooms) {
   const art = r.art || [];
-  if (art.length > 1) bad(`${r.title}: картин ${art.length}, а должна быть одна`);
+  if (art.length > 1) bad(`${r.title}: paintings ${art.length}, but there should be one`);
   for (const a of art) {
-    if (a.y < r.y + 1 || a.y + a.h > r.y + WALL - 4) bad(`${r.title}: рама вылезает за стену`);
-    if (a.x < r.x + 8 || a.x + a.w > r.x + r.w - 8) bad(`${r.title}: рама на боковой стене`);
-    if (overlaps(a, { x: r.door.x - 3, w: r.door.w + 6 })) bad(`${r.title}: рама перекрыла дверь`);
-    if (overlaps(a, { x: r.board.x - 3, w: r.board.w + 6 })) bad(`${r.title}: рама перекрыла доску`);
-    if (a.egg) bad(`${r.title}: пасхалка попала в комнату, а должна висеть в коридоре`);
+    if (a.y < r.y + 1 || a.y + a.h > r.y + WALL - 4) bad(`${r.title}: frame extends beyond the wall`);
+    if (a.x < r.x + 8 || a.x + a.w > r.x + r.w - 8) bad(`${r.title}: side wall frame`);
+    if (overlaps(a, { x: r.door.x - 3, w: r.door.w + 6 })) bad(`${r.title}: frame blocked the door`);
+    if (overlaps(a, { x: r.board.x - 3, w: r.board.w + 6 })) bad(`${r.title}: frame overlaps board`);
+    if (a.egg) bad(`${r.title}: Easter egg got into the room, but should be hanging in the corridor`);
   }
   const kind = art.length ? artOf(art[0]).kind : '—';
   const t = art.length ? titleOf(art[0]).name : '—';
-  console.log(`ok    | ${r.title}: ${art.length} шт · ${kind} · «${t}»`);
+  console.log(`ok    | ${r.title}: ${art.length} item(s) · ${kind} · “${t}”`);
 }
 
 // ---- motifs are guessed from the project name
@@ -39,8 +39,8 @@ const themes = [
 ];
 for (const [name, want] of themes) {
   const got = motifOf(name);
-  if (got !== want) bad(`тема для «${name}» → ${got}, ждали ${want}`);
-  else console.log(`ok    | тема «${name}» → ${got}`);
+  if (got !== want) bad(`topic for “${name}” → ${got}, waiting for ${want}`);
+  else console.log(`ok    | theme “${name}” → ${got}`);
 }
 
 // ---- rare in the corridor, and easter eggs only
@@ -48,24 +48,24 @@ const halls = L.wallArt || [];
 const windows = [];
 for (let wx = WINDOW_START; wx < L.w - 80; wx += WINDOW_STEP) windows.push({ x: wx - 4, w: WINDOW_W });
 const piersTotal = windows.length + 1;
-if (!halls.length) bad('в коридоре ни одной картины');
+if (!halls.length) bad('not a single painting in the corridor');
 if (halls.length > Math.ceil(piersTotal / 2)) {
-  bad(`в коридоре ${halls.length} картин на ${piersTotal} простенков — слишком часто`);
+  bad(`in the corridor there are ${halls.length} paintings on ${piersTotal} walls - too often`);
 }
 for (const a of halls) {
-  if (!a.egg) bad('картина в коридоре не помечена как пасхалка');
-  if (a.y < 2 || a.y + a.h > 32) bad(`коридор: рама вылезла из наружной стены (y=${a.y})`);
-  for (const w of windows) if (overlaps(a, w)) bad(`коридор: рама на окне (x=${a.x})`);
+  if (!a.egg) bad('the picture in the hallway is not marked as an easter egg');
+  if (a.y < 2 || a.y + a.h > 32) bad(`corridor: frame came out of the outer wall (y=${a.y})`);
+  for (const w of windows) if (overlaps(a, w)) bad(`corridor: window frame (x=${a.x})`);
 }
-console.log(`ok    | коридор: ${halls.length} картин на ${piersTotal} простенков`);
-for (const a of halls) console.log(`      | пасхалка: ${artOf(a).kind} · «${titleOf(a).name}»`);
+console.log(`ok    | corridor: ${halls.length} painting(s) across ${piersTotal} wall section(s)`);
+for (const a of halls) console.log(`      | easter egg: ${artOf(a).kind} · “${titleOf(a).name}”`);
 
 // ---- the same seed gives the same painting
 const one = L.rooms[0].art[0];
-if (one && artOf(one).kind !== artOf(one).kind) bad('картина нестабильна между вызовами');
-else console.log('ok    | картина стабильна между вызовами');
+if (one && artOf(one).kind !== artOf(one).kind) bad('the picture is unstable between calls');
+else console.log('ok    | the painting is stable across calls');
 
 const total = L.rooms.reduce((n, r) => n + (r.art || []).length, 0) + halls.length;
-console.log(`\nвсего картин на этаже: ${total} (комнат ${L.rooms.length})`);
-console.log(failed ? `провалено: ${failed}` : 'всё хорошо');
+console.log(`\ntotal paintings on the floor: ${total} (${L.rooms.length} rooms)`);
+console.log(failed ? `failed: ${failed}` : 'all good');
 process.exit(failed ? 1 : 0);

@@ -106,12 +106,12 @@ function index() {
 export function define(list) {
   for (const a of [].concat(list || [])) {
     if (!a || !a.id || !Array.isArray(a.codes) || !a.codes.length) {
-      throw new Error(`keymap: у действия должны быть id и codes — пришло ${JSON.stringify(a)}`);
+      throw new Error(`keymap: an action must have id and codes; received ${JSON.stringify(a)}`);
     }
     if (!GROUPS.includes(a.group)) {
-      throw new Error(`keymap: незнакомая группа «${a.group}» у ${a.id}`);
+      throw new Error(`keymap: unknown group “${a.group}” on ${a.id}`);
     }
-    if (actions.some((x) => x.id === a.id)) throw new Error(`keymap: действие ${a.id} уже объявлено`);
+    if (actions.some((x) => x.id === a.id)) throw new Error(`keymap: action ${a.id} is already declared`);
     actions.push({ held: false, ...a, codes: a.codes.slice() });
   }
   index();

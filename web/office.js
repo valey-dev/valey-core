@@ -204,7 +204,7 @@ const SWITCHER = {
 export const switcherSign = { code: '' };
 
 export function drawSwitcher(ctx, p, t, facing = 0) {
-  const look = SWITCHER[lang()] || SWITCHER.ru;
+  const look = SWITCHER[lang()] || SWITCHER.en;
   drawPerson(ctx, p.x, p.y, look, { pose: 'stand', frame: (t / 260) | 0, dir: facing, ms: t });
   // The plaque stands ABOVE the hint line, as on the frame, rather than below it.
   // While it was two glyphs wide the order did not matter; with "RU·EN" it grew to

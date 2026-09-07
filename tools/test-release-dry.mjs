@@ -14,7 +14,7 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, '→', String(got).slice(0, 300)); }
+  else { bad += 1; console.log('FAIL  |', name, '→', String(got).slice(0, 300)); }
 };
 
 // No digit is passed on purpose: the range picks it since 5 September 2026, and
@@ -40,31 +40,31 @@ const r = spawnSync(process.execPath, [path.join(ROOT, 'tools/release.mjs'), '--
 // «одна принятая фича — один минор» is the fifth right answer: a range with
 // several features is refused until somebody says --catch-up. Like the others
 // it proves the script read THIS repository, which is all this stand is about.
-const empty = /нет коммитов|выпускать нечего|уже есть|один минор/.test(r.stderr + r.stdout);
+const empty = /no commits|nothing to release|already exists|one minor release/.test(r.stderr + r.stdout);
 const spoke = /^## v\d+\.\d+\.\d+/m.test(r.stdout) || empty;
-ok('сухой прогон из чужой папки не падает', r.status === 0 || empty, r.stderr || r.stdout);
-ok('и говорит о своём репозитории, а не о чужой папке', spoke, r.stdout + r.stderr);
-ok('и ничего не записывает', /--dry: ничего не записано/.test(r.stdout) || empty, r.stdout);
+ok('dry run from someone else\'s folder does not crash', r.status === 0 || empty, r.stderr || r.stdout);
+ok('and talks about his repository, and not about someone else\'s folder', spoke, r.stdout + r.stderr);
+ok('and doesn\'t record anything', /--dry: nothing was written/.test(r.stdout) || empty, r.stdout);
 
 // Catch-up is an explicit release decision, and land is the only supported
 // merge path. Losing the flag between those two scripts makes the documented
 // recovery command impossible while still looking valid at the CLI boundary.
 const land = readFileSync(path.join(ROOT, 'tools/land.mjs'), 'utf8');
-ok('land передаёт явный --catch-up релизному скрипту',
+ok('land passes an explicit --catch-up to the release script',
   /const catchUp = argv\.includes\('--catch-up'\)/.test(land) &&
-  /if \(catchUp\) args\.push\('--catch-up'\)/.test(land), 'флаг потерян');
+  /if \(catchUp\) args\.push\('--catch-up'\)/.test(land), 'flag was lost');
 
 // The modules repository borrows the core release suite. Its tests depend on
 // the ordinary two-repository layout, and its GitHub page builder belongs to
 // core too. Both paths failed only after a PR had merged, so guard them here.
 const release = readFileSync(path.join(ROOT, 'tools/release.mjs'), 'utf8');
-ok('временный релиз модулей получает чистый core-хост',
+ok('a temporary module release gets a clean core host',
   /toolGit\('worktree', 'add'.*hostDir, 'origin\/main'\)/.test(land) &&
   /fs\.symlinkSync\(path\.relative\(moduleDir, source\), target, 'dir'\)/.test(land),
-  'release-worktree модулей снова оторван от core');
-ok('страница второго репозитория собирается инструментом core',
+  'the module release worktree is detached from core again');
+ok('a second repository builds its release page with the core tool',
   /path\.join\(TOOL_ROOT, 'tools\/gh-release\.mjs'\)/.test(release),
-  'gh-release.mjs снова ищется внутри выпускаемого репозитория');
+  'gh-release.mjs is being searched for inside the released repository again');
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

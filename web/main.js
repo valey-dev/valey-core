@@ -241,7 +241,7 @@ UI.initUI(state, {
   names: () => fetch('/api/names', { headers: owned() })
     .then((r) => r.json()).catch((e) => ({ error: e.message, packs: [] })),
   sound: () => { state.soundOn = sound.toggle(); UI.renderHud(); return state.soundOn; },
-  geocode: (q) => fetch('/api/geocode?q=' + encodeURIComponent(q)).then((r) => r.json()).catch((e) => ({ error: e.message })),
+  geocode: (q) => fetch('/api/geocode?q=' + encodeURIComponent(q) + '&lang=' + encodeURIComponent(lang())).then((r) => r.json()).catch((e) => ({ error: e.message })),
   // The key card asks about the CLI again: somebody went to the terminal,
   // logged in and came back, and the server's answer lives a minute — no
   // reason to sit out that minute looking at «not logged in».
@@ -435,7 +435,7 @@ function applyWeather(w) {
     state.sun = w.sun && w.sun.rise != null ? { ...w.sun, at: Date.now() } : null;
   } else {
     state.sun = null;
-    if (!state.weather || state.weather.source !== 'выдумана') state.weather = proceduralWeather();
+    if (!state.weather || state.weather.source !== 'procedural') state.weather = proceduralWeather();
   }
 }
 
@@ -1188,9 +1188,8 @@ function tickDrink(now) {
     const key = d.kind === 'water' ? 'drinks' : 'coffees';
     state.me[key] = (state.me[key] || 0) + 1;
     localStorage.setItem('valey-me', JSON.stringify(state.me));
-    UI.toast(d.kind === 'water'
-      ? `Стакан воды. Сегодня ${state.me.drinks}-й`
-      : `Кофе налит. Всего ${state.me.coffees}`);
+    UI.toast(tr(d.kind === 'water' ? 'toast.waterDone' : 'toast.coffeeDone',
+      { n: state.me[d.kind === 'water' ? 'drinks' : 'coffees'] }));
   }
 }
 

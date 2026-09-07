@@ -12,68 +12,68 @@ import { define, all, has, codesOf, groupOf, clashes, codeOf, actionOf, isAction
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
+  else { bad += 1; console.log('FAIL  |', name, '→', JSON.stringify(got)); }
 };
 
 // ------------------------------------------------------------------ the core
-ok('ядро объявило действия при импорте', all().length > 15, all().length);
-ok('столкновений в ядре нет', clashes().length === 0, clashes());
-ok('у каждого действия известная группа', all().every((a) => GROUPS.includes(a.group)), all().filter((a) => !GROUPS.includes(a.group)));
-ok('id уникальны', new Set(all().map((a) => a.id)).size === all().length, all().length);
+ok('kernel declared import actions', all().length > 15, all().length);
+ok('there are no collisions in the core', clashes().length === 0, clashes());
+ok('each action has a known group', all().every((a) => GROUPS.includes(a.group)), all().filter((a) => !GROUPS.includes(a.group)));
+ok('id are unique', new Set(all().map((a) => a.id)).size === all().length, all().length);
 
 // ------------------------------------------------- one key, two layouts
 // What this was all for: `code` does not depend on the layout, so pairs like
 // `k === 'n' || k === 'т'` are no longer needed — it is one and the same KeyN.
-ok('латинская N — заметки', isAction({ code: 'KeyN', key: 'n' }, 'panel.notes'), actionOf({ code: 'KeyN' }));
-ok('русская Т — те же заметки, потому что клавиша та же',
+ok('Latin N - notes', isAction({ code: 'KeyN', key: 'n' }, 'panel.notes'), actionOf({ code: 'KeyN' }));
+ok('Russian T - the same notes, because the key is the same',
   isAction({ code: 'KeyN', key: 'т' }, 'panel.notes'), actionOf({ code: 'KeyN', key: 'т' }));
-ok('и B, и И — скейт', actionOf({ code: 'KeyB', key: 'b' }) === 'act.skate'
+ok('and B, and I - skate', actionOf({ code: 'KeyB', key: 'b' }) === 'act.skate'
   && actionOf({ code: 'KeyB', key: 'и' }) === 'act.skate', actionOf({ code: 'KeyB', key: 'и' }));
-ok('символ без кода не спорит с кодом', actionOf({ code: 'KeyH', key: 'р' }) === 'panel.pager', actionOf({ code: 'KeyH', key: 'р' }));
+ok('a symbol without a code does not argue with the code', actionOf({ code: 'KeyH', key: 'р' }) === 'panel.pager', actionOf({ code: 'KeyH', key: 'р' }));
 
 // ------------------------------------------------------------ keys with no code
 // The gamepad sends key names: it has no codes and nowhere to get them from.
-ok('пробел с геймпада', codeOf({ key: ' ' }) === 'Space', codeOf({ key: ' ' }));
-ok('буква с геймпада', codeOf({ key: 'k' }) === 'KeyK', codeOf({ key: 'k' }));
-ok('Tab с геймпада', codeOf({ key: 'Tab' }) === 'Tab', codeOf({ key: 'Tab' }));
-ok('Shift с геймпада', codeOf({ key: 'Shift' }) === 'ShiftLeft', codeOf({ key: 'Shift' }));
-ok('плюс и равно — одна клавиша', codeOf({ key: '+' }) === 'Equal' && codeOf({ key: '=' }) === 'Equal', codeOf({ key: '+' }));
-ok('минус и подчёркивание — одна клавиша', codeOf({ key: '-' }) === 'Minus' && codeOf({ key: '_' }) === 'Minus', codeOf({ key: '_' }));
-ok('цифра с геймпада', codeOf({ key: '0' }) === 'Digit0', codeOf({ key: '0' }));
+ok('spacebar from gamepad', codeOf({ key: ' ' }) === 'Space', codeOf({ key: ' ' }));
+ok('letter from gamepad', codeOf({ key: 'k' }) === 'KeyK', codeOf({ key: 'k' }));
+ok('Tab from gamepad', codeOf({ key: 'Tab' }) === 'Tab', codeOf({ key: 'Tab' }));
+ok('Shift from a gamepad', codeOf({ key: 'Shift' }) === 'ShiftLeft', codeOf({ key: 'Shift' }));
+ok('plus and equal - one key', codeOf({ key: '+' }) === 'Equal' && codeOf({ key: '=' }) === 'Equal', codeOf({ key: '+' }));
+ok('minus and underscore - one key', codeOf({ key: '-' }) === 'Minus' && codeOf({ key: '_' }) === 'Minus', codeOf({ key: '_' }));
+ok('number from gamepad', codeOf({ key: '0' }) === 'Digit0', codeOf({ key: '0' }));
 // Cyrillic without a code is deliberately not parsed: guessing a position from a
 // character is exactly what this file removes. A real event always brings a code.
-ok('кириллица без кода не угадывается', codeOf({ key: 'т' }) === null, codeOf({ key: 'т' }));
-ok('пустое событие не падает', codeOf(null) === null && actionOf(null) === null, 'упало');
-ok('незнакомая клавиша — не действие', actionOf({ code: 'F7' }) === null, actionOf({ code: 'F7' }));
+ok('Cyrillic alphabet can\'t be guessed without code', codeOf({ key: 'т' }) === null, codeOf({ key: 'т' }));
+ok('empty event doesn\'t crash', codeOf(null) === null && actionOf(null) === null, 'упало');
+ok('unfamiliar key - no action', actionOf({ code: 'F7' }) === null, actionOf({ code: 'F7' }));
 
 // ------------------------------------------------------------------ the scale
-ok('Equal — приблизить', actionOf({ code: 'Equal' }) === 'zoom.in', actionOf({ code: 'Equal' }));
-ok('NumpadAdd — он же', actionOf({ code: 'NumpadAdd' }) === 'zoom.in', actionOf({ code: 'NumpadAdd' }));
-ok('Digit0 — сброс', actionOf({ code: 'Digit0' }) === 'zoom.reset', actionOf({ code: 'Digit0' }));
+ok('Equal - bring closer', actionOf({ code: 'Equal' }) === 'zoom.in', actionOf({ code: 'Equal' }));
+ok('NumpadAdd - aka', actionOf({ code: 'NumpadAdd' }) === 'zoom.in', actionOf({ code: 'NumpadAdd' }));
+ok('Digit0 - reset', actionOf({ code: 'Digit0' }) === 'zoom.reset', actionOf({ code: 'Digit0' }));
 
 // -------------------------------------------------------------------- walking
 // Walking is the arrows only: WASD was removed on 5 September 2026 and the four
 // letters went back to the free ones. Both sides are checked: the arrow walks,
 // the letter no longer does.
-ok('стрелка — это ходьба', actionOf({ code: 'ArrowLeft' }) === 'move.left', actionOf({ code: 'ArrowLeft' }));
-ok('а буква под ней свободна', actionOf({ code: 'KeyA' }) === null, actionOf({ code: 'KeyA' }));
-ok('и остальные три тоже', ['KeyW', 'KeyS', 'KeyD'].every((c) => actionOf({ code: c }) === null),
+ok('arrow is walking', actionOf({ code: 'ArrowLeft' }) === 'move.left', actionOf({ code: 'ArrowLeft' }));
+ok('and the letter below it is free', actionOf({ code: 'KeyA' }) === null, actionOf({ code: 'KeyA' }));
+ok('and the other three too', ['KeyW', 'KeyS', 'KeyD'].every((c) => actionOf({ code: c }) === null),
   ['KeyW', 'KeyS', 'KeyD'].map((c) => actionOf({ code: c })));
-ok('бег помечен как удерживаемый', all().find((a) => a.id === 'move.run').held === true, all().find((a) => a.id === 'move.run'));
+ok('run marked as held', all().find((a) => a.id === 'move.run').held === true, all().find((a) => a.id === 'move.run'));
 
 // -------------------------------------------------------------------- labels
-ok('буква печатается буквой', labelFor('KeyK') === 'K', labelFor('KeyK'));
-ok('пробел — словом', labelFor('Space') === 'SPACE', labelFor('Space'));
-ok('стрелка — стрелкой', labelFor('ArrowUp') === '↑', labelFor('ArrowUp'));
-ok('у действия все его подписи', labelsOf('move.left').join(' ') === '←', labelsOf('move.left'));
-ok('неизвестный код печатается как есть', labelFor('IntlBackslash') === 'IntlBackslash', labelFor('IntlBackslash'));
+ok('the letter is printed as a letter', labelFor('KeyK') === 'K', labelFor('KeyK'));
+ok('space - in a word', labelFor('Space') === 'SPACE', labelFor('Space'));
+ok('arrow - arrow', labelFor('ArrowUp') === '↑', labelFor('ArrowUp'));
+ok('the action has all its signatures', labelsOf('move.left').join(' ') === '←', labelsOf('move.left'));
+ok('unknown code is printed as is', labelFor('IntlBackslash') === 'IntlBackslash', labelFor('IntlBackslash'));
 
 // -------------------------------------------------------- a module takes a key
 define([{ id: 'plan.toggle', codes: ['KeyK'], group: 'panel' }]);
-ok('модуль объявил своё действие', has('plan.toggle'), all().map((a) => a.id));
-ok('и клавиша ведёт к нему', actionOf({ code: 'KeyK' }) === 'plan.toggle', actionOf({ code: 'KeyK' }));
-ok('группа модуля читается', groupOf('plan.toggle') === 'panel', groupOf('plan.toggle'));
-ok('коды отдаются копией, а не ссылкой', (() => {
+ok('the module declared its action', has('plan.toggle'), all().map((a) => a.id));
+ok('and the key leads to it', actionOf({ code: 'KeyK' }) === 'plan.toggle', actionOf({ code: 'KeyK' }));
+ok('module group read', groupOf('plan.toggle') === 'panel', groupOf('plan.toggle'));
+ok('codes are given as a copy, not as a link', (() => {
   const c = codesOf('plan.toggle'); c.push('KeyZ');
   return codesOf('plan.toggle').length === 1;
 })(), codesOf('plan.toggle'));
@@ -83,22 +83,22 @@ ok('коды отдаются копией, а не ссылкой', (() => {
 // order — alphabetical by folder name — and nobody was told.
 define([{ id: 'other.toggle', codes: ['KeyK', 'KeyQ'], group: 'panel' }]);
 const clash = clashes();
-ok('столкновение записано, а не проглочено', clash.length === 1, clash);
-ok('и названо поимённо', clash[0] && clash[0].code === 'KeyK' && clash[0].kept === 'plan.toggle' && clash[0].dropped === 'other.toggle', clash[0]);
-ok('первый объявивший держит клавишу', actionOf({ code: 'KeyK' }) === 'plan.toggle', actionOf({ code: 'KeyK' }));
-ok('вторая клавиша опоздавшего работает', actionOf({ code: 'KeyQ' }) === 'other.toggle', actionOf({ code: 'KeyQ' }));
+ok('the collision is recorded, not swallowed', clash.length === 1, clash);
+ok('and named by name', clash[0] && clash[0].code === 'KeyK' && clash[0].kept === 'plan.toggle' && clash[0].dropped === 'other.toggle', clash[0]);
+ok('the first person to announce holds the key', actionOf({ code: 'KeyK' }) === 'plan.toggle', actionOf({ code: 'KeyK' }));
+ok('the second latecomer key works', actionOf({ code: 'KeyQ' }) === 'other.toggle', actionOf({ code: 'KeyQ' }));
 
 // ---------------------------------------------------------------- refusals
 const throws = (fn) => { try { fn(); return false; } catch { return true; } };
-ok('действие без codes отвергается', throws(() => define([{ id: 'x.y', group: 'panel' }])), 'приняли');
-ok('пустой список кодов отвергается', throws(() => define([{ id: 'x.z', codes: [], group: 'panel' }])), 'приняли');
-ok('незнакомая группа отвергается', throws(() => define([{ id: 'x.w', codes: ['KeyY'], group: 'выдумка' }])), 'приняли');
-ok('повторный id отвергается', throws(() => define([{ id: 'plan.toggle', codes: ['KeyY'], group: 'panel' }])), 'приняли');
+ok('action without codes is rejected', throws(() => define([{ id: 'x.y', group: 'panel' }])), 'приняли');
+ok('empty codelist is rejected', throws(() => define([{ id: 'x.z', codes: [], group: 'panel' }])), 'приняли');
+ok('unfamiliar group is rejected', throws(() => define([{ id: 'x.w', codes: ['KeyY'], group: 'выдумка' }])), 'приняли');
+ok('repeated id is rejected', throws(() => define([{ id: 'plan.toggle', codes: ['KeyY'], group: 'panel' }])), 'приняли');
 
 // ------------------------------------------------------------------- reset
 reset();
-ok('после сброса остаётся только ядро', !has('plan.toggle') && has('panel.notes'), all().map((a) => a.id));
-ok('и столкновения забыты', clashes().length === 0, clashes());
+ok('after the reset, only the core remains', !has('plan.toggle') && has('panel.notes'), all().map((a) => a.id));
+ok('and the clashes are forgotten', clashes().length === 0, clashes());
 
-console.log(bad ? `\n${bad} ПРОВАЛ(ов)` : '\nвсё зелено');
+console.log(bad ? `\n${bad} failures` : '\nall green');
 process.exit(bad ? 1 : 0);

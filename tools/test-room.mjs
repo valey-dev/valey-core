@@ -16,18 +16,18 @@ const run = promisify(execFile);
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    | ' + name);
-  else { bad++; console.log('УПАЛ  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
+  else { bad++; console.log('FAIL  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
 };
 
 // ------------------------------------------------- parsing git's answer
 
-ok('обычный .git → каталог рядом с ним',
+ok('regular .git -> directory next to it',
    rootFromCommonDir('/tmp/repo/.git', '/tmp/repo/wt') === '/tmp/repo');
-ok('голый repo.git → сам репозиторий',
+ok('bare repo.git → the repository itself',
    rootFromCommonDir('/tmp/repo.git', '/tmp/x') === '/tmp/repo');
-ok('косая черта на хвосте не ломает',
+ok('the slash on the tail doesn\'t break',
    rootFromCommonDir('/tmp/repo/.git/', '/tmp/x') === '/tmp/repo');
-ok('git промолчал — остаётся свой каталог',
+ok('git is silent - its own directory remains',
    rootFromCommonDir('', '/tmp/whatever') === '/tmp/whatever');
 
 // ------------------------------------------------- a real worktree
@@ -53,13 +53,13 @@ await git(['worktree', 'add', '-q', '-b', 'topic-inside', inside], repo);
 const outside = path.join(tmp, 'my-project-topic');
 await git(['worktree', 'add', '-q', '-b', 'topic-outside', outside], repo);
 
-ok('основной чекаут — сам себе корень', await repoRoot(repo) === repo, await repoRoot(repo));
-ok('worktree внутри репозитория ведёт в корень', await repoRoot(inside) === repo, await repoRoot(inside));
-ok('worktree снаружи тоже ведёт в корень', await repoRoot(outside) === repo, await repoRoot(outside));
+ok('the main checkout is its own root', await repoRoot(repo) === repo, await repoRoot(repo));
+ok('worktree inside the repository leads to the root', await repoRoot(inside) === repo, await repoRoot(inside));
+ok('the worktree outside also leads to the root', await repoRoot(outside) === repo, await repoRoot(outside));
 
 const notGit = path.join(tmp, 'just-a-folder');
 await fsp.mkdir(notGit);
-ok('не репозиторий — остаётся своим каталогом', await repoRoot(notGit) === notGit, await repoRoot(notGit));
+ok('not a repository - remains its own directory', await repoRoot(notGit) === notGit, await repoRoot(notGit));
 
 // ------------------------------------------------- the floor: one room
 
@@ -71,7 +71,7 @@ const agents = [
   { id: 'b', name: 'Ася', project: await roomOf(inside), status: 'working' },
   { id: 'c', name: 'Петя', project: await roomOf(outside), status: 'idle' },
 ];
-ok('все три сессии зовут комнату одинаково',
+ok('all three sessions call the room the same',
    new Set(agents.map((a) => a.project)).size === 1, agents.map((a) => a.project));
 
 const plan = buildLayout(agents, {});
@@ -79,10 +79,10 @@ const plan = buildLayout(agents, {});
 // the floor has grown service rooms — the control room, the meeting room, the
 // greenhouse — and they have nothing to do with "how many rooms does one
 // repository get".
-ok('на этаже одна комната проекта', plan.projectRooms.length === 1, plan.projectRooms.map((r) => r.title));
-ok('и в ней три стола', plan.rooms[0]?.desks.length === 3, plan.rooms[0]?.desks.length);
-ok('и все трое за ними', plan.rooms[0]?.agents.length === 3, plan.rooms[0]?.agents);
-ok('комната названа репозиторием', plan.rooms[0]?.title === 'my-project', plan.rooms[0]?.title);
+ok('there is one project room on the floor', plan.projectRooms.length === 1, plan.projectRooms.map((r) => r.title));
+ok('and there are three tables in it', plan.rooms[0]?.desks.length === 3, plan.rooms[0]?.desks.length);
+ok('and all three behind them', plan.rooms[0]?.agents.length === 3, plan.rooms[0]?.agents);
+ok('the room is named repository', plan.rooms[0]?.title === 'my-project', plan.rooms[0]?.title);
 
 // --- a room from a module ---
 // The `room` point is asked inside the build, before the height of the world is
@@ -97,12 +97,12 @@ const withRoom = buildLayout(agents, {
   }),
 });
 const lib = withRoom.rooms.find((r) => r.key === '__test');
-ok('комната модуля попала в список комнат', !!lib, withRoom.rooms.map((r) => r.title));
-ok('мир вырос под неё, а не обрезал', lib && withRoom.h >= lib.y + lib.h, `h=${withRoom.h}`);
-ok('у неё появилась остановка лифта',
+ok('the module room is included in the list of rooms', !!lib, withRoom.rooms.map((r) => r.title));
+ok('the world grew up for it, and did not cut it off', lib && withRoom.h >= lib.y + lib.h, `h=${withRoom.h}`);
+ok('she got an elevator stop',
   (withRoom.lift.floors || []).some((f) => (f.rooms || []).includes('ЧИТАЛЬНЯ')),
   (withRoom.lift.floors || []).map((f) => `${f.n}:${(f.rooms || []).join('/')}`));
-ok('без модулей план прежний', buildLayout(agents).rooms.every((r) => r.key !== '__test'));
+ok('without modules same plan', buildLayout(agents).rooms.every((r) => r.key !== '__test'));
 
 await fsp.rm(tmp, { recursive: true, force: true });
 process.exit(bad ? 1 : 0);
