@@ -4,6 +4,11 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.21.5 — 7 September 2026
+
+### Fixed
+
+- **entrance:** on a phone the release card covered the menu (edc9986)
 ## v0.21.4 — 7 September 2026
 
 ### Fixed
