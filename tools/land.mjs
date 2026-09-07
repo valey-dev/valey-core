@@ -4,6 +4,7 @@
 //   npm run land            # the pull request of the current branch
 //   npm run land -- 12      # a particular one
 //   npm run land -- --dry   # everything up to the merge, and nothing after it
+//   npm run land -- 12 --catch-up  # knowingly release several missed features together
 //
 // Merging and releasing used to be two decisions, and the gap between them is
 // where versions went missing: on 5 September 2026 v0.10.0 went out carrying five
@@ -34,6 +35,7 @@ const run = (cmd, args, cwd = ROOT) => {
 
 const argv = process.argv.slice(2);
 const dry = argv.includes('--dry');
+const catchUp = argv.includes('--catch-up');
 const kind = argv.find((a) => ['patch', 'minor', 'major'].includes(a)) || null;
 const rest = argv.filter((a) => !a.startsWith('--') && a !== kind);
 let pr = rest[0] || null;
@@ -96,6 +98,7 @@ const sweep = () => {
 // VALEY_REPO at the worktree is the whole reason four files were not duplicated.
 const args = [fileURLToPath(new URL('release.mjs', import.meta.url))];
 if (kind) args.push(kind);
+if (catchUp) args.push('--catch-up');
 if (dry) args.push('--dry'); else args.push('--ship');
 const r = spawnSync(process.execPath, args,
   { cwd: dir, stdio: 'inherit', env: { ...process.env, VALEY_REPO: dir } });

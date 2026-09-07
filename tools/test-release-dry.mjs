@@ -5,6 +5,7 @@
 // halves. A run from the system temp directory is the most foreign cwd there is:
 // no repository and no package.json in it.
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,6 +45,14 @@ const spoke = /^## v\d+\.\d+\.\d+/m.test(r.stdout) || empty;
 ok('сухой прогон из чужой папки не падает', r.status === 0 || empty, r.stderr || r.stdout);
 ok('и говорит о своём репозитории, а не о чужой папке', spoke, r.stdout + r.stderr);
 ok('и ничего не записывает', /--dry: ничего не записано/.test(r.stdout) || empty, r.stdout);
+
+// Catch-up is an explicit release decision, and land is the only supported
+// merge path. Losing the flag between those two scripts makes the documented
+// recovery command impossible while still looking valid at the CLI boundary.
+const land = readFileSync(path.join(ROOT, 'tools/land.mjs'), 'utf8');
+ok('land передаёт явный --catch-up релизному скрипту',
+  /const catchUp = argv\.includes\('--catch-up'\)/.test(land) &&
+  /if \(catchUp\) args\.push\('--catch-up'\)/.test(land), 'флаг потерян');
 
 console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
 process.exit(bad ? 1 : 0);
