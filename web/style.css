@@ -885,6 +885,33 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .tcard input::placeholder{color:var(--muted-dim)}
 .tcard .small{font-size:11px}
 .tmeta{position:absolute; bottom:3%; color:var(--muted-dim); font-size:11px}
+
+/* Вход на узком экране: столбик вместо холста с предметами.
+   Проценты здесь считались от широкого окна, и на телефоне карточки
+   расходились не в стороны, а друг на друга: у `.tmenu` и `.tcard`
+   min-width 180 px, то есть на 390 px обе занимают почти по половине, а
+   карточка «ролик» — левая, растущая вниз, — накрывала меню целиком.
+   7 сентября 2026 это увидели на живом телефоне: «Войти» нажать было нельзя.
+   Раскладка коридора на такой ширине не работает вовсе — там некуда идти, —
+   поэтому вход становится обычной страницей: меню первым, карточки под ним. */
+@media (max-width:720px){
+  #title{inset:0; display:flex; flex-direction:column; gap:10px; padding:14px;
+    box-sizing:border-box; overflow-y:auto; background:rgba(20,13,8,.92)}
+  #title .tmenu, #title .tcard, #title .tnote{position:static; width:auto; min-width:0;
+    max-width:none; transform:none}
+  #title .tmenu{order:1; opacity:1}
+  #title .tcard{order:2}
+  #title .tnote{order:3}
+  /* Подписи по углам на телефоне не по углам: они уезжают в конец столбика
+     строкой, а «пройди по коридору» врёт — коридора здесь нет. */
+  #title .tmeta{position:static; order:4; text-align:left}
+  #title .tmeta.center{display:none}
+  #title .tmeta.right{margin-top:-6px}
+  /* Путь черновика ролика — одно длинное слово со слэшами, и на 390 px он
+     вылезал за рамку карточки: перенос по любому символу дешевле обрезки,
+     потому что этот путь копируют глазами в терминал. */
+  #title .tcard span, #title .tcard b{overflow-wrap:anywhere}
+}
 .tmeta.left{left:3%} .tmeta.right{right:3%}
 .tmeta.center{left:50%; transform:translateX(-50%)}
 
