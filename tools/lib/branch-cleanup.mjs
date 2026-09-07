@@ -53,6 +53,32 @@ const protectedBranch = (branch, mainRef) => {
     branch.startsWith('release/') || branch.startsWith('hotfix/');
 };
 
+const pendingDir = (repo) => {
+  const raw = git(repo, ['rev-parse', '--git-common-dir']).stdout.trim();
+  const common = path.isAbsolute(raw) ? raw : path.resolve(repo, raw);
+  return path.join(common, 'valey-cleanup-pending');
+};
+
+export function deferCleanup(repo, branch) {
+  const dir = pendingDir(path.resolve(repo));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, encodeURIComponent(branch)), branch + '\n');
+}
+
+export function pendingCleanups(repo) {
+  const dir = pendingDir(path.resolve(repo));
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).map((name) => {
+    try { return fs.readFileSync(path.join(dir, name), 'utf8').trim(); } catch { return ''; }
+  }).filter(Boolean).sort();
+}
+
+export function clearPendingCleanup(repo, branch) {
+  const dir = pendingDir(path.resolve(repo));
+  try { fs.unlinkSync(path.join(dir, encodeURIComponent(branch))); } catch {}
+  try { fs.rmdirSync(dir); } catch {}
+}
+
 export function inspectCleanup({ repo, branch, mainRef = 'origin/main', removeWorktree = false }) {
   const root = path.resolve(repo);
   if (git(root, ['remote', 'get-url', 'origin'], { allowFailure: true }).status === 0) {

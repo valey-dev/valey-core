@@ -1,6 +1,6 @@
 // node tools/test-branch-cleanup.mjs — merged branches are removed precisely,
 // while unmerged, dirty, protected, and currently used worktrees survive.
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,12 +9,14 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const TOOL = path.join(ROOT, 'tools/cleanup-merged.mjs');
 const AUDIT = path.join(ROOT, 'tools/audit-merged-branches.mjs');
+const PENDING = path.join(ROOT, 'tools/cleanup-pending.mjs');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'valey-branch-cleanup-'));
 const remote = path.join(tmp, 'remote.git');
 const repo = path.join(tmp, 'repo');
 const tree = path.join(tmp, 'tree');
 const dirtyTree = path.join(tmp, 'dirty-tree');
 let bad = 0;
+let holder = null;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
   else { bad += 1; console.log('FAIL  |', name, got === undefined ? '' : '→ ' + String(got)); }
@@ -28,6 +30,7 @@ const git = (...args) => {
 const cleanup = (branch, ...args) => run(process.execPath,
   [TOOL, branch, '--repo', repo, ...args], tmp);
 const audit = () => run(process.execPath, [AUDIT, '--repo', repo], tmp);
+const pending = () => run(process.execPath, [PENDING, '--repo', repo], tmp);
 const has = (ref) => run('git', ['show-ref', '--verify', '--quiet', ref]).status === 0;
 
 try {
@@ -76,6 +79,26 @@ try {
   ok('an explicitly requested clean worktree is removed', r.status === 0, r.stderr);
   ok('its branch is removed too', !has('refs/heads/feature/tree'));
 
+  const deferredTree = path.join(tmp, 'deferred-tree');
+  git('branch', 'feature/deferred');
+  git('worktree', 'add', deferredTree, 'feature/deferred');
+  r = cleanup('feature/deferred', '--apply', '--defer');
+  ok('a live worktree cleanup can be deferred', r.status === 3 && /queued/.test(r.stdout), r.stdout + r.stderr);
+  holder = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'],
+    { cwd: deferredTree, stdio: 'ignore' });
+  const holderExit = new Promise((resolve) => holder.once('exit', resolve));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  r = pending();
+  ok('the deferred cleanup keeps a worktree used by another process',
+    r.status === 0 && fs.existsSync(deferredTree) && /still pending/.test(r.stdout), r.stdout + r.stderr);
+  holder.kill();
+  await holderExit;
+  holder = null;
+  r = pending();
+  ok('the deferred cleanup removes the worktree after it becomes idle',
+    r.status === 0 && !fs.existsSync(deferredTree), r.stdout + r.stderr);
+  ok('the deferred branch is removed too', !has('refs/heads/feature/deferred'));
+
   git('branch', 'feature/dirty');
   git('worktree', 'add', dirtyTree, 'feature/dirty');
   fs.writeFileSync(path.join(dirtyTree, 'untracked.txt'), 'keep me\n');
@@ -83,6 +106,7 @@ try {
   ok('a dirty worktree is refused', r.status === 1 && /dirty/.test(r.stderr), r.stderr);
   ok('dirty worktree contents survive', fs.existsSync(path.join(dirtyTree, 'untracked.txt')));
 } finally {
+  if (holder) holder.kill();
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 

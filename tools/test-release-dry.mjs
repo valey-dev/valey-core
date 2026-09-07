@@ -79,6 +79,13 @@ ok('land cleans the PR branch only after the release success gate',
 ok('dry runs skip branch cleanup',
   /if \(!dry\) \{[\s\S]*?'tools\/cleanup-merged\.mjs'/.test(land.slice(sweepCall)),
   'cleanup is not guarded by !dry');
+ok('a live worktree cleanup is queued and retried outside the landing process',
+  /'--apply', '--defer'/.test(land) && /'tools\/cleanup-pending\.mjs'/.test(land) &&
+    /'--watch', '300'/.test(land),
+  'the deferred cleanup has no retry worker');
+ok('a later landing retries cleanup markers that outlive the watcher',
+  /spawnSync\(process\.execPath, \[pendingCleanup, '--repo', ROOT\]/.test(land),
+  'land does not retry the persistent cleanup queue');
 
 console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

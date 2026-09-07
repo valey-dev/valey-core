@@ -9,11 +9,12 @@
 // it the exact PR head, and every ref must already be an ancestor of origin/main.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applyCleanup, inspectCleanup } from './lib/branch-cleanup.mjs';
+import { applyCleanup, deferCleanup, inspectCleanup } from './lib/branch-cleanup.mjs';
 
 const TOOL_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const argv = process.argv.slice(2);
 const apply = argv.includes('--apply');
+const defer = argv.includes('--defer');
 const removeWorktree = argv.includes('--remove-worktree');
 const mainAt = argv.indexOf('--main');
 const repoAt = argv.indexOf('--repo');
@@ -36,8 +37,10 @@ try {
     process.exit(0);
   }
   if (plan.state === 'worktree-kept') {
+    if (apply && defer) deferCleanup(repo, branch);
     console.log(`${branch}: merged, but kept because it is checked out at ${plan.tree.path}`);
-    console.log('run again from another worktree with --apply --remove-worktree after it is idle');
+    console.log(defer ? 'cleanup was queued for a safe retry after the worktree becomes idle' :
+      'run again from another worktree with --apply --remove-worktree after it is idle');
     process.exit(3);
   }
   for (const action of plan.actions) {
