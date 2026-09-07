@@ -15,6 +15,7 @@
     "test": "node tools/run-tests.mjs",
     "coverage": "npx --yes c8@10 --reporter=text-summary --reporter=html --src=. --exclude=**/test-*.mjs --exclude=tools/run-tests.mjs --exclude=.claude/** --check-coverage --lines=70 --functions=55 node tools/run-tests.mjs",
     "figma:audit": "node \"$HOME/.claude/skills/agents-init/modules/design-first/scripts/figma-audit.mjs\"",
+    "notes": "node tools/notes.mjs",
     "release": "node tools/release.mjs",
     "ship": "node tools/release.mjs --ship",
     "land": "node tools/land.mjs"
