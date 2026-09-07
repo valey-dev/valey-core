@@ -312,8 +312,12 @@ UI.notesKey('Enter');
 check('Enter presses the selected button', nb[2].clicked === 1, nb.map((b) => b.clicked).join(','));
 check('and only her', nb.filter((b) => b.clicked).length === 1, nb.filter((b) => b.clicked).length);
 
+// The ring used to close here — a third press from the top landed on the last
+// button. The notes scroll, so on 7 September 2026 they joined the standup and
+// the shelf of things in stopping instead: two presses reach the top, the third
+// changes nothing.
 UI.notesKey('ArrowUp'); UI.notesKey('ArrowUp'); UI.notesKey('ArrowUp');
-check('the ring is closed', at(nb) === 3, at(nb));
+check('the top of the notes is a wall, not a way round to the last', at(nb) === 0, at(nb));
 
 // a closed panel does not take the keys
 UI.closeNotes();
@@ -340,6 +344,14 @@ check('to the left presses ◀ of the same slot', rows[1].prev.clicked === 1, ro
 check('the adjacent slot is not touched', rows[2].next.clicked === 0 && rows[2].prev.clicked === 0, 'тронут');
 UI.bagKey('Enter');
 check('Enter on a slot does the same as ▶', rows[1].next.clicked === 2, rows[1].next.clicked);
+
+// The tab scrolls, so both ends are walls — the same rule as the standup, the
+// shelf of things and the notes. Four rows here: the name and three slots.
+UI.bagKey('ArrowDown'); UI.bagKey('ArrowDown'); UI.bagKey('ArrowDown');
+check('the last slot does not wrap round to the name', focusRow() === 3, focusRow());
+UI.bagKey('ArrowUp'); UI.bagKey('ArrowUp'); UI.bagKey('ArrowUp'); UI.bagKey('ArrowUp');
+check('and the name line is the other wall', focusRow() === 0, focusRow());
+UI.bagKey('ArrowDown');
 
 // the name is an input: Enter has to give it the focus, or it cannot be typed from the keyboard
 UI.bagKey('ArrowUp');

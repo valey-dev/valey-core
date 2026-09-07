@@ -2430,7 +2430,7 @@ function selfKey(key) {
 
   const step = { arrowup: -1, arrowdown: 1 }[key];
   if (step !== undefined) {
-    bagIdx = (bagIdx + step + list.length) % list.length;
+    bagIdx = stopAt(bagIdx, step, list.length);
     paintBagFocus();
     return true;
   }
@@ -3522,7 +3522,7 @@ export function renderNotes() {
 // The notes panel opens with N but used to require a mouse for every action:
 // opening a note's conversation and deleting it. Both buttons share one ring in
 // markup order—the row's Open first, then its ✕.
-const notesRing = focusRing(() => el.notes, '.ngo, .ndel');
+const notesRing = focusRing(() => el.notes, '.ngo, .ndel', { noWrap: true });
 export function closeNotes() { el.notes.hidden = true; notesRing.reset(); }
 export function notesKey(raw) { return notesRing.key(raw, el.notes && !el.notes.hidden); }
 export function notesOpen() { return !el.notes.hidden; }
