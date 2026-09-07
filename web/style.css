@@ -171,7 +171,13 @@ kbd{color:var(--muted); font-size:10px}
 .vtask .tstat{display:block; flex:0 1 auto; min-width:0; max-width:42%; padding-left:0; letter-spacing:0;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .vtask:empty{display:none}
-.grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; padding:14px; overflow:auto}
+/* scroll-padding repeats the padding above on purpose. scrollIntoView aligns a
+   card to the scrollport edge, which sits inside the container's own padding:
+   arrowing down to the last row parked it flush against the bottom, while the
+   same wheel scroll showed 14px of air under it. Two ways to reach the last
+   card looked like two different layouts. */
+.grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; padding:14px; overflow:auto;
+  scroll-padding:14px}
 .grid figure{margin:0; cursor:pointer; background:var(--field); border:2px solid var(--wood); padding:6px}
 .grid figure:hover{border-color:var(--warn)}
 .thumb{height:96px; display:flex; align-items:center; justify-content:center; background:var(--bg-deep); color:var(--muted-dim); font-size:28px; overflow:hidden}
