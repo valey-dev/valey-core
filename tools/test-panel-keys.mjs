@@ -256,25 +256,33 @@ check('the right arrow takes you to the neighboring team', UI.rosterKey('ArrowRi
   at(roster.cards));
 check('and holds space in the column rather than falling to the first line',
   roster.cols[1].cards.indexOf(roster.cards[4]) === 1, at(roster.cards));
-// The short column is shorter: coming back sideways there is no third row to
-// stand on, and the focus stops at the last card rather than falling out.
+// Down at the bottom of a column stays there. It used to loop back to the top of
+// the same column, and this stand pinned that; the owner asked for the opposite
+// on 7 September 2026, because a long list is read to the end and the last press
+// silently teleporting you to the top is indistinguishable from a redraw. Short
+// panels — the lift, the language, the radio — keep their ring; only a panel
+// that scrolls asks for noWrap.
 UI.rosterKey('ArrowDown');
-check('at the end of a short column looped inside it', at(roster.cards) === 3, at(roster.cards));
+check('at the bottom of a column it stops instead of looping', at(roster.cards) === 4, at(roster.cards));
+UI.rosterKey('ArrowDown');
+check('and pressing again keeps it there', at(roster.cards) === 4, at(roster.cards));
 
 UI.rosterKey('ArrowLeft');
-check('left returns to the first command', at(roster.cards) === 0, at(roster.cards));
+check('left carries the place in the column across', at(roster.cards) === 1, at(roster.cards));
 UI.rosterKey('ArrowUp');
-check('looped up along its column', at(roster.cards) === 2, at(roster.cards));
+check('up walks the column', at(roster.cards) === 0, at(roster.cards));
+UI.rosterKey('ArrowUp');
+check('and the top is a wall too, not a way round to the bottom', at(roster.cards) === 0, at(roster.cards));
 
 UI.rosterKey('Enter');
 check('ENTER opens the card you are on',
-  roster.cards[2].clicked === 1, roster.cards.map((b) => b.clicked).join(','));
+  roster.cards[0].clicked === 1, roster.cards.map((b) => b.clicked).join(','));
 
 // G is the standup's only key of its own, and it is caught by the physical code:
 // under "ЙЦУКЕН" that key types «п», and the office must not care.
 led = null;
 check('G processed', UI.rosterKey({ key: 'п', code: 'KeyG' }) === true, 'не обработана');
-check('and leads to the one on whom the focus was', led === 't0-2', led);
+check('and leads to the one on whom the focus was', led === 't0-0', led);
 check('the panel then closed', UI.rosterOpen() === false, 'осталась открыта');
 
 roster.hidden = false;
@@ -304,8 +312,12 @@ UI.notesKey('Enter');
 check('Enter presses the selected button', nb[2].clicked === 1, nb.map((b) => b.clicked).join(','));
 check('and only her', nb.filter((b) => b.clicked).length === 1, nb.filter((b) => b.clicked).length);
 
+// The ring used to close here — a third press from the top landed on the last
+// button. The notes scroll, so on 7 September 2026 they joined the standup and
+// the shelf of things in stopping instead: two presses reach the top, the third
+// changes nothing.
 UI.notesKey('ArrowUp'); UI.notesKey('ArrowUp'); UI.notesKey('ArrowUp');
-check('the ring is closed', at(nb) === 3, at(nb));
+check('the top of the notes is a wall, not a way round to the last', at(nb) === 0, at(nb));
 
 // a closed panel does not take the keys
 UI.closeNotes();
@@ -333,6 +345,14 @@ check('the adjacent slot is not touched', rows[2].next.clicked === 0 && rows[2].
 UI.bagKey('Enter');
 check('Enter on a slot does the same as ▶', rows[1].next.clicked === 2, rows[1].next.clicked);
 
+// The tab scrolls, so both ends are walls — the same rule as the standup, the
+// shelf of things and the notes. Four rows here: the name and three slots.
+UI.bagKey('ArrowDown'); UI.bagKey('ArrowDown'); UI.bagKey('ArrowDown');
+check('the last slot does not wrap round to the name', focusRow() === 3, focusRow());
+UI.bagKey('ArrowUp'); UI.bagKey('ArrowUp'); UI.bagKey('ArrowUp'); UI.bagKey('ArrowUp');
+check('and the name line is the other wall', focusRow() === 0, focusRow());
+UI.bagKey('ArrowDown');
+
 // the name is an input: Enter has to give it the focus, or it cannot be typed from the keyboard
 UI.bagKey('ArrowUp');
 UI.bagKey('Enter');
@@ -359,6 +379,16 @@ check('Enter puts on the selected one', cells[1][1].clicked === 1, cells[1][1].c
 check('exactly one cell is highlighted', cells.flat().filter((c) => c.has('focus')).length === 1,
   cells.flat().filter((c) => c.has('focus')).length);
 check('to the right in a circle returns to the beginning of the row', (UI.bagKey('ArrowRight'), focusCell()) === '1:0', focusCell());
+// Down the shelf scrolls, so the last row is a wall — asked for on 7 September
+// 2026 together with the standup. Sideways stays a ring on purpose: a category
+// is four to eight cells and they are all on screen at once, so nothing is lost
+// by going round, which is why the check above still expects a wrap.
+UI.bagKey('ArrowDown');
+check('the last row of things does not wrap round to the first', focusCell() === '1:0', focusCell());
+UI.bagKey('ArrowUp');
+check('up walks the rows', focusCell() === '0:0', focusCell());
+UI.bagKey('ArrowUp');
+check('and the first row is a wall too', focusCell() === '0:0', focusCell());
 
 // back to "worn": the focus starts over there rather than remembering a cell of the grid
 bag = makeBagSelf(3);

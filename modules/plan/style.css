@@ -34,7 +34,7 @@
 .plango{align-self:flex-start; background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:12px "JetBrains Mono", "Courier New", monospace; padding:5px 12px; cursor:pointer;
   outline:2px solid var(--warn); outline-offset:-2px}
-.plango:hover{background:var(--wood-lit); color:var(--warn)}
+:where(body:not(.bykeys)) .plango:hover{background:var(--wood-lit); color:var(--warn)}
 .planlegend{display:flex; gap:14px; flex-wrap:wrap; padding:6px 12px 8px; font-size:10.5px; color:var(--muted);
   border-top:2px solid var(--wood-hi)}
 .planlegend s{text-decoration:none; display:inline-block; width:8px; height:8px; border:1px solid #000;
