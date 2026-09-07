@@ -283,10 +283,27 @@ export function layoutTitle() {
     requestAnimationFrame(layoutTitle);
     return;
   }
-  el.style.left = c.left + 'px';
-  el.style.top = c.top + 'px';
-  el.style.width = c.width + 'px';
-  el.style.height = c.height + 'px';
+  // On a phone the entrance stops being a corridor: the canvas is a small strip
+  // in the middle of a tall screen, and pinning the menu to it left the cards
+  // stacked on top of each other over 300 px of nothing. Below 720 px the inline
+  // box is dropped entirely so the stylesheet can lay the screen out as an
+  // ordinary column — see the @media block next to `.tmeta` in web/style.css.
+  //
+  // The properties are cleared rather than overwritten: an inline `left` beats
+  // any rule in the sheet, and one left behind on a rotation would pin the
+  // column back to the strip.
+  // The width is asked of the document's own window rather than the global one:
+  // the keyboard stands run this file against a stub DOM where `window` does not
+  // exist at all, and a bare `window.innerWidth` took the whole stand down.
+  const view = (el.ownerDocument && el.ownerDocument.defaultView) || (typeof window === 'undefined' ? null : window);
+  if (view && view.innerWidth <= 720) {
+    for (const k of ['left', 'top', 'width', 'height']) el.style.removeProperty(k);
+  } else {
+    el.style.left = c.left + 'px';
+    el.style.top = c.top + 'px';
+    el.style.width = c.width + 'px';
+    el.style.height = c.height + 'px';
+  }
   // The class goes on after the coordinates are written: the browser gets to
   // paint the menu where it belongs, and the CSS transition takes it from zero
   // to one instead of dragging it across the screen.
