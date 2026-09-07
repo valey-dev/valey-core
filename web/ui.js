@@ -2175,7 +2175,8 @@ function wideKey(key, cur) {
   const list = here.slice().sort((a, b) => rank(b) - rank(a) || a.row - b.row);
   const i = Math.max(0, list.indexOf(cur));
   let next = null;
-  if (key === 'arrowdown' || key === 'arrowright') next = list[(i + 1) % list.length];
+  if (key === 'arrowdown') next = list[Math.min(i + 1, list.length - 1)];
+  else if (key === 'arrowright') next = list[(i + 1) % list.length];
   else if (key === 'arrowup' || key === 'arrowleft') next = list[(i - 1 + list.length) % list.length];
   else if (key === 'enter' || key === ' ') return true;
   else return false;
@@ -2201,8 +2202,10 @@ function treeKey(key) {
   let next = null;
   if (key === 'arrowup' || key === 'arrowdown') {
     const col = LIBRARY.filter((n) => colOf(n) === colOf(cur)).sort((a, b) => a.row - b.row);
-    const d = key === 'arrowup' ? -1 : 1;
-    next = col[(col.indexOf(cur) + d + col.length) % col.length];
+    const i = col.indexOf(cur);
+    next = key === 'arrowup'
+      ? col[(i - 1 + col.length) % col.length]
+      : col[Math.min(i + 1, col.length - 1)];
   } else if (key === 'arrowleft') {
     next = cur.parent ? byId(cur.parent) : treeNear(colOf(cur) - 1, cur.row);
   } else if (key === 'arrowright') {
