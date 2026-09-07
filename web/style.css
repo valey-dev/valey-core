@@ -92,7 +92,7 @@ canvas{image-rendering:pixelated; display:block; border:3px solid var(--frame);
    browser gives a button and keep only the pointer: the HUD is one line of text
    and a raised control in it would read as a foreign object. */
 button.chip{background:none; border:0; padding:0; font:inherit; cursor:pointer}
-button.chip:hover{color:var(--ink-hi)}
+:where(body:not(.bykeys)) button.chip:hover{color:var(--ink-hi)}
 button.chip:focus-visible{outline:2px solid var(--warn); outline-offset:2px}
 
 /* ---- dialog ---- */
@@ -116,7 +116,7 @@ button.chip:focus-visible{outline:2px solid var(--warn); outline-offset:2px}
 .hint{color:var(--muted); font-size:11px}
 .files{list-style:none; margin:4px 0; padding:0; columns:2}
 .files li{cursor:pointer; padding:2px 4px; color:var(--ink-dim); break-inside:avoid}
-.files li:hover{background:var(--wood); color:var(--ink)}
+:where(body:not(.bykeys)) .files li:hover{background:var(--wood); color:var(--ink)}
 /* The same outline as "read more": keyboard focus looks consistent everywhere
    in the body of a card. */
 .files li.focus{background:var(--wood-lit); color:var(--ink); outline:2px solid var(--warn);
@@ -129,7 +129,7 @@ textarea:focus{outline:none; border-color:var(--warn)}
 .acts button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 10px; cursor:pointer;
   white-space:nowrap}
-.acts button:hover:not(:disabled){background:var(--wood-lit); color:var(--ink-hi)}
+:where(body:not(.bykeys)) .acts button:hover:not(:disabled){background:var(--wood-lit); color:var(--ink-hi)}
 /* A disabled tab must look disabled. "Task" dims while the agent awaits
    permission because there is nothing to deliver then; a live-looking button
    that cannot be pressed reads as broken. */
@@ -173,7 +173,7 @@ kbd{color:var(--muted); font-size:10px}
 .vtask:empty{display:none}
 .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; padding:14px; overflow:auto}
 .grid figure{margin:0; cursor:pointer; background:var(--field); border:2px solid var(--wood); padding:6px}
-.grid figure:hover{border-color:var(--warn)}
+:where(body:not(.bykeys)) .grid figure:hover{border-color:var(--warn)}
 .thumb{height:96px; display:flex; align-items:center; justify-content:center; background:var(--bg-deep); color:var(--muted-dim); font-size:28px; overflow:hidden}
 .thumb img{max-width:100%; max-height:100%; image-rendering:auto}
 figcaption{font-size:11px; margin-top:6px; color:var(--ink); word-break:break-all}
@@ -212,10 +212,10 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .prow button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 10px; cursor:pointer;
   display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
-.prow button:hover:not(:disabled){background:var(--wood-lit); color:var(--ink-hi)}
+:where(body:not(.bykeys)) .prow button:hover:not(:disabled){background:var(--wood-lit); color:var(--ink-hi)}
 .prow button:disabled{opacity:.45; cursor:not-allowed}
 .prow button.primary{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
-.prow button.primary:hover{color:var(--warn)}
+:where(body:not(.bykeys)) .prow button.primary:hover{color:var(--warn)}
 /* Arrow focus gets its own outline outside the border, like the bottom row. The
    primary button already has a yellow border, so border colour cannot highlight it. */
 .prow button.focus{outline:2px solid var(--ink); outline-offset:2px; color:var(--ink-hi)}
@@ -247,7 +247,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
   border:2px solid var(--warn); font:inherit; font-size:13px; padding:4px 10px; cursor:pointer}
 .qopt b{font-weight:normal; display:block}
 .qopt span{display:block; color:var(--muted); font-size:11px; line-height:1.35; margin-top:2px}
-.qopt:hover:not(:disabled){background:var(--wood); color:var(--ink-hi)}
+:where(body:not(.bykeys)) .qopt:hover:not(:disabled){background:var(--wood); color:var(--ink-hi)}
 .qopt:disabled{opacity:.45; cursor:not-allowed}
 .qopt.focus{outline:2px solid var(--warn); outline-offset:2px}
 .qopts li::before{content:"·"; position:absolute; left:4px; color:var(--warn)}
@@ -266,7 +266,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 #askAccess{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 10px; cursor:pointer;
   margin:10px 0 0; white-space:nowrap}
-#askAccess:hover{background:var(--wood-lit); color:var(--ink-hi)}
+:where(body:not(.bykeys)) #askAccess:hover{background:var(--wood-lit); color:var(--ink-hi)}
 /* The arrows walk onto this button, so it wears the ring of the body of a card
    — yellow and inset, like the file rows and the buttons on a note — and not
    the ring of the tabs at the bottom, which is the colour of ink. Copied from
@@ -282,7 +282,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .notes button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:11px "JetBrains Mono", "Courier New", monospace; padding:2px 6px; cursor:pointer;
   white-space:nowrap}
-.notes button:hover{background:var(--wood-lit); color:var(--ink-hi)}
+:where(body:not(.bykeys)) .notes button:hover{background:var(--wood-lit); color:var(--ink-hi)}
 
 /* ---- pager ---- */
 /* Its own corner: toasts bottom left, dialog centred, pager right—three layers
@@ -383,7 +383,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
   font:12px "JetBrains Mono", "Courier New",monospace}
 .pcard.work{border-left-color:var(--accent)}
 .pcard.wait{border-left-color:var(--warn)}
-.pcard:hover{border-color:var(--frame-dim)}
+:where(body:not(.bykeys)) .pcard:hover{border-color:var(--frame-dim)}
 .pface{grid-area:face; align-self:start; image-rendering:pixelated}
 .pname{grid-area:name; color:var(--warn); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .ptok{grid-area:tok; font-size:10px; color:var(--muted); white-space:nowrap}
@@ -406,7 +406,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
 .plead{grid-area:lead; align-self:center; background:none; border:none; padding:0 2px; cursor:pointer;
   color:var(--muted-dim); font:12px "JetBrains Mono", "Courier New",monospace}
-.plead:hover{color:var(--warn)}
+:where(body:not(.bykeys)) .plead:hover{color:var(--warn)}
 .pkeys{flex:0 0 auto; margin:0; padding:6px 14px 8px; font-size:11px; color:var(--muted-dim)}
 /* Width is divided by the office scale, like the four panels above: vw inside
    zoom is measured against the window and then multiplied by the scale, so an
@@ -449,7 +449,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .btab{display:flex; align-items:center; gap:6px; background:var(--field); color:var(--ink-dim);
   border:1px solid var(--frame-dim); padding:3px 10px; cursor:pointer;
   font:12px "JetBrains Mono", "Courier New",monospace}
-.btab:hover{background:var(--wood); color:var(--ink)}
+:where(body:not(.bykeys)) .btab:hover{background:var(--wood); color:var(--ink)}
 .btab.on{background:var(--wood); color:var(--warn); border:2px solid var(--accent); padding:2px 9px}
 .btab kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted-dim)}
 .rst kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted-dim)}
@@ -464,7 +464,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
   align-items:center; justify-content:center;
   background:var(--tile); border:2px solid var(--frame-dim)}
 .bcell canvas{image-rendering:pixelated; width:48px; height:48px}
-.bcell:hover{filter:brightness(1.15)}
+:where(body:not(.bykeys)) .bcell:hover{filter:brightness(1.15)}
 .bcell.on{background:var(--wood-hi); border-color:var(--accent)}
 .bcell.focus{border-color:var(--warn)}
 .dcap .dim{color:var(--muted-dim)}
@@ -473,7 +473,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .oseg{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
 .obtn{background:var(--field); color:var(--ink-dim); border:1px solid var(--frame-dim);
   padding:4px 12px; cursor:pointer; font:12px "JetBrains Mono", "Courier New",monospace}
-.obtn:hover{background:var(--wood); color:var(--ink)}
+:where(body:not(.bykeys)) .obtn:hover{background:var(--wood); color:var(--ink)}
 .obtn.on{background:var(--wood); color:var(--warn); border:2px solid var(--accent); padding:3px 11px}
 .orow{display:flex; align-items:center; gap:10px; background:var(--field); padding:6px 8px}
 .orow b{font-weight:normal; color:var(--ink)}
@@ -502,7 +502,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .tnode.office, .tnode.floor, .tnode.room{border-color:var(--frame-dim); color:var(--muted)}
 .tnode.office .tico, .tnode.floor .tico, .tnode.room .tico{opacity:.4}
 .tnode.ghost{background:none; border:1px dashed var(--frame-dim); color:var(--muted)}
-.tnode:hover{background:var(--wood)}
+:where(body:not(.bykeys)) .tnode:hover{background:var(--wood)}
 .tnode.on{background:var(--wood); border:2px solid var(--accent); padding:0 5px; color:var(--ink); font-weight:bold}
 .tico{width:16px; height:16px; flex:none;
   background:conic-gradient(var(--c) 0 25%, color-mix(in srgb, var(--c) 55%, black) 25% 50%,
@@ -524,13 +524,13 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .vsw kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted-dim)}
 .vbtn{background:var(--field); color:var(--ink-dim); border:1px solid var(--frame-dim);
   padding:2px 8px; cursor:pointer; font:11px "JetBrains Mono", "Courier New",monospace}
-.vbtn:hover{background:var(--wood); color:var(--ink)}
+:where(body:not(.bykeys)) .vbtn:hover{background:var(--wood); color:var(--ink)}
 .vbtn.on{background:var(--wood); color:var(--ink); border:2px solid var(--accent); padding:1px 7px}
 .tdirs{display:flex; gap:6px}
 .tdir{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; padding:6px 8px; cursor:pointer;
   background:var(--bg-deep); border:1px solid var(--frame-dim); text-align:left;
   font:10px "JetBrains Mono", "Courier New",monospace; color:var(--muted)}
-.tdir:hover{background:var(--wood)}
+:where(body:not(.bykeys)) .tdir:hover{background:var(--wood)}
 .tdir.on{background:var(--wood); border:2px solid var(--accent); padding:5px 7px}
 .tdir b{font-size:10px; letter-spacing:.06em; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .tdir.on b{color:var(--ink)}
@@ -587,7 +587,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .drow{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:3px 0; font-size:12px}
 .drow button{background:var(--wood); color:var(--ink); border:2px solid var(--frame); width:28px;
   font:12px "JetBrains Mono", "Courier New",monospace; cursor:pointer}
-.drow button:hover{background:var(--wood-lit); color:var(--warn)}
+:where(body:not(.bykeys)) .drow button:hover{background:var(--wood-lit); color:var(--warn)}
 .zhint{font-size:10px; color:var(--muted); margin-left:auto; margin-right:10px}
 .zoomwrap{overflow:auto; max-height:70vh}
 .full.pixel{image-rendering:pixelated; transform:scale(2); transform-origin:top left}
@@ -600,7 +600,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .skyrow{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
 .skybody button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:12px "JetBrains Mono", "Courier New",monospace; padding:4px 10px; cursor:pointer}
-.skybody button:hover{background:var(--wood-lit); color:var(--warn)}
+:where(body:not(.bykeys)) .skybody button:hover{background:var(--wood-lit); color:var(--warn)}
 .skybody button.on{background:var(--on); border-color:var(--accent); color:var(--accent)}
 .skyplace{color:var(--warn); font-size:12px}
 .skystatus{margin:0; color:var(--ink-dim); font-size:12px; border-left:3px solid var(--frame); padding-left:8px}
@@ -618,7 +618,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .sendrow{display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap}
 .sendrow button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:12px "JetBrains Mono", "Courier New",monospace; padding:4px 10px; cursor:pointer}
-.sendrow button:hover:not(:disabled){background:var(--wood-lit); color:var(--warn)}
+:where(body:not(.bykeys)) .sendrow button:hover:not(:disabled){background:var(--wood-lit); color:var(--warn)}
 .sendrow button:disabled{opacity:.45; cursor:not-allowed}
 .sendrow button.arm{background:var(--arm); border-color:var(--arm-edge); color:var(--arm-ink)}
 .modepick{font-size:11px; color:var(--muted); margin-left:auto}
@@ -656,13 +656,13 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .ntail.warn{color:var(--warn)}
 .retry{background:var(--retry); color:var(--retry-ink); border:2px solid var(--retry-edge); font:10px "JetBrains Mono", "Courier New",monospace;
   padding:1px 6px; cursor:pointer; margin-left:4px}
-.retry:hover{background:var(--retry-hi)}
+:where(body:not(.bykeys)) .retry:hover{background:var(--retry-hi)}
 .retry:disabled{opacity:.5; cursor:default}
 
 /* ---- handing a note from the desk over to the chat ---- */
 .tochat{background:var(--wood); color:var(--ink); border:2px solid var(--frame); font:10px "JetBrains Mono", "Courier New",monospace;
   padding:1px 6px; cursor:pointer; margin-left:auto}
-.tochat:hover{background:var(--wood-lit); color:var(--warn)}
+:where(body:not(.bykeys)) .tochat:hover{background:var(--wood-lit); color:var(--warn)}
 .tochat.arm{background:var(--arm); border-color:var(--arm-edge); color:var(--arm-ink)}
 .tochat:disabled{opacity:.5; cursor:default}
 
@@ -680,7 +680,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 /* ---- reading a whole conversation ---- */
 .linky{background:none; border:none; color:var(--info); font:11px "JetBrains Mono", "Courier New",monospace;
   cursor:pointer; padding:2px 0; margin-top:4px}
-.linky:hover{color:var(--warn); text-decoration:underline}
+:where(body:not(.bykeys)) .linky:hover{color:var(--warn); text-decoration:underline}
 .chatlog{max-height:72vh}
 .msg{border-left:3px solid var(--wood); padding:2px 0 8px 10px; margin-bottom:12px}
 .msg.user{border-left-color:var(--info-edge)}
@@ -698,7 +698,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .say{cursor:pointer}
 
 .linky.more{color:var(--warn); font-weight:bold}
-.linky.more:hover{color:var(--ink-hi)}
+:where(body:not(.bykeys)) .linky.more:hover{color:var(--ink-hi)}
 /* Arrow Up focuses this with the same visibility as the bottom buttons. */
 .linky.focus{color:var(--ink-hi); background:var(--wood-lit); outline:2px solid var(--warn);
   outline-offset:1px; text-decoration:none}
@@ -728,7 +728,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .recwait.on{color:var(--warn)}
 .recgo{flex:none; background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:11px "JetBrains Mono", "Courier New",monospace; padding:3px 8px; cursor:pointer}
-.recgo:hover{background:var(--wood-lit); color:var(--warn)}
+:where(body:not(.bykeys)) .recgo:hover{background:var(--wood-lit); color:var(--warn)}
 
 /* ---- lift ---- */
 .liftwrap{width:min(420px,92vw)}
@@ -767,7 +767,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
    as a two-pixel border but could not be read on screen—"Down does nothing."
    Grid cells and office-tab buttons now highlight like everything else. */
 .bcell.focus, .obtn.focus{outline:2px solid var(--warn); outline-offset:-2px}
-.liftbtn:hover{background:var(--wood-lit); color:var(--warn)}
+:where(body:not(.bykeys)) .liftbtn:hover{background:var(--wood-lit); color:var(--warn)}
 .liftbtn.here{border-color:var(--accent); color:var(--accent)}
 .liftbtn b{font-weight:normal; flex:none; width:64px}
 .liftbtn span{color:var(--muted); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -778,7 +778,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .swatches{display:flex; gap:6px; flex-wrap:wrap}
 .swatch{width:52px; height:38px; border:2px solid var(--frame); cursor:pointer; padding:0;
   position:relative; font:9px "JetBrains Mono", "Courier New",monospace; color:var(--ink); background:var(--wood)}
-.swatch:hover{border-color:var(--warn)}
+:where(body:not(.bykeys)) .swatch:hover{border-color:var(--warn)}
 .swatch.on{border-color:var(--warn); box-shadow:0 0 0 2px rgba(255,209,102,.3)}
 .skinrow{display:flex; align-items:center; gap:10px; font-size:11px; color:var(--muted)}
 .skinrow input[type=range]{flex:1; accent-color:var(--warn)}
@@ -787,7 +787,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .skinval{width:38px; text-align:right; color:var(--ink-dim)}
 .skinbody button.thin{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:12px "JetBrains Mono", "Courier New",monospace; padding:4px 10px; cursor:pointer; align-self:flex-start}
-.skinbody button.thin:hover{background:var(--wood-lit); color:var(--warn)}
+:where(body:not(.bykeys)) .skinbody button.thin:hover{background:var(--wood-lit); color:var(--warn)}
 
 /* The same frozen duplicate as .invbody input: #8c7660 is --muted, and var()
    would shift this colour with office hue. */
@@ -806,7 +806,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .nhead b{flex:1; font-weight:normal}
 .nhead button{background:none; border:none; color:var(--muted); cursor:pointer;
   font:12px "JetBrains Mono", "Courier New",monospace; padding:0 2px}
-.nhead button:hover{color:var(--warn)}
+:where(body:not(.bykeys)) .nhead button:hover{color:var(--warn)}
 .nhead .ndel.arm{color:var(--bad-dim)}
 .nanchor{display:block; font-style:normal; font-size:10px; color:var(--muted-dim); margin-top:2px}
 .nbody{color:var(--ink-dim); font-size:13px; line-height:1.55; white-space:pre-wrap; margin-top:3px}
@@ -848,7 +848,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
   border:3px solid var(--frame); font:15px "JetBrains Mono", "Courier New",monospace; padding:9px 12px; cursor:pointer;
   text-align:left}
 .tbtn kbd{margin-left:auto; color:var(--muted); font-size:11px}
-.tbtn:hover{background:var(--wood-lit); color:var(--warn)}
+:where(body:not(.bykeys)) .tbtn:hover{background:var(--wood-lit); color:var(--warn)}
 .tbtn.main{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
 .tbtn.focus{outline:2px solid var(--ink); outline-offset:2px}
 .tbtn.main.focus{outline-color:var(--warn)}
@@ -977,7 +977,7 @@ body.titling #hud{visibility:hidden}
 .sizes{display:flex; gap:4px; flex:1}
 .szbtn{flex:1; background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:11px "JetBrains Mono", "Courier New",monospace; padding:3px 0; cursor:pointer}
-.szbtn:hover{background:var(--wood-lit); color:var(--warn)}
+:where(body:not(.bykeys)) .szbtn:hover{background:var(--wood-lit); color:var(--warn)}
 .szbtn.on{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
 
 /* ---- all notes at once ----
@@ -999,12 +999,12 @@ body.titling #hud{visibility:hidden}
 .nmeta span{flex:1; font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis}
 .ngo{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:10px "JetBrains Mono", "Courier New",monospace; padding:2px 8px; cursor:pointer; flex:none}
-.ngo:hover{background:var(--wood-lit); color:var(--warn)}
+:where(body:not(.bykeys)) .ngo:hover{background:var(--wood-lit); color:var(--warn)}
 /* A closed conversation has nothing to open, so it gets no button. */
 .ndead{flex:none; font-size:10px; color:var(--muted-dim); border:2px solid var(--wood-hi); padding:2px 8px}
 .nmeta .ndel{background:none; border:none; color:var(--muted-dim); cursor:pointer;
   font:11px "JetBrains Mono", "Courier New",monospace; flex:none}
-.nmeta .ndel:hover{color:var(--bad-dim)}
+:where(body:not(.bykeys)) .nmeta .ndel:hover{color:var(--bad-dim)}
 .nmeta .ndel.arm{color:var(--bad-dim)}
 .rbody .empty span{display:block; margin-top:8px; font-size:11px; line-height:1.6}
 /* Easel, third stage: one frame fills the panel with arrows at its sides.
@@ -1065,7 +1065,7 @@ body.titling #hud{visibility:hidden}
   padding:5px 9px; display:flex; flex-direction:column; align-items:flex-start; gap:2px}
 .stand-mod b{font-weight:400}
 .stand-mod i{font-style:normal; font-size:9px; letter-spacing:.14em; color:var(--accent)}
-.stand-mod:hover{border-color:var(--warn)}
+:where(body:not(.bykeys)) .stand-mod:hover{border-color:var(--warn)}
 .stand-mod:disabled{opacity:.6; cursor:default}
 /* Disabled state is visible in colour, word, and border. One signal was not
    enough; an icon-only version was already missed. */
@@ -1085,14 +1085,14 @@ body.titling #hud{visibility:hidden}
 #standtab{position:fixed; top:8px; left:8px; z-index:60; display:none; cursor:pointer;
   background:rgba(20,13,8,.92); border:2px solid var(--warn); color:var(--warn);
   font:9px/1 var(--mono, monospace); letter-spacing:.18em; padding:6px 8px}
-#standtab:hover{background:var(--warn); color:var(--bg-deep)}
+:where(body:not(.bykeys)) #standtab:hover{background:var(--warn); color:var(--bg-deep)}
 body.stand-folded #stand{display:none}
 body.stand-folded #standtab{display:block}
 /* ---- diff ---- */
 .gitbody.diff .gfiles{flex:0 0 240px; overflow:auto; padding:6px 0}
 .gfile{display:flex; gap:8px; padding:4px 10px; font-size:11px; color:var(--ink-dim); cursor:pointer}
 .gfile span{flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left}
-.gfile:hover{background:var(--wood-hi)}
+:where(body:not(.bykeys)) .gfile:hover{background:var(--wood-hi)}
 .gfile.sel{background:var(--wood); color:var(--ink); box-shadow:inset 2px 0 0 var(--accent)}
 .gcode{flex:1 1 auto; overflow:auto; border-left:2px solid var(--wood-hi); padding:4px 0 12px}
 .dl{display:flex; align-items:baseline; gap:0; font-size:11px; line-height:16px; white-space:pre}
@@ -1113,7 +1113,7 @@ body.stand-folded #standtab{display:block}
 .langrow{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
 .langrow button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:12px "JetBrains Mono", "Courier New",monospace; padding:4px 10px; cursor:pointer}
-.langrow button:hover{background:var(--wood-lit); color:var(--warn)}
+:where(body:not(.bykeys)) .langrow button:hover{background:var(--wood-lit); color:var(--warn)}
 .langrow button.on{background:var(--on); border-color:var(--accent); color:var(--accent)}
 .langrow button.focus{outline:2px solid var(--warn); outline-offset:-2px}
 .langstatus{margin:0; color:var(--ink-dim); font-size:12px; border-left:3px solid var(--frame); padding-left:8px}
@@ -1127,7 +1127,7 @@ body.stand-folded #standtab{display:block}
 .keycard{display:flex; flex-direction:column; align-items:center; gap:4px; width:88px;
   background:var(--field); border:2px solid transparent; padding:8px 6px; cursor:pointer}
 .keycard canvas{width:48px; height:36px; image-rendering:pixelated}
-.keycard:hover{background:var(--wood)}
+:where(body:not(.bykeys)) .keycard:hover{background:var(--wood)}
 .keycard.on{border-color:var(--accent); background:var(--wood)}
 .keycard.dimmed canvas{opacity:.45}
 .keycard .kname{font-size:11px; color:var(--ink-dim)}
@@ -1247,3 +1247,18 @@ body.stand-folded #standtab{display:block}
   border-radius:2px}
 .keyslegend s.free{border-bottom-color:transparent}
 .keyslegend .k{margin-left:auto; color:var(--ink-dim)}
+
+/* ---- the keyboard is driving ----
+   A list walked with the arrows lit two cells at once: the focus where the
+   keyboard put it, and :hover under whatever the mouse was resting on. The
+   second light is not a choice anybody made — scrollIntoView slides fresh cells
+   under a parked cursor, so it wanders on its own while the hand is on the
+   keys, and the panel offers two answers to "where am I".
+   So every hover rule in the office is gated on this class, and the pointer
+   itself goes away while the keys are in charge. :where() is what makes that
+   affordable: it contributes nothing to specificity, so 45 gated rules keep the
+   exact weight they had and nothing changes order behind them.
+   Coming back is a real mouse movement, and only that. Scrolled content under a
+   still pointer fires mouseover, never mousemove — which is precisely the
+   difference this needs, and the reason the wandering highlight existed. */
+html body.bykeys, html body.bykeys *{cursor:none}

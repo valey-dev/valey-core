@@ -805,6 +805,29 @@ function onKey(e) {
   }
 }
 addEventListener('keydown', onKey);
+
+// Who is driving, the keyboard or the mouse. The office answers to both, and a
+// list showed it: the arrows moved the focus while :hover stayed lit under a
+// cursor nobody had touched for minutes, so two cells claimed to be the current
+// one. Worse, scrollIntoView pulls new cells under a still pointer, so the stray
+// highlight crawled by itself. The class turns hover off across the office (see
+// .bykeys in style.css) and hides the pointer with it.
+// Capture, so the flag is already right by the time a panel repaints on this
+// same key. Any key counts, walking included: the mouse is not being used then
+// either, and a pointer parked over the floor lights nothing but noise.
+let byKeys = false;
+const driving = (keys) => {
+  if (byKeys === keys) return;               // toggling a class on every mousemove is not free
+  byKeys = keys;
+  document.body.classList.toggle('bykeys', keys);
+};
+addEventListener('keydown', () => driving(true), true);
+// Only a genuine movement hands it back. mouseover is what fires when content
+// scrolls under a still cursor, and honouring that would undo the fix on the
+// very key press that caused it.
+addEventListener('mousemove', () => driving(false), true);
+addEventListener('mousedown', () => driving(false), true);
+addEventListener('wheel', () => driving(false), { capture: true, passive: true });
 // The entrance screen is open and nothing is over it — so both the keys and the walking
 // along the corridor belong to it.
 const titleFree = () => titleOpen()

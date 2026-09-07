@@ -40,7 +40,7 @@
 .radioknobs{display:flex; gap:6px; justify-content:center}
 .radioknobs button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:12px "JetBrains Mono", "Courier New",monospace; padding:3px 10px; cursor:pointer}
-.radioknobs button:hover{background:var(--wood-lit); color:var(--warn)}
+:where(body:not(.bykeys)) .radioknobs button:hover{background:var(--wood-lit); color:var(--warn)}
 .radioknobs button.big{min-width:130px}
 .radioknobs button.on{background:#3f5c48; border-color:var(--accent); color:var(--accent)}
 .radiolist{list-style:none; margin:0; padding:0; max-height:120px; overflow:auto}
@@ -48,9 +48,9 @@
 .radiolist .rst{flex:1; text-align:left; background:none; border:none; color:var(--ink-dim);
   font:12px "JetBrains Mono", "Courier New",monospace; padding:4px 6px; cursor:pointer}
 .radiolist li.now .rst{color:var(--accent)}
-.radiolist .rst:hover{background:var(--wood); color:var(--ink)}
+:where(body:not(.bykeys)) .radiolist .rst:hover{background:var(--wood); color:var(--ink)}
 .radiolist .rdel{background:none; border:none; color:var(--muted-dim); cursor:pointer; padding:0 6px}
-.radiolist .rdel:hover{color:#ff9f8f}
+:where(body:not(.bykeys)) .radiolist .rdel:hover{color:#ff9f8f}
 .radioadd{display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--ink-dim)}
 .radioadd input{background:var(--field); color:var(--ink); border:2px solid var(--frame);
   font:12px "JetBrains Mono", "Courier New",monospace; padding:5px}
@@ -75,7 +75,7 @@
   border:2px solid var(--frame); font:12px "JetBrains Mono", "Courier New",monospace; padding:5px}
 .radiorow button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:12px "JetBrains Mono", "Courier New",monospace; padding:4px 10px; cursor:pointer}
-.radiorow button:hover{background:var(--wood-lit); color:var(--warn)}
+:where(body:not(.bykeys)) .radiorow button:hover{background:var(--wood-lit); color:var(--warn)}
 .radiorow button.thin{border-color:var(--frame-dim); color:var(--muted)}
 /* Focus outline for receiver controls. It once lived in a core rule beside
    unrelated selectors. The outline is shared across the office, but whoever
