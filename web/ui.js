@@ -329,7 +329,7 @@ function buildDialog(a) {
         : `<button id="askAccess">${tr(st === 'refused' ? 'acc.askAgain' : 'acc.ask')}</button>`;
       body = `<p class="q">${tr('dlg.whatUp')}</p>
         <p class="say">${tr('acc.projectionOnly')}</p>
-        <p class="hint block">${tr(st === 'refused' ? 'acc.refused' : st === 'pending' ? 'acc.waiting' : 'acc.closed')}</p>
+        <p class="hint">${tr(st === 'refused' ? 'acc.refused' : st === 'pending' ? 'acc.waiting' : 'acc.closed')}</p>
         ${btn}
         <p class="hint dim">${tr('acc.note')}</p>`;
     }
