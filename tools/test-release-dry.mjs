@@ -4,8 +4,8 @@
 // from a subdirectory, or from someone else's folder, a release was applied by
 // halves. A run from the system temp directory is the most foreign cwd there is:
 // no repository and no package.json in it.
-import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { readFileSync, realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -86,6 +86,64 @@ ok('a live worktree cleanup is queued and retried outside the landing process',
 ok('a later landing retries cleanup markers that outlive the watcher',
   /spawnSync\(process\.execPath, \[pendingCleanup, '--repo', ROOT\]/.test(land),
   'land does not retry the persistent cleanup queue');
+
+// A release cut through `npm run land` runs in a temporary worktree with
+// VALEY_REPO pointing at it, so «the repo this script lives in» cannot be a
+// path comparison: it answered «someone else's repository» for v0.22.0, v0.23.0
+// and v0.24.0, and all three minors went out with no video-script draft. The
+// git object store is what a worktree shares and a second repository does not,
+// so that is what the guard has to compare.
+ok('the video draft survives a release cut in a temporary worktree',
+  /--git-common-dir/.test(release) && /const ownRepo = ROOT === TOOL_ROOT \|\|/.test(release),
+  'ownRepo is a path comparison again');
+
+// Proof rather than a grep: the guard's own code is run against a real
+// worktree of this repository and against the modules repository beside it.
+const ownRepoOf = (dir) => {
+  const src = readFileSync(path.join(ROOT, 'tools/release.mjs'), 'utf8');
+  const from = src.indexOf('const commonDir = (dir) => {');
+  const to = src.indexOf('})();', from) + '})();'.length;
+  const body = src.slice(from, to);
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e',
+    "import { execFileSync } from 'node:child_process';\n" +
+    "import { realpathSync } from 'node:fs';\n" +
+    "import path from 'node:path';\n" +
+    `const TOOL_ROOT = ${JSON.stringify(ROOT)};\n` +
+    `const ROOT = ${JSON.stringify(dir)};\n` +
+    body + '\nconsole.log(ownRepo);'],
+    { encoding: 'utf8' });
+  return r.stdout.trim();
+};
+
+const tmpTree = path.join(os.tmpdir(), 'valey-release-guard-' + process.pid);
+let made = false;
+try {
+  execFileSync('git', ['-C', ROOT, 'worktree', 'add', '--detach', tmpTree, 'HEAD'],
+    { stdio: ['ignore', 'ignore', 'pipe'] });
+  made = true;
+} catch { /* a shallow or unusual checkout: the grep above still stands */ }
+if (made) {
+  ok('a temporary worktree of this repository counts as this repository',
+    ownRepoOf(tmpTree) === 'true', ownRepoOf(tmpTree));
+  try { execFileSync('git', ['-C', ROOT, 'worktree', 'remove', '--force', tmpTree]); } catch { /* held */ }
+}
+
+// The modules repository borrows this suite and has no audience for a video.
+// It is only a second repository where the private half is actually deployed:
+// in a bare core worktree `modules/` is an ordinary directory of this very
+// repository, and asserting «false» there would fail the stand for the right
+// answer.
+const modules = path.join(ROOT, 'modules');
+let separate = false;
+try {
+  separate = execFileSync('git', ['-C', modules, 'rev-parse', '--show-toplevel'],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() === realpathSync(modules);
+} catch { /* the private half is not deployed here */ }
+if (separate) {
+  ok('a second repository inside this tree does not', ownRepoOf(modules) === 'false', ownRepoOf(modules));
+} else {
+  console.log('skip  | a second repository inside this tree does not (modules/ is not its own repo here)');
+}
 
 console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

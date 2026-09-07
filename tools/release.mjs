@@ -13,7 +13,7 @@
 // runs the stands first, because that is the last moment the commit is still
 // cheap to change.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { pickKind, check } from './release-kind.mjs';
@@ -257,7 +257,26 @@ if (!ship) {
 // The video is the office's own rule: a minor of the office is shown to people.
 // The modules repository is released by the same tooling and has no video and no
 // audience for one, so the draft belongs to the repo this script lives in.
-const ownRepo = ROOT === TOOL_ROOT;
+//
+// «The same repo» is not «the same path». Since land.mjs cuts every release in a
+// temporary worktree with VALEY_REPO pointing at it, a path comparison answered
+// «someone else's repository» for every landed release: v0.22.0, v0.23.0 and
+// v0.24.0 all went out without a draft, and ~/.config/valey/scripts stopped at
+// v0.21.0. What actually separates the two cases is the git object store, which
+// a worktree shares with its checkout and a second repository does not.
+const commonDir = (dir) => {
+  try {
+    const out = execFileSync('git', ['-C', dir, 'rev-parse', '--git-common-dir'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    // `--git-common-dir` answers relative to the cwd of the git call, not to -C,
+    // so it is resolved against the same directory git was pointed at.
+    return realpathSync(path.resolve(dir, out));
+  } catch { return null; }
+};
+const ownRepo = ROOT === TOOL_ROOT || (() => {
+  const a = commonDir(ROOT), b = commonDir(TOOL_ROOT);
+  return a !== null && a === b;
+})();
 if (next.endsWith('.0') && ownRepo) {
   try {
     const out = execFileSync(process.execPath, [fileURLToPath(new URL('script.mjs', import.meta.url)), tag],
