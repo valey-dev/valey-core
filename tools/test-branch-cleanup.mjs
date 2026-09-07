@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const TOOL = path.join(ROOT, 'tools/cleanup-merged.mjs');
+const AUDIT = path.join(ROOT, 'tools/audit-merged-branches.mjs');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'valey-branch-cleanup-'));
 const remote = path.join(tmp, 'remote.git');
 const repo = path.join(tmp, 'repo');
@@ -26,6 +27,7 @@ const git = (...args) => {
 };
 const cleanup = (branch, ...args) => run(process.execPath,
   [TOOL, branch, '--repo', repo, ...args], tmp);
+const audit = () => run(process.execPath, [AUDIT, '--repo', repo], tmp);
 const has = (ref) => run('git', ['show-ref', '--verify', '--quiet', ref]).status === 0;
 
 try {
@@ -43,6 +45,8 @@ try {
   git('switch', 'main'); git('merge', '--no-ff', 'feature/merged', '-m', 'merge feature'); git('push');
 
   let r = cleanup('feature/merged');
+  let a = audit();
+  ok('the audit reports a merged remote branch', a.status === 1 && /feature\/merged/.test(a.stderr), a.stderr);
   ok('dry-run succeeds', r.status === 0, r.stderr);
   ok('dry-run keeps the local branch', has('refs/heads/feature/merged'));
   ok('dry-run keeps the remote branch', has('refs/remotes/origin/feature/merged'));
@@ -50,6 +54,8 @@ try {
   ok('apply succeeds for an ordinary merged branch', r.status === 0, r.stderr);
   ok('the local branch is deleted', !has('refs/heads/feature/merged'));
   ok('the remote branch is deleted', !has('refs/remotes/origin/feature/merged'));
+  a = audit();
+  ok('the audit turns green after cleanup', a.status === 0, a.stderr);
 
   git('switch', '-c', 'feature/unmerged');
   fs.appendFileSync(path.join(repo, 'file.txt'), 'unmerged\n');
@@ -82,4 +88,3 @@ try {
 
 console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);
-

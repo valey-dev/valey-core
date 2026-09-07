@@ -110,3 +110,13 @@ export function applyCleanup(plan) {
   }
   return { ...plan, state: 'cleaned' };
 }
+
+export function mergedRemoteBranches(repo, mainRef = 'origin/main') {
+  const root = path.resolve(repo);
+  const r = git(root, ['for-each-ref', `--merged=${mainRef}`, '--format=%(refname)', 'refs/remotes/origin']);
+  return r.stdout.split('\n').map((line) => line.trim()).filter(Boolean)
+    .filter((ref) => ref !== 'refs/remotes/origin/HEAD' && ref !== `refs/remotes/${mainRef}`)
+    .map((ref) => ref.replace(/^refs\/remotes\/origin\//, ''))
+    .filter((branch) => !protectedBranch(branch, mainRef))
+    .sort();
+}

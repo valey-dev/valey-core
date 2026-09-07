@@ -95,3 +95,21 @@ jobs:
             sed -n '/Coverage summary/,/^=\{10,\}$/p' /tmp/coverage.txt || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # GitHub deletes the head branch after a PR merge, and land.mjs removes any
+  # matching local ref after the release. This delayed check is the backstop for
+  # a merge path that skipped either half. It runs after the ordinary jobs so
+  # GitHub has finished its server-side branch deletion before refs are read.
+  branch-hygiene:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, coverage]
+    runs-on: ubuntu-latest
+    name: merged branches
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: fetch all branch refs
+        run: git fetch origin --prune '+refs/heads/*:refs/remotes/origin/*'
+      - name: no merged remote branches remain
+        run: node tools/audit-merged-branches.mjs
