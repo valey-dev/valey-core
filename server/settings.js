@@ -149,11 +149,11 @@ export async function getSettings() {
   if (cache) return cache;
   try {
     const m = await migrateSettings();
-    if (m.done) console.log(`Настройки переехали в ${m.file}; старый файл оставлен на месте.`);
+    if (m.done) console.log(`Settings moved to ${m.file}; the legacy file was left in place.`);
     // Two files are the one case where the office can quietly lose half the
     // names. Saying it out loud is cheaper than guessing.
-    if (m.reason === 'both') console.log(`Настройки есть и в ${m.file}, и в ${m.legacy}. Взят первый; второй не тронут.`);
-  } catch (e) { console.log(`Настройки не переехали: ${e.message}. Старый файл цел.`); }
+    if (m.reason === 'both') console.log(`Settings exist in both ${m.file} and ${m.legacy}. Using the first; the second was not touched.`);
+  } catch (e) { console.log(`Settings were not moved: ${e.message}. The legacy file is intact.`); }
   // No file and a broken file are different cases. The first is an ordinary
   // first start. The second looked the same until 4 September 2026: the office
   // quietly started from defaults, and the next save overwrote the file — the
@@ -167,9 +167,9 @@ export async function getSettings() {
     try { saved = JSON.parse(raw); } catch (e) {
       const backup = `${FILE}.broken-${new Date().toISOString().replace(/[:.]/g, '-')}`;
       try { await fsp.writeFile(backup, raw); } catch { /* at least say it */ }
-      console.error(`Настройки не читаются: ${e.message}. Файл отложен в ${backup}; `
-        + `офис стартует с умолчаний, и следующее сохранение перепишет ${FILE}. `
-        + 'Имена, токен и приглашения — в отложенной копии.');
+      console.error(`Settings could not be read: ${e.message}. The file was moved to ${backup}; `
+        + `the office is starting with defaults, and the next save will overwrite ${FILE}. `
+        + 'Names, the token, and invitations remain in the backup.');
     }
   }
   if (saved && typeof saved === 'object' && !Array.isArray(saved)) {

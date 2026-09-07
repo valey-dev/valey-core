@@ -12,7 +12,7 @@ import { reportTail, applyLine, emptyState } from '../server/agents.js';
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    | ' + name);
-  else { bad++; console.log('УПАЛ  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
+  else { bad++; console.log('FAIL  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
 };
 
 const tail = (what, status, need) =>
@@ -21,21 +21,21 @@ const tail = (what, status, need) =>
 // ------------------------------------------------------------ ordinary answer
 
 const one = reportTail(tail('Вкладка «Ключи» в инвентаре', 'собрано, стенд на 5188', 'Ничего'));
-ok('задача берётся из хвоста', one && one.what === 'Вкладка «Ключи» в инвентаре', one);
-ok('статус берётся из хвоста', one && one.status === 'собрано, стенд на 5188', one);
-ok('«Ничего» не становится просьбой', one && one.need === '', one);
+ok('the task is taken from the tail', one && one.what === 'Вкладка «Ключи» в инвентаре', one);
+ok('status is taken from the tail', one && one.status === 'собрано, стенд на 5188', one);
+ok('"Nothing" becomes a request', one && one.need === '', one);
 
 const asked = reportTail(tail('Прайсинг на лендинге', 'нарисовано, ждёт утверждения', 'выбрать версию — v4 или v5'));
-ok('просьба к человеку доезжает', asked && asked.need === 'выбрать версию — v4 или v5', asked);
+ok('a request to a person arrives', asked && asked.need === 'выбрать версию — v4 или v5', asked);
 
 // -------------------------------------------------------- no tail, no task
 
-ok('без отчёта задачи нет', reportTail('Готово, всё работает.') === null);
-ok('пустой ответ не падает', reportTail('') === null);
-ok('undefined не падает', reportTail(undefined) === null);
+ok('without a report there is no task', reportTail('Готово, всё работает.') === null);
+ok('empty answer doesn\'t drop', reportTail('') === null);
+ok('undefined doesn\'t crash', reportTail(undefined) === null);
 
 // A report line named in prose but not filled in is not a task.
-ok('одно упоминание правила задачей не считается',
+ok('just mentioning a rule is not considered a task',
    reportTail('Каждый ответ кончается строкой «Текущая фича/задача».') === null);
 
 // -------------------------------------------- the last tail, not the first
@@ -45,36 +45,36 @@ ok('одно упоминание правила задачей не счита�
 // match means showing the day-before-yesterday's work in the head and not
 // noticing.
 const twice = reportTail(tail('Старое дело', 'сдано', 'Ничего') + '\n' + tail('Новое дело', 'в работе', 'Ничего'));
-ok('берётся последний хвост, а не первый', twice && twice.what === 'Новое дело', twice);
+ok('the last tail is taken, not the first', twice && twice.what === 'Новое дело', twice);
 
 // --------------------------------------------------------- however it is written
 
-ok('без звёздочек тоже читается',
+ok('without asterisks it is also readable',
    (reportTail('Текущая фича/задача — Разряды агентов\nСтатус — рисуется') || {}).what === 'Разряды агентов');
-ok('двоеточие вместо тире',
+ok('colon instead of dash',
    (reportTail('**Текущая задача**: Почтовая комната') || {}).what === 'Почтовая комната');
-ok('разметка из значения снимается',
+ok('the marking is removed from the value',
    (reportTail('**Текущая фича/задача** — `server/agents.js` и **шапка**') || {}).what === 'server/agents.js и шапка');
-ok('строка в цитате читается',
+ok('the line in the quote reads',
    (reportTail('> **Текущая фича/задача** — Лифт') || {}).what === 'Лифт');
 
 // «Ничего» gets written in several ways, and a full stop changes nothing.
 for (const n of ['Ничего', 'ничего.', 'Нет', 'Nothing', '—']) {
   const r = reportTail(tail('Задача', 'статус', n));
-  ok(`«${n}» — это не просьба`, r && r.need === '', r);
+  ok(`"${n}" is not a request`, r && r.need === '', r);
 }
 
 // -------------------------------------------------------------------- limits
 
 // The value is capped but not lost: clipping a long line is the head's job.
 const long = reportTail(tail('я'.repeat(500), 'ok', 'Ничего'));
-ok('длинная задача обрезана потолком', long && long.what.length === 300, long && long.what.length);
+ok('long task cut off by ceiling', long && long.what.length === 300, long && long.what.length);
 
 // The tail sits at the end of an answer: there is no reason to look into the
 // beginning of a long message, or a quoted report from somewhere else becomes
 // the task.
 const far = reportTail(tail('Далёкое дело', 'сдано', 'Ничего') + 'x'.repeat(4000));
-ok('хвост ищется только в конце ответа', far === null);
+ok('the tail is searched only at the end of the answer', far === null);
 
 // ----------------------------- the task does not go out while the agent answers
 //
@@ -88,13 +88,13 @@ const say = (text) => JSON.stringify({
 });
 
 const st = emptyState();
-ok('у сессии без отчёта задачи нет', st.task === null, st.task);
+ok('a session without a report has no task', st.task === null, st.task);
 applyLine(st, say(tail('Разбор хвоста отчёта', 'пишу', 'Ничего')));
-ok('задача запоминается из ответа', st.task && st.task.what === 'Разбор хвоста отчёта', st.task);
-applyLine(st, say('Сейчас посмотрю, что в файле.'));
-ok('реплика без хвоста не гасит задачу', st.task && st.task.what === 'Разбор хвоста отчёта', st.task);
+ok('the task is remembered from the answer', st.task && st.task.what === 'Разбор хвоста отчёта', st.task);
+applyLine(st, say('Now I\'ll see what\'s in the file.'));
+ok('a replica without a tail does not extinguish the task', st.task && st.task.what === 'Разбор хвоста отчёта', st.task);
 applyLine(st, say(tail('Следующее дело', 'сдано', 'Ничего')));
-ok('новый хвост заменяет прежнюю задачу', st.task && st.task.what === 'Следующее дело', st.task);
+ok('the new tail replaces the old task', st.task && st.task.what === 'Следующее дело', st.task);
 
-console.log(bad ? `\n${bad} УПАЛО` : '\nвсё зелено');
+console.log(bad ? `\n${bad} FAILED` : '\nall green');
 process.exit(bad ? 1 : 0);

@@ -58,7 +58,7 @@ export function deviceLang() {
 // install themselves.
 const inBrowser = typeof navigator !== 'undefined'
   && !/^Node\.js/.test(String(navigator.userAgent || ''));
-let LANG = inBrowser ? deviceLang() : 'ru';
+let LANG = inBrowser ? deviceLang() : 'en';
 
 const DICT = {
   ru: {
@@ -82,6 +82,7 @@ const DICT = {
     'sky.snow': 'снег',
     'sky.fog': 'туман',
     'sky.made': 'выдумана',
+    'sky.realSource': 'настоящая',
     'sky.outside': 'За окном — {what}',
 
     // ------------------------------------------------- the captions on the canvas
@@ -125,6 +126,8 @@ const DICT = {
     'label.searching': 'ищу агентов…',
 
     // --------------------------------------------------------------- the toasts
+    'toast.waterDone': 'Стакан воды. Сегодня {n}-й.',
+    'toast.coffeeDone': 'Кофе налит. Всего {n}.',
     'toast.canTaken': 'Лейка в руках. Поливов в ней {n}.',
     'toast.canTakenDry': 'Лейка в руках, и она пустая. Кран справа.',
     'toast.canBack': 'Лейка на крючке.',
@@ -764,6 +767,7 @@ const DICT = {
     'sky.snow': 'snow',
     'sky.fog': 'fog',
     'sky.made': 'made up',
+    'sky.realSource': 'real',
     'sky.outside': 'Outside — {what}',
 
     'hint.talk': '[ SPACE ] talk',
@@ -801,6 +805,8 @@ const DICT = {
     'label.limited': 'out of quota — dozing',
     'label.searching': 'looking for agents…',
 
+    'toast.waterDone': 'A glass of water. {n} today.',
+    'toast.coffeeDone': 'Coffee poured. {n} total.',
     'toast.canTaken': 'Can in hand. {n} waterings in it.',
     'toast.canTakenDry': 'Can in hand, and it is empty. Tap is on the right.',
     'toast.canBack': 'Can is back on its hook.',
@@ -1426,7 +1432,7 @@ function plural(s, n) {
 // Returns the key when there is no translation: a missing string is then visible
 // to the eye in the office rather than quietly substituted in the other language.
 export function t(key, vars) {
-  let s = (DICT[LANG] && DICT[LANG][key]) ?? (DICT.ru && DICT.ru[key]) ?? key;
+  let s = (DICT[LANG] && DICT[LANG][key]) ?? (DICT.en && DICT.en[key]) ?? key;
   if (!vars) return s;
   if (typeof vars.n === 'number') s = plural(s, vars.n);
   return s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? String(vars[k]) : m));
@@ -1467,8 +1473,8 @@ const wanted = (l, k) => {
   const f = FORMS.find((s) => k.endsWith('.' + s));
   return !f || f === 'many' || new Intl.PluralRules(l).resolvedOptions().pluralCategories.includes(f);
 };
-const missing = LANGS.flatMap((l) => Object.keys(DICT.ru).filter((k) => DICT[l][k] == null && wanted(l, k)).map((k) => `${l}:${k}`));
-if (missing.length) console.warn('i18n: нет перевода —', missing.join(', '));
+const missing = LANGS.flatMap((l) => Object.keys(DICT.en).filter((k) => DICT[l][k] == null && wanted(l, k)).map((k) => `${l}:${k}`));
+if (missing.length) console.warn('i18n: missing translation —', missing.join(', '));
 
 // A module's dictionary is poured into the common one: the same tr will look it
 // up, so a module does not start a translation of its own and does not argue with

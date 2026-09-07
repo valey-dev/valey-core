@@ -30,9 +30,9 @@ export async function findCli() {
     const { stdout } = await run('/bin/sh', ['-lc', 'command -v claude'], { timeout: 5000 });
     const p = stdout.trim().split('\n')[0];
     if (p) cli.path = p;
-    else { cli.error = 'claude не найден в PATH'; cli.errorKey = 'err.noCli'; }
+    else { cli.error = 'claude was not found in PATH'; cli.errorKey = 'err.noCli'; }
   } catch {
-    cli.error = 'claude не найден в PATH'; cli.errorKey = 'err.noCli';
+    cli.error = 'claude was not found in PATH'; cli.errorKey = 'err.noCli';
   }
   return cli;
 }
@@ -83,8 +83,8 @@ export async function deliveryStatus() {
     // the key travels next to the Russian text: the office is bilingual, the server is not
     hintKey: !c.path ? 'err.installCli' : out ? 'err.loggedOut' : null,
     hint: !c.path
-      ? 'Установи CLI: npm install -g @anthropic-ai/claude-code (или укажи путь в CLAUDE_BIN)'
-      : out ? 'CLI разлогинен — в терминале claude auth login' : null,
+      ? 'Install the CLI: npm install -g @anthropic-ai/claude-code (or set CLAUDE_BIN)'
+      : out ? 'The CLI is signed out; run claude auth login in a terminal' : null,
   };
 }
 
@@ -93,8 +93,8 @@ export function isBusy(agentId) { return busy.has(agentId); }
 // task is mutated in place so the game can watch it move through its states
 export async function deliver(task, agent, mode = 'default') {
   const c = await findCli();
-  if (!c.path) { task.state = 'failed'; task.error = 'claude CLI не установлен'; task.errorKey = 'err.notInstalled'; return task; }
-  if (busy.has(agent.id)) { task.state = 'failed'; task.error = 'этому агенту уже что-то отправляется'; task.errorKey = 'err.busy'; return task; }
+  if (!c.path) { task.state = 'failed'; task.error = 'claude CLI is not installed'; task.errorKey = 'err.notInstalled'; return task; }
+  if (busy.has(agent.id)) { task.state = 'failed'; task.error = 'another message is already being sent to this agent'; task.errorKey = 'err.busy'; return task; }
 
   const args = ['--resume', agent.id, '-p', task.text];
   if (MODES.has(mode) && mode !== 'default') args.push('--permission-mode', mode);
@@ -131,14 +131,14 @@ export async function deliver(task, agent, mode = 'default') {
         task.mode = mode;
         if (mode !== 'bypassPermissions' && BLOCKED_RE.test(task.reply)) {
           task.blocked = true;
-          console.log('[deliver] упёрся в права, режим был:', mode);
+          console.log('[deliver] blocked on permissions; mode was:', mode);
         }
       } else {
-        const raw = (err.trim() || out.trim() || `claude вышел с кодом ${code}`);
+        const raw = (err.trim() || out.trim() || `claude exited with code ${code}`);
         const notAuthed = /not logged in|please run \/login/i.test(raw);
         task.errorKey = notAuthed ? 'err.notAuthed' : null;
         task.error = notAuthed
-          ? 'CLI не авторизован: открой терминал, запусти claude и выполни /login (или claude setup-token)'
+          ? 'CLI is not authorized: open a terminal, start claude, and run /login (or claude setup-token)'
           : raw.slice(0, 500);
         task.state = 'failed';
       }

@@ -30,22 +30,22 @@ addDict({
 
 let bad = 0;
 const ok = (what, cond, got) => {
-  if (cond) { console.log('  ок  ', what); return; }
-  bad++; console.log('  ПЛОХО', what, got !== undefined ? `— получено: ${JSON.stringify(got)}` : '');
+  if (cond) { console.log('  ok  ', what); return; }
+  bad++; console.log('  FAIL', what, got !== undefined ? `— received: ${JSON.stringify(got)}` : '');
 };
 
 // ------------------------------------------------------------------ Russian
 const ru = (n) => t('test.screens', { n });
-ok('1 — единственное', ru(1) === '1 экран', ru(1));
-ok('2 — как в макете', ru(2) === '2 экрана', ru(2));
-ok('4 — ещё «экрана»', ru(4) === '4 экрана', ru(4));
-ok('5 — «экранов»', ru(5) === '5 экранов', ru(5));
-ok('7 — «экранов»', ru(7) === '7 экранов', ru(7));
-ok('0 — «экранов», а не «экран»', ru(0) === '0 экранов', ru(0));
+ok('ru: 1 uses the singular form', ru(1) === '1 экран', ru(1));
+ok('ru: 2 uses the few form', ru(2) === '2 экрана', ru(2));
+ok('ru: 4 still uses the few form', ru(4) === '4 экрана', ru(4));
+ok('ru: 5 uses the many form', ru(5) === '5 экранов', ru(5));
+ok('ru: 7 uses the many form', ru(7) === '7 экранов', ru(7));
+ok('ru: 0 uses many rather than singular', ru(0) === '0 экранов', ru(0));
 // 11 and 21 are the whole reason Intl is here rather than n % 10
-ok('11 — «экранов», хотя кончается на 1', ru(11) === '11 экранов', ru(11));
-ok('21 — «экран», хотя больше десяти', ru(21) === '21 экран', ru(21));
-ok('111 — «экранов»', ru(111) === '111 экранов', ru(111));
+ok('ru: 11 uses many despite ending in 1', ru(11) === '11 экранов', ru(11));
+ok('ru: 21 uses singular despite exceeding ten', ru(21) === '21 экран', ru(21));
+ok('ru: 111 uses many', ru(111) === '111 экранов', ru(111));
 
 // ------------------------------------------------------------------ English
 setLang('en');
@@ -59,48 +59,48 @@ setLang('ru');
 // Russian only for a Russian device, English for everything else. The office was
 // hard-coded to Russian until 6 September 2026, which read as a bug to everybody
 // who did not speak it — and it is the first thing a stranger sees.
-ok('русское устройство — русский офис', pickLang(['ru-RU', 'en-US']) === 'ru');
-ok('регион не решает: ru-KZ — тоже русский', pickLang(['ru-KZ']) === 'ru');
-ok('РЕГИСТР тега не решает', pickLang(['RU']) === 'ru');
-ok('английское устройство — английский офис', pickLang(['en-GB']) === 'en');
+ok('a Russian device gets a Russian office', pickLang(['ru-RU', 'en-US']) === 'ru');
+ok('the region does not matter: ru-KZ is Russian', pickLang(['ru-KZ']) === 'ru');
+ok('language-tag case does not matter', pickLang(['RU']) === 'ru');
+ok('an English device gets an English office', pickLang(['en-GB']) === 'en');
 // A third language the office does not speak must land on English, not on the
 // author's own language, and not on a key instead of text.
-ok('язык, которого офис не знает, — английский', pickLang(['de-DE', 'fr']) === 'en', pickLang(['de-DE', 'fr']));
-ok('порядок списка уважается: первым идёт то, что человек поставил первым',
+ok('an unsupported language falls back to English', pickLang(['de-DE', 'fr']) === 'en', pickLang(['de-DE', 'fr']));
+ok('the preferred-language order is respected',
   pickLang(['en-US', 'ru-RU']) === 'en');
-ok('русский вторым в списке всё же выбирается, если первого офис не знает',
+ok('Russian is selected second when the first language is unsupported',
   pickLang(['de', 'ru']) === 'ru');
-ok('устройства нет вовсе — английский', pickLang([]) === 'en' && pickLang(undefined) === 'en');
-ok('deviceLang отвечает одним из двух языков офиса', ['ru', 'en'].includes(deviceLang()), deviceLang());
+ok('no device locale falls back to English', pickLang([]) === 'en' && pickLang(undefined) === 'en');
+ok('deviceLang returns one of the supported languages', ['ru', 'en'].includes(deviceLang()), deviceLang());
 
 // 'auto' is what a fresh settings file says, and it must never reach the screen
 // as a language of its own: it resolves to the device, like anything unknown.
 setLang('auto');
 const selfOf = { ru: 'русский', en: 'English' };
-ok('«auto» — это язык устройства, а не третий язык', t('lang.self') === selfOf[deviceLang()], t('lang.self'));
-ok('«auto» ставит язык в документ', globalThis.document.documentElement.lang === deviceLang(),
+ok('auto resolves to the device language rather than a third language', t('lang.self') === selfOf[deviceLang()], t('lang.self'));
+ok('auto writes the resolved language to the document', globalThis.document.documentElement.lang === deviceLang(),
   globalThis.document.documentElement.lang);
 // index.html carries no title of its own since 6 September 2026, so the very
 // first setLang has to write one even when it changed nothing.
 globalThis.document.title = '';
 setLang('auto');
-ok('заголовок вкладки пишется и когда язык не менялся', globalThis.document.title === t('doc.title'),
+ok('the title is written even when the language did not change', globalThis.document.title === t('doc.title'),
   globalThis.document.title);
 // Garbage in the settings file lands where 'auto' does, not on a blank office.
-setLang('клингонский');
-ok('неизвестный язык в настройках — тоже язык устройства', t('lang.self') === selfOf[deviceLang()], t('lang.self'));
+setLang('klingon');
+ok('an unknown setting also resolves to the device language', t('lang.self') === selfOf[deviceLang()], t('lang.self'));
 setLang('ru');
 
 // ------------------------------------------------ strings without forms are left alone
-ok('строка без | остаётся собой', t('cam.corridor', { n: 2 }) === 'коридор 2', t('cam.corridor', { n: 2 }));
-ok('подстановка без n работает', t('board.title', { room: 'AI valey' }) === 'Доска · AI valey');
-ok('словарь полон, и формы, которых у языка нет, не считаются пропуском', !warned.some((w) => w.includes('нет перевода')), warned);
-ok('нет ключа — виден ключ', t('нетТакого') === 'нетТакого');
+ok('a string without forms remains unchanged', t('cam.corridor', { n: 2 }) === 'коридор 2', t('cam.corridor', { n: 2 }));
+ok('substitution works without n', t('board.title', { room: 'AI valey' }) === 'Доска · AI valey');
+ok('the dictionary is complete without requiring unsupported forms', !warned.some((w) => w.includes('missing translation')), warned);
+ok('a missing key remains visible', t('missingKey') === 'missingKey');
 
 // The form separator must never reach the screen for any n — that is what the
 // breakage would look like in the office: "one:1 экран|few:1 экрана|…" right
 // there in the card.
-ok('разделитель форм не протекает наружу', [0, 1, 2, 5, 21, 100].every((n) => !ru(n).includes('|')));
+ok('the form separator never leaks into output', [0, 1, 2, 5, 21, 100].every((n) => !ru(n).includes('|')));
 
-console.log(bad ? `\nупало проверок: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nfailed checks: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

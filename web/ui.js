@@ -86,7 +86,7 @@ export function renderHud() {
   const z = S.zoom || { dev: 1, auto: true, tight: false };
   const place = w.label ? ` · ${esc(w.label)}` : '';
   el.hud.innerHTML = `<b>VALEY</b> · ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}
-    <span class="chip sky" title="${tr('hud.skyTitle', { source: w.source === 'выдумана' ? tr('sky.made') : esc(w.source || '') })}">${WEATHER_ICON[w.kind] || '·'} ${tr('sky.' + w.kind)}${temp}${place}</span>
+    <span class="chip sky" title="${tr('hud.skyTitle', { source: w.source === 'procedural' ? tr('sky.made') : w.source === 'real' ? tr('sky.realSource') : esc(w.source || '') })}">${WEATHER_ICON[w.kind] || '·'} ${tr('sky.' + w.kind)}${temp}${place}</span>
     ${room}<span class="chip work" title="${tr('hud.workTitle')}">⌨ ${working}</span>${waiting
       // A bare number in the corner is read as «three messages» and pressed at:
       // on 6 September 2026 it was mistaken for the pager badge, and H — which
@@ -1894,7 +1894,7 @@ const TONE = { floor1: '#c9a06a', bible: '#c9a06a', art: '#d97b6c', easel: '#d97
   board: '#9fe0a8', gittree: '#9fe0a8', task: '#ffd166', feed: '#ffd166', cctv: '#8fbcff', dossier: '#8fbcff',
   radio: '#c39bff', dress: '#f6e3c0', agents: '#e0a06a', floor: '#e0a06a', talk: '#9fe0a8', meet: '#9fe0a8',
   door: '#8c7660', guest: '#8c7660' };
-const L = (v) => (v ? (v[lang()] || v.ru) : '');
+const L = (v) => (v ? (v[lang()] || v.en) : '');
 // own is lit; office/floor is dim with the tier name; room is a free branch
 // whose folder is absent (radio without modules/); ghost is "in a year."
 const treeState = (n) => (n.tier === 'more' ? 'ghost'

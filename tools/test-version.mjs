@@ -22,11 +22,11 @@ const git = (...a) => execFileSync('git', ['-C', ROOT, ...a], { encoding: 'utf8'
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, got === undefined ? '' : '→ ' + got); }
+  else { bad += 1; console.log('FAIL  |', name, got === undefined ? '' : '→ ' + got); }
 };
 
 const version = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
-ok('версия в package.json читается', /^\d+\.\d+\.\d+$/.test(version), version);
+ok('the version in package.json is read', /^\d+\.\d+\.\d+$/.test(version), version);
 
 // The tag that HEAD can actually see, not the newest one in the repository. A
 // branch a release behind main is not broken — it simply has not pulled — and a
@@ -37,10 +37,10 @@ try { reachable = git('describe', '--tags', '--abbrev=0', '--match', 'v[0-9]*');
 
 if (!reachable) {
   // A repository before its first release is not broken, it is young.
-  console.log('ok    | тегов ещё нет — сравнивать не с чем');
+console.log('ok    | no tags yet; there is nothing to compare');
 } else {
   const newest = reachable.replace(/^v/, '');
-  ok('тег, который видит HEAD, и package.json говорят одно и то же', newest === version,
+  ok('the tag that sees HEAD and package.json say the same thing', newest === version,
     `тег v${newest}, package.json ${version} — либо тег ушёл без релизного коммита, либо коммит не запушен`);
 }
 
@@ -53,8 +53,8 @@ const unreachable = all.filter((t) => {
   try { git('merge-base', '--is-ancestor', t, 'HEAD'); return false; } catch { return true; }
 });
 if (unreachable.length) {
-  console.log(`      | к сведению: ${unreachable.length} тег(ов) не видно с этой ветки — ${unreachable.slice(0, 3).join(', ')}`);
+console.log(`      | note: ${unreachable.length} tag(s) are not visible from this branch — ${unreachable.slice(0, 3).join(', ')}`);
 }
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

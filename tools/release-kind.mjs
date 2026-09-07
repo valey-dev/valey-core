@@ -39,7 +39,7 @@ export function classify(commit) {
 // `version` is the current one, because "breaking" answers differently below 1.0:
 // semver spends the zero major on exactly this, and the rulebook keeps that.
 export function pickKind(commits, version) {
-  // The hash rides along: the caller writes a «Ломает» block out of these, and a
+  // The hash rides along: the caller writes a "Breaking changes" block out of these, and a
   // changelog entry without a hash cannot be looked up.
   const parsed = commits.map((c) => ({ ...classify(c), hash: typeof c === 'string' ? null : c.hash }));
   const feats = parsed.filter((c) => c.type === 'feat');
@@ -53,25 +53,25 @@ export function pickKind(commits, version) {
   // by the time anybody notices, the only fix left is to admit the count.
   if (feats.length > 1) {
     warnings.push(
-      `в диапазоне ${feats.length} фич — по правилу это ${feats.length} миноров, ` +
-      `значит ${feats.length - 1} релиз(ов) не выпущено вовремя. ` +
-      'Разряд ниже правды: режется один минор на всё.');
+      `the range contains ${feats.length} features, which should be ${feats.length} minor releases; ` +
+      `${feats.length - 1} release(s) were therefore missed. ` +
+      'The version understates reality: one minor is being cut for all of them.');
   }
 
   if (breaking.length) {
     // Below 1.0 a breaking change still costs a minor — the number cannot carry
-    // the news, so the changelog has to. The caller writes the «Ломает» block;
+    // the news, so the changelog has to. The caller writes the "Breaking changes" block;
     // here we only insist that it is owed.
     if (zero) {
       return {
         kind: 'minor', breaking, feats, fixes, warnings,
-        why: `ломающих изменений ${breaking.length}, но мажор нулевой — по semver это minor`,
+        why: `${breaking.length} breaking change(s), but the major is zero, so semver makes this minor`,
         needsBreakingBlock: true,
       };
     }
     return {
       kind: 'major', breaking, feats, fixes, warnings,
-      why: `ломающих изменений ${breaking.length}`,
+      why: `${breaking.length} breaking change(s)`,
       needsBreakingBlock: true,
     };
   }
@@ -79,13 +79,13 @@ export function pickKind(commits, version) {
   if (feats.length) {
     return {
       kind: 'minor', breaking, feats, fixes, warnings,
-      why: `фич ${feats.length}`, needsBreakingBlock: false,
+      why: `${feats.length} feature(s)`, needsBreakingBlock: false,
     };
   }
   if (fixes.length) {
     return {
       kind: 'patch', breaking, feats, fixes, warnings,
-      why: `починок и ускорений ${fixes.length}, ничего нового`,
+      why: `${fixes.length} fix(es) or performance change(s), nothing new`,
       needsBreakingBlock: false,
     };
   }
@@ -93,7 +93,7 @@ export function pickKind(commits, version) {
   // Other tells a reader nothing. Not an error — just not a release on its own.
   return {
     kind: null, breaking, feats, fixes, warnings,
-    why: 'в диапазоне нет ни feat, ни fix, ни perf — выпускать нечего',
+    why: 'the range contains no feat, fix, or perf commits, so there is nothing to release',
     needsBreakingBlock: false,
   };
 }
@@ -108,16 +108,16 @@ export function check(asked, picked) {
     // Nothing visible in the range: a deliberate `patch` is fine — that is how a
     // release made only of refactors gets a number when somebody wants one.
     return asked === 'patch'
-      ? { ok: true, note: 'в диапазоне нет видимых изменений — patch по твоему слову' }
-      : { ok: false, note: `${picked.why}: ${asked} тут не за что ставить` };
+      ? { ok: true, note: 'the range has no visible changes; cutting a patch by explicit request' }
+      : { ok: false, note: `${picked.why}: there is no reason to cut ${asked}` };
   }
   if (asked === picked.kind) return { ok: true, note: null };
   if (ORDER[asked] < ORDER[picked.kind]) {
     return {
       ok: false,
-      note: `диапазон просит ${picked.kind} (${picked.why}), а ты сказал ${asked} — ` +
-        'разряд занижен, это ровно та ошибка, ради которой проверка и стоит',
+      note: `the range requires ${picked.kind} (${picked.why}), but ${asked} was requested; ` +
+        'the version is understated, which is exactly what this check prevents',
     };
   }
-  return { ok: true, note: `диапазон просит ${picked.kind} (${picked.why}), режется ${asked} — разряд завышен сознательно` };
+  return { ok: true, note: `the range requires ${picked.kind} (${picked.why}); cutting ${asked} is a deliberate overstatement` };
 }

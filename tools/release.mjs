@@ -50,11 +50,11 @@ const catchUp = argv.includes('--catch-up');
 // first argument is taken only when it is not a flag.
 const asked = argv.find((a) => !a.startsWith('--')) || null;
 if (asked && !['major', 'minor', 'patch'].includes(asked))
-  die(`не разряд: ${asked}. Ожидается major, minor, patch — или ничего, тогда решает диапазон`);
-if (dry && ship) die('--dry и --ship вместе не имеют смысла');
+  die(`invalid release kind: ${asked}. Expected major, minor, patch, or nothing to infer it from the range`);
+if (dry && ship) die('--dry and --ship cannot be used together');
 
 // A dirty tree is somebody else's edits landing in the release commit. Better to stop.
-if (!dry && git('status', '--porcelain')) die('дерево грязное, сначала закоммить или спрячь');
+if (!dry && git('status', '--porcelain')) die('the working tree is dirty; commit or stash it first');
 
 const pkgPath = path.join(ROOT, 'package.json');
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
@@ -74,14 +74,14 @@ try { range = gitQuiet('describe', '--tags', '--abbrev=0', '--match', 'v[0-9]*')
 const commits = git('log', range, '--no-merges', '--format=%h%x00%s%x00%b%x1e')
   .split('\x1e').map((r) => r.replace(/^\n/, '')).filter((r) => r.trim())
   .map((r) => { const [hash, subject, body] = r.split('\0'); return { hash, subject, body }; });
-if (!commits.length) die(`после ${range.split('..')[0]} нет коммитов`);
+if (!commits.length) die(`there are no commits after ${range.split('..')[0]}`);
 
 // The range decides; the argument is only allowed to agree with it.
 const picked = pickKind(commits, pkg.version);
 const verdict = check(asked, picked);
 if (!verdict.ok) die(verdict.note);
 const kind = asked || picked.kind;
-if (!kind) die(`${picked.why}. Если релиз всё же нужен — скажи patch словом`);
+if (!kind) die(`${picked.why}. If a release is still required, explicitly request patch`);
 // One accepted feature is one minor, so more than one in a range means a release
 // was not cut when it was earned. Until 5 September 2026 this only printed a
 // warning and cut anyway: v0.10.0 went out carrying five features from two
@@ -90,20 +90,20 @@ if (!kind) die(`${picked.why}. Если релиз всё же нужен — с
 // The dry run refuses too, on purpose: «what would happen» has to include «it
 // would not». A guard you only meet on the real run is a guard you meet too late.
 if (picked.feats.length > 1 && !catchUp) {
-  die(`в диапазоне ${picked.feats.length} фич, а по правилу одна принятая фича — один минор.\n` +
-    '  Значит релиз пропущен. Если догоняем осознанно — повтори с --catch-up,\n' +
-    '  и это уедет одним минором, как сейчас и происходит.');
+  die(`the range contains ${picked.feats.length} features, while one accepted feature should produce one minor release.\n` +
+    '  A release was therefore missed. To catch up deliberately, repeat with --catch-up;\n' +
+    '  they will ship together in one minor release.');
 }
-for (const w of picked.warnings) console.log('ВНИМАНИЕ: ' + w + '\n');
-if (verdict.note) console.log('ВНИМАНИЕ: ' + verdict.note + '\n');
-if (!asked) console.log(`разряд выбран по диапазону: ${kind} — ${picked.why}\n`);
+for (const w of picked.warnings) console.log('WARNING: ' + w + '\n');
+if (verdict.note) console.log('WARNING: ' + verdict.note + '\n');
+if (!asked) console.log(`release kind inferred from range: ${kind} — ${picked.why}\n`);
 
 const next = kind === 'major' ? `${maj + 1}.0.0`
   : kind === 'minor' ? `${maj}.${min + 1}.0`
   : `${maj}.${min}.${pat + 1}`;
 const tag = 'v' + next;
 
-if (git('tag', '-l', tag)) die(`тег ${tag} уже есть`);
+if (git('tag', '-l', tag)) die(`tag ${tag} already exists`);
 
 const TYPES = [
   // The headings are English from 2 September 2026: the entries themselves are
@@ -140,7 +140,7 @@ const lines = [`## ${tag} — ${date}`, ''];
 // Russian on purpose: it is a warning to the person updating, not a changelog
 // entry, and it must not read as one more line in the list.
 if (picked.needsBreakingBlock) {
-  lines.push('### Ломает', '');
+  lines.push('### Breaking changes', '');
   for (const c of picked.breaking)
     lines.push(`- ${c.scope ? `**${c.scope}:** ` : ''}${c.text}${c.hash ? ` (${c.hash})` : ''}`);
   lines.push('');
@@ -161,8 +161,8 @@ if (other.length) {
 const section = lines.join('\n');
 
 console.log(section);
-console.log(`— ${commits.length} коммитов, из них без раздела ${other.length}`);
-if (dry) { console.log('--dry: ничего не записано'); process.exit(0); }
+console.log(`— ${commits.length} commits, ${other.length} without a section`);
+if (dry) { console.log('--dry: nothing was written'); process.exit(0); }
 
 // A release is a tag on `main` — nothing merges there that has not been accepted,
 // so there is no other branch a version can honestly come from. Cutting one on a
@@ -177,30 +177,30 @@ const head = git('rev-parse', 'HEAD');
 const mainAt = (() => { try { return gitQuiet('rev-parse', 'origin/main'); } catch { return ''; } })();
 if (mainAt) {
   if (head !== mainAt) {
-    die('релиз режется с того коммита, на котором стоит origin/main.\n' +
-      `  здесь HEAD ${head.slice(0, 7)}, а origin/main ${mainAt.slice(0, 7)} — сначала слей и подтяни.`);
+    die('a release must be cut from the commit pointed to by origin/main.\n' +
+      `  HEAD is ${head.slice(0, 7)}, while origin/main is ${mainAt.slice(0, 7)}; merge and pull first.`);
   }
 } else {
   // No remote at all — a young clone. Then the branch name is the only signal left.
   const branch = git('rev-parse', '--abbrev-ref', 'HEAD');
-  if (branch !== 'main') die(`origin не настроен, а ветка ${branch} — релиз режется на main`);
+  if (branch !== 'main') die(`origin is not configured and the current branch is ${branch}; releases are cut on main`);
 }
 
 // The stands run before anything is written, not after: this is the last moment
 // the release commit is still cheap to change. `--ship` pushes, and a pushed
 // commit is not free to rewrite.
 if (ship) {
-  console.log('\nстенды перед пушем:');
+  console.log('\ntests before push:');
   // A repository without a runner is not a repository without checks — it is one
   // whose checks are called otherwise. Saying so beats pretending they ran.
   const runner = path.join(ROOT, 'tools/run-tests.mjs');
   if (!existsSync(runner)) {
-    console.log('  стендов у этого репозитория нет — прогонять нечего');
+    console.log('  this repository has no tests to run');
   } else {
   const t = spawnSync(process.execPath, [runner],
     { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
   const tail = (t.stdout || '').trim().split('\n').slice(-3).join('\n');
-  if (t.status !== 0) die('стенды не прошли — релиз не режется:\n' + tail);
+  if (t.status !== 0) die('tests failed; the release will not be cut:\n' + tail);
   console.log(tail + '\n');
   }
 }
@@ -211,22 +211,22 @@ writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
 const changelogPath = path.join(ROOT, 'CHANGELOG.md');
 const changelog = readFileSync(changelogPath, 'utf8');
 const at = changelog.indexOf('\n## ');
-if (at < 0) die('в CHANGELOG.md нет ни одного раздела ## — некуда вставлять');
+if (at < 0) die('CHANGELOG.md has no ## section to insert into');
 writeFileSync(changelogPath,
   changelog.slice(0, at + 1) + section + changelog.slice(at + 1));
 
 git('add', 'package.json', 'CHANGELOG.md');
 git('commit', '-m', `chore(release): ${tag}`);
 git('tag', '-a', tag, '-m', tag);
-console.log(`\nготово: ${tag} на ${git('rev-parse', '--short', 'HEAD')}`);
+console.log(`\ndone: ${tag} at ${git('rev-parse', '--short', 'HEAD')}`);
 // The push and the release page are two steps and both are named here. Until
 // 5 September 2026 only the first one was: the project had three tags and no
 // releases on GitHub, and everybody kept calling the tags releases. The notes
 // existed the whole time — they just never left the repository.
 if (!ship) {
-  console.log(`пуш — отдельно:\n  git push origin HEAD:main ${tag}`);
-  console.log(`и следом страница релиза из этой же секции:\n  node tools/gh-release.mjs ${tag}`);
-  console.log(`или всё сразу в следующий раз:\n  npm run ship`);
+  console.log(`push separately:\n  git push origin HEAD:main ${tag}`);
+  console.log(`then create the release page from the same section:\n  node tools/gh-release.mjs ${tag}`);
+  console.log(`or do both next time:\n  npm run ship`);
 }
 
 // A minor with no video is a broken rule rather than a detail: that is how
@@ -242,9 +242,9 @@ if (next.endsWith('.0') && ownRepo) {
     const out = execFileSync(process.execPath, [fileURLToPath(new URL('script.mjs', import.meta.url)), tag],
       { encoding: 'utf8' });
     console.log('\n' + out.trim());
-    console.log(`\nМинорный релиз — значит ролик. Черновик уже лежит, править его\nлегче, чем начинать с нуля. Проход снимается одной командой.`);
+    console.log(`\nA minor release calls for a video. A draft is ready; editing it is\neasier than starting from scratch. The walkthrough records with one command.`);
   } catch (err) {
-    console.log('\nчерновик сценария не собрался: ' + (err.stderr || err.message).toString().trim());
+    console.log('\nscript draft generation failed: ' + (err.stderr || err.message).toString().trim());
   }
 }
 
@@ -260,19 +260,19 @@ if (next.endsWith('.0') && ownRepo) {
 // publishing and would belong to a person, not to a script.
 if (ship) {
   const remote = (() => { try { return git('remote', 'get-url', 'origin'); } catch { return ''; } })();
-  if (!remote) die(`тег ${tag} на месте, но origin не настроен — пушить некуда`);
-  console.log(`\nпуш в origin (${remote}):`);
+  if (!remote) die(`tag ${tag} exists locally, but origin is not configured; there is nowhere to push`);
+  console.log(`\npushing to origin (${remote}):`);
   git('push', 'origin', 'HEAD:main', tag);
-  console.log(`  main и ${tag} уехали`);
+  console.log(`  main and ${tag} pushed`);
 
-  console.log('\nстраница релиза:');
+  console.log('\nrelease page:');
   const r = spawnSync(process.execPath, [path.join(ROOT, 'tools/gh-release.mjs'), tag],
     { cwd: ROOT, stdio: 'inherit' });
   // The tag is already pushed by now, so a failure here is not fatal to the
   // release — it is one command away from being finished, and saying which one
   // beats a stack trace.
   if (r.status !== 0) {
-    console.log(`\nстраница не собралась. Тег ${tag} уже в origin, доделать:\n  node tools/gh-release.mjs ${tag}`);
+    console.log(`\nrelease page creation failed. Tag ${tag} is already on origin; finish with:\n  node tools/gh-release.mjs ${tag}`);
     process.exit(1);
   }
 }

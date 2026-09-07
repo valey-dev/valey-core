@@ -74,7 +74,7 @@ def svg(path):
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" '
         f'shape-rendering="crispEdges">{body}</svg>')
 
-print('png32:', png('web/favicon.png', 2), 'байт')
-print('png128:', png('web/favicon-128.png', 8), 'байт')
+print('png32:', png('web/favicon.png', 2), 'bytes')
+print('png128:', png('web/favicon-128.png', 8), 'bytes')
 svg('web/favicon.svg')
-print('svg:', len(open('web/favicon.svg').read()), 'байт')
+print('svg:', len(open('web/favicon.svg').read()), 'bytes')

@@ -42,7 +42,7 @@ export async function realWeather({ force = false } = {}) {
 
   fetchedAt = Date.now();
   inflight = pull(cfg.lat, cfg.lon, cfg.label)
-    .then((w) => { cache = w; console.log(`[weather] ${w.label}: код ${w.code}, ${w.temp}°`); return w; })
+    .then((w) => { cache = w; console.log(`[weather] ${w.label}: code ${w.code}, ${w.temp}°`); return w; })
     .catch((err) => {
       console.error('[weather]', err.message);
       cache = { enabled: true, label: cfg.label, lat: cfg.lat, lon: cfg.lon, error: err.message, at: Date.now() };
@@ -55,8 +55,9 @@ export async function realWeather({ force = false } = {}) {
 
 export function forgetWeather() { cache = null; fetchedAt = 0; }
 
-export async function geocode(q) {
-  const url = `${GEO}?name=${encodeURIComponent(q)}&count=6&language=ru&format=json`;
+export async function geocode(q, language = 'en') {
+  const lang = language === 'ru' ? 'ru' : 'en';
+  const url = `${GEO}?name=${encodeURIComponent(q)}&count=6&language=${lang}&format=json`;
   const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error('geocoding ' + res.status);
   const j = await res.json();

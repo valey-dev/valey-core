@@ -198,7 +198,7 @@ async function admitted(req) {
 }
 
 const forbidden = (res) => send(res, 403, {
-  error: 'смотреть можно, командовать нельзя',
+  error: 'viewing is allowed, control is not',
   errorKey: 'err.guest',
 });
 
@@ -336,7 +336,7 @@ async function readBody(req, max = BODY_MAX) {
   let size = 0;
   for await (const c of req) {
     size += c.length;
-    if (size > max) throw new BodyError(413, 'err.tooBig', 'слишком длинно');
+    if (size > max) throw new BodyError(413, 'err.tooBig', 'request body is too large');
     chunks.push(c);
   }
   return Buffer.concat(chunks).toString('utf8');
@@ -348,12 +348,12 @@ async function readBody(req, max = BODY_MAX) {
 // empty object, as before.
 async function readJson(req, max = BODY_MAX) {
   const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
-  if (type !== 'application/json') throw new BodyError(415, 'err.notJson', 'нужен application/json');
+  if (type !== 'application/json') throw new BodyError(415, 'err.notJson', 'application/json is required');
   const raw = await readBody(req, max);
   if (!raw.trim()) return {};
   let b;
-  try { b = JSON.parse(raw); } catch { throw new BodyError(400, 'err.badJson', 'не разобрать'); }
-  if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BodyError(400, 'err.badJson', 'ожидался объект');
+  try { b = JSON.parse(raw); } catch { throw new BodyError(400, 'err.badJson', 'invalid JSON'); }
+  if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BodyError(400, 'err.badJson', 'a JSON object is required');
   return b;
 }
 
@@ -429,7 +429,7 @@ export function createHandler() {
       }
       console.error('[http]', req.method, req.url, (e && e.stack) || e);
       try {
-        if (!res.headersSent) send(res, 500, { error: 'внутренняя ошибка', errorKey: 'err.internal' });
+        if (!res.headersSent) send(res, 500, { error: 'internal error', errorKey: 'err.internal' });
         else res.end();
       } catch { /* the socket is already closed */ }
     }
@@ -458,7 +458,7 @@ async function handle(req, res) {
     // learning that something lives at this address and merely refuses entry.
     return send(res, net.reason === 'closed' ? 404 : 401, net.reason === 'closed'
       ? { error: 'not found', errorKey: 'err.notFound' }
-      : { error: 'нужен токен', errorKey: 'err.needToken' });
+      : { error: 'a token is required', errorKey: 'err.needToken' });
   }
   // The token arrived in the address — remember it in a cookie and take it out
   // of the URL, so the secret does not stay in browser history and in the
@@ -478,14 +478,14 @@ async function handle(req, res) {
   // A foreign tab changes state only through a non-GET: it cannot read a GET
   // anyway, the same-origin rule keeps the answer from it.
   if (req.method !== 'GET' && req.method !== 'HEAD' && crossSite(req)) {
-    return send(res, 403, { error: 'запрос с чужой страницы', errorKey: 'err.crossSite' });
+    return send(res, 403, { error: 'request came from another page', errorKey: 'err.crossSite' });
   }
 
   // The gate stands before every handler rather than inside each: that way a
   // new endpoint is closed by default rather than forgotten. Static files are
   // not gated — the page has to be shown if only to say "a code is needed".
   if (url.pathname.startsWith('/api/') && !OPEN.has(url.pathname) && !(await admitted(req))) {
-    return send(res, 403, { error: 'нужно приглашение', errorKey: 'err.needCode' });
+    return send(res, 403, { error: 'an invitation is required', errorKey: 'err.needCode' });
   }
 
   if (url.pathname === '/api/stream') {
@@ -530,10 +530,10 @@ async function handle(req, res) {
   // while": the request names one, and that is what the owner sees.
   if (url.pathname === '/api/access' && req.method === 'POST') {
     const guest = await guestOf(req);
-    if (!guest) return send(res, 403, { error: 'просить может гость', errorKey: 'err.guestOnly' });
+    if (!guest) return send(res, 403, { error: 'only a guest may ask', errorKey: 'err.guestOnly' });
     const b = await readJson(req);
     const agentId = String(b.agentId || '');
-    if (!agentId) return send(res, 400, { error: 'нужен agentId' });
+    if (!agentId) return send(res, 400, { error: 'agentId is required' });
     asks.set(askKey(guest.guest, agentId), {
       id: crypto.randomUUID().slice(0, 8),
       guestId: guest.guest, agentId,
@@ -549,7 +549,7 @@ async function handle(req, res) {
     if (!(await isOwner(req))) return forbidden(res);
     const b = await readJson(req);
     const ask = [...asks.values()].find((a) => a.id === b.id);
-    if (!ask) return send(res, 404, { error: 'этого запроса уже нет' });
+    if (!ask) return send(res, 404, { error: 'this request no longer exists' });
     if (b.yes) {
       if (!grants.has(ask.guestId)) grants.set(ask.guestId, new Set());
       grants.get(ask.guestId).add(ask.agentId);
@@ -637,8 +637,8 @@ async function handle(req, res) {
     const s = await getSettings();
     const invites = s.access.invites || [];
     const invite = invites.find((i) => i.code === String(b.code || ''));
-    if (!invite) return send(res, 403, { error: 'такого приглашения нет', errorKey: 'err.codeUnknown' });
-    if (invite.usedAt) return send(res, 403, { error: 'код уже использован', errorKey: 'err.codeUsed' });
+    if (!invite) return send(res, 403, { error: 'this invitation does not exist', errorKey: 'err.codeUnknown' });
+    if (invite.usedAt) return send(res, 403, { error: 'this code has already been used', errorKey: 'err.codeUsed' });
     invite.usedAt = Date.now();
     invite.guest = crypto.randomUUID();
     await patchSettings({ access: { ...s.access, invites } });
@@ -650,10 +650,10 @@ async function handle(req, res) {
   // nearby sees. No transcripts, no paths, no files are here, and none can be.
   if (url.pathname === '/api/here' && req.method === 'POST') {
     const raw = await readBody(req);
-    if (raw.length > 2000) return send(res, 413, { error: 'слишком длинно' });
+    if (raw.length > 2000) return send(res, 413, { error: 'request body is too large' });
     let b;
-    try { b = JSON.parse(raw); } catch { return send(res, 400, { error: 'не разобрать' }); }
-    if (!b || typeof b.id !== 'string' || !b.id) return send(res, 400, { error: 'нужен id' });
+    try { b = JSON.parse(raw); } catch { return send(res, 400, { error: 'invalid JSON' }); }
+    if (!b || typeof b.id !== 'string' || !b.id) return send(res, 400, { error: 'id is required' });
     const num = (v) => (Number.isFinite(v) ? Math.round(v) : 0);
     people.set(b.id.slice(0, 64), {
       id: b.id.slice(0, 64),
@@ -704,10 +704,10 @@ async function handle(req, res) {
     // consent, and only for the agent the consent was given about.
     const guest = await guestOf(req);
     if (guest && !granted(guest.guest, id)) {
-      return send(res, 403, { error: 'этот разговор не открыт', errorKey: 'err.notGranted' });
+      return send(res, 403, { error: 'this conversation is not open', errorKey: 'err.notGranted' });
     }
     const agent = last.agents.find((a) => a.id === id);
-    if (!agent) return send(res, 404, { error: 'такого агента нет в офисе', errorKey: 'err.noSuchAgent' });
+    if (!agent) return send(res, 404, { error: 'this agent is not in the office', errorKey: 'err.noSuchAgent' });
     return send(res, 200, { agent: { id, name: agent.name, title: agent.title }, messages: conversation(id) });
   }
 
@@ -725,7 +725,7 @@ async function handle(req, res) {
       const lying = resend
         ? outbox.find((t) => t.id === resend && t.agentId === agentId && t.state === 'note')
         : null;
-      if (resend && !lying) return send(res, 400, { error: 'этой записки уже нет на столе', errorKey: 'err.noteGone' });
+      if (resend && !lying) return send(res, 400, { error: 'this note is no longer on the desk', errorKey: 'err.noteGone' });
       const body = lying ? lying.text : text;
       if (!agentId || !body) return send(res, 400, { error: 'agentId and text required' });
       if (lying) outbox.splice(outbox.indexOf(lying), 1);
@@ -741,10 +741,10 @@ async function handle(req, res) {
       }
 
       const agent = last.agents.find((a) => a.id === agentId);
-      if (!agent) { task.state = 'failed'; task.error = 'агента уже нет в офисе'; task.errorKey = 'err.agentGone'; return send(res, 200, { ok: true, task }); }
+      if (!agent) { task.state = 'failed'; task.error = 'the agent is no longer in the office'; task.errorKey = 'err.agentGone'; return send(res, 200, { ok: true, task }); }
       const status = await deliveryStatus();
       if (!status.available) { task.state = 'failed'; task.error = status.hint; task.errorKey = status.hintKey; return send(res, 200, { ok: true, task, delivery: status }); }
-      if (isBusy(agentId)) { task.state = 'failed'; task.error = 'ему уже что-то отправляется'; task.errorKey = 'err.busy'; return send(res, 200, { ok: true, task }); }
+      if (isBusy(agentId)) { task.state = 'failed'; task.error = 'another message is already being sent to this agent'; task.errorKey = 'err.busy'; return send(res, 200, { ok: true, task }); }
 
       const { delivery } = await getSettings();
       const mode = MODES.has(wantedMode) ? wantedMode : delivery.mode;
@@ -800,7 +800,7 @@ async function handle(req, res) {
     if (!(await isOwner(req))) return forbidden(res);
     const b = await readJson(req);
     const done = answerPermit(String(b.id || ''), { decision: String(b.decision || ''), message: b.message });
-    if (!done) return send(res, 404, { error: 'этого запроса уже нет', errorKey: 'err.permitGone' });
+    if (!done) return send(res, 404, { error: 'this request no longer exists', errorKey: 'err.permitGone' });
     broadcastPermits();
     return send(res, 200, { ok: true, ...done, permits: permits() });
   }
@@ -833,7 +833,7 @@ async function handle(req, res) {
     const q = (url.searchParams.get('q') || '').trim();
     if (q.length < 2) return send(res, 200, { results: [] });
     try {
-      return send(res, 200, { results: await geocode(q) });
+      return send(res, 200, { results: await geocode(q, url.searchParams.get('lang')) });
     } catch (e) {
       return send(res, 502, { error: e.message });
     }
@@ -867,7 +867,7 @@ async function handle(req, res) {
     // path was guessed.
     const guest = await guestOf(req);
     if (guest && !owners.some((id) => granted(guest.guest, id))) {
-      return send(res, 403, { error: 'этот разговор не открыт', errorKey: 'err.notGranted' });
+      return send(res, 403, { error: 'this conversation is not open', errorKey: 'err.notGranted' });
     }
     try {
       const st = await fsp.stat(p);
@@ -922,10 +922,10 @@ async function handle(req, res) {
   // office must not be able to switch off other people's features. It lives as
   // long as the server does.
   if (url.pathname === '/api/stand/toggle') {
-    if (!process.env.VALEY_STAND) return send(res, 404, { error: 'стенда нет' });
+    if (!process.env.VALEY_STAND) return send(res, 404, { error: 'stand mode is not active' });
     if (!(await isOwner(req))) return forbidden(res);
     const body = await readJson(req);
-    if (!setModuleOff(body.id, !!body.off)) return send(res, 404, { error: 'нет такого модуля' });
+    if (!setModuleOff(body.id, !!body.off)) return send(res, 404, { error: 'no such module' });
     return send(res, 200, { ok: true, all: moduleAll() });
   }
 
@@ -992,7 +992,7 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
   if (external && !(boot.network || {}).token) {
     boot = await patchSettings({ network: { external: true, token: newToken() } });
-    console.log('Сетевой токен создан и записан в настройки офиса');
+    console.log('A network token was created and saved to the office settings');
   }
   const HOST = host || (external ? '0.0.0.0' : '127.0.0.1');
   const server = http.createServer(createHandler());
@@ -1008,26 +1008,26 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   // because the hook was talking to another port. So every office says out loud
   // whether it is the one being asked.
   const canon = Number((s.network || {}).port) || 5177;
-  if (port === canon) console.log('  вопросы Claude Code приходят сюда (канонический порт)');
-  else console.log(`  вопросы Claude Code идут не сюда, а на ${canon} — этот офис их не получит`);
+  if (port === canon) console.log('  Claude Code questions arrive here (canonical port)');
+  else console.log(`  Claude Code questions go to ${canon}; this office will not receive them`);
   if (external) {
     const t = (boot.network || {}).token || '';
-    console.log(`  открыт наружу (${HOST}) — с другого устройства один раз с токеном:`);
-    console.log(`  http://<адрес-этой-машины>:${port}/?token=${t || '<см. настройки>'}`);
+    console.log(`  exposed on ${HOST}; from another device, open once with a token:`);
+    console.log(`  http://<this-machine-address>:${port}/?token=${t || '<see settings>'}`);
   }
-  if (mods.length) console.log(`  модули: ${mods.map(m => m.id).join(', ')}`);
+  if (mods.length) console.log(`  modules: ${mods.map(m => m.id).join(', ')}`);
   // A module that failed to load must say so here: otherwise a missing feature
   // gets investigated by eye instead of by one line in the log.
-  for (const e of moduleErrors()) console.log(`  модуль не встал: ${e.id} — ${e.error}`);
+  for (const e of moduleErrors()) console.log(`  module failed to start: ${e.id} — ${e.error}`);
   // The owner link is printed every time, not only in shared mode: open it once
   // and you stay the owner in this browser even after the office becomes shared.
   // Looking it up in .settings.json later is an extra step at a bad moment.
-  console.log(`  хозяин: http://localhost:${port}/#owner=${token}`);
+  console.log(`  owner: http://localhost:${port}/#owner=${token}`);
   if (s.access.mode === 'private') {
-    console.log('  режим: private — всё с этой машины считается хозяйским.');
-    console.log('  Перед тем как открыть офис наружу, переключите на shared.');
+    console.log('  mode: private — everything from this machine is treated as the owner.');
+    console.log('  Switch to shared before exposing the office to the network.');
   } else {
-    console.log('  режим: shared — командовать может только тот, кто предъявил токен.');
+    console.log('  mode: shared — only a client presenting the token may control the office.');
   }
   tick();
   peopleTick();

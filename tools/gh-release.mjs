@@ -39,7 +39,7 @@ const asked = args.find((a) => !a.startsWith('--'));
 // would otherwise claim to be the newest.
 const tags = git('tag', '-l', 'v*').split('\n').filter(Boolean)
   .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-if (!tags.length) die('в репозитории нет тегов v*');
+if (!tags.length) die('the repository has no v* tags');
 
 // The section of CHANGELOG.md for one version: from its heading to the next one.
 // Missing is a hard stop rather than an empty release — an empty release page is
@@ -76,25 +76,25 @@ try {
   repo = execFileSync('gh', ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'],
     { cwd: ROOT, encoding: 'utf8' }).trim();
 } catch {
-  die('gh не отвечает: не установлен, не авторизован или это не репозиторий GitHub');
+  die('gh did not respond: it is missing, unauthorized, or this is not a GitHub repository');
 }
 
 const wanted = all ? tags : [asked || tags[tags.length - 1]];
 let made = 0, skipped = 0;
 
 for (const tag of wanted) {
-  if (!tags.includes(tag)) die(`тега ${tag} в репозитории нет`);
+  if (!tags.includes(tag)) die(`tag ${tag} does not exist in the repository`);
 
   // A release for a tag nobody else can fetch would point at nothing. The tag has
   // to be on the remote first — that is a separate, deliberate step.
   const onRemote = execFileSync('git', ['-C', ROOT, 'ls-remote', '--tags', 'origin', `refs/tags/${tag}`],
     { encoding: 'utf8' }).trim();
-  if (!onRemote) { console.log(`${tag}: тега нет на origin — сначала push, потом релиз`); skipped++; continue; }
+  if (!onRemote) { console.log(`${tag}: tag is absent from origin; push it before creating a release`); skipped++; continue; }
 
   const body = notes(tag);
-  if (!body) { console.log(`${tag}: в CHANGELOG.md нет секции — пропускаю`); skipped++; continue; }
+  if (!body) { console.log(`${tag}: CHANGELOG.md has no section; skipping`); skipped++; continue; }
 
-  if (published(tag)) { console.log(`${tag}: релиз уже есть`); skipped++; continue; }
+  if (published(tag)) { console.log(`${tag}: release already exists`); skipped++; continue; }
 
   if (dry) {
     console.log(`\n=== ${tag} → ${repo}\n${body}\n`);
@@ -104,8 +104,8 @@ for (const tag of wanted) {
 
   execFileSync('gh', ['release', 'create', tag, '-R', repo, '--title', tag, '--notes', body],
     { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
-  console.log(`${tag}: опубликован`);
+  console.log(`${tag}: published`);
   made++;
 }
 
-console.log(`\n${dry ? 'сухой прогон: ' : ''}готово ${made}, пропущено ${skipped}`);
+console.log(`\n${dry ? 'dry run: ' : ''}created ${made}, skipped ${skipped}`);

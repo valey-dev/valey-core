@@ -20,7 +20,7 @@ const css = fs.readFileSync(path.join(ROOT, 'web/style.css'), 'utf8');
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
+  else { bad += 1; console.log('FAIL  |', name, '→', JSON.stringify(got)); }
 };
 
 // The panels that place themselves and are left out of the shared list by
@@ -29,15 +29,15 @@ const ok = (name, cond, got) => {
 const OWN = ['dialog', 'viewer', 'title', 'pager'];
 
 const hidden = [...html.matchAll(/<div id="([\w-]+)" hidden><\/div>/g)].map((m) => m[1]);
-ok('панели в разметке нашлись', hidden.length >= 8, hidden);
+ok('panels were found in the markup', hidden.length >= 8, hidden);
 
 // the rule line where the centred ones are listed
 const rule = (css.match(/^#[^{]*\{position:fixed; inset:0; z-index:28;[^}]*\}/m) || [''])[0];
 const centred = [...rule.matchAll(/#([\w-]+)/g)].map((m) => m[1]);
-ok('правило центрирования найдено', centred.length >= 7, centred);
+ok('centering rule found', centred.length >= 7, centred);
 
 const forgotten = hidden.filter((id) => !centred.includes(id) && !OWN.includes(id));
-ok('ни одна панель не забыта: либо в общем правиле, либо ставит себя сама',
+ok('not a single panel is forgotten: either as a general rule, or sets itself',
   forgotten.length === 0, forgotten);
 
 // Hiding goes by the same list: without [hidden] the display:flex rule beats the
@@ -47,16 +47,16 @@ ok('ни одна панель не забыта: либо в общем пра�
 // itself when it caught the #dialog rule instead of the long list.
 const hiddenListed = [...css.matchAll(/#([\w-]+)\[hidden\]/g)].map((m) => m[1]);
 const notHidden = centred.filter((id) => !hiddenListed.includes(id));
-ok('и каждая центрируемая умеет прятаться', notHidden.length === 0, notHidden);
+ok('and each centered one knows how to hide', notHidden.length === 0, notHidden);
 
 // The other way round: the rule must hold no names that are absent from the
 // markup — such a name means a panel renamed or deleted.
 const ghosts = centred.filter((id) => !hidden.includes(id));
-ok('в правиле нет призраков — все имена есть в разметке', ghosts.length === 0, ghosts);
+ok('there are no ghosts in the rule - all names are in the markup', ghosts.length === 0, ghosts);
 
 for (const id of OWN) {
-  ok(`${id} ставит себя сам — у него своё правило`, new RegExp('#' + id + '\\b').test(css), id);
+  ok(`${id} sets itself - it has its own rule`, new RegExp('#' + id + '\\b').test(css), id);
 }
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

@@ -94,7 +94,7 @@ const out = {
 if (answer.decision === 'allow' && (answer.updatedPermissions || []).length) {
   out.updatedPermissions = answer.updatedPermissions;
 }
-if (answer.decision === 'deny') out.message = answer.message || 'отказано в офисе';
+if (answer.decision === 'deny') out.message = answer.message || 'denied in the office';
 
 process.stdout.write(JSON.stringify({ hookSpecificOutput: out }));
 process.exit(0);

@@ -29,7 +29,7 @@ const SNAP = 'tools/figma-tokens.json';
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, got === undefined ? '' : '→ ' + JSON.stringify(got)); }
+  else { bad += 1; console.log('FAIL  |', name, got === undefined ? '' : '→ ' + JSON.stringify(got)); }
 };
 
 // ------------------------------------------------------------------ the sides
@@ -49,17 +49,17 @@ const norm = (hex) => {
 };
 
 const rootBlock = blank(css).match(/:root\{([\s\S]*?)\n\}/);
-ok('блок :root на месте', !!rootBlock);
+ok('the :root block is in place', !!rootBlock);
 if (!rootBlock) process.exit(1);
 
 const cssVars = new Map();
 for (const m of rootBlock[1].matchAll(/--([\w-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\s*;/g)) {
   cssVars.set(m[1], norm(m[2]));
 }
-ok(`в :root ${cssVars.size} цветов`, cssVars.size > 20, cssVars.size);
+ok(`in :root ${cssVars.size} colors`, cssVars.size > 20, cssVars.size);
 
 const palette = new Map(Object.entries(snap.palette).map(([k, v]) => [k, norm(v)]));
-ok(`в снимке ${palette.size} примитивов`, palette.size > 20, palette.size);
+ok(`in a snapshot of ${palette.size} primitives`, palette.size > 20, palette.size);
 
 // --------------------------------------------------------------- the compare
 // Three ways the two sides can disagree, and they are different bugs: a colour
@@ -75,23 +75,23 @@ const differ = [...cssVars.entries()]
 
 if (onlyCss.length) {
   bad += 1;
-  console.log(`УПАЛ  | в ${CSS} есть цвет, которого нет в макетах — пересобери снимок`);
+  console.log(`FAIL  | ${CSS} has a color missing from the layouts; regenerate the snapshot`);
   for (const n of onlyCss.slice(0, 10)) console.log(`      | --${n} = ${cssVars.get(n)}`);
-  if (onlyCss.length > 10) console.log(`      | …и ещё ${onlyCss.length - 10}`);
-} else ok('каждый цвет из :root есть в макетах', true);
+  if (onlyCss.length > 10) console.log(`      | …and ${onlyCss.length - 10} more`);
+} else ok('every color from :root is in the layouts', true);
 
 if (onlyFigma.length) {
   bad += 1;
-  console.log(`УПАЛ  | в макетах есть примитив, которого нет в ${CSS}`);
+  console.log(`FAIL  | the layouts have a primitive missing from ${CSS}`);
   for (const n of onlyFigma.slice(0, 10)) console.log(`      | palette/${n} = ${palette.get(n)}`);
-  if (onlyFigma.length > 10) console.log(`      | …и ещё ${onlyFigma.length - 10}`);
-} else ok('каждый примитив макетов есть в :root', true);
+  if (onlyFigma.length > 10) console.log(`      | …and ${onlyFigma.length - 10} more`);
+} else ok('every layout primitive is in :root', true);
 
 if (differ.length) {
   bad += 1;
-  console.log('УПАЛ  | цвет разъехался: одно имя, два значения');
-  for (const d of differ) console.log(`      | --${d.name}: ${CSS} ${d.css} · макеты ${d.figma}`);
-} else ok('значения совпадают до последнего разряда', true);
+  console.log('FAIL  | a color has one name but two values');
+  for (const d of differ) console.log(`      | --${d.name}: ${CSS} ${d.css} · layouts ${d.figma}`);
+} else ok('values are the same until the last digit', true);
 
 // ------------------------------------------------------- semantics point home
 // A semantic token is an alias onto a primitive. An alias onto a name that is
@@ -100,14 +100,14 @@ if (differ.length) {
 const dangling = Object.entries(snap.semantic).filter(([, target]) => !palette.has(target));
 if (dangling.length) {
   bad += 1;
-  console.log('УПАЛ  | семантика ссылается на примитив, которого нет');
+  console.log('FAIL  | a semantic token points to a missing primitive');
   for (const [name, target] of dangling.slice(0, 10)) console.log(`      | ${name} → palette/${target}`);
-} else ok(`${Object.keys(snap.semantic).length} семантических токенов ссылаются на живые примитивы`, true);
+} else ok(`${Object.keys(snap.semantic).length} semantic tokens refer to live primitives`, true);
 
 // The snapshot says which collection and mode it came from. Without it a stale
 // export from another file would pass every check above and mean nothing.
-ok('снимок называет свою коллекцию', typeof snap.collection === 'string' && snap.collection.length > 0, snap.collection);
-ok('снимок называет дату выгрузки', /^\d{4}-\d{2}-\d{2}$/.test(snap.exported || ''), snap.exported);
+ok('the picture names its collection', typeof snap.collection === 'string' && snap.collection.length > 0, snap.collection);
+ok('the picture states the upload date', /^\d{4}-\d{2}-\d{2}$/.test(snap.exported || ''), snap.exported);
 
-console.log(bad ? `\nУПАЛО: ${bad}` : '\nвсё зелено');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall green');
 process.exit(bad ? 1 : 0);

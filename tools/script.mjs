@@ -57,20 +57,20 @@ let spanFrom = '';
 let tag;
 if (positional && positional.includes('..')) {
   const [a, b] = positional.split('..');
-  if (!VER.test(a) || !VER.test(b)) die(`не похоже на диапазон версий: ${positional}`);
+  if (!VER.test(a) || !VER.test(b)) die(`not a valid version range: ${positional}`);
   spanFrom = a; tag = b;
 } else if (since) {
-  if (!VER.test(since)) die(`не похоже на версию: ${since}`);
+  if (!VER.test(since)) die(`not a valid version: ${since}`);
   spanFrom = since; tag = positional || 'v' + pkg.version;
 } else {
   tag = positional || 'v' + pkg.version;
 }
-if (!VER.test(tag)) die(`не похоже на версию: ${tag}`);
+if (!VER.test(tag)) die(`not a valid version: ${tag}`);
 
 // Patches get no video — the rule from media/README.md, and reminding of it is
 // cheaper than explaining later why nobody expected a video for v0.2.1.
 const patch = Number(tag.split('.')[2]);
-if (patch !== 0) console.warn(`внимание: ${tag} — патч, а ролики снимаются на миноры`);
+if (patch !== 0) console.warn(`warning: ${tag} is a patch release, while videos are made for minor releases`);
 
 // The range: from the previous version to this one. Only v* tags are looked
 // for, or the nearest one turns out to be a journal tag and the range comes out
@@ -103,7 +103,7 @@ const commits = git('log', range, '--no-merges', '--format=%h%x00%s')
   .split('\n').filter(Boolean)
   .map((l) => { const [hash, subject] = l.split('\0'); return { hash, subject }; })
   .filter((c) => !/^chore\(release\): v\d+\.\d+\.\d+$/.test(c.subject));
-if (!commits.length) die(`в ${range} нет коммитов — нечего показывать`);
+if (!commits.length) die(`${range} contains no commits; there is nothing to show`);
 
 const RE = /^(\w+)(?:\(([^)]*)\))?!?:\s*(.+)$/;
 const feats = [], fixes = [];
@@ -114,7 +114,7 @@ for (const c of commits) {
   else if (m[1] === 'fix') fixes.push({ ...c, scope: m[2] || '', text: m[3] });
 }
 
-// «101 коммитов» is not a typo but a missing set of forms. The language's own
+// "101 commits" is not a typo but a missing set of forms. The language's own
 // rules are in Intl, and the office already declines by it (web/i18n.js). The
 // draft itself is Russian: it is read by whoever records the video.
 const RU = new Intl.PluralRules('ru');
@@ -125,63 +125,63 @@ const out = path.join(SCRIPTS_DIR, `${tag}.md`);
 // overwritten by accident. --force is the deliberate exception: it is what you
 // reach for when the auto-draft of one version is being widened into a take over
 // four, and the automatic one has not been touched yet.
-if (existsSync(out) && !force) die(`${out} уже есть — переписывать не буду (--force, если нарочно)`);
+if (existsSync(out) && !force) die(`${out} already exists; refusing to overwrite it (use --force deliberately)`);
 
 const show = feats.slice(0, shown);
 const rest = feats.slice(shown);
 const L = [];
-L.push(`# ${tag} — <одно слово для обложки>`, '');
-L.push(`Черновик, собран из ${commits.length} ${plural(commits.length, 'коммита', 'коммитов', 'коммитов')} диапазона \`${range}\`.`);
+L.push(`# ${tag} — <one word for the cover>`, '');
+L.push(`Draft assembled from ${commits.length} ${commits.length === 1 ? 'commit' : 'commits'} in \`${range}\`.`);
 if (covered.length > 1) {
-  L.push(`Один проход на ${covered.length} ${plural(covered.length, 'версию', 'версии', 'версий')}: ${covered.join(', ')}.`);
+  L.push(`One walkthrough covers ${covered.length} ${covered.length === 1 ? 'version' : 'versions'}: ${covered.join(', ')}.`);
 }
-L.push('Правь свободно: генератор знает, что влито, но не знает, что смешно.', '');
+L.push('Edit freely: the generator knows what was merged, but not what is funny.', '');
 
-L.push('## Что показываем', '');
-if (!show.length) L.push('_Ни одного `feat` в этом релизе — показывать нечего, и это повод не снимать._', '');
+L.push('## What to show', '');
+if (!show.length) L.push('_This release has no `feat` commits—there is nothing to show and no reason to record._', '');
 for (const f of show) {
   L.push(`### ${f.scope ? f.scope + ': ' : ''}${f.text}`);
-  L.push(`- коммит: \`${f.hash}\``);
-  L.push('- где в офисе: <куда идти, какие клавиши>');
-  L.push('- что говорит ведущий: <реплика>');
+  L.push(`- commit: \`${f.hash}\``);
+  L.push('- where in the office: <where to go and which keys to press>');
+  L.push('- presenter line: <line>');
   L.push('');
 }
 if (rest.length) {
-  L.push(`_Не влезло в три бита (${rest.length}) — либо в следующий выпуск, либо одной строкой в описании:_`, '');
+  L.push(`_Did not fit into three beats (${rest.length})—move to the next release or mention in one description line:_`, '');
   for (const f of rest) L.push(`- ${f.scope ? f.scope + ': ' : ''}${f.text} (\`${f.hash}\`)`);
   L.push('');
 }
 
-// The heading counts what actually goes on camera, not the cap: «Биты: 4» over
+// The heading counts what actually goes on camera, not the cap: "Beats: 4" over
 // two features is the draft lying about itself on its first line.
-const WORDS = { 1: 'Один бит', 2: 'Два бита', 3: 'Три бита', 4: 'Четыре бита', 5: 'Пять битов', 6: 'Шесть битов' };
-L.push(`## ${WORDS[show.length] || 'Биты'}`, '');
-L.push('1. **Зашёл и раздал задание.** <кому и какое>');
-L.push('2. **По дороге показал новое.** Порядок обхода: ' + (show.map((f) => f.scope || 'фича').join(' → ') || '<…>'));
-L.push('3. **Финальный гэг.** <обычно за счёт агента, который занят не тем>', '');
+const WORDS = { 1: 'One beat', 2: 'Two beats', 3: 'Three beats', 4: 'Four beats', 5: 'Five beats', 6: 'Six beats' };
+L.push(`## ${WORDS[show.length] || 'Beats'}`, '');
+L.push('1. **Enter and hand out a task.** <to whom and what>');
+L.push('2. **Show what is new along the way.** Route: ' + (show.map((f) => f.scope || 'feature').join(' → ') || '<…>'));
+L.push('3. **Final gag.** <usually at the expense of an agent working on the wrong thing>', '');
 
-L.push('## Проход', '');
-L.push('Снимается одной командой, поэтому после правки фичи переснимается тоже одной.');
-L.push('Координаты мест считаются, а не подбираются: `#x=` и `#y=` в адресе.', '');
+L.push('## Walkthrough', '');
+L.push('One command records it, so one command records it again after a feature changes.');
+L.push('Location coordinates are calculated rather than guessed: use `#x=` and `#y=` in the URL.', '');
 L.push('```bash');
 L.push(`node tools/shot.mjs --port 5183 --video .shots/${tag}.mp4 \\`);
-L.push('  --keys "wait:1500,Space,wait:7000,<дальше по местам>"');
+L.push('  --keys "wait:1500,Space,wait:7000,<continue through locations>"');
 L.push('```', '');
-L.push('Звука в файле нет — войсовер единственная дорожка.', '');
+L.push('The file has no sound; voice-over is the only audio track.', '');
 
 if (fixes.length) {
-  L.push(`## Починено (${fixes.length}) — в описание, не в кадр`, '');
+  L.push(`## Fixed (${fixes.length}) — description, not camera`, '');
   for (const f of fixes) L.push(`- ${f.scope ? f.scope + ': ' : ''}${f.text}`);
   L.push('');
 }
 
-L.push('## Чек-лист', '');
-for (const s of ['проход снят', 'сценарий дописан', 'войсовер записан', 'обложка собрана', 'залито на канал']) {
+L.push('## Checklist', '');
+for (const s of ['walkthrough recorded', 'script completed', 'voice-over recorded', 'cover prepared', 'uploaded to the channel']) {
   L.push(`- [ ] ${s}`);
 }
 L.push('');
 
 mkdirSync(path.dirname(out), { recursive: true });
 writeFileSync(out, L.join('\n'));
-console.log(`черновик: ${out}`);
-console.log(`фич ${feats.length}, из них в кадр ${show.length}; починок ${fixes.length}`);
+console.log(`draft: ${out}`);
+console.log(`${feats.length} features, ${show.length} on camera; ${fixes.length} fixes`);

@@ -14,7 +14,7 @@ const TOKEN = 'test-owner-token-0001';
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
+  else { bad += 1; console.log('FAIL  |', name, '→', JSON.stringify(got)); }
 };
 
 // The sessions directory is its own and empty: the stand is about the threshold and the rights, it needs no agents.
@@ -35,82 +35,82 @@ const call = (p, { as = 'nobody', method = 'POST', body = {} } = {}) => {
 try {
   // ------------------------------------------------- no entry without an invitation
   const cold = await call('/api/state', { method: 'GET' });
-  ok('без приглашения офис не показывают вовсе', cold.status === 403, cold.status);
-  ok('и отказ объясняет, чего не хватает', cold.j && cold.j.errorKey === 'err.needCode', cold.j);
+  ok('without an invitation the office is not shown at all', cold.status === 403, cold.status);
+  ok('and failure explains what is missing', cold.j && cold.j.errorKey === 'err.needCode', cold.j);
   const whoCold = await call('/api/whoami', { method: 'GET' });
-  ok('но спросить, кто ты, можно всегда', whoCold.status === 200, whoCold.status);
-  ok('и офис признаётся, что нужен код', whoCold.j.needsCode === true, whoCold.j);
+  ok('but you can always ask who you are', whoCold.status === 200, whoCold.status);
+  ok('and the office admits that a code is needed', whoCold.j.needsCode === true, whoCold.j);
 
   // ------------------------------------------------------------ the door
   const made = await call('/api/invite', { as: 'owner', body: { name: 'Костя', from: 'Сергей' } });
-  ok('хозяин делает приглашение', made.status === 200 && !!made.j.invite.code, made.status);
-  ok('и в ссылке есть код', (made.j.url || '').includes(made.j.invite.code), made.j.url);
-  ok('код не шестизначный — перебором по нему не ходят',
+  ok('the host makes an invitation', made.status === 200 && !!made.j.invite.code, made.status);
+  ok('and there is code in the link', (made.j.url || '').includes(made.j.invite.code), made.j.url);
+  ok('the code is not six digits - they don’t brute force it',
     made.j.invite.code.length >= 12, made.j.invite.code.length);
 
   const guestOnly = await call('/api/invite', { body: { name: 'сам себя' } });
-  ok('гость приглашать не может', guestOnly.status === 403, guestOnly.status);
+  ok('guest cannot invite', guestOnly.status === 403, guestOnly.status);
 
   const enter = await call('/api/enter', { body: { code: made.j.invite.code } });
-  ok('по коду впускают', enter.status === 200 && !!enter.j.guest, enter.status);
-  ok('и говорят, кто позвал', enter.j.from === 'Сергей', enter.j);
+  ok('they let you in according to the code', enter.status === 200 && !!enter.j.guest, enter.status);
+  ok('and they say who called', enter.j.from === 'Сергей', enter.j);
   GUEST = enter.j.guest;
 
   const again = await call('/api/enter', { body: { code: made.j.invite.code } });
-  ok('второй раз по той же ссылке — нет', again.status === 403, again.status);
-  ok('и причина названа', again.j.errorKey === 'err.codeUsed', again.j);
+  ok('second time using the same link - no', again.status === 403, again.status);
+  ok('and the reason is given', again.j.errorKey === 'err.codeUsed', again.j);
   const junkCode = await call('/api/enter', { body: { code: 'нет-такого' } });
-  ok('чужой код не подходит', junkCode.j.errorKey === 'err.codeUnknown', junkCode.j);
+  ok('someone else\'s code doesn\'t work', junkCode.j.errorKey === 'err.codeUnknown', junkCode.j);
 
   // -------------------------------------------------------- what a guest may do
   const look = await call('/api/state', { as: 'guest', method: 'GET' });
-  ok('вошедший смотрит офис', look.status === 200, look.status);
+  ok('walker looks at the office', look.status === 200, look.status);
   const here = await call('/api/here', { as: 'guest', body: { id: 'g1', name: 'Костя', x: 10, y: 10 } });
-  ok('и ходит по нему', here.status === 200, here.status);
+  ok('and walks on it', here.status === 200, here.status);
   const note = await call('/api/task', { as: 'guest', body: { agentId: 'нет-такого', text: 'привет' } });
-  ok('и оставляет записку на столе', note.status !== 403, note.status);
+  ok('and leaves a note on the table', note.status !== 403, note.status);
   const stream = await fetch(base + '/api/stream?guest=' + encodeURIComponent(GUEST)).then((r) => r.status);
-  ok('поток пускает по тому же пропуску в строке запроса', stream === 200, stream);
+  ok('the thread starts using the same gap in the query line', stream === 200, stream);
   // EventSource cannot set headers, so without this the owner in shared mode
   // lost his own office: the page is alive and the stream is refused to it.
   const ownerStream = await fetch(base + '/api/stream?owner=' + encodeURIComponent(TOKEN)).then((r) => r.status);
-  ok('и хозяина в его собственный поток — тоже', ownerStream === 200, ownerStream);
+  ok('and the owner into his own stream - too', ownerStream === 200, ownerStream);
   const noPass = await fetch(base + '/api/stream').then((r) => r.status);
-  ok('а без пропуска поток закрыт', noPass === 403, noPass);
+  ok('and without a pass the stream is closed', noPass === 403, noPass);
 
   // ------------------------------------------------------- what a guest may not do
   const deliver = await call('/api/task', { as: 'guest', body: { agentId: 'x', text: 'y', deliver: true } });
-  ok('отправить в чат нельзя', deliver.status === 403, deliver);
-  ok('и отказ про право, а не про пропуск', deliver.j.errorKey === 'err.guest', deliver.j);
+  ok('Can\'t send to chat', deliver.status === 403, deliver);
+  ok('and the refusal is about a right, not about a pass', deliver.j.errorKey === 'err.guest', deliver.j);
   const settings = await call('/api/settings', { as: 'guest', body: { lang: 'en' } });
-  ok('менять настройки офиса нельзя', settings.status === 403, settings.status);
+  ok('You cannot change office settings', settings.status === 403, settings.status);
   const shot = await fetch(base + '/api/shot?name=x', {
     method: 'POST', headers: { 'x-valey-guest': GUEST }, body: 'data:image/png;base64,AA',
   }).then((r) => r.status);
-  ok('писать кадры на чужой диск нельзя', shot === 403, shot);
+  ok('You can\'t write frames to someone else\'s disk', shot === 403, shot);
 
   // ------------------------------------------------------- the token does not leak
   const seen = await fetch(base + '/api/settings', { headers: { 'x-valey-guest': GUEST } }).then((r) => r.text());
-  ok('токена хозяина в настройках нет', !seen.includes(TOKEN), null);
-  ok('и кода приглашения тоже', !seen.includes(made.j.invite.code), null);
-  ok('и выданного гостевого токена', !seen.includes(GUEST), null);
+  ok('There is no host token in the settings', !seen.includes(TOKEN), null);
+  ok('and the invitation code too', !seen.includes(made.j.invite.code), null);
+  ok('and the issued guest token', !seen.includes(GUEST), null);
   const list = await call('/api/invites', { as: 'owner', method: 'GET' });
-  ok('в списке у хозяина кодов нет — ссылку он получил один раз',
+  ok('The owner does not have codes in the list - he received the link once',
     !JSON.stringify(list.j).includes(made.j.invite.code), list.j);
-  ok('но видно, кого звали и вошёл ли он',
+  ok('but you can see who was called and whether he entered',
     list.j.invites[0].name === 'Костя' && list.j.invites[0].used === true, list.j.invites[0]);
 
   // ------------------------------------------------------------- evicting
   const out = await call('/api/invite/revoke', { as: 'owner', body: { id: list.j.invites[0].id } });
-  ok('хозяин гасит приглашение', out.status === 200, out.status);
+  ok('the host cancels the invitation', out.status === 200, out.status);
   const after = await call('/api/state', { as: 'guest', method: 'GET' });
-  ok('и выгнанный больше не смотрит', after.status === 403, after.status);
+  ok('and the one kicked out doesn\'t look anymore', after.status === 403, after.status);
 } catch (e) {
   bad += 1;
-  console.log('УПАЛ  | стенд не доехал →', e.message);
+  console.log('FAIL  | test did not complete →', e.message);
 } finally {
   await stop();
 }
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

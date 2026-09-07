@@ -15,7 +15,7 @@ const GUEST = 'guest-pass-for-the-test';
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
+  else { bad += 1; console.log('FAIL  |', name, '→', JSON.stringify(got)); }
 };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -109,13 +109,13 @@ try {
 
   // ------------------------------------------------- nobody is in the office
   const alone = await askPermit(BASH('git push'));
-  ok('никого нет — хук отпускается сразу', alone.status === 200 && !alone.j.decision, alone);
+  ok('there is no one - the hook is released immediately', alone.status === 200 && !alone.j.decision, alone);
 
   // A guest does not count as a watcher: the pager does not reach him.
   const g = openStream(`guest=${GUEST}`);
   await g.ready;
   const onlyGuest = await askPermit(BASH('git push'));
-  ok('один гость — тоже «никого»', onlyGuest.status === 200 && !onlyGuest.j.decision, onlyGuest);
+  ok('one guest - also “no one”', onlyGuest.status === 200 && !onlyGuest.j.decision, onlyGuest);
 
   // ------------------------------------------------------- the owner is watching
   const o = openStream(`owner=${OWNER}`);
@@ -124,33 +124,33 @@ try {
   // --------------------------------------------------------- allow
   let held = askPermit(BASH('git push -u origin HEAD'));
   let s = await untilPermits(1);
-  ok('запрос виден хозяину', (s.permits || []).length === 1, s.permits);
+  ok('the request is visible to the owner', (s.permits || []).length === 1, s.permits);
   const p1 = (s.permits || [])[0] || {};
-  ok('команда видна целиком', p1.command === 'git push -u origin HEAD', p1.command);
-  ok('описание от агента на месте', p1.description === 'Push the worktree branch', p1.description);
-  ok('правило названо словами', p1.rule === 'Bash(git push *)', p1.rule);
-  ok('привязан к сессии', p1.agentId === 'sess-1', p1.agentId);
+  ok('the entire team is visible', p1.command === 'git push -u origin HEAD', p1.command);
+  ok('description from the agent on site', p1.description === 'Push the worktree branch', p1.description);
+  ok('the rule is named in words', p1.rule === 'Bash(git push *)', p1.rule);
+  ok('session bound', p1.agentId === 'sess-1', p1.agentId);
 
   const gs = await state({ 'x-valey-guest': GUEST });
-  ok('гость не видит запросов', (gs.permits || []).length === 0, gs.permits);
+  ok('the guest does not see requests', (gs.permits || []).length === 0, gs.permits);
 
   const byGuest = await post('/api/permit/answer', { id: p1.id, decision: 'allow' }, guest);
-  ok('гость не может ответить', byGuest.status === 403, byGuest);
+  ok('the guest cannot answer', byGuest.status === 403, byGuest);
 
   await post('/api/permit/answer', { id: p1.id, decision: 'allow' });
   let got = await held;
-  ok('разрешено — хук получает allow', got.j.decision === 'allow', got.j);
-  ok('без «всегда» правил не уходит', !(got.j.updatedPermissions || []).length, got.j);
+  ok('allowed - the hook gets allow', got.j.decision === 'allow', got.j);
+  ok('without “always” rules does not go away', !(got.j.updatedPermissions || []).length, got.j);
   s = await state();
-  ok('отвеченный запрос уходит из офиса', (s.permits || []).length === 0, s.permits);
+  ok('the answered request leaves the office', (s.permits || []).length === 0, s.permits);
 
   // ---------------------------------------------------- always allow
   held = askPermit(BASH('git push'));
   s = await untilPermits(1);
   await post('/api/permit/answer', { id: s.permits[0].id, decision: 'always' });
   got = await held;
-  ok('«всегда» — allow с правилами', got.j.decision === 'allow' && got.j.updatedPermissions.length === 1, got.j);
-  ok('правила уходят как пришли',
+  ok('“always” – allow with rules', got.j.decision === 'allow' && got.j.updatedPermissions.length === 1, got.j);
+  ok('the rules leave as they came',
     got.j.updatedPermissions[0].destination === 'localSettings'
     && got.j.updatedPermissions[0].rules[0].ruleContent === 'git push *', got.j.updatedPermissions);
 
@@ -159,14 +159,14 @@ try {
   s = await untilPermits(1);
   await post('/api/permit/answer', { id: s.permits[0].id, decision: 'deny', message: 'сделай ветку' });
   got = await held;
-  ok('отказ доходит с запиской', got.j.decision === 'deny' && got.j.message === 'сделай ветку', got.j);
+  ok('the refusal comes with a note', got.j.decision === 'deny' && got.j.message === 'сделай ветку', got.j);
 
   // -------------------------------------------------------- in the terminal
   held = askPermit(BASH('npm publish'));
   s = await untilPermits(1);
   await post('/api/permit/answer', { id: s.permits[0].id, decision: 'terminal' });
   got = await held;
-  ok('«в терминале» — пустой ответ, а не отказ', got.status === 200 && !got.j.decision, got.j);
+  ok('“in the terminal” is an empty response, not a refusal', got.status === 200 && !got.j.decision, got.j);
 
   // ------------------------------------------------------- not twice
   held = askPermit(BASH('ls'));
@@ -175,7 +175,7 @@ try {
   await post('/api/permit/answer', { id, decision: 'allow' });
   await held;
   const again = await post('/api/permit/answer', { id, decision: 'deny' });
-  ok('второй ответ на тот же запрос не проходит', again.status === 404, again);
+  ok('the second response to the same request fails', again.status === 404, again);
 
   // ------------------------------------------------ the session left the office
   // Neither of these requests has a `sess-1` session on disk, and that is on
@@ -184,17 +184,17 @@ try {
   held = askPermit(BASH('ls -la'));
   await wait(3000);                              // a snapshot tick takes 2.5 s
   s = await state();
-  ok('неизвестную офису сессию такт не отпускает', (s.permits || []).length === 1, s.permits);
+  ok('tact does not let go of a session unknown to the office', (s.permits || []).length === 1, s.permits);
   await post('/api/permit/answer', { id: s.permits[0].id, decision: 'terminal' });
   await held;
 
   // ------------------------------------------- the event arrives at once
   held = askPermit(BASH('git status'));
   await wait(250);
-  ok('пейджеру событие приходит своим каналом',
+  ok('the pager receives the event via its own channel',
     o.events.some((e) => e.startsWith('event: permits') && e.includes('git status')),
     o.events.filter((e) => e.startsWith('event: permits')).length);
-  ok('гостю событие не приходит',
+  ok('the event does not arrive to the guest',
     !g.events.some((e) => e.startsWith('event: permits')),
     g.events.length);
   s = await state();
@@ -210,15 +210,15 @@ try {
   const P = await import('../server/permit.js');
   const one = P.ask({ session_id: 'sess-x', tool_name: 'Bash', tool_input: { command: 'ls' } }, { audience: true });
   P.forgetGone(['sess-other'], Date.now());
-  ok('только что пришедший вопрос переживает такт', P.permits().length === 1, P.permits());
+  ok('the question that just arrived is experiencing tact', P.permits().length === 1, P.permits());
   P.forgetGone([], Date.now() + P.GRACE_MS + 1000);
-  ok('пустой снимок не считается доказательством', P.permits().length === 1, P.permits());
+  ok('a blank photograph is not considered evidence', P.permits().length === 1, P.permits());
   P.forgetGone(['sess-other'], Date.now() + P.GRACE_MS + 1000);
-  ok('а через отсрочку — отпускается', P.permits().length === 0, P.permits());
-  ok('и хук получает пустоту, а не отказ', (await one.verdict) === null, await one.verdict);
+  ok('and after a delay - released', P.permits().length === 0, P.permits());
+  ok('and the hook gets a void, not a refusal', (await one.verdict) === null, await one.verdict);
 } catch (e) {
   bad += 1;
-  console.log('УПАЛ  | исключение →', e.message);
+console.log('FAIL  | exception →', e.message);
 }
 
 // ---- a question is a question, not a wall of braces --------------------------
@@ -231,35 +231,35 @@ try {
   // Asked before anything is called: a missing export should read as a failed
   // check, not as a stack trace on line 231.
   const has = typeof P2.questionOf === 'function';
-  ok('офис умеет читать вопрос', has, typeof P2.questionOf);
+  ok('the office can read the question', has, typeof P2.questionOf);
   const nested = has && P2.questionOf({ questions: [{ header: 'Где хаб', question: 'Где живёт хаб?',
     options: [{ label: 'у нас', description: 'хаб у нас, платит владелец' },
       { label: 'у покупателя', description: 'ставит сам, мы не платим' }] }] });
-  ok('вопрос читается из списка', nested && nested.text === 'Где живёт хаб?', nested);
-  ok('и варианты приезжают с ним',
+  ok('the question is read from the list', nested && nested.text === 'Где живёт хаб?', nested);
+  ok('and options come with it',
     nested && nested.options.map((o) => o.label).join('|') === 'у нас|у покупателя', nested && nested.options);
   // The sentence under an option is what the choice is made on; a label alone
   // says «после демо» and nothing about what that costs.
-  ok('и комментарий под вариантом не теряется',
+  ok('and the comment under the option is not lost',
     nested && nested.options[0].note === 'хаб у нас, платит владелец', nested && nested.options[0]);
   const flat = has && P2.questionOf({ question: 'Так тоже спрашивают?', options: ['да', 'нет'] });
-  ok('одиночный вопрос читается так же', flat && flat.text === 'Так тоже спрашивают?', flat);
-  ok('строки в вариантах не теряются', flat && flat.options.length === 2, flat && flat.options);
-  ok('вариант строкой остаётся вариантом, просто без комментария',
+  ok('single question reads the same way', flat && flat.text === 'Так тоже спрашивают?', flat);
+  ok('lines in options are not lost', flat && flat.options.length === 2, flat && flat.options);
+  ok('the line option remains an option, just without a comment',
     flat && flat.options[0].label === 'да' && flat.options[0].note === '', flat && flat.options[0]);
-  ok('команда — не вопрос', has && P2.questionOf({ command: 'ls' }) === null, has && P2.questionOf({ command: 'ls' }));
+  ok('team is not a question', has && P2.questionOf({ command: 'ls' }) === null, has && P2.questionOf({ command: 'ls' }));
 
   const asked = P2.ask({ session_id: 'sess-q', tool_name: 'AskUserQuestion',
     tool_input: { questions: [{ question: 'Мержим?', options: [{ label: 'да' }, { label: 'позже' }] }] } },
     { audience: true });
   const shown = P2.permits().find((x) => x.tool === 'AskUserQuestion');
-  ok('в заявке стоит текст вопроса, а не JSON', shown && shown.command === 'Мержим?', shown && shown.command);
-  ok('и фигурных скобок в ней нет', shown && !/[{}]/.test(shown.command), shown && shown.command);
-  ok('варианты доезжают до офиса', shown && shown.question && shown.question.options.length === 2, shown && shown.question);
+  ok('the application contains the text of the question, not JSON', shown && shown.command === 'Мержим?', shown && shown.command);
+  ok('and there are no curly braces in it', shown && !/[{}]/.test(shown.command), shown && shown.command);
+  ok('options reach the office', shown && shown.question && shown.question.options.length === 2, shown && shown.question);
   P2.answer(shown.id, { decision: 'allow' });
   await asked.verdict;
 }
 
 await stop();
-console.log(bad ? `\n${bad} ПРОВАЛ(ов)` : '\nвсё зелено');
+console.log(bad ? `\n${bad} failures` : '\nall green');
 process.exit(bad ? 1 : 0);

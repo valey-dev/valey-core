@@ -28,7 +28,7 @@ delete process.env.VALEY_SETTINGS;
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    | ' + name);
-  else { bad++; console.log('УПАЛ  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
+  else { bad++; console.log('FAIL  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
 };
 
 // fileURLToPath rather than url.pathname: the project path contains a space, and
@@ -60,14 +60,14 @@ const SAMPLE = { lang: 'en', names: { 's1': 'Петя', 's2': 'Лиза' }, secr
   await writeLegacy(SAMPLE);
   const { dir, mod } = await fresh();
   const r = await mod.migrateSettings();
-  ok('переезд состоялся', r.done === true, r);
+  ok('the move took place', r.done === true, r);
   const moved = JSON.parse(await fsp.readFile(path.join(dir, 'settings.json'), 'utf8'));
-  ok('имена доехали целиком', JSON.stringify(moved.names) === JSON.stringify(SAMPLE.names), moved.names);
-  ok('токен доехал', moved.secrets.token === 'СЕКРЕТ');
+  ok('the names arrived in full', JSON.stringify(moved.names) === JSON.stringify(SAMPLE.names), moved.names);
+  ok('the token has arrived', moved.secrets.token === 'СЕКРЕТ');
   const still = await fsp.readFile(LEGACY, 'utf8').catch(() => null);
-  ok('старый файл остался на месте', still !== null);
+  ok('the old file remains in place', still !== null);
   const s = await mod.getSettings();
-  ok('офис читает перенесённые имена', s.names.s1 === 'Петя', s.names);
+  ok('the office reads the transferred names', s.names.s1 === 'Петя', s.names);
 }
 
 // ------------------------------------- there is already data at the new place
@@ -78,10 +78,10 @@ const SAMPLE = { lang: 'en', names: { 's1': 'Петя', 's2': 'Лиза' }, secr
   await fsp.mkdir(dir, { recursive: true });
   await fsp.writeFile(path.join(dir, 'settings.json'), JSON.stringify(mine));
   const r = await mod.migrateSettings();
-  ok('когда есть оба — переезд не делается', r.done === false && r.reason === 'both', r);
+  ok('when there are both, the move is not made', r.done === false && r.reason === 'both', r);
   const after = JSON.parse(await fsp.readFile(path.join(dir, 'settings.json'), 'utf8'));
-  ok('существующий конфиг не затёрт', after.secrets.token === 'МОЙ', after.secrets);
-  ok('и его имена целы', after.names.s9 === 'Марк', after.names);
+  ok('the existing config is not overwritten', after.secrets.token === 'МОЙ', after.secrets);
+  ok('and his names are intact', after.names.s9 === 'Марк', after.names);
 }
 
 // ------------------------------------------------- nothing to move
@@ -89,12 +89,12 @@ const SAMPLE = { lang: 'en', names: { 's1': 'Петя', 's2': 'Лиза' }, secr
   await fsp.rm(LEGACY, { force: true });
   const { mod } = await fresh();
   const r = await mod.migrateSettings();
-  ok('без старого файла переезд молчит', r.done === false && r.reason === 'nothing-to-move', r);
+  ok('without the old file the move is silent', r.done === false && r.reason === 'nothing-to-move', r);
   const s = await mod.getSettings();
   // 'auto' is the language of an office nobody has opened yet: since 6 September
   // 2026 the first page resolves it from the device and writes the answer back.
   // A concrete language here would mean the defaults had been chosen for the user.
-  ok('и настройки берутся по умолчанию', s.lang === 'auto' && Object.keys(s.names).length === 0, s.lang);
+  ok('and the settings are taken by default', s.lang === 'auto' && Object.keys(s.names).length === 0, s.lang);
 }
 
 // ------------------------------------------------------- a broken old file
@@ -103,16 +103,16 @@ const SAMPLE = { lang: 'en', names: { 's1': 'Петя', 's2': 'Лиза' }, secr
   const { dir, mod } = await fresh();
   let threw = false;
   try { await mod.migrateSettings(); } catch { threw = true; }
-  ok('битый файл не переносится', threw === true);
+  ok('broken file is not transferred', threw === true);
   const made = await fsp.readFile(path.join(dir, 'settings.json'), 'utf8').catch(() => null);
-  ok('и мусор на новом месте не создаётся', made === null);
+  ok('and garbage is not created in the new place', made === null);
   const s = await mod.getSettings();
-  ok('офис при этом поднимается на умолчаниях', s.lang === 'auto', s.lang);
+  ok('the office is raised by default', s.lang === 'auto', s.lang);
 }
 
 // put the tree back exactly as the test found it
 await fsp.rm(LEGACY, { force: true });
 if (legacyExisted !== null) await fsp.writeFile(LEGACY, legacyExisted);
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

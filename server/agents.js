@@ -75,7 +75,7 @@ async function transcriptFor(sessionId, cwd) {
   const stats = await Promise.all(paths.map(async (p) => {
     try { return { p, m: (await fsp.stat(p)).mtimeMs }; } catch { return { p, m: 0 }; }
   }));
-  console.warn(`[transcript] ${sessionId.slice(0, 8)}: ${paths.length} копий, беру свежую`);
+  console.warn(`[transcript] ${sessionId.slice(0, 8)}: ${paths.length} copies, using the newest`);
   return stats.sort((a, b) => b.m - a.m)[0].p;
 }
 
@@ -240,29 +240,30 @@ function describeTool(name, input = {}) {
   return { key: 'work', mood: 'code' };
 }
 
-// The Russian phrase stays here so the activity field reads as it used to.
-const ACT_RU = {
-  test: 'гоняет тесты', ship: 'коммитит', gitread: 'смотрит в git', build: 'собирает билд',
-  deps: 'ставит зависимости', lint: 'ловит линтер', dig: 'копается в файлах',
-  shell: 'колдует в терминале', edit: 'правит {arg}', read: 'читает {arg}',
-  grep: 'ищет по коду', search: 'гуглит: {arg}', fetch: 'читает статью',
-  plan: 'раскладывает план', subtasks: 'раздаёт подзадачи', artifact: 'публикует артефакт',
-  figma: 'рисует макет в Figma', jira: 'ковыряет Jira', slack: 'пишет в Slack',
-  mail: 'разбирает почту', mcp: 'дёргает {arg}', work: 'работает', thinking: 'думает',
-  awaiting: 'ждёт твоего слова', idle: 'залип в окно',
+// Legacy clients read the rendered activity field rather than the structured
+// act key. Keep that compatibility surface in the repository's default language.
+const ACT_EN = {
+  test: 'running tests', ship: 'committing', gitread: 'reading git', build: 'building',
+  deps: 'installing dependencies', lint: 'chasing the linter', dig: 'digging through files',
+  shell: 'working in the terminal', edit: 'editing {arg}', read: 'reading {arg}',
+  grep: 'searching the code', search: 'searching: {arg}', fetch: 'reading an article',
+  plan: 'laying out a plan', subtasks: 'handing out subtasks', artifact: 'publishing an artifact',
+  figma: 'drawing in Figma', jira: 'working in Jira', slack: 'writing in Slack',
+  mail: 'going through the mail', mcp: 'calling {arg}', work: 'working', thinking: 'thinking',
+  awaiting: 'waiting on your word', idle: 'staring out of the window',
 };
-const ACT_FALLBACK_RU = { edit: 'код', read: 'файл' };
-const actRu = (a) => (ACT_RU[a.key] || ACT_RU.work).replace('{arg}', a.arg || ACT_FALLBACK_RU[a.key] || '');
+const ACT_FALLBACK_EN = { edit: 'code', read: 'a file' };
+const actEn = (a) => (ACT_EN[a.key] || ACT_EN.work).replace('{arg}', a.arg || ACT_FALLBACK_EN[a.key] || '');
 
 // Frame: Prod → "Roles · six chips", node 285:9 — it holds the chip colours and
 // which work switches each role on.
 const ROLES = {
-  design:   { role: 'Дизайнер',      short: 'design' },
-  research: { role: 'Исследователь', short: 'research' },
-  plan:     { role: 'Продакт',       short: 'plan' },
-  code:     { role: 'Разработчик',   short: 'code' },
-  qa:       { role: 'Тестировщик',   short: 'qa' },
-  release:  { role: 'Релиз-инженер', short: 'release' },
+  design:   { role: 'Designer',         short: 'design' },
+  research: { role: 'Researcher',       short: 'research' },
+  plan:     { role: 'Product manager',  short: 'plan' },
+  code:     { role: 'Developer',        short: 'code' },
+  qa:       { role: 'QA engineer',      short: 'qa' },
+  release:  { role: 'Release engineer', short: 'release' },
   // the role travels as a key (short) too — the office translates it at its end
 };
 
@@ -584,26 +585,23 @@ export const PACKS = {
   en: pack(EN_MALE, EN_FEMALE),
 };
 export const PACK_IDS = Object.keys(PACKS);
-const packOf = (id) => PACKS[id] || PACKS.ru;
+const packOf = (id) => PACKS[id] || PACKS.en;
 
 // The pool is exported for the stand, so it checks what was handed out rather than its own copy of the list.
-export const namePool = (id = 'ru') => packOf(id).pool.slice();
+export const namePool = (id = 'en') => packOf(id).pool.slice();
 // The sample for the panel comes from the handing-out order, not from the pool:
 // the pool is male and female concatenated, so its first four names are four
 // men, which lies about the dictionary.
-export const nameSample = (id = 'ru', n = 4) => packOf(id).names.slice(0, n);
+export const nameSample = (id = 'en', n = 4) => packOf(id).names.slice(0, n);
 
 // Which pack is actually in force. 'auto' follows the office language: a fresh
 // office in English gets English names, and nobody has to be taught that.
 //
-// The office language can itself be 'auto' — a fresh install nobody has opened
-// yet, since 6 September 2026 — and then neither lookup matches and the names
-// come out Russian. That lasts until the first page load, which resolves the
-// language from the device and writes it here; the pack changes with it and the
-// office renames itself on the next tick. Nobody has learned those names in the
-// meantime: an office with no visitor has no reader.
-export const effectivePack = ({ namePack = 'auto', lang = 'ru' } = {}) =>
-  (PACKS[namePack] ? namePack : (PACKS[lang] ? lang : 'ru'));
+// The office language can itself be 'auto' on a fresh install nobody has opened
+// yet. In that state the public distribution starts with English names; the
+// first page load may then resolve an explicitly supported device locale.
+export const effectivePack = ({ namePack = 'auto', lang = 'en' } = {}) =>
+  (PACKS[namePack] ? namePack : (PACKS[lang] ? lang : 'en'));
 
 // "Ося 51" is the same name as "Ося": the number was appended when the pool ran
 // out. Names from earlier versions of the pool are not in the map, and for them
@@ -614,7 +612,7 @@ export const effectivePack = ({ namePack = 'auto', lang = 'ru' } = {}) =>
 // on disk until the next snapshot, and «Пётр» has to stay a man for those
 // seconds — otherwise half the floor changes gender between the keypress and
 // the redraw.
-export function genderOf(name = '', id = 'ru') {
+export function genderOf(name = '', id = 'en') {
   const base = String(name).replace(/\s+\d+$/, '');
   const here = packOf(id).gender.get(base);
   if (here) return here;
@@ -637,7 +635,7 @@ export function hash(str) {
 // The pure part of the allocator: `saved` is what lies on disk, `order` is the
 // sessions that need a name, in start order, and `keep` is those that keep
 // theirs. Everything else lives in nameRegistry so this can be run by a stand.
-export function assignNames(saved, order, keep, packId = 'ru') {
+export function assignNames(saved, order, keep, packId = 'en') {
   const NAMES = packOf(packId).names;
   const names = {};
   for (const [sid, n] of Object.entries(saved)) if (keep.has(sid)) names[sid] = n;
@@ -846,7 +844,7 @@ export async function snapshot() {
       roleKey: roleInfo.short,
       status: busy ? 'working' : (t.awaitingUser ? 'awaiting' : 'idle'),
       act: busy ? { key: act.key, arg: act.arg || '' } : { key: t.awaitingUser ? 'awaiting' : 'idle', arg: '' },
-      activity: busy ? actRu(act) : (t.awaitingUser ? ACT_RU.awaiting : ACT_RU.idle),
+      activity: busy ? actEn(act) : (t.awaitingUser ? ACT_EN.awaiting : ACT_EN.idle),
       mood: act.mood,
       lastSaid: t.lastAssistantText.slice(0, 1500),
       // The limit notice is not something the agent said: it came from the

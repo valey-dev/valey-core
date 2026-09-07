@@ -44,7 +44,7 @@ try {
 } catch { /* the office is not running — handled below */ }
 
 if (!agents.length) {
-  console.error(`whoami: офис на ${PORT} не отвечает — имя живёт в нём, и придумывать его нельзя`);
+  console.error(`whoami: the office on ${PORT} is not responding; the name lives there and must not be invented`);
   process.exit(1);
 }
 
@@ -53,8 +53,8 @@ const mine = agents.find((a) => a.cwd === here)
   || agents.find((a) => a.cwd && here.startsWith(a.cwd + '/'));
 
 if (!mine) {
-  console.error(`whoami: в офисе нет агента с рабочим каталогом ${here}`);
-  console.error('   Возможно, сессия только началась и ещё не доехала до снимка.');
+  console.error(`whoami: the office has no agent whose working directory is ${here}`);
+  console.error('   The session may have just started and not reached the snapshot yet.');
   process.exit(1);
 }
 
@@ -67,8 +67,8 @@ if (asJson) {
   // The date is written out in full, as everywhere else in a Brief: «05.09» in a
   // file that lives for months is a riddle about the year.
   const d = new Date();
-  const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-    'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
   const when = `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
   console.log(`${sign} · ${when}${mine.branch ? ' · ' + mine.branch : ''}`);
 } else {

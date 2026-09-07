@@ -13,7 +13,7 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, '→', String(got).slice(0, 300)); }
+  else { bad += 1; console.log('FAIL  |', name, '→', String(got).slice(0, 300)); }
 };
 
 // No digit is passed on purpose: the range picks it since 5 September 2026, and
@@ -39,11 +39,11 @@ const r = spawnSync(process.execPath, [path.join(ROOT, 'tools/release.mjs'), '--
 // «одна принятая фича — один минор» is the fifth right answer: a range with
 // several features is refused until somebody says --catch-up. Like the others
 // it proves the script read THIS repository, which is all this stand is about.
-const empty = /нет коммитов|выпускать нечего|уже есть|один минор/.test(r.stderr + r.stdout);
+const empty = /no commits|nothing to release|already exists|one minor release/.test(r.stderr + r.stdout);
 const spoke = /^## v\d+\.\d+\.\d+/m.test(r.stdout) || empty;
-ok('сухой прогон из чужой папки не падает', r.status === 0 || empty, r.stderr || r.stdout);
-ok('и говорит о своём репозитории, а не о чужой папке', spoke, r.stdout + r.stderr);
-ok('и ничего не записывает', /--dry: ничего не записано/.test(r.stdout) || empty, r.stdout);
+ok('dry run from someone else\'s folder does not crash', r.status === 0 || empty, r.stderr || r.stdout);
+ok('and talks about his repository, and not about someone else\'s folder', spoke, r.stdout + r.stderr);
+ok('and doesn\'t record anything', /--dry: nothing was written/.test(r.stdout) || empty, r.stdout);
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

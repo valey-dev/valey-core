@@ -58,7 +58,7 @@ UI.initUI({ agents: [], looks: new Map(), settings: {}, delivery: {} }, {});
 let failed = 0;
 const check = (name, ok, got) => {
   if (ok) console.log('ok    |', name);
-  else { failed++; console.log('ПЛОХО |', name, '→', got); }
+  else { failed++; console.log('FAIL  |', name, '→', got); }
 };
 const focusAt = () => lift.btns.findIndex((b) => b.has('focus'));
 
@@ -67,54 +67,54 @@ const floors = { floors: [{ n: 1, rooms: [] }, { n: 2, rooms: [] }, { n: 3, room
 lift = makeLift('floors', 3);
 let picked = null;
 UI.openLift(floors, 2, (n) => { picked = n; });
-check('фокус на текущем этаже, а не на первом', focusAt() === 1, focusAt());
+check('focus on the current floor, not the first one', focusAt() === 1, focusAt());
 
 // --- 2. the arrows walk the floors ---
-check('вверх обработана', UI.liftKey('ArrowUp') === true, 'не обработана');
-check('и подняла на этаж выше по списку', focusAt() === 0, focusAt());
+check('up processed', UI.liftKey('ArrowUp') === true, 'не обработана');
+check('and raised me to a floor higher on the list', focusAt() === 0, focusAt());
 UI.liftKey('ArrowDown'); UI.liftKey('ArrowDown');
-check('вниз опускает', focusAt() === 2, focusAt());
+check('lowers down', focusAt() === 2, focusAt());
 
 // --- 3. the list wraps: a step off the edge goes to the other end ---
 UI.liftKey('ArrowDown');
-check('с последнего вниз — на первый', focusAt() === 0, focusAt());
+check('from last down to first', focusAt() === 0, focusAt());
 
 // --- 4. Enter presses the chosen floor ---
 UI.liftKey('Enter');
-check('Enter нажимает этаж под фокусом', lift.btns[0].clicked === 1, lift.btns[0].clicked);
-check('и только его', lift.btns.filter((b) => b.clicked).length === 1, lift.btns.map((b) => b.clicked).join(','));
+check('Enter presses the floor under focus', lift.btns[0].clicked === 1, lift.btns[0].clicked);
+check('and only him', lift.btns.filter((b) => b.clicked).length === 1, lift.btns.map((b) => b.clicked).join(','));
 
 // --- 5. a digit picks a floor directly: "3" is floor three, not item three ---
 lift = makeLift('floors', 3);
-check('цифра обработана панелью', UI.liftKey('2') === true, 'не обработана');
-check('и нажала этаж с этим номером', lift.btns[1].clicked === 1, lift.btns[1].clicked);
-check('соседние этажи не тронуты', lift.btns[0].clicked === 0 && lift.btns[2].clicked === 0, 'тронуты');
-check('и фокус переехал туда же', lift.btns[1].has('focus'), 'не переехал');
+check('the figure is processed by the panel', UI.liftKey('2') === true, 'не обработана');
+check('and pressed the floor with this number', lift.btns[1].clicked === 1, lift.btns[1].clicked);
+check('the adjacent floors are not touched', lift.btns[0].clicked === 0 && lift.btns[2].clicked === 0, 'тронуты');
+check('and the focus moved there', lift.btns[1].has('focus'), 'не переехал');
 UI.liftKey('7');
-check('цифра мимо списка ничего не нажала', lift.btns.every((b) => b.clicked <= 1), 'нажала');
-check('но в офис не уехала', UI.liftKey('7') === true, 'уехала');
+check('the number past the list did not press anything', lift.btns.every((b) => b.clicked <= 1), 'нажала');
+check('but didn\'t go to the office', UI.liftKey('7') === true, 'уехала');
 
 // --- 6. a closed panel does not take the keys ---
 // otherwise the arrows stop walking the office after the very first ride
 lift.hidden = true;
-check('закрытая панель не ест стрелки', UI.liftKey('ArrowUp') === false, 'съела');
-check('и не ест Enter', UI.liftKey('Enter') === false, 'съела');
+check('closed panel does not accept arrows', UI.liftKey('ArrowUp') === false, 'съела');
+check('and doesn\'t eat Enter', UI.liftKey('Enter') === false, 'съела');
 
 // --- 6. the reception desk: the same keys on the same node ---
 lift = makeLift('rec', 2);
 UI.openReception({ n: 1, rooms: ['AI valey', 'figma'] }, () => {});
-check('на стойке фокус встаёт на первую строку', focusAt() === 0, focusAt());
+check('on the counter the focus is on the first line', focusAt() === 0, focusAt());
 UI.liftKey('ArrowDown');
-check('и ходит по строкам', focusAt() === 1, focusAt());
+check('and walks along the lines', focusAt() === 1, focusAt());
 UI.liftKey(' ');
-check('ПРОБЕЛ нажимает строку', lift.btns[1].clicked === 1, lift.btns[1].clicked);
+check('SPACEBAR presses a line', lift.btns[1].clicked === 1, lift.btns[1].clicked);
 
 // --- 7. a floor with no rows: the panel must not get stuck ---
 // on an empty floor the desk draws a greeting and not a single button
 lift = makeLift('rec', 0);
 UI.openReception({ n: 9, rooms: [] }, () => {});
-check('пустая стойка стрелки не забирает', UI.liftKey('ArrowDown') === false, 'забрала');
-check('и Enter тоже', UI.liftKey('Enter') === false, 'забрала');
+check('empty arrow stand does not pick up', UI.liftKey('ArrowDown') === false, 'забрала');
+check('and Enter too', UI.liftKey('Enter') === false, 'забрала');
 
-console.log(failed ? `\nпровалено: ${failed}` : '\nвсё сошлось');
+console.log(failed ? `\nfailed: ${failed}` : '\nall matched');
 process.exit(failed ? 1 : 0);

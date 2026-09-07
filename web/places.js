@@ -187,9 +187,9 @@ let places = [];
 export function define(list) {
   for (const p of [].concat(list || [])) {
     if (!p || !p.id || !p.title) {
-      throw new Error(`places: у места должны быть id и title — пришло ${JSON.stringify(p)}`);
+      throw new Error(`places: an entry must have id and title; received ${JSON.stringify(p)}`);
     }
-    if (places.some((x) => x.id === p.id)) throw new Error(`places: место ${p.id} уже объявлено`);
+    if (places.some((x) => x.id === p.id)) throw new Error(`places: entry ${p.id} is already declared`);
     places.push({ registry: false, deaf: false, caps: {}, mute: [], ...p,
       caps: { ...(p.caps || {}) }, mute: [...(p.mute || [])] });
   }

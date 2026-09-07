@@ -17,7 +17,7 @@ import { loadModules, moduleList, moduleDefaults, moduleErrors, moduleRoute, mod
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    | ' + name);
-  else { bad++; console.log('УПАЛ  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
+  else { bad++; console.log('FAIL  | ' + name + (got === undefined ? '' : ' → ' + JSON.stringify(got))); }
 };
 
 const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-modules-'));
@@ -31,10 +31,10 @@ const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-modules-'));
 await fsp.writeFile(path.join(root, 'package.json'), JSON.stringify({ type: 'module' }));
 
 // 1. No modules/ directory at all — the free build.
-ok('без каталога modules/ загрузчик молчит и отдаёт пустоту', (await loadModules(root)).length === 0);
-ok('список пуст', moduleList().length === 0);
-ok('настроек не добавилось', Object.keys(moduleDefaults()).length === 0);
-ok('маршрут никем не перехвачен', (await moduleRoute(new URL('http://x/api/wip'), {}, {}, () => {})) === false);
+ok('Without the modules/ directory, the bootloader is silent and renders empty', (await loadModules(root)).length === 0);
+ok('the list is empty', moduleList().length === 0);
+ok('no settings added', Object.keys(moduleDefaults()).length === 0);
+ok('the route is not intercepted by anyone', (await moduleRoute(new URL('http://x/api/wip'), {}, {}, () => {})) === false);
 
 // 2. A normal module with a server.
 const mods = path.join(root, 'modules');
@@ -65,17 +65,17 @@ await fsp.mkdir(path.join(mods, 'чужой'), { recursive: true });
 await fsp.writeFile(path.join(mods, 'чужой', 'module.json'), JSON.stringify({ id: 'не-тот-id', client: 'client.js' }));
 
 const loaded = await loadModules(root);
-ok('загрузился ровно один модуль', loaded.length === 1, loaded.map(m => m.id));
-ok('это он', loaded[0]?.id === 'пример');
-ok('в списке для клиента есть путь к клиенту и стилю',
+ok('Exactly one module loaded', loaded.length === 1, loaded.map(m => m.id));
+ok('it\'s him', loaded[0]?.id === 'пример');
+ok('in the list for the client there is a path to the client and style',
   moduleList()[0]?.client === 'client.js' && moduleList()[0]?.style === 'style.css', moduleList());
-ok('модуль довёз свои настройки', moduleDefaults()['пример']?.ключ === '', moduleDefaults());
-ok('ошибок нет', moduleErrors().length === 0, moduleErrors());
+ok('the module delivered its settings', moduleDefaults()['пример']?.ключ === '', moduleDefaults());
+ok('no errors', moduleErrors().length === 0, moduleErrors());
 
 let answered = null;
 const taken = await moduleRoute(new URL('http://x/api/wip'), {}, {}, (_res, code, body) => { answered = { code, body }; });
-ok('модуль забрал свой маршрут', taken === true && answered?.code === 200, answered);
-ok('чужой маршрут не забрал', (await moduleRoute(new URL('http://x/api/state'), {}, {}, () => {})) === false);
+ok('the module took its route', taken === true && answered?.code === 200, answered);
+ok('didn\'t take someone else\'s route', (await moduleRoute(new URL('http://x/api/state'), {}, {}, () => {})) === false);
 
 // The owner check is handed to a module route, not worked out inside it: the
 // office has one such check and it knows about private mode, local addresses
@@ -83,23 +83,23 @@ ok('чужой маршрут не забрал', (await moduleRoute(new URL('ht
 answered = null;
 await moduleRoute(new URL('http://x/api/wip/where'), {}, {}, (_res, code, body) => { answered = { code, body }; },
   { isOwner: async () => true });
-ok('хозяину маршрут отвечает', answered?.code === 200 && answered.body.file === '/tmp/settings.json', answered);
+ok('the route answers the owner', answered?.code === 200 && answered.body.file === '/tmp/settings.json', answered);
 answered = null;
 await moduleRoute(new URL('http://x/api/wip/where'), {}, {}, (_res, code, body) => { answered = { code, body }; },
   { isOwner: async () => false });
-ok('гостю — отказ', answered?.code === 403, answered);
+ok('guest - refusal', answered?.code === 403, answered);
 answered = null;
 await moduleRoute(new URL('http://x/api/wip/where'), {}, {}, (_res, code, body) => { answered = { code, body }; });
-ok('без контекста тоже отказ, а не падение', answered?.code === 403, answered);
+ok('without context, it’s also a failure, not a fall', answered?.code === 403, answered);
 
 // 4. A broken module server does not bring the office down, but does not stay quiet either.
 await fsp.mkdir(path.join(mods, 'broken'), { recursive: true });
 await fsp.writeFile(path.join(mods, 'broken', 'module.json'), JSON.stringify({ id: 'broken', server: 'server.js' }));
 await fsp.writeFile(path.join(mods, 'broken', 'server.js'), 'this is not javascript(');
 await loadModules(root);
-ok('сломанный модуль не уронил загрузку', moduleList().some(m => m.id === 'пример'));
-ok('сломанный модуль не попал в список для клиента', !moduleList().some(m => m.id === 'broken'));
-ok('и о нём сказано вслух', moduleErrors().some(e => e.id === 'broken'), moduleErrors());
+ok('broken module didn\'t drop the load', moduleList().some(m => m.id === 'пример'));
+ok('the broken module was not included in the list for the client', !moduleList().some(m => m.id === 'broken'));
+ok('and it is said out loud', moduleErrors().some(e => e.id === 'broken'), moduleErrors());
 
 // 5. Watching the office snapshot. The point is server-side, and it is needed by
 // whoever keeps a journal: the client's `tick` is about a frame in the browser,
@@ -109,22 +109,22 @@ await moduleObserve({ n: 2 }, { n: 1 });
 // second read brought the stand down along with the remaining checks — that is
 // how the first CI run showed a crash instead of four honest failures.
 const seen = await fsp.readFile(path.join(root, 'seen.json'), 'utf8').catch(() => null);
-ok('наблюдателю достались снимок и предыдущий', seen === '[2,1]', seen);
+ok('the observer got the photo and the previous one', seen === '[2,1]', seen);
 
 // An observer that throws neither stops the tick nor swallows its neighbours:
 // this is called every 2.5 seconds and has to survive any foreign code.
 await fsp.mkdir(path.join(mods, 'падучий'), { recursive: true });
 await fsp.writeFile(path.join(mods, 'падучий', 'module.json'), JSON.stringify({ id: 'падучий', server: 'server.js' }));
 await fsp.writeFile(path.join(mods, 'падучий', 'server.js'),
-  'export const observe = async () => { throw new Error("наблюдатель упал"); };\n');
+  'export const observe = async () => { throw new Error("observer crashed"); };\n');
 await loadModules(root);
 let survived = true;
 try { await moduleObserve({ n: 3 }, { n: 2 }); } catch { survived = false; }
-ok('упавший наблюдатель не уронил такт', survived);
-ok('и не помешал соседу отработать',
+ok('the fallen observer did not drop the beat', survived);
+ok('and didn’t stop the neighbor from working',
   await fsp.readFile(path.join(root, 'seen.json'), 'utf8') === '[3,2]',
   await fsp.readFile(path.join(root, 'seen.json'), 'utf8').catch(() => null));
 
 await fsp.rm(root, { recursive: true, force: true });
-console.log(bad ? `\n${bad} упало` : '\nвсё прошло');
+console.log(bad ? `\n${bad} упало` : '\nall passed');
 process.exit(bad ? 1 : 0);

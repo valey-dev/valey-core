@@ -21,7 +21,7 @@ const TOKEN = 'consent-owner-0001';
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
-  else { bad += 1; console.log('УПАЛ  |', name, '→', JSON.stringify(got)); }
+  else { bad += 1; console.log('FAIL  |', name, '→', JSON.stringify(got)); }
 };
 
 const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-consent-'));
@@ -48,80 +48,80 @@ const SECRET = ['lastSaid', 'lastAsked', 'files', 'artifacts', 'branch', 'cwd', 
 try {
   const made = await call('/api/invite', { as: 'owner', body: { name: 'Костя', from: 'Сергей' } });
   GUEST = (await call('/api/enter', { body: { code: made.j.invite.code } })).j.guest;
-  ok('гость вошёл', !!GUEST, GUEST);
+  ok('the guest has entered', !!GUEST, GUEST);
 
   // The snapshot is not built in the same millisecond the server starts.
   const asOwner = await waitForAgent(() => stateAs('owner'));
   const agentId = asOwner.agents[0].id;
-  ok('в офисе выдуманный агент, а не чья-то живая сессия',
+  ok('there\'s a fictitious agent in the office, not someone\'s live session',
     asOwner.agents[0].project === 'rocket-shop' && asOwner.agents[0].lastSaid === fake.said,
     { project: asOwner.agents[0].project, said: asOwner.agents[0].lastSaid });
 
   // ------------------------------------------------------ the default
   const asGuest = await stateAs('guest');
   const a = asGuest.agents.find((x) => x.id === agentId);
-  ok('гость видит агента', !!a, asGuest.agents.length);
-  ok('и его имя, роль, комнату и состояние',
+  ok('the guest sees the agent', !!a, asGuest.agents.length);
+  ok('and his name, role, room and state',
     !!a.name && !!a.roleKey && !!a.project && !!a.status, a);
   const leaked = SECRET.filter((k) => a[k] !== undefined);
-  ok('но ничего из того, чем агент занят', leaked.length === 0, leaked);
-  ok('у хозяина эти поля на месте — значит их правда прячут, а не потеряли',
+  ok('but nothing that the agent is doing', leaked.length === 0, leaked);
+  ok('the owner has these fields in place - which means they are really hiding them, and not lost',
     SECRET.some((k) => asOwner.agents[0][k] !== undefined), null);
 
   const chat = await call('/api/chat?id=' + agentId, { as: 'guest', method: 'GET' });
-  ok('разговор гостю закрыт', chat.status === 403, chat.status);
-  ok('и отказ назван', chat.j && chat.j.errorKey === 'err.notGranted', chat.j);
+  ok('conversation with the guest is closed', chat.status === 403, chat.status);
+  ok('and the refusal is named', chat.j && chat.j.errorKey === 'err.notGranted', chat.j);
 
   // ------------------------------------------------------ the request
   const ask = await call('/api/access', { as: 'guest', body: { agentId, note: 'подстрахую' } });
-  ok('гость может попросить', ask.status === 200, ask.status);
+  ok('the guest can ask', ask.status === 200, ask.status);
   const ownerSees = await stateAs('owner');
-  ok('хозяин видит запрос', (ownerSees.access.requests || []).length === 1, ownerSees.access);
-  ok('и в нём написано, о ком и что просили',
+  ok('the owner sees the request', (ownerSees.access.requests || []).length === 1, ownerSees.access);
+  ok('and it says who and what they asked for',
     ownerSees.access.requests[0].agentId === agentId
       && ownerSees.access.requests[0].note === 'подстрахую', ownerSees.access.requests[0]);
   const askAgain = await call('/api/access', { as: 'guest', body: { agentId, note: 'ну пожалуйста' } });
-  ok('повторная просьба заменяет прежнюю, а не ложится второй',
+  ok('a repeated request replaces the previous one, rather than a second one',
     (await stateAs('owner')).access.requests.length === 1, askAgain.status);
 
   const byGuest = await call('/api/access/answer', { as: 'guest', body: { id: 'что угодно', yes: true } });
-  ok('сам себе гость открыть не может', byGuest.status === 403, byGuest.status);
+  ok('the guest cannot open it for himself', byGuest.status === 403, byGuest.status);
 
   // ------------------------------------------------------ the refusal
   const reqId = (await stateAs('owner')).access.requests[0].id;
   await call('/api/access/answer', { as: 'owner', body: { id: reqId, yes: false } });
   const refused = await stateAs('guest');
-  ok('гость видит отказ, а не тишину', refused.access.refused.includes(agentId), refused.access);
+  ok('the guest sees a refusal, not silence', refused.access.refused.includes(agentId), refused.access);
   const stillClosed = await call('/api/chat?id=' + agentId, { as: 'guest', method: 'GET' });
-  ok('и разговор по-прежнему закрыт', stillClosed.status === 403, stillClosed.status);
+  ok('and the conversation is still closed', stillClosed.status === 403, stillClosed.status);
 
   // ------------------------------------------------------ the consent
   await call('/api/access', { as: 'guest', body: { agentId, note: 'ещё раз' } });
   const reqId2 = (await stateAs('owner')).access.requests[0].id;
   const yes = await call('/api/access/answer', { as: 'owner', body: { id: reqId2, yes: true } });
-  ok('хозяин открывает доступ', yes.status === 200, yes.status);
+  ok('the owner opens access', yes.status === 200, yes.status);
 
   const opened = await stateAs('guest');
   const b = opened.agents.find((x) => x.id === agentId);
-  ok('теперь гость видит, чем агент занят', b.lastSaid !== undefined, Object.keys(b).length);
-  ok('и это записано у него в доступе', opened.access.granted.includes(agentId), opened.access);
+  ok('now the guest can see what the agent is doing', b.lastSaid !== undefined, Object.keys(b).length);
+  ok('and this is recorded in his access', opened.access.granted.includes(agentId), opened.access);
   const chatOpen = await call('/api/chat?id=' + agentId, { as: 'guest', method: 'GET' });
-  ok('разговор открылся', chatOpen.status === 200, chatOpen.status);
+  ok('the conversation opened up', chatOpen.status === 200, chatOpen.status);
 
   const other = opened.agents.find((x) => x.id !== agentId);
-  if (other) ok('но только про этого агента, не про всех', other.lastSaid === undefined, Object.keys(other));
+  if (other) ok('but only about this agent, not about everyone', other.lastSaid === undefined, Object.keys(other));
 
-  ok('хозяин видит, кому что открыто',
+  ok('the owner sees who is opening what',
     (await stateAs('owner')).access.open.some((o) => o.agentId === agentId), null);
 
   // ------------------------------------------------------ the revoke
   const guestId = (await stateAs('owner')).access.open[0].guestId;
   await call('/api/access/revoke', { as: 'owner', body: { guestId, agentId } });
   const shut = await stateAs('guest');
-  ok('после отзыва снова только проекция',
+  ok('after the review again only projection',
     shut.agents.find((x) => x.id === agentId).lastSaid === undefined, null);
   const chatShut = await call('/api/chat?id=' + agentId, { as: 'guest', method: 'GET' });
-  ok('и разговор закрылся обратно', chatShut.status === 403, chatShut.status);
+  ok('and the conversation closed back', chatShut.status === 403, chatShut.status);
 
   // ------------------------------ the projection has to survive being drawn
   // Handing a guest a trimmed agent is only half of it — the office must be
@@ -139,16 +139,16 @@ try {
   const actors = new Map();
   let drew = null;
   try { syncActors(actors, seen.agents || [], layout); } catch (e) { drew = e.message; }
-  ok('гостевой снимок переживает расстановку актёров', drew === null, drew);
-  ok('и все агенты расставлены', actors.size === (seen.agents || []).length,
+  ok('guest shot survives the cast lineup', drew === null, drew);
+  ok('and all the agents are deployed', actors.size === (seen.agents || []).length,
     [actors.size, (seen.agents || []).length]);
 } catch (e) {
   bad += 1;
-  console.log('УПАЛ  | стенд не доехал →', e.message);
+  console.log('FAIL  | test did not complete →', e.message);
 } finally {
   await stop();
   await fsp.rm(dir, { recursive: true, force: true });
 }
 
-console.log(bad ? `\nПРОВАЛЕНО: ${bad}` : '\nвсё хорошо');
+console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);
