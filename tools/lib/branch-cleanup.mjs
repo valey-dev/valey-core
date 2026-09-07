@@ -4,7 +4,7 @@ import path from 'node:path';
 
 const command = (cmd, args, options = {}) => {
   const r = spawnSync(cmd, args, { encoding: 'utf8', ...options });
-  return { status: r.status ?? 1, stdout: r.stdout || '', stderr: r.stderr || '' };
+  return { status: r.status ?? 1, stdout: r.stdout || '', stderr: r.stderr || '', error: r.error || null };
 };
 
 const git = (repo, args, { allowFailure = false } = {}) => {
@@ -40,6 +40,7 @@ export function worktrees(repo) {
 
 const processesIn = (dir) => {
   const r = command('lsof', ['-a', '-d', 'cwd', '+D', dir, '-Fp']);
+  if (r.error && r.error.code === 'ENOENT') return null;
   if (r.status !== 0 && !r.stderr && !r.stdout) return [];
   if (r.status !== 0 && /not found|No such file/i.test(r.stderr)) return null;
   return [...new Set(r.stdout.split('\n')
@@ -54,6 +55,9 @@ const protectedBranch = (branch, mainRef) => {
 
 export function inspectCleanup({ repo, branch, mainRef = 'origin/main', removeWorktree = false }) {
   const root = path.resolve(repo);
+  if (git(root, ['remote', 'get-url', 'origin'], { allowFailure: true }).status === 0) {
+    git(root, ['fetch', 'origin', '--prune', '--quiet']);
+  }
   const valid = git(root, ['check-ref-format', '--branch', branch], { allowFailure: true });
   if (valid.status !== 0) throw new Error(`invalid branch name: ${branch}`);
   if (protectedBranch(branch, mainRef)) throw new Error(`protected branch cannot be cleaned: ${branch}`);
@@ -106,4 +110,3 @@ export function applyCleanup(plan) {
   }
   return { ...plan, state: 'cleaned' };
 }
-

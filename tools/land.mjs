@@ -143,6 +143,22 @@ if (r.status !== 0) {
     `  VALEY_REPO=${dir} node ${path.join(TOOL_ROOT, 'tools/release.mjs')} --ship`);
 }
 sweep();
+
+// GitHub removes the remote PR branch at merge time. The local ref belongs to
+// this clone, so the server cannot clean it: do that only after the release has
+// succeeded and main contains the exact PR head. A branch still checked out in
+// a live worktree is deliberately deferred; removing a directory from under the
+// shell or agent that called land would turn successful delivery into damage.
+if (!dry) {
+  console.log('\nbranch cleanup:');
+  const cleanup = spawnSync(process.execPath,
+    [path.join(TOOL_ROOT, 'tools/cleanup-merged.mjs'), info.headRefName,
+      '--repo', ROOT, '--apply'],
+    { cwd: os.tmpdir(), stdio: 'inherit' });
+  if (cleanup.status !== 0 && cleanup.status !== 3) {
+    die(`release was published, but branch cleanup failed for ${info.headRefName}`);
+  }
+}
 console.log(dry
   ? '\n--dry: nothing was merged or released. Above is the section that would ship and the tests covering it.'
   : '\ndone: PR merged, version cut, and release published.');
