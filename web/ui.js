@@ -329,7 +329,7 @@ function buildDialog(a) {
         : `<button id="askAccess">${tr(st === 'refused' ? 'acc.askAgain' : 'acc.ask')}</button>`;
       body = `<p class="q">${tr('dlg.whatUp')}</p>
         <p class="say">${tr('acc.projectionOnly')}</p>
-        <p class="hint block">${tr(st === 'refused' ? 'acc.refused' : st === 'pending' ? 'acc.waiting' : 'acc.closed')}</p>
+        <p class="hint">${tr(st === 'refused' ? 'acc.refused' : st === 'pending' ? 'acc.waiting' : 'acc.closed')}</p>
         ${btn}
         <p class="hint dim">${tr('acc.note')}</p>`;
     }
@@ -1230,6 +1230,19 @@ export function liftOpen() { return !!(el.lift && !el.lift.hidden); }
 // that is a different place from the card itself: there the letters type.
 export function cardPage() { return S.page; }
 
+// The box that scrolls in the open file: the image sits in its own frame, text
+// scrolls in the panel body.
+function scrollSingle(key) {
+  const can = (b) => b && b.scrollHeight > b.clientHeight + 1;
+  const zoom = el.viewer.querySelector('.zoomwrap');
+  const box = can(zoom) ? zoom : el.viewer.querySelector('.single') || zoom;
+  if (!box) return;
+  if (key === 'home') { box.scrollTop = 0; return; }
+  if (key === 'end') { box.scrollTop = box.scrollHeight; return; }
+  const step = Math.max(120, box.clientHeight * 0.9);
+  box.scrollTop += key === 'pageup' ? -step : step;
+}
+
 export function viewerKey(raw, big = false) {
   if (el.viewer.hidden) return false;
   const key = raw.toLowerCase();
@@ -1263,6 +1276,11 @@ export function viewerKey(raw, big = false) {
   const n = gallery.items.length;
 
   if (gallery.mode === 'single') {
+    // A tall image runs off the bottom of the screen and the mouse could reach
+    // it while the keyboard could not: PageUp/PageDown were in VIEWER_KEYS, so
+    // the viewer swallowed them and did nothing. On a Mac keyboard without a
+    // numeric block these are Fn+↑/↓, which is how this was noticed.
+    if (['pageup', 'pagedown', 'home', 'end'].includes(key)) { scrollSingle(key); return true; }
     if (key === 'r' || key === 'к') return toggleMarkdownRaw();
     // Pixel zoom is an action on the image itself and has no button. The mouse
     // used to be the only way to inspect an individual pixel.
@@ -2155,7 +2173,8 @@ function wideKey(key, cur) {
   const list = here.slice().sort((a, b) => rank(b) - rank(a) || a.row - b.row);
   const i = Math.max(0, list.indexOf(cur));
   let next = null;
-  if (key === 'arrowdown' || key === 'arrowright') next = list[(i + 1) % list.length];
+  if (key === 'arrowdown') next = list[Math.min(i + 1, list.length - 1)];
+  else if (key === 'arrowright') next = list[(i + 1) % list.length];
   else if (key === 'arrowup' || key === 'arrowleft') next = list[(i - 1 + list.length) % list.length];
   else if (key === 'enter' || key === ' ') return true;
   else return false;
@@ -2181,8 +2200,10 @@ function treeKey(key) {
   let next = null;
   if (key === 'arrowup' || key === 'arrowdown') {
     const col = LIBRARY.filter((n) => colOf(n) === colOf(cur)).sort((a, b) => a.row - b.row);
-    const d = key === 'arrowup' ? -1 : 1;
-    next = col[(col.indexOf(cur) + d + col.length) % col.length];
+    const i = col.indexOf(cur);
+    next = key === 'arrowup'
+      ? col[(i - 1 + col.length) % col.length]
+      : col[Math.min(i + 1, col.length - 1)];
   } else if (key === 'arrowleft') {
     next = cur.parent ? byId(cur.parent) : treeNear(colOf(cur) - 1, cur.row);
   } else if (key === 'arrowright') {

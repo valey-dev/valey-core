@@ -28,9 +28,10 @@ import { pickKind, check } from './release-kind.mjs';
 // own version, its own tags and the same rules, and duplicating four tools into
 // it would mean two copies drifting apart. So the root is overridable, and the
 // default stays «the repo this file belongs to».
+const TOOL_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const ROOT = process.env.VALEY_REPO
   ? path.resolve(process.env.VALEY_REPO)
-  : path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+  : TOOL_ROOT;
 
 const git = (...a) => execFileSync('git', ['-C', ROOT, ...a], { encoding: 'utf8' }).trim();
 // The same, but quietly: before the first tag `git describe` shouts into stderr,
@@ -236,7 +237,7 @@ if (!ship) {
 // The video is the office's own rule: a minor of the office is shown to people.
 // The modules repository is released by the same tooling and has no video and no
 // audience for one, so the draft belongs to the repo this script lives in.
-const ownRepo = ROOT === path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const ownRepo = ROOT === TOOL_ROOT;
 if (next.endsWith('.0') && ownRepo) {
   try {
     const out = execFileSync(process.execPath, [fileURLToPath(new URL('script.mjs', import.meta.url)), tag],
@@ -266,13 +267,17 @@ if (ship) {
   console.log(`  main and ${tag} pushed`);
 
   console.log('\nrelease page:');
-  const r = spawnSync(process.execPath, [path.join(ROOT, 'tools/gh-release.mjs'), tag],
+  // The released repository can borrow this release suite without carrying a
+  // duplicate tools/ directory. The page builder therefore lives beside this
+  // script, just like release-kind.mjs and the video-script helper above.
+  const r = spawnSync(process.execPath, [path.join(TOOL_ROOT, 'tools/gh-release.mjs'), tag],
     { cwd: ROOT, stdio: 'inherit' });
   // The tag is already pushed by now, so a failure here is not fatal to the
   // release — it is one command away from being finished, and saying which one
   // beats a stack trace.
   if (r.status !== 0) {
-    console.log(`\nrelease page creation failed. Tag ${tag} is already on origin; finish with:\n  node tools/gh-release.mjs ${tag}`);
+    console.log(`\nrelease page creation failed. Tag ${tag} is already on origin; finish with:\n` +
+      `  VALEY_REPO=${ROOT} node ${path.join(TOOL_ROOT, 'tools/gh-release.mjs')} ${tag}`);
     process.exit(1);
   }
 }

@@ -5,6 +5,7 @@
 // halves. A run from the system temp directory is the most foreign cwd there is:
 // no repository and no package.json in it.
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,6 +45,26 @@ const spoke = /^## v\d+\.\d+\.\d+/m.test(r.stdout) || empty;
 ok('dry run from someone else\'s folder does not crash', r.status === 0 || empty, r.stderr || r.stdout);
 ok('and talks about his repository, and not about someone else\'s folder', spoke, r.stdout + r.stderr);
 ok('and doesn\'t record anything', /--dry: nothing was written/.test(r.stdout) || empty, r.stdout);
+
+// Catch-up is an explicit release decision, and land is the only supported
+// merge path. Losing the flag between those two scripts makes the documented
+// recovery command impossible while still looking valid at the CLI boundary.
+const land = readFileSync(path.join(ROOT, 'tools/land.mjs'), 'utf8');
+ok('land passes an explicit --catch-up to the release script',
+  /const catchUp = argv\.includes\('--catch-up'\)/.test(land) &&
+  /if \(catchUp\) args\.push\('--catch-up'\)/.test(land), 'flag was lost');
+
+// The modules repository borrows the core release suite. Its tests depend on
+// the ordinary two-repository layout, and its GitHub page builder belongs to
+// core too. Both paths failed only after a PR had merged, so guard them here.
+const release = readFileSync(path.join(ROOT, 'tools/release.mjs'), 'utf8');
+ok('a temporary module release gets a clean core host',
+  /toolGit\('worktree', 'add'.*hostDir, 'origin\/main'\)/.test(land) &&
+  /fs\.symlinkSync\(path\.relative\(moduleDir, source\), target, 'dir'\)/.test(land),
+  'the module release worktree is detached from core again');
+ok('a second repository builds its release page with the core tool',
+  /path\.join\(TOOL_ROOT, 'tools\/gh-release\.mjs'\)/.test(release),
+  'gh-release.mjs is being searched for inside the released repository again');
 
 console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

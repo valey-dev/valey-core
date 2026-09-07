@@ -880,6 +880,35 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .tcard input::placeholder{color:var(--muted-dim)}
 .tcard .small{font-size:11px}
 .tmeta{position:absolute; bottom:3%; color:var(--muted-dim); font-size:11px}
+
+/* Narrow-screen entrance: a column instead of a canvas of scattered objects.
+   These percentages were calculated for a wide window. On a phone the cards
+   overlapped rather than spreading apart: `.tmenu` and `.tcard` both had a
+   180 px minimum width, so on a 390 px screen each took almost half while the
+   video card on the left grew downward and covered the menu completely.
+   A live-phone check found this on 7 September 2026: Enter could not be tapped.
+   The corridor layout does not work at this width either because there is
+   nowhere to walk, so the entrance becomes a regular page: menu first, then
+   the cards. */
+@media (max-width:720px){
+  #title{inset:0; display:flex; flex-direction:column; gap:10px; padding:14px;
+    box-sizing:border-box; overflow-y:auto; background:rgba(20,13,8,.92)}
+  #title .tmenu, #title .tcard, #title .tnote{position:static; width:auto; min-width:0;
+    max-width:none; transform:none}
+  #title .tmenu{order:1; opacity:1}
+  #title .tcard{order:2}
+  #title .tnote{order:3}
+  /* Corner labels are not corners on a phone: they move to the end of the
+     column as a row. The walk-the-corridor label is hidden because there is no
+     corridor here. */
+  #title .tmeta{position:static; order:4; text-align:left}
+  #title .tmeta.center{display:none}
+  #title .tmeta.right{margin-top:-6px}
+  /* A video-draft path is one long slash-separated word and used to escape the
+     card at 390 px. Breaking anywhere is better than clipping because readers
+     copy this path into a terminal by sight. */
+  #title .tcard span, #title .tcard b{overflow-wrap:anywhere}
+}
 .tmeta.left{left:3%} .tmeta.right{right:3%}
 .tmeta.center{left:50%; transform:translateX(-50%)}
 
