@@ -40,9 +40,11 @@ const server = createServer((req, res) => {
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const BASE = `http://127.0.0.1:${server.address().port}`;
 
-const run = (dir, extra = []) => new Promise((resolve) => {
+const run = (dir, extra = [], env = {}) => new Promise((resolve) => {
   execFile('sh', [SCRIPT, `--dir=${dir}`, '--version=9.9.9', ...extra],
-    { env: { ...process.env, VALEY_BASE: BASE }, encoding: 'utf8' },
+    // Pinned, not inherited: the stand must not pass or fail on whoever's
+    // machine it runs on having a Russian locale.
+    { env: { ...process.env, VALEY_BASE: BASE, LC_ALL: 'ru_RU.UTF-8', LANG: 'ru_RU.UTF-8', ...env }, encoding: 'utf8' },
     (err, stdout, stderr) => resolve({ code: err ? err.code ?? 1 : 0, out: stdout + stderr }));
 });
 
@@ -87,7 +89,37 @@ try {
   r = await run(path.join(work, 'flag'), ['--rnu']);
   assert.notEqual(r.code, 0, 'проглотил неизвестный ключ');
 
-  console.log('установщик: 12 проверок прошли');
+  mode = 'ok';
+
+  // Two languages, chosen by locale, English by default: the landing speaks
+  // both and a buyer is not necessarily either.
+  const en = await run(path.join(work, 'en'), [], { LC_ALL: 'en_US.UTF-8', LANG: 'en_US.UTF-8' });
+  assert.equal(en.code, 0, `английская установка упала: ${en.out}`);
+  assert.match(en.out, /Office assembled/, 'при английской локали говорит не по-английски');
+  assert.doesNotMatch(en.out, /Офис собран/);
+
+  // The paid modules ride in on the same command. This is the whole answer to
+  // "two repositories?": two sources, one thing the buyer types.
+  const packSrc = path.join(work, 'packsrc', 'valey-office', 'easel');
+  mkdirSync(packSrc, { recursive: true });
+  writeFileSync(path.join(packSrc, 'module.json'), JSON.stringify({ id: 'easel', tier: 'office' }) + '\n');
+  writeFileSync(path.join(work, 'packsrc', 'valey-office', 'README.md'), 'not a module\n');
+  const packZip = path.join(work, 'pack.zip');
+  execFileSync('zip', ['-qr', packZip, 'valey-office'], { cwd: path.join(work, 'packsrc') });
+
+  const withPack = path.join(work, 'withpack');
+  const p = await run(withPack, [`--pack=${packZip}`]);
+  assert.equal(p.code, 0, `установка с модулями упала: ${p.out}`);
+  assert.ok(existsSync(path.join(withPack, 'modules', 'easel', 'module.json')), 'модуль не встал в modules/');
+  assert.ok(!existsSync(path.join(withPack, 'modules', 'README.md')), 'в modules/ уехал не-модуль');
+  assert.match(p.out, /Модули на месте: easel/);
+
+  // A pack that is not there stops the install rather than finishing quietly
+  // with an office the buyer paid to have modules in.
+  const noPack = await run(path.join(work, 'nopack'), ['--pack=/nope/nothing.zip']);
+  assert.notEqual(noPack.code, 0, 'проглотил отсутствующий пакет модулей');
+
+  console.log('установщик: 18 проверок прошли');
 } finally {
   server.close();
   rmSync(work, { recursive: true, force: true });
