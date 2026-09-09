@@ -44,4 +44,4 @@ node tools/notes.mjs v0.24.0             # one release
 node tools/notes.mjs v0.24.0..v0.30.0    # a span, oldest first
 ```
 
-Notes start at v0.24.0. The twenty-three versions before it have no fragments and are not being backfilled — that line is drawn in `CHANGELOG.md`, where they are all still listed.
+Notes start at v0.24.0. The versions before it have no fragments and are not being backfilled — that line is drawn in `CHANGELOG.md`, where they are all still listed. The one exception is [v0.18.0](v0.18.0.md), written after the fact and saying so in its first line: its before-and-after is the clearest illustration in the repository of what a replayed pair is for.
