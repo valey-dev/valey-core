@@ -27,6 +27,12 @@ export const freePort = () => new Promise((resolve, reject) => {
 // and a transcript of a few lines. The data is invented at the source — by the
 // rule about anything that can end up in a public repository.
 export async function fakeClaudeDir(dir, {
+  // The session file used to be named after this process's pid alone, so a
+  // second invented agent in the same directory overwrote the first one and the
+  // floor came out with one person on it. The name is free-form — the office
+  // reads the pid out of the file, not off it — so a slot is enough.
+  slot = '',
+  branch = 'feature/cart-discount',
   sessionId = 'aaaaaaaa-0000-4000-8000-000000000001',
   cwd = '/Users/kolya/Projects/rocket-shop',
   said = 'Done: the cart calculates the discount and its test is green.',
@@ -38,12 +44,12 @@ export async function fakeClaudeDir(dir, {
   const project = path.join(claude, 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
   await fsp.mkdir(sessions, { recursive: true });
   await fsp.mkdir(project, { recursive: true });
-  await fsp.writeFile(path.join(sessions, `${process.pid}.json`), JSON.stringify({
+  await fsp.writeFile(path.join(sessions, `${process.pid}${slot ? '-' + slot : ''}.json`), JSON.stringify({
     pid: process.pid, sessionId, cwd, startedAt: Date.now() - 60_000, version: '2.1.260', kind: 'interactive',
   }));
   const ts = (back) => new Date(Date.now() - back).toISOString();
   const lines = [
-    { type: 'user', timestamp: ts(50_000), gitBranch: 'feature/cart-discount', message: { role: 'user', content: asked } },
+    { type: 'user', timestamp: ts(50_000), gitBranch: branch, message: { role: 'user', content: asked } },
     { type: 'assistant', timestamp: ts(40_000), message: { role: 'assistant', model: 'claude-fable-5', stop_reason: 'tool_use',
       content: [{ type: 'tool_use', name: 'Edit', input: { file_path: file } }] } },
     { type: 'assistant', timestamp: ts(30_000), message: { role: 'assistant', model: 'claude-fable-5', stop_reason: 'end_turn',

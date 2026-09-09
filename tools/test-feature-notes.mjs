@@ -13,7 +13,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { parseFragment, readFragments, renderNote, checkNotes, assemble } from './notes.mjs';
+import { parseFragment, readFragments, renderNote, checkNotes, missingShots, assemble, shotSource } from './notes.mjs';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -29,13 +29,18 @@ scope: office
 keys:
   - "\`→\` — the next card, and it stops at the last one"
   - "\`←\` — back"
+shots:
+  - id: standup
+    url: "#room=standup"
+    keys: "Enter,wait:2500"
+  - id: floor
 ---
 
 Holding the arrow used to run off the end and wrap around.
 
 Now it stops.
 `;
-const f = parseFragment(good, 'arrows.md');
+const f = { slug: 'arrows', ...parseFragment(good, 'arrows.md') };
 ok('the title is read', f.title === 'The arrows stop at the ends', f);
 ok('the scope is read', f.scope === 'office', f);
 ok('both keys arrived, unquoted', f.keys.length === 2 && f.keys[1] === '`←` — back', f.keys);
@@ -53,12 +58,32 @@ ok('a file with no front matter is a failure',
 ok('a list item with no field above it is a failure',
   /list item/.test(fails(() => parseFragment('---\n  - a\n---\n\nbody\n', 'x.md'))));
 
+// --- the shot recipes ----------------------------------------------------
+// The recipe, not the picture, is what the fragment carries: a recipe replays on
+// an older tag, which is the whole reason a before-and-after is possible at all.
+ok('both recipes arrived', f.shots.length === 2, f.shots);
+ok('a recipe reads its indented lines', f.shots[0].url === '#room=standup' && f.shots[0].keys === 'Enter,wait:2500', f.shots[0]);
+ok('a recipe may be an id and nothing else', f.shots[1].id === 'floor' && !f.shots[1].keys, f.shots[1]);
+ok('an id that cannot be a file name is a failure',
+  /not a usable file name/.test(fails(() => parseFragment('---\ntitle: x\nshots:\n  - id: ../etc\n---\n\nbody\n', 'x.md'))));
+// Two shots called the same thing would land on one file, and the second would
+// silently be the only one left.
+ok('two recipes with one id is a failure',
+  /share the id/.test(fails(() => parseFragment('---\ntitle: x\nshots:\n  - id: a\n  - id: a\n---\n\nbody\n', 'x.md'))));
+ok('a misspelled shot field is a failure too',
+  /unknown shot field `keyz`/.test(fails(() => parseFragment('---\ntitle: x\nshots:\n  - id: a\n    keyz: b\n---\n\nbody\n', 'x.md'))));
+ok('an ordinary field after a recipe is still an ordinary field',
+  parseFragment('---\nshots:\n  - id: a\ntitle: x\n---\n\nbody\n', 'x.md').title === 'x');
+
 // --- the rendered note ---------------------------------------------------
 const section = '## v0.24.0 — 8 September 2026\n\n### Added\n\n- **office:** the arrows stop (abc1234)\n';
 const note = renderNote('v0.24.0', '8 September 2026', [f], section);
 ok('the note opens with the version and the date', note.startsWith('# v0.24.0 — 8 September 2026'), note.slice(0, 60));
 ok('the prose is in it', note.includes('Holding the arrow'), note);
 ok('the keys are a list under a heading', /\*\*Keys\*\*\n\n- `→`/.test(note), note);
+ok('the pictures are in the note, named by version, slug and id',
+  note.includes('![The arrows stop at the ends](v0.24.0/arrows-standup.png)')
+  && note.includes('(v0.24.0/arrows-floor.png)'), note);
 // The changelog is embedded rather than rewritten: the moment this file starts
 // composing its own bullets, there are two sources for one fact.
 ok('the changelog section is embedded verbatim', note.includes('- **office:** the arrows stop (abc1234)'), note);
@@ -90,12 +115,29 @@ ROOTS: {
   const read = readFragments(root);
   ok('the fragment is found and carries its slug', read.length === 1 && read[0].slug === 'arrows', read);
 
+  // --- the pictures ------------------------------------------------------
+  ok('a declared picture that was never rendered is named',
+    missingShots(root, read).join(',') === 'arrows/standup,arrows/floor', missingShots(root, read));
+  mkdirSync(path.join(root, 'notes/unreleased/arrows'), { recursive: true });
+  for (const id of ['standup', 'floor']) writeFileSync(path.join(root, shotSource('arrows', id)), 'png');
+  ok('and once rendered, nothing is missing', missingShots(root, read).length === 0, missingShots(root, read));
+
   const file = assemble(root, 'v0.24.0', '8 September 2026', read, section);
   ok('the note landed under its version', file === 'notes/v0.24.0.md' && existsSync(path.join(root, file)), file);
   ok('with the prose in it', readFileSync(path.join(root, file), 'utf8').includes('Holding the arrow'));
   // A fragment left behind would be collected again by the next release, and the
   // same feature would appear in two notes.
   ok('and the fragment is gone', !existsSync(path.join(root, 'notes/unreleased/arrows.md')));
+  ok('the pictures moved under the version',
+    existsSync(path.join(root, 'notes/v0.24.0/arrows-standup.png'))
+    && existsSync(path.join(root, 'notes/v0.24.0/arrows-floor.png')));
+  ok('and left nothing behind to be collected twice',
+    !existsSync(path.join(root, 'notes/unreleased/arrows')));
+  // The recipes travel with the pictures: a frame whose recipe was thrown away
+  // can never be taken again, on this tag or an older one.
+  const side = JSON.parse(readFileSync(path.join(root, 'notes/v0.24.0/shots.json'), 'utf8'));
+  ok('the recipes were kept next to them',
+    side.tag === 'v0.24.0' && side.shots.length === 2 && side.shots[0].keys === 'Enter,wait:2500', side);
 }
 
 console.log(bad ? `\nFAILED: ${bad}` : '\nall green');

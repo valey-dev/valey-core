@@ -20,19 +20,31 @@
 //
 // The note is public-facing, and it is English for the same reason the changelog
 // and the README are: it is read by whoever has not met this office yet.
-import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, renameSync, rmSync, copyFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const NOTES_DIR = 'notes';
 export const UNRELEASED = 'notes/unreleased';
+// A picture is rendered in the feature branch, next to its fragment, and moves
+// under the version at release time. Two fragments may well both call a shot
+// `floor`, so the slug goes into the released name and nothing overwrites
+// anything.
+export const shotSource = (slug, id) => path.join(UNRELEASED, slug, `${id}.png`);
+export const shotName = (slug, id) => `${slug}-${id}.png`;
 const VER = /^v(\d+)\.(\d+)\.(\d+)$/;
 
 // The fields a fragment may carry. An unknown one is an error rather than a
 // field quietly ignored: a misspelled `keys:` is invisible in the rendered note,
 // and the whole point of the front matter is that it is machine-readable.
-const FIELDS = new Set(['title', 'scope', 'keys']);
-const LISTS = new Set(['keys']);
+const FIELDS = new Set(['title', 'scope', 'keys', 'shots']);
+const LISTS = new Set(['keys', 'shots']);
+// `shots` is a list of recipes rather than of strings: an id to name the file by,
+// and how to get the office to the right place. The recipe, not the picture, is
+// what a fragment carries — a recipe can be replayed on an older tag, and that is
+// where a real before-and-after comes from. A picture can only be looked at.
+const MAPS = new Set(['shots']);
+const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport']);
 
 // A three-line parser instead of a YAML dependency. The project has none, and a
 // front matter of three keys is not a reason for the first one.
@@ -42,25 +54,48 @@ export function parseFragment(text, name) {
   if (!m) fail('no front matter; the file must start with a --- block');
   const front = {};
   let list = null;
+  let item = null;
   for (const raw of m[1].split('\n')) {
     if (!raw.trim()) continue;
-    const item = /^\s+-\s+(.*)$/.exec(raw);
-    if (item) {
+    const dash = /^\s+-\s+(.*)$/.exec(raw);
+    if (dash) {
       if (!list) fail(`a list item with no field above it: ${raw.trim()}`);
-      front[list].push(unquote(item[1]));
+      if (!MAPS.has(list)) { front[list].push(unquote(dash[1])); item = null; continue; }
+      item = {};
+      front[list].push(item);
+      // A recipe opens on its own dash line and continues on the indented lines
+      // below it, so `- id: x` has to be read as both at once.
+      const first = /^([a-z]+):\s*(.*)$/.exec(dash[1]);
+      if (!first) fail(`a shot starts with \`id:\`, not: ${dash[1]}`);
+      shotField(item, first[1], first[2], fail);
       continue;
     }
-    const kv = /^([a-z]+):\s*(.*)$/.exec(raw);
+    const kv = /^(\s*)([a-z]+):\s*(.*)$/.exec(raw);
     if (!kv) fail(`cannot read the line: ${raw.trim()}`);
-    const [, key, value] = kv;
+    const [, indent, key, value] = kv;
+    if (indent && item) { shotField(item, key, value, fail); continue; }
     if (!FIELDS.has(key)) fail(`unknown field \`${key}\`; expected ${[...FIELDS].join(', ')}`);
+    item = null;
     if (LISTS.has(key)) { front[key] = []; list = key; if (value.trim()) fail(`\`${key}\` is a list; put the items on the lines below`); }
     else { front[key] = unquote(value); list = null; }
   }
   const body = m[2].trim();
   if (!front.title) fail('`title:` is required');
   if (!body) fail('the fragment has no text under the front matter');
-  return { title: front.title, scope: front.scope || '', keys: front.keys || [], body };
+  const shots = front.shots || [];
+  const seen = new Set();
+  for (const sh of shots) {
+    if (!sh.id) fail('every shot needs an `id:` — it names the file');
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(sh.id)) fail(`\`${sh.id}\` is not a usable file name; use letters, digits and dashes`);
+    if (seen.has(sh.id)) fail(`two shots share the id \`${sh.id}\`; one would overwrite the other`);
+    seen.add(sh.id);
+  }
+  return { title: front.title, scope: front.scope || '', keys: front.keys || [], shots, body };
+}
+
+function shotField(shot, key, value, fail) {
+  if (!SHOT_FIELDS.has(key)) fail(`unknown shot field \`${key}\`; expected ${[...SHOT_FIELDS].join(', ')}`);
+  shot[key] = unquote(value);
 }
 
 const unquote = (s) => s.trim().replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
@@ -79,6 +114,8 @@ export function renderNote(tag, date, fragments, section) {
     out.push(`## ${f.title}`, '');
     if (f.scope) out.push(`*${f.scope}*`, '');
     out.push(f.body, '');
+    for (const sh of f.shots || [])
+      out.push(`![${f.title}](${tag}/${shotName(f.slug, sh.id)})`, '');
     if (f.keys.length) {
       out.push('**Keys**', '');
       for (const k of f.keys) out.push(`- ${k}`);
@@ -106,10 +143,38 @@ export function checkNotes(root, { kind, feats, fragments, allow }) {
     '  A release that genuinely needs none goes out with --no-note.' };
 }
 
+// A fragment that declares a shot and has no picture next to it would render an
+// empty image in the note, and nobody looks at their own note again after the
+// release. So it is checked before the tag rather than after.
+export function missingShots(root, fragments) {
+  const out = [];
+  for (const f of fragments)
+    for (const sh of f.shots || [])
+      if (!existsSync(path.join(root, shotSource(f.slug, sh.id)))) out.push(`${f.slug}/${sh.id}`);
+  return out;
+}
+
 export function assemble(root, tag, date, fragments, section) {
   const file = path.join(NOTES_DIR, `${tag}.md`);
   writeFileSync(path.join(root, file), renderNote(tag, date, fragments, section));
-  for (const f of fragments) unlinkSync(path.join(root, f.file));
+
+  // The pictures move under the version, and the recipes move with them. The
+  // recipe is the half that keeps working: replayed on an older tag it is what
+  // makes a before-and-after possible, and a picture whose recipe was thrown
+  // away can never be taken again.
+  const shots = [];
+  for (const f of fragments) {
+    for (const sh of f.shots || []) {
+      const to = path.join(NOTES_DIR, tag, shotName(f.slug, sh.id));
+      mkdirSync(path.join(root, NOTES_DIR, tag), { recursive: true });
+      renameSync(path.join(root, shotSource(f.slug, sh.id)), path.join(root, to));
+      shots.push({ file: shotName(f.slug, sh.id), slug: f.slug, ...sh });
+    }
+    if ((f.shots || []).length) rmSync(path.join(root, UNRELEASED, f.slug), { recursive: true, force: true });
+    unlinkSync(path.join(root, f.file));
+  }
+  if (shots.length)
+    writeFileSync(path.join(root, NOTES_DIR, tag, 'shots.json'), JSON.stringify({ tag, shots }, null, 2) + '\n');
   return file;
 }
 
@@ -118,6 +183,10 @@ title: ${slug.replace(/-/g, ' ')}
 scope: office
 keys:
   - "\`→\` — what it does now"
+shots:
+  - id: ${slug}
+    url: "#room=standup"
+    keys: "Enter,wait:2500"
 ---
 
 What was awkward before, in a sentence or two.
