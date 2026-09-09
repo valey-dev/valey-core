@@ -13,7 +13,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { parseFragment, readFragments, renderNote, checkNotes, missingShots, assemble, shotSource } from './notes.mjs';
+import { parseFragment, readFragments, renderNote, checkNotes, missingShots, assemble, shotSource, beforeSource, findBefore, cmpTag } from './notes.mjs';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -90,6 +90,20 @@ ok('the changelog section is embedded verbatim', note.includes('- **office:** th
 ok('and demoted to a heading inside the note, not a second top-level one',
   note.includes('### What changed') && !note.includes('## v0.24.0 — 8'), note);
 
+// --- the before half -----------------------------------------------------
+// The tag rides in the file name rather than in a sidecar: a picture that has
+// lost track of which version it shows asserts nothing in particular.
+const withBefore = renderNote('v0.26.0', '9 September 2026',
+  [{ ...f, shots: [{ id: 'standup', before: { tag: 'v0.12.0', file: 'standup.before-v0.12.0.png' } }] }],
+  section);
+ok('the pair is captioned with the tag it was replayed on',
+  withBefore.includes('*Before, v0.12.0*') && withBefore.includes('*After, v0.26.0*'), withBefore);
+ok('and before comes first, which is the whole sentence',
+  withBefore.indexOf('*Before') < withBefore.indexOf('](v0.26.0/arrows-standup.png)'), withBefore);
+ok('the old frame keeps its tag in the released name',
+  withBefore.includes('![The arrows stop at the ends, before](v0.26.0/arrows-standup.before-v0.12.0.png)'), withBefore);
+ok('versions sort by number, not as text', cmpTag('v0.9.0', 'v0.12.0') < 0, cmpTag('v0.9.0', 'v0.12.0'));
+
 // --- the guard -----------------------------------------------------------
 const feats = [{ hash: 'abc1234', subject: 'feat(office): the arrows stop' }];
 ROOTS: {
@@ -122,7 +136,18 @@ ROOTS: {
   for (const id of ['standup', 'floor']) writeFileSync(path.join(root, shotSource('arrows', id)), 'png');
   ok('and once rendered, nothing is missing', missingShots(root, read).length === 0, missingShots(root, read));
 
-  const file = assemble(root, 'v0.24.0', '8 September 2026', read, section);
+  // A before frame is optional by design, and it is found on disk rather than
+  // declared: whether a comparison is worth making is a judgement.
+  ok('no before frame is not a problem', findBefore(root, 'arrows', 'standup') === null);
+  writeFileSync(path.join(root, beforeSource('arrows', 'standup', 'v0.12.0')), 'png');
+  writeFileSync(path.join(root, beforeSource('arrows', 'standup', 'v0.9.0')), 'png');
+  const found = findBefore(root, 'arrows', 'standup');
+  ok('replayed on several tags, the newest wins', found.tag === 'v0.12.0', found);
+  const again = readFragments(root);
+  ok('and the fragment picks it up without declaring it',
+    again[0].shots[0].before.tag === 'v0.12.0' && !again[0].shots[1].before, again[0].shots);
+
+  const file = assemble(root, 'v0.24.0', '8 September 2026', again, section);
   ok('the note landed under its version', file === 'notes/v0.24.0.md' && existsSync(path.join(root, file)), file);
   ok('with the prose in it', readFileSync(path.join(root, file), 'utf8').includes('Holding the arrow'));
   // A fragment left behind would be collected again by the next release, and the
@@ -135,9 +160,14 @@ ROOTS: {
     !existsSync(path.join(root, 'notes/unreleased/arrows')));
   // The recipes travel with the pictures: a frame whose recipe was thrown away
   // can never be taken again, on this tag or an older one.
+  ok('the before frame moved under the version too, tag and all',
+    existsSync(path.join(root, 'notes/v0.24.0/arrows-standup.before-v0.12.0.png')));
   const side = JSON.parse(readFileSync(path.join(root, 'notes/v0.24.0/shots.json'), 'utf8'));
   ok('the recipes were kept next to them',
     side.tag === 'v0.24.0' && side.shots.length === 2 && side.shots[0].keys === 'Enter,wait:2500', side);
+  ok('and the recipe records which tag the before half came from',
+    side.shots[0].before.tag === 'v0.12.0'
+    && side.shots[0].before.file === 'arrows-standup.before-v0.12.0.png', side.shots[0]);
 }
 
 console.log(bad ? `\nFAILED: ${bad}` : '\nall green');
