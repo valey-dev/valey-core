@@ -1,0 +1,15 @@
+{
+  "tag": "v0.26.0",
+  "shots": [
+    {
+      "file": "notes-before-floor.png",
+      "slug": "notes-before",
+      "id": "floor",
+      "keys": "Enter,wait:2500",
+      "before": {
+        "tag": "v0.12.0",
+        "file": "notes-before-floor.before-v0.12.0.png"
+      }
+    }
+  ]
+}
