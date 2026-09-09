@@ -19,6 +19,7 @@
 //   wait:800     simply wait
 //   F9           the office's own 1:1 canvas shot into .shots (written by the office)
 //   shift-F9     the same, but ×4 with no smoothing
+//   ?            the keyboard panel; shift-<key> works for anything else too
 // An ordinary --out captures the whole page with the panels; F9 inside the
 // office captures the canvas alone, but pixel for pixel.
 //
@@ -108,8 +109,14 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // «/» opens the keys panel, and without it that panel could not be photographed
 // at all — the one screen this tool is most often pointed at since 5 September 2026.
 const VK = { Enter: 13, ' ': 32, Escape: 27, Tab: 9, F9: 120, '/': 191, '=': 187, '-': 189,
-  w: 87, a: 65, s: 83, d: 68, e: 69, b: 66, c: 67, i: 73, k: 75, m: 77, n: 78, o: 79, p: 80, r: 82, t: 84, u: 85, z: 90,
   ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39 };
+// Every letter, rather than the dozen somebody happened to need. The list was
+// hand-picked and had grown holes: `h` opens the pager and `g` walks you to a
+// desk, and neither could be photographed at all — the run refused with «unknown
+// key», which at least said so, unlike the silent version before it. A letter
+// costs one entry in a table; deciding which letters the office is allowed to
+// have is not this file's business.
+for (let c = 97; c <= 122; c++) VK[String.fromCharCode(c)] = c - 32;
 // The digits: since 31 August 2026 they pick an item in an open panel — a tab
 // of the inventory or of the card, a floor in the lift, a station on the radio.
 // Without them those screens cannot be captured at all: the panel can be
@@ -132,6 +139,9 @@ for (let d = 0; d <= 9; d++) CODE[String(d)] = 'Digit' + d;
 // off" — neither had worked. The synonyms exist so that missing the name is a
 // typo rather than silence.
 const ALIAS = { Space: ' ', Spacebar: ' ', Esc: 'Escape', Slash: '/', Equal: '=', Minus: '-', Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight' };
+// «?» is written as itself and sent as shift and slash, because that is how a
+// person presses it and how the office asks for it.
+const SHIFTED = { '?': '/' };
 const alias = (k) => (Object.prototype.hasOwnProperty.call(ALIAS, k) ? ALIAS[k] : k);
 
 // Extra flags for the browser, space separated, through the environment rather
@@ -241,11 +251,26 @@ try {
   for (const step of steps) {
     const [what, ms] = step.split(':');
     if (what === 'wait') { await wait(Number(ms) || 500); continue; }
-    if (what === 'shift-F9') { await key('keyDown', 'F9', 8); await key('keyUp', 'F9', 8); await wait(600); continue; }
+    // shift-<anything>, not just shift-F9. The office documents its help on «?»,
+    // and «?» is shift and slash: until 9 September 2026 the one key every panel
+    // tells you to press was the one the camera could not press.
+    if (what.startsWith('shift-')) {
+      const k = alias(what.slice(6));
+      if (!VK[k]) throw new Error(`--keys: unknown key “${what.slice(6)}” in shift-`);
+      await key('keyDown', k, 8); await key('keyUp', k, 8);
+      await wait(Number(ms) || (k === 'F9' ? 600 : 400));
+      continue;
+    }
     if (what.startsWith('hold-')) {
       const k = alias(what.slice(5));
       if (!VK[k]) throw new Error(`--keys: unknown key “${what.slice(5)}” in hold-`);
       await key('keyDown', k); await wait(Number(ms) || 800); await key('keyUp', k); continue;
+    }
+    if (SHIFTED[what]) {
+      const k = SHIFTED[what];
+      await key('keyDown', k, 8); await key('keyUp', k, 8);
+      await wait(Number(ms) || 400);
+      continue;
     }
     const k = alias(what);
     // Sending an event without a keyCode in silence is a lie: the office will
