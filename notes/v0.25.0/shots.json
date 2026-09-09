@@ -1,0 +1,11 @@
+{
+  "tag": "v0.25.0",
+  "shots": [
+    {
+      "file": "notes-shots-floor.png",
+      "slug": "notes-shots",
+      "id": "floor",
+      "keys": "Enter,wait:2500"
+    }
+  ]
+}
