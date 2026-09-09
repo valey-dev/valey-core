@@ -15,9 +15,9 @@ const FRAMES = [
 
 // What the room is about, guessed from the project name. First match wins.
 const MOTIFS = [
-  { kind: 'food', re: /carbonara|restaurant|pizza|kitchen|food|cafe|кафе|еда|кухн|ресторан/i },
+  { kind: 'food', re: /restaurant|pizza|kitchen|food|cafe|кафе|еда|кухн|ресторан/i },
   { kind: 'money', re: /budget|money|wallet|bank|finance|invoice|бюджет|деньг|счёт|финанс/i },
-  { kind: 'dog', re: /shebis|kennel|dog|pet|puppy|собак|питомник|щен/i },
+  { kind: 'dog', re: /kennel|dog|pet|puppy|собак|питомник|щен/i },
   { kind: 'chart', re: /dashboard|analytic|metric|activity|report|stat|дашборд|отчёт|метрик/i },
   { kind: 'network', re: /ping|monitor|uptime|server|proxy|net|пинг|сервер|монитор/i },
   { kind: 'muscle', re: /grip|iron|gym|fit|sport|workout|спорт|зал|качал/i },

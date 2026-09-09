@@ -86,7 +86,7 @@ ok('a note without an anchor goes into the general heap', sp.orphans.length === 
 // Sessions die and the notes remain: without a snapshot the shared list would
 // keep a dangling id instead of the agent's name and what the person was reading.
 reset();
-const ctx = { agent: 'Тоня', project: 'carbonara-restaurant', title: 'Daily brief',
+const ctx = { agent: 'Тоня', project: 'marmalade-kitchen', title: 'Daily brief',
   quote: '  Сегодня   тебя нет — подтверждено\nс двух сторон  ' };
 const withCtx = addNote('agent-1', 7, 'мысль', ctx);
 ok('the photo was saved', withCtx.ctx && withCtx.ctx.agent === 'Тоня', withCtx.ctx);

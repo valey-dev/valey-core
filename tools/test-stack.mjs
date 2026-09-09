@@ -84,16 +84,16 @@ ok('there are no manifests - pickManifest is silent', pickManifest({}) === null)
 // ---------------------------------------------------------------- the room
 
 const agents = [
-  { id: 'a1', project: 'budget-app', startedAt: 1, version: 'v3.5.6', stack: 'Next 16' },
-  { id: 'a2', project: 'budget-app', startedAt: 2, version: '', stack: '' },
+  { id: 'a1', project: 'wallet-app', startedAt: 1, version: 'v3.5.6', stack: 'Next 16' },
+  { id: 'a2', project: 'wallet-app', startedAt: 2, version: '', stack: '' },
   { id: 'b1', project: 'grip', startedAt: 3, version: '', stack: 'Rust' },
   { id: 'c1', project: 'nowhere', startedAt: 4, version: '', stack: '' },
   { id: 'd1', project: 'tagged', startedAt: 5, version: 'v0.4.0', stack: '' },
 ];
 const L = buildLayout(agents);
 const room = (key) => L.rooms.find((r) => r.key === key);
-ok('version and stack in one line', room('budget-app').sub === 'v3.5.6 · Next 16', room('budget-app').sub);
-ok('the data is taken from the agent who has it', room('budget-app').sub !== '');
+ok('version and stack in one line', room('wallet-app').sub === 'v3.5.6 · Next 16', room('wallet-app').sub);
+ok('the data is taken from the agent who has it', room('wallet-app').sub !== '');
 ok('stack only', room('grip').sub === 'Rust', room('grip').sub);
 ok('version only', room('tagged').sub === 'v0.4.0', room('tagged').sub);
 ok('nothing was found - there is no second line', room('nowhere').sub === '', room('nowhere').sub);

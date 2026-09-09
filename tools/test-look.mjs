@@ -22,7 +22,7 @@ const oldLookOf = (id) => {
 };
 
 const ids = [];
-for (const p of ['carbonara-restaurant', 'budget-app', 'AI valey', 'shebis', 'pingator']) {
+for (const p of ['marmalade-kitchen', 'wallet-app', 'AI valey', 'kennel', 'pingwatch']) {
   for (let i = 0; i < 60; i++) ids.push(`${p}-${i}`);
 }
 ids.push('Петя', 'Petya', 'agent', '', 'ы');
