@@ -1,9 +1,25 @@
 #!/usr/bin/env node
 // Rendering the pictures a feature note declares.
 //
-//   node tools/notes-shots.mjs              # every fragment waiting for the release
-//   node tools/notes-shots.mjs arrows-stop  # one of them
-//   node tools/notes-shots.mjs --keep       # leave the demo office up to look at
+//   node tools/notes-shots.mjs                    # every fragment waiting for the release
+//   node tools/notes-shots.mjs arrows-stop        # one of them
+//   node tools/notes-shots.mjs --keep             # leave the demo office up to look at
+//   node tools/notes-shots.mjs --before           # the same recipes on the last release
+//   node tools/notes-shots.mjs --before v0.20.0   # or on a particular one
+//
+// ------------------------------------------------------------------ before
+//
+// `--before` is why a fragment carries a recipe rather than a picture. The same
+// recipe is replayed against a worktree of an older tag — old server, old office,
+// same walk — and the frame lands beside the new one as the «before» half of the
+// pair. It is not declared in the front matter: whether a comparison is worth
+// making is a judgement, not a property of the feature.
+//
+// What no script can check is whether the old office understood the recipe. A
+// room added by this feature does not exist on the old tag, a key does nothing
+// there, and the walk quietly ends up somewhere else — the frame comes back
+// looking plausible and showing the wrong place. So the run says it out loud:
+// a «before» frame has to be looked at before it is committed.
 //
 // The pictures are taken in the feature branch, next to the fragment, and not
 // at release time. Two reasons. The office being photographed has to be the one
@@ -22,12 +38,12 @@
 // The office is raised without VALEY_STAND: the yellow plaque is for whoever is
 // testing, and it has no business in a picture that ships with the release.
 import { readdirSync, mkdirSync, existsSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, execFileSync } from 'node:child_process';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFragments, shotSource, UNRELEASED } from './notes.mjs';
+import { readFragments, shotSource, beforeSource, cmpTag, UNRELEASED } from './notes.mjs';
 import { startOffice, fakeClaudeDir, waitForAgent } from './lib/office.mjs';
 
 const ROOT = process.env.VALEY_REPO
@@ -37,7 +53,20 @@ const die = (m) => { console.error('notes-shots: ' + m); process.exit(1); };
 
 const argv = process.argv.slice(2);
 const keep = argv.includes('--keep');
-const only = argv.find((a) => !a.startsWith('--')) || '';
+const at = argv.indexOf('--before');
+// `at + 1` is the tag that belongs to --before, not a slug. Without the `at >= 0`
+// guard it is index 0 whenever the flag is absent, which swallowed the slug.
+const only = argv.find((a, i) => !a.startsWith('--') && !(at >= 0 && i === at + 1)) || '';
+const git = (...a) => execFileSync('git', ['-C', ROOT, ...a], { encoding: 'utf8' }).trim();
+
+// The tag to replay on: the one given, or the newest release there is.
+let before = null;
+if (at >= 0) {
+  const tags = git('tag', '-l', 'v[0-9]*').split('\n').filter(Boolean).sort(cmpTag);
+  if (!tags.length) die('this repository has no releases to replay against');
+  before = argv[at + 1] && !argv[at + 1].startsWith('--') ? argv[at + 1] : tags[tags.length - 1];
+  if (!tags.includes(before)) die(`there is no tag ${before}`);
+}
 
 let fragments;
 try { fragments = readFragments(ROOT); } catch (err) { die(err.message); }
@@ -66,7 +95,17 @@ const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-notes-shots-'));
 let claudeDir = null;
 for (const who of CAST) claudeDir = (await fakeClaudeDir(tmp, who)).dir;
 
-const office = await startOffice({ claudeDir, root: ROOT });
+// The old office is a detached worktree of the tag — its own server, its own
+// web/. It goes outside the checkout: a worktree under it gets walked by every
+// file watcher in the project.
+let worktree = null;
+if (before) {
+  worktree = await fsp.mkdtemp(path.join(os.tmpdir(), `valey-${before}-`));
+  git('worktree', 'add', '-q', '--detach', worktree, before);
+  console.log(`replaying on ${before}, in a worktree of it`);
+}
+
+const office = await startOffice({ claudeDir, root: worktree || ROOT });
 console.log(`demo office on ${office.base}`);
 try {
   await waitForAgent(async () => (await fetch(office.base + '/api/state')).json());
@@ -80,7 +119,8 @@ let taken = 0;
 for (const f of wanted) {
   mkdirSync(path.join(ROOT, UNRELEASED, f.slug), { recursive: true });
   for (const sh of f.shots) {
-    const out = path.join(ROOT, shotSource(f.slug, sh.id));
+    const rel = before ? beforeSource(f.slug, sh.id, before) : shotSource(f.slug, sh.id);
+    const out = path.join(ROOT, rel);
     const args = ['--url', office.base + '/' + (sh.url || ''), '--out', out];
     if (sh.keys) args.push('--keys', sh.keys);
     if (sh.viewport) args.push('--viewport', sh.viewport);
@@ -89,7 +129,7 @@ for (const f of wanted) {
       if (!keep) await office.stop();
       die(`${f.slug}/${sh.id} was not taken`);
     }
-    console.log(`  ${shotSource(f.slug, sh.id)}`);
+    console.log(`  ${rel}`);
     taken += 1;
   }
 }
@@ -101,4 +141,12 @@ if (keep) {
 }
 await office.stop();
 await fsp.rm(tmp, { recursive: true, force: true });
+if (worktree) {
+  git('worktree', 'remove', '--force', worktree);
+  await fsp.rm(worktree, { recursive: true, force: true });
+}
 console.log(`\n${taken} picture${taken > 1 ? 's' : ''} rendered`);
+if (before)
+  console.log(`\nLook at them before committing. ${before} never heard of this feature,\n` +
+    'so a recipe that walks into a room it does not have ends up somewhere else\n' +
+    'and comes back looking perfectly plausible.');

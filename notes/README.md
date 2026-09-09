@@ -26,6 +26,17 @@ shots:
 
 The office in these frames is invented at the source: made-up people on made-up projects, out of the same fixtures the stands use. A photograph of a real office is a photograph of real project and branch names, and these files go to a public repository.
 
+### Before and after
+
+```bash
+node tools/notes-shots.mjs --before v0.20.0   # the same recipes on that release
+node tools/notes-shots.mjs --before           # on the last one
+```
+
+The recipe is replayed against a worktree of that tag — its server, its office — and the frame lands beside the new one with the tag in its name. The note then prints the pair. A before frame is never declared in the front matter: whether a comparison is worth making is a judgement, not a property of the feature.
+
+Look at what comes back. No check can tell whether the old office understood the recipe: a room this feature added does not exist back there, a key does nothing, and the walk ends up somewhere else and photographs it perfectly plausibly.
+
 Reading them back:
 
 ```bash

@@ -32,6 +32,30 @@ export const UNRELEASED = 'notes/unreleased';
 // anything.
 export const shotSource = (slug, id) => path.join(UNRELEASED, slug, `${id}.png`);
 export const shotName = (slug, id) => `${slug}-${id}.png`;
+// The «before» frame is the same recipe replayed on an older tag, and the tag it
+// was replayed on is part of what the picture means: «this is what that looked
+// like» is a claim about a version. It rides in the file name rather than in a
+// sidecar — a sidecar can be lost, renamed or forgotten in a move, and then the
+// picture is left asserting something about no version in particular.
+const BEFORE = /^(.+)\.before-(v\d+\.\d+\.\d+)\.png$/;
+export const beforeSource = (slug, id, tag) => path.join(UNRELEASED, slug, `${id}.before-${tag}.png`);
+export const beforeName = (slug, id, tag) => `${slug}-${id}.before-${tag}.png`;
+
+// What was rendered for this shot, if anything: the newest tag wins when a
+// recipe has been replayed on several.
+export function findBefore(root, slug, id) {
+  const dir = path.join(root, UNRELEASED, slug);
+  if (!existsSync(dir)) return null;
+  const hit = readdirSync(dir)
+    .map((f) => BEFORE.exec(f)).filter((m) => m && m[1] === id)
+    .sort((a, b) => cmpTag(a[2], b[2])).pop();
+  return hit ? { tag: hit[2], file: hit[0] } : null;
+}
+
+export const cmpTag = (a, b) => {
+  const [x, y] = [a, b].map((v) => VER.exec(v).slice(1).map(Number));
+  return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+};
 const VER = /^v(\d+)\.(\d+)\.(\d+)$/;
 
 // The fields a fragment may carry. An unknown one is an error rather than a
@@ -104,8 +128,18 @@ export function readFragments(root) {
   const dir = path.join(root, UNRELEASED);
   if (!existsSync(dir)) return [];
   return readdirSync(dir).filter((f) => f.endsWith('.md')).sort()
-    .map((f) => ({ file: path.join(UNRELEASED, f), slug: f.replace(/\.md$/, ''),
-      ...parseFragment(readFileSync(path.join(dir, f), 'utf8'), f) }));
+    .map((f) => {
+      const slug = f.replace(/\.md$/, '');
+      const frag = { file: path.join(UNRELEASED, f), slug,
+        ...parseFragment(readFileSync(path.join(dir, f), 'utf8'), f) };
+      // A «before» frame is never declared in the front matter: it is not part of
+      // what the feature is, it is a picture that either got taken or did not.
+      for (const sh of frag.shots) {
+        const b = findBefore(root, slug, sh.id);
+        if (b) sh.before = b;
+      }
+      return frag;
+    });
 }
 
 export function renderNote(tag, date, fragments, section) {
@@ -114,8 +148,16 @@ export function renderNote(tag, date, fragments, section) {
     out.push(`## ${f.title}`, '');
     if (f.scope) out.push(`*${f.scope}*`, '');
     out.push(f.body, '');
-    for (const sh of f.shots || [])
+    for (const sh of f.shots || []) {
+      // Before first: it is the sentence «it used to look like this», and it
+      // only reads that way when the reader meets it before the answer.
+      if (sh.before) {
+        out.push(`*Before, ${sh.before.tag}*`, '');
+        out.push(`![${f.title}, before](${tag}/${beforeName(f.slug, sh.id, sh.before.tag)})`, '');
+        out.push(`*After, ${tag}*`, '');
+      }
       out.push(`![${f.title}](${tag}/${shotName(f.slug, sh.id)})`, '');
+    }
     if (f.keys.length) {
       out.push('**Keys**', '');
       for (const k of f.keys) out.push(`- ${k}`);
@@ -165,10 +207,14 @@ export function assemble(root, tag, date, fragments, section) {
   const shots = [];
   for (const f of fragments) {
     for (const sh of f.shots || []) {
-      const to = path.join(NOTES_DIR, tag, shotName(f.slug, sh.id));
       mkdirSync(path.join(root, NOTES_DIR, tag), { recursive: true });
-      renameSync(path.join(root, shotSource(f.slug, sh.id)), path.join(root, to));
-      shots.push({ file: shotName(f.slug, sh.id), slug: f.slug, ...sh });
+      renameSync(path.join(root, shotSource(f.slug, sh.id)),
+        path.join(root, NOTES_DIR, tag, shotName(f.slug, sh.id)));
+      if (sh.before)
+        renameSync(path.join(root, UNRELEASED, f.slug, sh.before.file),
+          path.join(root, NOTES_DIR, tag, beforeName(f.slug, sh.id, sh.before.tag)));
+      shots.push({ file: shotName(f.slug, sh.id), slug: f.slug, ...sh,
+        ...(sh.before ? { before: { tag: sh.before.tag, file: beforeName(f.slug, sh.id, sh.before.tag) } } : {}) });
     }
     if ((f.shots || []).length) rmSync(path.join(root, UNRELEASED, f.slug), { recursive: true, force: true });
     unlinkSync(path.join(root, f.file));
