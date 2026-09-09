@@ -17,7 +17,7 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { pickKind, check } from './release-kind.mjs';
-import { readFragments, checkNotes, assemble } from './notes.mjs';
+import { readFragments, checkNotes, missingShots, assemble } from './notes.mjs';
 
 // The root comes from this file rather than from the cwd: git and the files have
 // to look at one repository. Until 4 September 2026 git went to the cwd while
@@ -176,6 +176,13 @@ try { fragments = readFragments(ROOT); } catch (err) { die(err.message); }
 const notes = checkNotes(ROOT, { kind, feats: picked.feats, fragments, allow: noNote });
 if (!notes.ok) die(notes.note);
 if (notes.bare) console.log('WARNING: cut without a feature note, on --no-note\n');
+// A declared picture that was never rendered would go into the note as a broken
+// image, and nobody opens their own note again after the release.
+const noShots = missingShots(ROOT, fragments);
+if (noShots.length)
+  die(`the note declares pictures that have not been rendered: ${noShots.join(', ')}.\n` +
+    '  They are taken in the feature branch, against a demo office:\n' +
+    '    node tools/notes-shots.mjs');
 if (fragments.length)
   console.log(`\nfeature note ${tag}.md, from ${fragments.length} fragment${fragments.length > 1 ? 's' : ''}: ` +
     fragments.map((f) => f.slug).join(', '));

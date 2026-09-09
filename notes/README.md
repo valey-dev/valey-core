@@ -11,6 +11,21 @@ node tools/notes.mjs                     # what is waiting for the next release
 
 `tools/release.mjs` collects everything in `notes/unreleased/` into `notes/vX.Y.Z.md`, embeds the changelog section verbatim, and deletes the fragments. A release carrying a feature and no fragment is refused; `--no-note` is how you overrule that on purpose.
 
+## Pictures
+
+A fragment declares shots, and a shot is a recipe rather than a file — an id, where to be, and the keys that get there:
+
+```yaml
+shots:
+  - id: standup
+    url: "#room=standup"
+    keys: "Enter,wait:2500,hold-w:1500"
+```
+
+`node tools/notes-shots.mjs` raises a demo office, walks it through each recipe and puts the frame next to its fragment. The release moves the pictures under the version and writes the recipes beside them in `notes/vX.Y.Z/shots.json` — a picture can only be looked at, but a recipe can be replayed on an older tag, which is what a real before-and-after will be made of. Declaring a shot and never rendering it stops the release.
+
+The office in these frames is invented at the source: made-up people on made-up projects, out of the same fixtures the stands use. A photograph of a real office is a photograph of real project and branch names, and these files go to a public repository.
+
 Reading them back:
 
 ```bash
