@@ -129,13 +129,21 @@ No framework: each file prints its checks and exits non-zero if one failed. They
 
 Everything drawn is checked with eyes: `tools/shot.mjs` takes the picture from a terminal, walks the office with `--keys`, and looks inside the live page with `--eval`.
 
+## Release notes
+
+Every release carries one, in [notes/](notes/): what the feature is, which keys it answers to, what was deliberately left out — and frames of the office showing it.
+
+The pictures are recipes rather than files. A note records where to stand and which keys to press, so the same walk can be replayed against a worktree of an older tag and photographed there: the before half of a pair is the office that actually shipped with that version, not a caption. The floor in them is invented — made-up people on made-up projects, from the fixtures the tests use — because a photograph of a real office is a photograph of real project and branch names.
+
+A note is written in the branch that builds the feature, not assembled at release time out of the commit subjects; that is what keeps it from being a longer copy of the changelog. How to write one is [documented here](notes/README.md).
+
+What changed between releases, one line per commit, is in [CHANGELOG.md](CHANGELOG.md).
+
 ## Licence
 
 [AGPL-3.0](LICENSE). Use it, read it, change it, run it for yourself or your team. If you distribute a changed version, or run it as a service for other people, your changes are theirs to read too — the same deal you get here.
 
 Contributions need a signed agreement; see [CONTRIBUTING.md](CONTRIBUTING.md) for what it says and why.
-
-What changed between releases is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Not affiliated with Anthropic
 
