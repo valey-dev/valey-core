@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { retryFetch } from './git-retry.mjs';
 
 const command = (cmd, args, options = {}) => {
   const r = spawnSync(cmd, args, { encoding: 'utf8', ...options });
@@ -82,7 +83,9 @@ export function clearPendingCleanup(repo, branch) {
 export function inspectCleanup({ repo, branch, mainRef = 'origin/main', removeWorktree = false }) {
   const root = path.resolve(repo);
   if (git(root, ['remote', 'get-url', 'origin'], { allowFailure: true }).status === 0) {
-    git(root, ['fetch', 'origin', '--prune', '--quiet']);
+    // This very fetch is the other half of the collision described in
+    // git-retry.mjs: it runs every two seconds while a deferred cleanup waits.
+    retryFetch(() => git(root, ['fetch', 'origin', '--prune', '--quiet']));
   }
   const valid = git(root, ['check-ref-format', '--branch', branch], { allowFailure: true });
   if (valid.status !== 0) throw new Error(`invalid branch name: ${branch}`);
