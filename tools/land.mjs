@@ -22,6 +22,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { retryFetch } from './lib/git-retry.mjs';
 
 const TOOL_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const ROOT = process.env.VALEY_REPO
@@ -55,10 +56,31 @@ if (!pr) {
   try { pr = JSON.parse(gh('pr', 'view', '--json', 'number')).number; }
   catch { die('could not determine the PR: this branch has none and no number was provided'); }
 }
-const info = JSON.parse(gh('pr', 'view', String(pr), '--json', 'number,title,state,mergeable,headRefName'));
-if (info.state !== 'OPEN') die(`PR #${info.number} is already ${info.state}`);
+const info = JSON.parse(gh('pr', 'view', String(pr),
+  '--json', 'number,title,state,mergeable,headRefName,mergeCommit'));
 console.log(`PR #${info.number} — ${info.title}`);
 console.log(`branch ${info.headRefName}, mergeable: ${info.mergeable}`);
+
+// A landing that fell over after the merge used to have no way back: the PR was
+// MERGED, so a second run refused, and the release had to be cut by hand — in
+// exactly the gap between merge and tag that this command exists to close. Being
+// already merged is therefore a place to resume from, not a reason to stop. What
+// is checked is that the merge really is in main; whether there is anything left
+// to release is release.mjs's judgement, and it says so better than a guess here.
+retryFetch(() => git('fetch', 'origin', '--tags', '--quiet'));
+let resuming = false;
+if (info.state === 'MERGED') {
+  const sha = info.mergeCommit && info.mergeCommit.oid;
+  if (!sha) die(`PR #${info.number} is merged, but GitHub did not name the merge commit`);
+  const inMain = spawnSync('git', ['-C', ROOT, 'merge-base', '--is-ancestor', sha, 'origin/main'],
+    { stdio: 'ignore' }).status === 0;
+  if (!inMain) die(`PR #${info.number} is merged as ${sha.slice(0, 7)}, which is not in origin/main;\n` +
+    '  there is nothing here to resume');
+  resuming = true;
+  console.log(`\nalready merged as ${sha.slice(0, 7)} — resuming at the release`);
+} else if (info.state !== 'OPEN') {
+  die(`PR #${info.number} is ${info.state}`);
+}
 
 // -------------------------------------------------------------- the stands
 // Before the merge rather than after: a local branch is free to fix, a merged one
@@ -73,15 +95,18 @@ if (dry) {
 
 // ---------------------------------------------------------------- the merge
 if (!dry) {
-  console.log('\nmerge:');
-  run('gh', ['pr', 'merge', String(pr), '--merge']);
+  if (resuming) console.log('\nmerge: already done, from the earlier run');
+  else {
+    console.log('\nmerge:');
+    run('gh', ['pr', 'merge', String(pr), '--merge']);
+  }
 }
 
 // -------------------------------------------------------------- the release
 // A temporary worktree on a temporary branch at origin/main: release.mjs asks
 // that HEAD be the commit main stands on, and does not care what the branch is
 // called any more.
-git('fetch', 'origin', '--tags', '--quiet');
+retryFetch(() => git('fetch', 'origin', '--tags', '--quiet'));
 // A secondary repository is normally mounted next to the core files: its tests
 // import ../../web and its server-side stands expect the modules to be visible
 // at <core>/modules. A top-level /tmp worktree satisfies neither contract. Give
@@ -91,7 +116,7 @@ const secondary = path.resolve(ROOT) !== path.resolve(TOOL_ROOT);
 let hostDir = null;
 let dir;
 if (secondary) {
-  toolGit('fetch', 'origin', '--tags', '--quiet');
+  retryFetch(() => toolGit('fetch', 'origin', '--tags', '--quiet'));
   hostDir = fs.mkdtempSync(path.join(os.tmpdir(), 'valey-land-core-'));
   toolGit('worktree', 'add', '--quiet', '--detach', hostDir, 'origin/main');
   dir = path.join(hostDir, 'private-mods');
