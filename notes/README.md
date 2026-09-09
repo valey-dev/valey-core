@@ -44,4 +44,6 @@ node tools/notes.mjs v0.24.0             # one release
 node tools/notes.mjs v0.24.0..v0.30.0    # a span, oldest first
 ```
 
-Notes start at v0.24.0. The versions before it have no fragments and are not being backfilled — that line is drawn in `CHANGELOG.md`, where they are all still listed. The one exception is [v0.18.0](v0.18.0.md), written after the fact and saying so in its first line: its before-and-after is the clearest illustration in the repository of what a replayed pair is for.
+Notes start at v0.24.0. Five older releases have one anyway — [v0.10.0](v0.10.0.md), [v0.12.0](v0.12.0.md), [v0.13.0](v0.13.0.md), [v0.14.0](v0.14.0.md) and [v0.18.0](v0.18.0.md) — because their before-and-after can actually be photographed, and a pair is the fastest way to see what any of this is for. Each says in its own first line that it was written after the fact, out of the changelog rather than by whoever built the feature.
+
+The rest are not backfilled and will not be. Most of what shipped before v0.24.0 is invisible in a frame — release tooling, the module contract, settings, guest access — and some of it needs a floor the demo office does not have: a pager with a real question waiting, a room that has to be walked to. A note nobody can illustrate and nobody remembers writing is a worse record than the changelog line, which is still there for every one of them.

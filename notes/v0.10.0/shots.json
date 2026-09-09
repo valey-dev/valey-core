@@ -1,0 +1,15 @@
+{
+  "tag": "v0.10.0",
+  "shots": [
+    {
+      "file": "keyboard-keys.png",
+      "slug": "keyboard",
+      "id": "keys",
+      "keys": "Enter,wait:2500,?,wait:1200",
+      "before": {
+        "tag": "v0.9.0",
+        "file": "keyboard-keys.before-v0.9.0.png"
+      }
+    }
+  ]
+}

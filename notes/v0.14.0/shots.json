@@ -1,0 +1,15 @@
+{
+  "tag": "v0.14.0",
+  "shots": [
+    {
+      "file": "language-floor.png",
+      "slug": "language",
+      "id": "floor",
+      "keys": "Enter,wait:2500",
+      "before": {
+        "tag": "v0.13.0",
+        "file": "language-floor.before-v0.13.0.png"
+      }
+    }
+  ]
+}
