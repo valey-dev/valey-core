@@ -899,8 +899,12 @@ async function handle(req, res) {
   }
 
   // Which modules made it into this build. The client builds its imports from
-  // this list, so the list is the only thing the core knows about modules.
-  if (url.pathname === '/api/modules') return send(res, 200, moduleList());
+  // this list, so the list is the only thing the core knows about modules — and
+  // therefore the place to decide what a guest is allowed to load at all. A
+  // module that does not say `"guests": "shown"` is left out of a guest's list,
+  // so its client never reaches the page: no key of its own gets registered, no
+  // object of its own gets drawn, and its panel cannot be opened.
+  if (url.pathname === '/api/modules') return send(res, 200, moduleList(await isOwner(req)));
 
   // The test stand. An empty text means "this is an ordinary office" and the
   // client draws nothing. git is asked for the branch only here: in a normal run
@@ -914,7 +918,7 @@ async function handle(req, res) {
     } catch { /* not a repository — we manage without the branch */ }
     return send(res, 200, {
       text, branch, port: PORT,
-      modules: moduleList().map((m) => m.id),
+      modules: moduleList(true).map((m) => m.id),      // the stand plate is the owner's
       all: moduleAll(),
       errors: moduleErrors(),
     });

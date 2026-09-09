@@ -12,7 +12,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { loadModules, moduleList, moduleDefaults, moduleErrors, moduleRoute, moduleObserve } from '../server/modules.js';
+import { loadModules, moduleList, moduleAll, moduleDefaults, moduleErrors, moduleRoute, moduleObserve } from '../server/modules.js';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -32,15 +32,21 @@ await fsp.writeFile(path.join(root, 'package.json'), JSON.stringify({ type: 'mod
 
 // 1. No modules/ directory at all — the free build.
 ok('Without the modules/ directory, the bootloader is silent and renders empty', (await loadModules(root)).length === 0);
-ok('the list is empty', moduleList().length === 0);
+ok('the list is empty', moduleList(true).length === 0);
 ok('no settings added', Object.keys(moduleDefaults()).length === 0);
-ok('the route is not intercepted by anyone', (await moduleRoute(new URL('http://x/api/wip'), {}, {}, () => {})) === false);
+ok('the route is not intercepted by anyone',
+  (await moduleRoute(new URL('http://x/api/wip'), {}, {}, () => {}, { isOwner: async () => true })) === false);
 
 // 2. A normal module with a server.
 const mods = path.join(root, 'modules');
 await fsp.mkdir(path.join(mods, 'пример'), { recursive: true });
 await fsp.writeFile(path.join(mods, 'пример', 'module.json'), JSON.stringify({
   id: 'пример', name: { ru: 'Пример', en: 'Sample' }, tier: 'office',
+  // Shown to guests on purpose: what the checks below are about is a module
+  // refusing an owner-only route on its own, and a module hidden from guests is
+  // never asked at all — the refusal would come from the office, not from it.
+  // That skipping is checked separately, over its own fixtures, further down.
+  guests: 'shown',
   client: 'client.js', style: 'style.css', server: 'server.js'
 }));
 await fsp.writeFile(path.join(mods, 'пример', 'server.js'),
@@ -68,14 +74,15 @@ const loaded = await loadModules(root);
 ok('Exactly one module loaded', loaded.length === 1, loaded.map(m => m.id));
 ok('it\'s him', loaded[0]?.id === 'пример');
 ok('in the list for the client there is a path to the client and style',
-  moduleList()[0]?.client === 'client.js' && moduleList()[0]?.style === 'style.css', moduleList());
+  moduleList(true)[0]?.client === 'client.js' && moduleList(true)[0]?.style === 'style.css', moduleList(true));
 ok('the module delivered its settings', moduleDefaults()['пример']?.ключ === '', moduleDefaults());
 ok('no errors', moduleErrors().length === 0, moduleErrors());
 
+const owner = { isOwner: async () => true };
 let answered = null;
-const taken = await moduleRoute(new URL('http://x/api/wip'), {}, {}, (_res, code, body) => { answered = { code, body }; });
+const taken = await moduleRoute(new URL('http://x/api/wip'), {}, {}, (_res, code, body) => { answered = { code, body }; }, owner);
 ok('the module took its route', taken === true && answered?.code === 200, answered);
-ok('didn\'t take someone else\'s route', (await moduleRoute(new URL('http://x/api/state'), {}, {}, () => {})) === false);
+ok('didn\'t take someone else\'s route', (await moduleRoute(new URL('http://x/api/state'), {}, {}, () => {}, owner)) === false);
 
 // The owner check is handed to a module route, not worked out inside it: the
 // office has one such check and it knows about private mode, local addresses
@@ -90,15 +97,15 @@ await moduleRoute(new URL('http://x/api/wip/where'), {}, {}, (_res, code, body) 
 ok('guest - refusal', answered?.code === 403, answered);
 answered = null;
 await moduleRoute(new URL('http://x/api/wip/where'), {}, {}, (_res, code, body) => { answered = { code, body }; });
-ok('without context, it’s also a failure, not a fall', answered?.code === 403, answered);
+ok('without context, it\u2019s also a failure, not a fall', answered?.code === 403, answered);
 
 // 4. A broken module server does not bring the office down, but does not stay quiet either.
 await fsp.mkdir(path.join(mods, 'broken'), { recursive: true });
 await fsp.writeFile(path.join(mods, 'broken', 'module.json'), JSON.stringify({ id: 'broken', server: 'server.js' }));
 await fsp.writeFile(path.join(mods, 'broken', 'server.js'), 'this is not javascript(');
 await loadModules(root);
-ok('broken module didn\'t drop the load', moduleList().some(m => m.id === 'пример'));
-ok('the broken module was not included in the list for the client', !moduleList().some(m => m.id === 'broken'));
+ok('broken module didn\'t drop the load', moduleList(true).some(m => m.id === 'пример'));
+ok('the broken module was not included in the list for the client', !moduleList(true).some(m => m.id === 'broken'));
 ok('and it is said out loud', moduleErrors().some(e => e.id === 'broken'), moduleErrors());
 
 // 5. Watching the office snapshot. The point is server-side, and it is needed by
@@ -125,6 +132,50 @@ ok('and didn’t stop the neighbor from working',
   await fsp.readFile(path.join(root, 'seen.json'), 'utf8') === '[3,2]',
   await fsp.readFile(path.join(root, 'seen.json'), 'utf8').catch(() => null));
 
+// 6. Who is allowed to see a module. The invitation used to be all or nothing:
+// a guest called in to watch the agents also got every paid module's client.
+// The manifest decides now, and silence means «the owner's alone» — a module
+// that forgets the line must not add itself to a guest's floor.
+await fsp.rm(mods, { recursive: true, force: true });
+const put = async (id, extra) => {
+  await fsp.mkdir(path.join(mods, id), { recursive: true });
+  await fsp.writeFile(path.join(mods, id, 'module.json'),
+    JSON.stringify({ id, name: { ru: id, en: id }, client: 'client.js', server: 'server.js', ...extra }));
+  await fsp.writeFile(path.join(mods, id, 'server.js'),
+    `export const route = (url, req, res, send) => { if (url.pathname !== '/api/${id}') return false; send(res, 200, { id: '${id}' }); return true; };\n`);
+};
+// Latin ids here on purpose: new URL() percent-encodes a Cyrillic path, and the
+// module compares against the raw string, so a Cyrillic id would fail the route
+// check for a reason that has nothing to do with guests.
+await put('shown', { guests: 'shown' });
+await put('hidden', { guests: 'hidden' });
+await put('silent', {});
+await put('typo', { guests: 'да' });
+await loadModules(root);
+
+const ids = (forOwner) => moduleList(forOwner).map((m) => m.id).sort();
+ok('the owner sees all four', ids(true).length === 4, ids(true));
+ok('a guest sees only the one declared open', ids(false).join() === 'shown', ids(false));
+ok('silence closes rather than opens', !ids(false).includes('silent'), ids(false));
+ok('a typo in the value closes too', !ids(false).includes('typo'), ids(false));
+
+// The list is convenience; the lock is the route. A guest can type the URL.
+const call = async (id, forOwner) => {
+  let got = null;
+  await moduleRoute(new URL('http://x/api/' + id), {}, {}, (_res, code, body) => { got = { code, body }; },
+    { isOwner: async () => forOwner });
+  return got;
+};
+ok('an open module\'s route answers a guest', (await call('shown', false))?.code === 200, await call('shown', false));
+ok('a closed module\'s route does not answer a guest at all', (await call('hidden', false)) === null, await call('hidden', false));
+ok('but it answers the owner', (await call('hidden', true))?.code === 200, await call('hidden', true));
+
+// And the office has to be able to say what a guest sees, or the rule is true
+// and invisible.
+const shelf = Object.fromEntries(moduleAll().map((m) => [m.id, m.guests]));
+ok('the office can say what a guest sees',
+  shelf['shown'] === 'shown' && shelf['hidden'] === 'hidden' && shelf['silent'] === 'hidden', shelf);
+
 await fsp.rm(root, { recursive: true, force: true });
-console.log(bad ? `\n${bad} упало` : '\nall passed');
+console.log(bad ? `\n${bad} failed` : '\nall passed');
 process.exit(bad ? 1 : 0);
