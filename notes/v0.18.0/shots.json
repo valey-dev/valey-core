@@ -1,0 +1,15 @@
+{
+  "tag": "v0.18.0",
+  "shots": [
+    {
+      "file": "standup-teams.png",
+      "slug": "standup",
+      "id": "teams",
+      "keys": "Enter,wait:2500,Tab,wait:1200",
+      "before": {
+        "tag": "v0.17.0",
+        "file": "standup-teams.before-v0.17.0.png"
+      }
+    }
+  ]
+}
