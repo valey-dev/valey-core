@@ -141,4 +141,6 @@ What changed between releases is in [CHANGELOG.md](CHANGELOG.md).
 
 Claude Code is Anthropic's. This is an independent project that reads the session files Claude Code leaves on your disk, and nothing else. It is not endorsed by, and has no connection to, Anthropic.
 
+Found something that leaves the machine, or runs what you did not ask for? Write to security@valey.dev rather than opening an issue — [SECURITY.md](SECURITY.md) says what counts and what to include.
+
 Built by [Sergei Goriugin (xoyk)](https://github.com/xoyk).
