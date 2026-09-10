@@ -84,8 +84,8 @@ const { initTitle, renderTitle, titleKey, titleOpen, closeTitle, tickTitle } = a
 // --- an office of four rooms, as it looks in a real snapshot ---
 const rooms = [
   { key: 'AI valey', title: 'AI valey', agents: ['a1', 'a2', 'a3'] },
-  { key: 'budget-app', title: 'budget-app', agents: ['b1', 'b2'] },
-  { key: 'shebis', title: 'shebis', agents: ['c1'] },
+  { key: 'wallet-app', title: 'wallet-app', agents: ['b1', 'b2'] },
+  { key: 'kennel', title: 'kennel', agents: ['c1'] },
 ];
 const agents = [
   { id: 'a1', status: 'awaiting' }, { id: 'a2', status: 'working' }, { id: 'a3', status: 'idle' },
@@ -188,7 +188,7 @@ ok('the down arrow goes through the rooms', key('ArrowDown') === true, null);
 key('ArrowDown');   // roomIdx = 2, the last one
 key('ArrowDown');   // it stops rather than wrapping around
 key('Enter');
-ok('Enter enters the selected room', calls.enter.at(-1) === 'shebis', calls.enter);
+ok('Enter enters the selected room', calls.enter.at(-1) === 'kennel', calls.enter);
 
 key('Escape');
 renderTitle();

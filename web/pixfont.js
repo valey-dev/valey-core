@@ -99,7 +99,7 @@ export const WIDE = { FONT: FONT_WIDE, W: 5, ADVANCE: 6 };
 
 // There are no lower-case letters here: 3×5 does not hold them, and everything
 // drawn in this font is upper-cased. A folder name changes its look because of it
-// — "budget-app" on the plaque becomes "BUDGET-APP" — and that is the conscious
+// — "wallet-app" on the plaque becomes "WALLET-APP" — and that is the conscious
 // price of the option. «Ё» folds into «Е» and «Й» into «И»: the dots and the
 // breve ask for a sixth row, and a sixth row means a different height for every
 // plaque in the office. The price is known and was accepted along with the frame.

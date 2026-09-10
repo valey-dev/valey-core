@@ -22,9 +22,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xoyk/valey-core.git"
+    "url": "git+https://github.com/valey-dev/valey-core.git"
   },
   "bugs": {
-    "url": "https://github.com/xoyk/valey-core/issues"
+    "url": "https://github.com/valey-dev/valey-core/issues"
   }
 }

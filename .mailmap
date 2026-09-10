@@ -1,0 +1,10 @@
+# One person, one line in `git shortlog`. The account name is what the
+# commits carry; the full name is what LICENSE, CLA.md and the README use.
+Sergei Goriugin <xoyk82@gmail.com> xoyk <xoyk82@gmail.com>
+
+# Co-author trailers name the model that helped with each commit, and the
+# model changes between sessions. Grouped by trailer they read as one
+# contributor, which is the honest count.
+Claude <noreply@anthropic.com> Claude Opus 5 <noreply@anthropic.com>
+Claude <noreply@anthropic.com> Claude Opus 5 (1M context) <noreply@anthropic.com>
+Claude <noreply@anthropic.com> Claude Fable 5.1 <noreply@anthropic.com>

@@ -36,7 +36,7 @@ const ROOM_TONES = [
 // files: the rulebook promised «including service rooms» while the code searched
 // the project ones only and silently dropped the player into the first room it
 // found. Nothing said it had missed. The key is now a key — `__security`; the
-// title stays for older links that said «carbonara». The leading underscores are
+// title stays for older links that said «marmalade». The leading underscores are
 // optional: `#room=security` is the same thing, and it is the first thing anyone
 // will type.
 export function pickRoom(layout, want) {

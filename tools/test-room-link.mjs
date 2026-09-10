@@ -18,7 +18,7 @@ const ok = (name, cond, got) => {
 };
 
 const agents = [
-  { id: 'a', name: 'Тоня', project: 'carbonara-restaurant', seat: 0, roleKey: 'code', status: 'working' },
+  { id: 'a', name: 'Тоня', project: 'marmalade-kitchen', seat: 0, roleKey: 'code', status: 'working' },
   { id: 'b', name: 'Пётр', project: 'storefront', seat: 0, roleKey: 'qa', status: 'idle' },
 ];
 const L = buildLayout(agents);
@@ -30,8 +30,8 @@ ok('negotiation', pickRoom(L, 'meeting')?.meeting === true, pickRoom(L, 'meeting
 ok('greenhouse', pickRoom(L, 'greenhouse')?.greenhouse === true, pickRoom(L, 'greenhouse')?.key);
 
 // ------------------------------------------------------------ project rooms
-const proj = pickRoom(L, 'carbonara');
-ok('old links at the beginning of the title are still alive', !!proj && proj.title.startsWith('carbonara'), proj && proj.title);
+const proj = pickRoom(L, 'marmalade');
+ok('old links at the beginning of the title are still alive', !!proj && proj.title.startsWith('marmalade'), proj && proj.title);
 ok('and by the project key too', pickRoom(L, L.projectRooms[0].key)?.key === L.projectRooms[0].key, L.projectRooms[0].key);
 
 // ------------------------------------------------------------------ nothing

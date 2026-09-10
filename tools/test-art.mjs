@@ -6,9 +6,9 @@ const agents = [];
 const add = (project, n) => {
   for (let i = 0; i < n; i++) agents.push({ id: `${project}-${i}`, project, startedAt: 1000 + agents.length });
 };
-add('carbonara-restaurant', 12); add('budget-app', 7); add('shebis', 3);
-add('activity-dashboard', 1); add('pingator', 2); add('iron-grip', 5);
-add('AI valey', 2); add('AJIRA', 1);
+add('marmalade-kitchen', 12); add('wallet-app', 7); add('kennel', 3);
+add('orbit-dashboard', 1); add('pingwatch', 2); add('gym-planner', 5);
+add('AI valey', 2); add('TALOS', 1);
 
 const L = buildLayout(agents);
 let failed = 0;
@@ -33,8 +33,8 @@ for (const r of L.rooms) {
 
 // ---- motifs are guessed from the project name
 const themes = [
-  ['carbonara-restaurant', 'food'], ['budget-app', 'money'], ['shebis', 'dog'],
-  ['activity-dashboard', 'chart'], ['pingator', 'network'], ['iron-grip', 'muscle'],
+  ['marmalade-kitchen', 'food'], ['wallet-app', 'money'], ['kennel', 'dog'],
+  ['orbit-dashboard', 'chart'], ['pingwatch', 'network'], ['gym-planner', 'muscle'],
   ['AI valey', 'valley'], ['figma-плагин', 'design'], ['неизвестный проект', null],
 ];
 for (const [name, want] of themes) {

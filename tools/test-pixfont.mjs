@@ -28,7 +28,7 @@ ok('each sign is exactly 3x5 and only # and .', wrong.length === 0, wrong.map(([
 
 const need = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -_.·/:';
 ok('Latin alphabet, numbers and version symbols are in place', PF.canDraw(need), [...need].filter((c) => !PF.canDraw(c)));
-ok('lowercase converted to uppercase', PF.canDraw('budget-app'));
+ok('lowercase converted to uppercase', PF.canDraw('wallet-app'));
 ok('the font does not use the Cyrillic alphabet - and says so', !PF.canDraw('Проект'));
 ok('empty line is drawable', PF.canDraw(''));
 
@@ -126,8 +126,8 @@ const plate = (title, sub) => {
   const box = drawNameplate(ctx, { title, sub, y: 300 }, { x: 100, w: 36 });
   return { ctx, box };
 };
-const p1 = plate('budget-app', '');
-const p2 = plate('budget-app', 'v3.5.6 · Next 16');
+const p1 = plate('wallet-app', '');
+const p2 = plate('wallet-app', 'v3.5.6 · Next 16');
 
 ok('one line sign 9 pixels', p1.box.h === 9, p1.box);
 ok('two-line 17', p2.box.h === 17, p2.box);
