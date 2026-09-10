@@ -1412,6 +1412,22 @@ export function lang() { return LANG; }
 
 export function other() { return LANG === 'ru' ? 'en' : 'ru'; }
 
+// The clock speaks the office's language, not the browser's. Five stamps in the
+// transcript and the notes called toLocaleString([]), and an empty list means
+// "whatever the browser was installed in": a Russian office on an English laptop
+// signed a message «09/10, 02:08 PM» — month first and AM/PM, which the office
+// has nowhere else. Found on 10 September 2026 against the transcript mock-up.
+// en-GB rather than en-US on purpose: day before month and a 24-hour clock, so
+// the two languages differ in their words and not in the order of the numbers.
+export function locale() { return LANG === 'ru' ? 'ru-RU' : 'en-GB'; }
+
+const STAMP = { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' };
+const CLOCK = { hour: '2-digit', minute: '2-digit' };
+// «10.09, 14:08» — a message, a note: the day and the minute.
+export function fmtStamp(ts) { return new Date(ts).toLocaleString(locale(), STAMP); }
+// «14:08» — for a line that already knows the day: the weather, "nothing new".
+export function fmtClock(ts) { return new Date(ts).toLocaleTimeString(locale(), CLOCK); }
+
 // Russian «2 экрана» needs three forms, English "2 screens" two. The forms lie
 // inside the string itself, separated by | and labelled with the name of a
 // category, and Intl.PluralRules of the same language chooses between them.

@@ -69,7 +69,7 @@ export function toast(text, kind = '') {
 // ---------------------------------------------------------------------- hud
 // tr, not t: in ui.js `t` is already taken by local variables in several
 // functions, and the import there was silently shadowed
-import { t as tr, lang } from './i18n.js';
+import { t as tr, lang, fmtStamp, fmtClock } from './i18n.js';
 import { cardClosed } from './pager.js';
 
 const WEATHER_ICON = { clear: '☀', clouds: '☁', rain: '☂', storm: '⚡', snow: '❄', fog: '≋' };
@@ -2500,7 +2500,7 @@ export function renderSky(results = null, busy = '') {
         ? tr('sky.updated', {
             what: tr('sky.' + w.kind),
             temp: w.temp != null ? `, ${Math.round(w.temp)}°` : '',
-            at: live.at ? new Date(live.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '—' })
+            at: live.at ? fmtClock(live.at) : '—' })
         : tr('sky.asking');
 
   el.sky.innerHTML = `<div class="rwrap skywrap">
@@ -3185,9 +3185,9 @@ export async function openTranscript(a, focusTs = null) {
 // A note card is drawn from storage on every log repaint rather than living in
 // the DOM: paintChat rebuilds everything, and only outside state can survive it.
 const noteCard = (n, orphan) => {
-  const when = new Date(n.at).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const when = fmtStamp(n.at);
   const anchor = orphan && n.ts
-    ? `<i class="nanchor">${tr('note.anchor', { when: new Date(n.ts).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) })}</i>`
+    ? `<i class="nanchor">${tr('note.anchor', { when: fmtStamp(n.ts) })}</i>`
     : '';
   return `<div class="note" data-note="${n.id}">
     <div class="nhead"><b>${tr('note.label', { when })}${n.edited ? ' · ' + tr('note.edited') : ''}</b>
@@ -3198,7 +3198,7 @@ const noteCard = (n, orphan) => {
 
 const noteEditor = (ts, text) => `<div class="noteed" data-anchor="${ts == null ? '' : ts}">
     <b>${ts == null ? tr('note.newLoose') : tr('note.newFor', {
-      when: new Date(ts).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) })}</b>
+      when: fmtStamp(ts) })}</b>
     <textarea id="notein" rows="2" placeholder="${tr('note.placeholder')}">${esc(text || '')}</textarea>
     <i>${tr('note.keys')}</i></div>`;
 
@@ -3220,7 +3220,7 @@ function paintChat(msgs, fresh = 0, force = false) {
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
   const keep = box.scrollTop;
   const { byTs, orphans } = splitNotes(a.id, msgs);
-  const stamp = (ts) => ts ? new Date(ts).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+  const stamp = (ts) => ts ? fmtStamp(ts) : '';
 
   // An edited note is replaced by the editor rather than its card.
   const ed = chatView.editing;
@@ -3379,7 +3379,7 @@ async function loadChat(fresh) {
   // The tail may grow in place rather than gain an item; a growing answer is one message.
   const grew = msgs.length > was.length
     || (msgs.length && was.length && msgs[msgs.length - 1].text !== was[was.length - 1].text);
-  if (fresh && !grew) { chatStatus(tr('chat.noNew') + ' · ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })); return; }
+  if (fresh && !grew) { chatStatus(tr('chat.noNew') + ' · ' + fmtClock(Date.now())); return; }
   paintChat(msgs, fresh ? Math.max(1, msgs.length - was.length) : 0);
   if (fresh) {
     const added = msgs.length - was.length;
@@ -3434,7 +3434,7 @@ export function renderNotes() {
     groups.get(key).push(n);
   }
   const alive = new Set(S.agents.map((a) => a.id));
-  const stamp = (ms) => new Date(ms).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const stamp = (ms) => fmtStamp(ms);
 
   // A note whose address is not a session belongs to somebody else, and the
   // core does not read it: it shows the address to every module and takes the
