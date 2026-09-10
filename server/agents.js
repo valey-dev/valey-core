@@ -412,6 +412,7 @@ function textOf(content) {
 }
 
 const IMAGE_RE = /\.(png|jpe?g|gif|svg|webp)$/i;
+const INTERRUPTED_RE = /^\[Request interrupted by user/;
 
 const RECENT_MAX = 16;
 const MSG_MAX = 12000;
@@ -464,6 +465,11 @@ function applyLine(st, line) {
       if (said) st.task = said;
     }
     st.awaitingUser = r.message.stop_reason === 'end_turn';
+    // An API error is written as a synthetic assistant message — model
+    // «<synthetic>», stop_sequence — and it ends the turn the way end_turn does:
+    // the app is back at the prompt. Read as an open turn it kept the agent
+    // «working» on an error nobody was going to retry for it.
+    if (r.isApiErrorMessage) st.awaitingUser = true;
     for (const b of Array.isArray(content) ? content : []) {
       if (b?.type !== 'tool_use') continue;
       const d = describeTool(b.name, b.input);
@@ -488,7 +494,14 @@ function applyLine(st, line) {
     const isToolResult = Array.isArray(content) && content.some((b) => b?.type === 'tool_result');
     if (!isToolResult) {
       const txt = textOf(content);
-      if (txt && !txt.startsWith('<')) {
+      // Esc in the app lands in the transcript as a user line — «[Request
+      // interrupted by user]», or «… for tool use» — and it is not a prompt: the
+      // person stopped the agent and is expected to say something next. Read as
+      // a prompt it kept the turn open, and under the hour above an interrupted
+      // agent would sit «working» at a desk nobody was working at.
+      if (INTERRUPTED_RE.test(txt)) {
+        st.awaitingUser = true;
+      } else if (txt && !txt.startsWith('<')) {
         st.lastUserPrompt = txt.slice(0, 400);
         st.awaitingUser = false;
         remember(st, 'user', txt, r.timestamp);
@@ -795,7 +808,26 @@ async function seatRegistry(sessions) {
   return next;
 }
 
-const IDLE_MS = 90_000;
+// A turn is open from the person's prompt to the model's end_turn, and while it
+// is open the agent is working: a tool is running, a permission prompt is up, or
+// the next step is being composed. None of that writes a line to the transcript
+// — a line lands when a step ends — so until 10 September 2026 `busy` meant
+// "the last line is younger than 90 seconds", and a long Bash put the agent to
+// sleep on the floor while Claude Desktop showed it working. Measured over 25
+// fresh transcripts on 9 September: pauses over 90 s were 0.9% of the steps and
+// 28.6% of the working time, the longest 46 minutes; two live agents sat under
+// «z z» on the 410th and 428th second of a Bash call. The office now trusts an
+// open turn for an hour. After that the silence is more likely a hung step than
+// a slow one, and «z z» is the honest picture again.
+const STEP_MS = 60 * 60_000;
+
+// 'working' | 'awaiting' | 'idle', from the parsed transcript alone — so a stand
+// can drive it with lines and a clock of its own.
+export function statusOf(t, now = Date.now()) {
+  if (t.awaitingUser) return 'awaiting';
+  const idleFor = t.lastTs ? now - t.lastTs : Infinity;
+  return idleFor < STEP_MS ? 'working' : 'idle';
+}
 
 export async function snapshot() {
   const sessions = await liveSessions();
@@ -815,7 +847,8 @@ export async function snapshot() {
     const files = [...t.files.values()].sort((a, b) => b.ts - a.ts).slice(0, 16);
     const artifacts = files.filter((f) => f.made || f.image);
     const idleFor = t.lastTs ? Date.now() - t.lastTs : Infinity;
-    const busy = idleFor < IDLE_MS && !t.awaitingUser;
+    const status = statusOf(t);
+    const busy = status === 'working';
     const act = t.lastTool ? describeTool(t.lastTool, t.lastToolInput) : { key: 'thinking', mood: 'plan' };
     const roleInfo = inferRole(t);
     // The version and the stack belong to the repository, not to the session:
@@ -842,7 +875,7 @@ export async function snapshot() {
       title: t.title || t.aiTitle || '',
       role: roleInfo.role,
       roleKey: roleInfo.short,
-      status: busy ? 'working' : (t.awaitingUser ? 'awaiting' : 'idle'),
+      status,
       act: busy ? { key: act.key, arg: act.arg || '' } : { key: t.awaitingUser ? 'awaiting' : 'idle', arg: '' },
       activity: busy ? actEn(act) : (t.awaitingUser ? ACT_EN.awaiting : ACT_EN.idle),
       mood: act.mood,
