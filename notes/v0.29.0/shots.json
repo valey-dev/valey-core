@@ -1,0 +1,12 @@
+{
+  "tag": "v0.29.0",
+  "shots": [
+    {
+      "file": "hookah-lounge.png",
+      "slug": "hookah",
+      "id": "lounge",
+      "url": "#room=__security",
+      "keys": "Enter,wait:3000"
+    }
+  ]
+}
