@@ -354,6 +354,44 @@ function drawCorridorProp(ctx, p, t) {
     }
     return;
   }
+  if (kind === 'hookah') {
+    // The hookah on a low tray. Drawn 10 September 2026 for a live demo with the
+    // design phase skipped on the owner's word; the frame is owed afterwards.
+    // The smoke is the ashtray's wisp grown up: four puffs, slower, wider, and
+    // drifting — a room where people are at ease, not a bin somebody stubbed a
+    // cigarette in.
+    px(ctx, x - 8, y - 3, 16, 3, '#3a2f2a');                  // the tray
+    px(ctx, x - 8, y - 3, 16, 1, '#5a4a40');
+    px(ctx, x - 4, y - 10, 8, 7, '#3b6f8a');                  // the glass base
+    px(ctx, x - 4, y - 10, 8, 1, '#6fb3d0');
+    px(ctx, x - 3, y - 9, 2, 3, '#8fd0e8');                   // its highlight
+    px(ctx, x - 4, y - 5, 8, 2, '#2d5a72');                   // the water line
+    px(ctx, x - 1, y - 22, 2, 12, '#c9a24a');                 // the brass stem
+    px(ctx, x, y - 22, 1, 12, '#8a6a2a');
+    px(ctx, x - 3, y - 23, 6, 1, '#c9a24a');                  // the plate
+    px(ctx, x - 2, y - 26, 4, 3, '#8a4a3a');                  // the clay bowl
+    px(ctx, x - 2, y - 26, 4, 1, '#a85e48');
+    // the hose: down the stem, out to the right, mouthpiece resting on the tray
+    px(ctx, x + 1, y - 16, 2, 1, '#5a2f4a');
+    px(ctx, x + 3, y - 15, 1, 6, '#5a2f4a');
+    px(ctx, x + 4, y - 9, 3, 1, '#5a2f4a');
+    px(ctx, x + 7, y - 8, 1, 4, '#5a2f4a');
+    px(ctx, x + 6, y - 4, 3, 1, '#c9a24a');                   // the mouthpiece
+    // the coal: it breathes
+    const glow = 0.6 + 0.4 * Math.sin(t / 700);
+    ctx.globalAlpha = glow;
+    px(ctx, x - 1, y - 27, 2, 1, '#ff8a3c');
+    ctx.globalAlpha = 1;
+    // the smoke
+    for (let i = 0; i < 4; i++) {
+      const life = ((t / 3400 + i / 4) % 1);
+      const size = life < 0.5 ? 3 : 2;
+      ctx.globalAlpha = 0.36 * (1 - life);
+      px(ctx, x - 1 + Math.round(Math.sin(life * 4 + i * 1.7) * 4), y - 29 - Math.round(life * 20), size, size, '#dcd6e6');
+      ctx.globalAlpha = 1;
+    }
+    return;
+  }
   if (kind === 'bench') {
     px(ctx, x - 17, y - 12, 34, 6, '#7a5a3e');
     px(ctx, x - 17, y - 6, 34, 3, '#5f4530');

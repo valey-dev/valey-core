@@ -271,6 +271,10 @@ export function buildLayout(agents, opts = {}) {
 
   props.push({ kind: 'lounge', x: lounge.x, y: lounge.y + 5 });
   props.push({ kind: 'ashtray', x: lounge.x + 36, y: lounge.y + 6 });
+  // The hookah stands between the two who smoke standing, a step in front of them,
+  // so the smoke rises past both and the hose reaches whoever is closer. It is
+  // furniture, not a seat: nobody is pinned to it, the places stay the five above.
+  props.push({ kind: 'hookah', x: lounge.x + 59, y: lounge.y + 16 });
   // The bear skin lies in front of the sofa, where a rug belongs: the sofa is the
   // fireplace this office does not have.
   props.push({ kind: 'bearrug', x: lounge.x, y: lounge.y + 22 });
@@ -673,8 +677,8 @@ export function blocked(L, x, y) {
     // A thing has the right to name its own dimensions — otherwise a module cannot put
     // anything of its own into the corridor: the table knows only the kinds listed here,
     // and it has nowhere to learn about foreign ones.
-    const w = p.w ?? ({ bench: 34, lounge: 54, ashtray: 10, lang: 14, kicker: 44 }[p.kind] || 16);
-    const h = p.h ?? ({ plant: 14, lounge: 22, ashtray: 18, lang: 24, kicker: 22 }[p.kind] || 26);
+    const w = p.w ?? ({ bench: 34, lounge: 54, ashtray: 10, hookah: 14, lang: 14, kicker: 44 }[p.kind] || 16);
+    const h = p.h ?? ({ plant: 14, lounge: 22, ashtray: 18, hookah: 26, lang: 24, kicker: 22 }[p.kind] || 26);
     if (x > p.x - w / 2 - 4 && x < p.x + w / 2 + 4 && y > p.y - h && y < p.y + 4) return true;
   }
   for (const r of L.rooms) {
