@@ -2,11 +2,12 @@
   "tag": "v0.29.0",
   "shots": [
     {
-      "file": "hookah-lounge.png",
+      "file": "lounge.png",
       "slug": "hookah",
       "id": "lounge",
       "url": "#room=__security",
-      "keys": "Enter,wait:3000"
+      "keys": "Enter,wait:2500,hold-ArrowUp:1300,Escape,hold-ArrowLeft:3600,Escape,wait:900",
+      "viewport": "1400,1000"
     }
   ]
 }

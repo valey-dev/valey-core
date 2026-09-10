@@ -105,7 +105,10 @@ if (before) {
   console.log(`replaying on ${before}, in a worktree of it`);
 }
 
-const office = await startOffice({ claudeDir, root: worktree || ROOT });
+// Whatever stand sign the caller's shell carries must not reach these frames:
+// they go to a public repository. On 10 September 2026 a VALEY_STAND left over
+// from a stand on the same machine was photographed into a release note.
+const office = await startOffice({ claudeDir, root: worktree || ROOT, env: { VALEY_STAND: '' } });
 console.log(`demo office on ${office.base}`);
 try {
   await waitForAgent(async () => (await fetch(office.base + '/api/state')).json());
