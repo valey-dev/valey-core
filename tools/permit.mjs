@@ -20,6 +20,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { hookOutput } from './lib/permit-verdict.mjs';
 
 // Which office the questions go to. VALEY_URL wins — that is how a stand or a
 // second machine is pointed somewhere else on purpose — then the canonical port
@@ -81,20 +82,7 @@ try {
   // person.
 }
 
-if (!answer || !answer.decision) passThrough();
-
-// The office's verdict, in the shape Claude Code expects. The rules for "always
-// allow" travel as the very objects that arrived in permission_suggestions: the
-// office does not invent them, it returns them — and Claude Code writes them
-// itself, in the same place the "Always allow" button would have.
-const out = {
-  hookEventName: 'PermissionRequest',
-  decision: answer.decision,
-};
-if (answer.decision === 'allow' && (answer.updatedPermissions || []).length) {
-  out.updatedPermissions = answer.updatedPermissions;
-}
-if (answer.decision === 'deny') out.message = answer.message || 'denied in the office';
-
-process.stdout.write(JSON.stringify({ hookSpecificOutput: out }));
+const out = hookOutput(payload, answer);
+if (!out) passThrough();
+process.stdout.write(JSON.stringify(out));
 process.exit(0);
