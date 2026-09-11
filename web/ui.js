@@ -2240,6 +2240,25 @@ export function renderBag(tab) {
   else if (bagTab === 'tree') { bindTree(); bindTreeView(); }
   else if (bagTab === 'keys') bindKeys();
   else bindOffice();
+  markScrollable(el.bag.querySelector('.bbody'));
+}
+
+// The inventory body has scrolled since it was built, and nothing ever said so:
+// no bar, no edge, and the cut lands mid-line, so a long card reads as broken
+// markup rather than as «there is more below». Measured 7 September 2026 on the
+// unconnected mail key: 596 against 478, and the 118 hidden pixels held exactly
+// the sentence about where the Google secret is kept — the one a person should
+// read before pasting it.
+//
+// The class is what the fade hangs on, and it is set from the real numbers
+// rather than guessed from the tab: every tab has its own content and the same
+// question. Recomputed on scroll, because the answer changes at the bottom.
+function markScrollable(body) {
+  if (!body) return;
+  const mark = () => body.classList.toggle('more',
+    body.scrollHeight - body.scrollTop - body.clientHeight > 2);
+  body.addEventListener('scroll', mark, { passive: true });
+  mark();
 }
 
 function bindOffice() {
@@ -2599,12 +2618,39 @@ export function focusRing(nodeOf, selector, opts = {}) {
   const stepTo = opts.noWrap ? stopAt : wrapAt;
   let idx = 0;
   const list = () => (nodeOf() ? [...nodeOf().querySelectorAll(selector)] : []);
+
+  // Tab inside a panel belongs to the browser — main.js hands it back while the
+  // focus sits on a control — and the browser moves the focus without telling
+  // the ring. Until 8 September 2026 the yellow outline stayed on the field you
+  // had left while the browser drew its own blue one on the field you had
+  // arrived at: two highlights, neither of them where the office thought it was.
+  // Found by Sergey tabbing from Client ID to Client secret on the mail card.
+  //
+  // So the ring listens instead of guessing: whatever moves the focus — Tab,
+  // Shift+Tab, a mouse — the highlight goes with it. Classes only, never paint():
+  // paint() scrolls and calls onMove, and one of those would fire on every Tab.
+  const follow = () => {
+    const node = nodeOf();
+    // A panel may hand the ring a node of its own making rather than an element —
+    // the radio does, and so do the keyboard stands. Nothing to listen on there.
+    if (!node || !node.dataset || !node.addEventListener || node.dataset.ringFollow) return;
+    node.dataset.ringFollow = '1';
+    node.addEventListener('focusin', (e) => {
+      const l = list();
+      const at = l.indexOf(e.target);
+      if (at < 0 || at === idx) return;
+      idx = at;
+      l.forEach((b, i) => b.classList.toggle('focus', i === at));
+    });
+  };
+
   const paint = () => {
     const l = list();
     if (!l.length) return;
     idx = Math.max(0, Math.min(l.length - 1, idx));
     l.forEach((b, i) => b.classList.toggle('focus', i === idx));
     l[idx].scrollIntoView({ block: 'nearest' });
+    follow();
     // Some panels need more than a highlighted button. The language panel has a
     // "what happens if pressed" line below, which must follow focus, not a click.
     // Otherwise the cost would be shown only after it had already been paid.

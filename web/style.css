@@ -428,6 +428,17 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .bagwrap{height:min(560px, calc(86vh / var(--ui, 1)))}
 .bagwrap .bbody, .bagwrap .dbody{flex:1 1 auto; overflow-y:auto; min-height:0}
 .bagwrap .bbody{min-height:0}
+/* "There is more below": the content fades at the bottom edge until the end has
+   been reached. A mask rather than a fill — a mask carries alpha only, so no
+   colour has to be written by hand next to the token that already holds it.
+   markScrollable() sets the class from the real numbers, so a list that has been
+   read to the end has no edge. currentColor rather than a literal: a mask reads
+   alpha only, so any opaque colour does, and this one names no colour at all. */
+.bagwrap .bbody.more{-webkit-mask-image:linear-gradient(currentColor calc(100% - 22px), transparent);
+  mask-image:linear-gradient(currentColor calc(100% - 22px), transparent)}
+/* Inside a key card the outline is the office's ring, so the browser's is one
+   too many: until 8 September 2026 a field arrived at by Tab had both. */
+.keydetail input:focus{outline:none}
 /* The tree keeps one height whatever branch is open. Its content varies a lot —
    five nodes in one direction, one in another, a card of two lines or of six —
    and a panel that resizes under every keypress reads as the office twitching.
