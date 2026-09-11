@@ -22,6 +22,8 @@ npm start
 
 Then open <http://localhost:5177>.
 
+Run it twice and the second one says where the first is and exits: two offices on one port would be two offices, not one. If something that is not Valey holds 5177, the office takes the next free port and says so — with the reminder that Claude Code sends its questions to 5177, so a hook set up later needs the port freed or `network.port` in the settings changed.
+
 The server binds `127.0.0.1`, so the office answers this machine and nothing
 else. 
 
