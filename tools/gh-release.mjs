@@ -16,9 +16,15 @@
 // version, verbatim — one text, one source. A release whose notes were written
 // separately drifts from the changelog on the second edit, and then nobody knows
 // which of the two is the truth.
+//
+// The page also carries what install.sh downloads: the tarball of the tag and
+// the checksum beside it, built by tools/dist.mjs. valey.dev/dist/ is a redirect
+// to these assets, so a release without them is a version the one-liner cannot
+// install — the four files are as much a part of the release as the notes.
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 // The root comes from this file rather than from the cwd, for the reason
@@ -58,14 +64,28 @@ function notes(tag) {
   return lines.slice(from + 1, to).join('\n').trim();
 }
 
-// What is already published. `gh` answers with an error when the release is not
-// there, and that is not a failure — it is the normal case for a fresh tag.
+// What is already published, and with how many files. `gh` answers with an
+// error when the release is not there, and that is not a failure — it is the
+// normal case for a fresh tag. A page that exists but carries no assets is the
+// state every release was in before 11 September 2026, and it is caught up
+// here rather than by hand.
 function published(tag) {
   try {
-    execFileSync('gh', ['release', 'view', tag, '-R', repo, '--json', 'tagName'],
+    const out = execFileSync('gh', ['release', 'view', tag, '-R', repo, '--json', 'assets', '-q', '.assets | length'],
       { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-    return true;
-  } catch { return false; }
+    return { assets: Number(out.trim()) };
+  } catch { return null; }
+}
+
+// The four files install.sh asks for, built into a folder that goes away with
+// the run. dist.mjs is asked rather than imported: it is a command, and it
+// prints where the bytes came from.
+const TOOLS = path.dirname(fileURLToPath(import.meta.url));
+function assets(tag) {
+  const out = mkdtempSync(path.join(tmpdir(), 'valey-dist-'));
+  execFileSync(process.execPath, [path.join(TOOLS, 'dist.mjs'), tag, '--out', out],
+    { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'ignore', 'inherit'] });
+  return { dir: out, files: readdirSync(out).sort().map((f) => path.join(out, f)) };
 }
 
 // The repository is asked of git rather than hardcoded: this tree has two remotes
@@ -94,17 +114,32 @@ for (const tag of wanted) {
   const body = notes(tag);
   if (!body) { console.log(`${tag}: CHANGELOG.md has no section; skipping`); skipped++; continue; }
 
-  if (published(tag)) { console.log(`${tag}: release already exists`); skipped++; continue; }
+  const have = published(tag);
+  if (have && have.assets > 0) { console.log(`${tag}: release already exists`); skipped++; continue; }
 
   if (dry) {
-    console.log(`\n=== ${tag} → ${repo}\n${body}\n`);
+    const names = assets(tag);
+    console.log(`\n=== ${tag} → ${repo}${have ? ' (page exists, assets missing)' : ''}\n${body}\n`);
+    console.log(names.files.map((f) => '  + ' + path.basename(f)).join('\n'));
+    rmSync(names.dir, { recursive: true, force: true });
     made++;
     continue;
   }
 
-  execFileSync('gh', ['release', 'create', tag, '-R', repo, '--title', tag, '--notes', body],
-    { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
-  console.log(`${tag}: published`);
+  const built = assets(tag);
+  try {
+    if (have) {
+      execFileSync('gh', ['release', 'upload', tag, '-R', repo, ...built.files],
+        { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+      console.log(`${tag}: page existed without files; ${built.files.length} assets added`);
+    } else {
+      execFileSync('gh', ['release', 'create', tag, '-R', repo, '--title', tag, '--notes', body, ...built.files],
+        { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+      console.log(`${tag}: published with ${built.files.length} assets`);
+    }
+  } finally {
+    rmSync(built.dir, { recursive: true, force: true });
+  }
   made++;
 }
 

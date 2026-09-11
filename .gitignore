@@ -9,6 +9,11 @@ coverage/
 # Landing build for Cloudflare Pages, generated on their side.
 _site/
 
+# What install.sh downloads, built by tools/dist.mjs from a tag. It lives on
+# the release page, never in the tree: a tarball per version in the history
+# would be a megabyte forever for bytes git can already reproduce.
+dist/
+
 # Third-party modules under modules/ are private, live in their own repository,
 # and arrive here through a symlink. Core neither stores nor notices them:
 # otherwise they would appear in every connected checkout's status and one day

@@ -17,6 +17,11 @@
 # rather read first — and you should — that is one flag apart:
 #
 #   curl -fsSL https://valey.dev/install.sh -o install.sh && less install.sh && sh install.sh
+#
+# Where the bytes come from: valey.dev/dist/<version>/ is a redirect to the
+# assets of that GitHub release, and `latest` to the newest one. The version is
+# its own path segment because that is the only thing a static host's redirect
+# can capture; a version baked into the file name could not be forwarded.
 set -eu
 
 BASE=${VALEY_BASE:-https://valey.dev}
@@ -116,10 +121,9 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT INT TERM
 
 say "$(msg fetching "$VERSION")"
-curl -fsSL "$BASE/dist/valey-$VERSION.tar.gz" -o "$TMP/valey.tar.gz" \
-  || die "$(msg no_archive "$BASE/dist/valey-$VERSION.tar.gz")"
-curl -fsSL "$BASE/dist/valey-$VERSION.tar.gz.sha256" -o "$TMP/valey.sha256" \
-  || die "$(msg no_sum)"
+ARCHIVE="$BASE/dist/$VERSION/valey-$VERSION.tar.gz"
+curl -fsSL "$ARCHIVE" -o "$TMP/valey.tar.gz" || die "$(msg no_archive "$ARCHIVE")"
+curl -fsSL "$ARCHIVE.sha256" -o "$TMP/valey.sha256" || die "$(msg no_sum)"
 
 # Verify before unpacking, not after: the point is to not write unchecked bytes
 # into the place the user is about to run from.
