@@ -679,6 +679,21 @@ function onKey(e) {
   const code = codeOf(e);
   const act = actionOf(e);
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+  // Keyboard-first has a price, and it comes due on a panel with more than one
+  // control. The office takes Tab, Space and Enter from the browser for itself,
+  // so somebody who has stepped onto a button with the keyboard can neither
+  // press it nor move on: the keys are eaten before the browser sees them. While
+  // the focus sits on a control, those three belong to the browser and do the
+  // ordinary thing — walk the focus, press the button.
+  //
+  // It stayed invisible because every card the office ships has exactly one
+  // button: «Enter — встал, Enter — нажал» worked, and there was nowhere to walk
+  // to. The mail key card has six controls, and there the trap is the whole
+  // interaction. Found by Sergey on 6 September 2026.
+  //
+  // Letters are not in the list on purpose: C still closes the inventory from a
+  // focused button, and the office does not lose its own keys to a stray focus.
+  if (/^(BUTTON|SELECT|A)$/.test(e.target.tagName) && ['Tab', 'Space', 'Enter'].includes(code)) return;
   // A combination with Cmd, Ctrl or Alt belongs to the browser and to the system, not to
   // the office. Without this line Cmd+R reloaded the page and rolled the radio out into the
   // bargain — the letter arrived here bare, and nobody looked at the modifier. The same
