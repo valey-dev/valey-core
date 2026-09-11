@@ -26,7 +26,9 @@ const bytes = readFileSync(tgz);
 const digest = createHash('sha256').update(bytes).digest('hex');
 
 let mode = 'ok';
+const asked = [];                      // every path the script requested
 const server = createServer((req, res) => {
+  asked.push(req.url);
   if (req.url.endsWith('.tar.gz')) {
     if (mode === 'no-archive') { res.writeHead(404); return res.end(); }
     res.writeHead(200); return res.end(mode === 'tampered' ? Buffer.concat([bytes, Buffer.from('x')]) : bytes);
@@ -56,6 +58,11 @@ try {
   assert.ok(existsSync(path.join(good, 'package.json')), 'офис не распакован');
   assert.match(r.out, /cd .*office && npm start/, 'не сказано, чем запускать');
   assert.doesNotMatch(r.out, /Запускаю/, 'запустил офис, хотя --run не просили');
+  // The path shape is a contract with the site's _redirects: the version is a
+  // segment of its own, because a static host's redirect captures segments and
+  // nothing finer. Change it here and the redirect on valey.dev stops matching.
+  assert.deepEqual(asked, ['/dist/9.9.9/valey-9.9.9.tar.gz', '/dist/9.9.9/valey-9.9.9.tar.gz.sha256'],
+    `скрипт ходит не по тем адресам: ${asked.join(' ')}`);
 
   // Refuses to write into a place that already has something in it.
   r = await run(good);
@@ -119,7 +126,7 @@ try {
   const noPack = await run(path.join(work, 'nopack'), ['--pack=/nope/nothing.zip']);
   assert.notEqual(noPack.code, 0, 'проглотил отсутствующий пакет модулей');
 
-  console.log('установщик: 18 проверок прошли');
+  console.log('установщик: 19 проверок прошли');
 } finally {
   server.close();
   rmSync(work, { recursive: true, force: true });
