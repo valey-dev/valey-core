@@ -1808,6 +1808,21 @@ function bindKeys() {
   };
   const card = cards[keyIdx];
   if (card && card.bind) card.bind(detail);
+  // A field holding the focus makes the office blind to its keys, so the way out
+  // of a field has to be the field's own. Escape hands the ring back rather than
+  // shutting the shelf: el.bag is selfClosing, and without this an Escape typed
+  // into a half-filled Client ID threw the whole inventory away. A second Escape,
+  // with the ring back on, still closes it — the two steps are the point.
+  //
+  // A listener rather than onkeydown: a module binds its own handler to the same
+  // field, and assigning would wipe it.
+  detail.querySelectorAll('input').forEach((f) => f.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    f.blur();
+    paintBagFocus();
+  }));
   paintBagFocus();
 }
 
