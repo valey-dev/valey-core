@@ -2632,7 +2632,19 @@ function bindResults() {
 export function focusRing(nodeOf, selector, opts = {}) {
   const stepTo = opts.noWrap ? stopAt : wrapAt;
   let idx = 0;
-  const list = () => (nodeOf() ? [...nodeOf().querySelectorAll(selector)] : []);
+  // Only what has a box is in the ring. The radio's volume knob sits under a
+  // `hidden` row until the full Spotify player connects, and until 11 September
+  // 2026 one press of the down arrow went into it: the outline vanished and the
+  // key read as stuck. The panel's own box is asked first, because some panels
+  // paint the ring a moment before they open, and a closed panel would otherwise
+  // hand over an empty ring. The keyboard stands' nodes have no boxes to ask.
+  const boxed = (n) => !n.getClientRects || n.getClientRects().length > 0;
+  const list = () => {
+    const node = nodeOf();
+    if (!node) return [];
+    const all = [...node.querySelectorAll(selector)];
+    return boxed(node) ? all.filter(boxed) : all;
+  };
 
   // Tab inside a panel belongs to the browser — main.js hands it back while the
   // focus sits on a control — and the browser moves the focus without telling
@@ -2677,6 +2689,9 @@ export function focusRing(nodeOf, selector, opts = {}) {
     // Focus a particular index: the current floor in the lift, or the first note
     // after leaving search.
     at(i) { idx = i; paint(); },
+    // Focus a particular element. Counting it in a list of one's own goes wrong
+    // as soon as the ring skips something hidden that the list did not.
+    on(b) { const at = list().indexOf(b); if (at >= 0) { idx = at; paint(); } },
     key(raw, open) {
       if (!open) return false;
       const key = raw.toLowerCase();
@@ -2695,7 +2710,8 @@ export function focusRing(nodeOf, selector, opts = {}) {
       if (opts.numbers) {
         const n = Number(key);
         if (Number.isInteger(n) && n >= 1 && n <= 9) {
-          const pool = opts.numbers === true ? l : [...nodeOf().querySelectorAll(opts.numbers)];
+          const pool = opts.numbers === true ? l
+            : [...nodeOf().querySelectorAll(opts.numbers)].filter((b) => !boxed(nodeOf()) || boxed(b));
           const hit = opts.byData ? pool.find((b) => Number(b.dataset[opts.byData]) === n) : pool[n - 1];
           // A digit outside the list does not escape into the office. The panel
           // is open, and a player moving underneath reads as erratic keyboard input.

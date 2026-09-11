@@ -152,5 +152,19 @@ ok('a missing project leaves a person in place',
 ok('an empty anchor moves no one',
   applyAnchor(after, gone, null) === false && gone.x === 1, gone);
 
+// ------------------------------------------------------- the language switcher
+// The figure stands where a person walks in: the corridor above the first
+// slot's room, which is where the spawn puts them. With seven projects there are
+// three rows, and until 11 September 2026 it stood in the top one.
+for (const n of [3, 7]) {
+  const L = buildLayout(mk(n));
+  const lang = L.props.find((p) => p.kind === 'lang');
+  const door = L.projectRooms[0];
+  const band = L.bands.find((b) => !b.roof && lang && lang.y >= b.y && lang.y <= b.y + b.h + 8);
+  ok(`with ${n} projects the switcher is in the entrance corridor`,
+    band && door.y - band.y - band.h >= 0 && door.y - band.y - band.h < 20,
+    lang && [lang.y, band && band.y, door.y]);
+}
+
 console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

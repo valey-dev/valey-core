@@ -43,6 +43,18 @@ ok('an HTML text node is not a comment', russianComments('<p>Привет</p>\n'
 ok('a comment in a Markdown code fence is checked',
   russianComments('```sh\necho ok # сломано\n```\n', 'markdown').length === 1);
 ok('Markdown prose is not a comment', russianComments('Русский текст.\n', 'markdown').length === 0);
+// A quotation wrapped with its comment: feed/test-view.mjs had «через 2 сек»
+// across a line break on 9 September 2026, and both halves were reported.
+ok('a quotation wrapped across // lines may remain',
+  russianComments('// a toast says «через\n// 2 сек» and goes\n').length === 0);
+ok('a quotation wrapped across # lines may remain',
+  russianComments('# a toast says «через\n# 2 сек»\n', 'hash').length === 0);
+ok('Russian after a wrapped quotation is still caught, on its own line',
+  russianComments('let a;\n// «через\n// 2 сек» сломано\n')[0]?.line === 3);
+ok('an apostrophe does not pair with one lines below',
+  russianComments("// don't\n// сломано\n// it's\n").length === 1);
+ok('a code line breaks the run',
+  russianComments('// «через\nx();\n// 2 сек»\n').length === 2);
 
 // ------------------------------------------------------------------ the code
 const files = execSync('git ls-files "*.js" "*.mjs" "*.css" "*.html" "*.svg" "*.yml" "*.yaml" "*.py" "*.md" ".gitignore"', { encoding: 'utf8' })

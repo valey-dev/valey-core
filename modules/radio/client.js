@@ -229,10 +229,8 @@ const radioRing = focusRing(() => el.radio, RING, { numbers: '.rst' });
 // should be on.
 function ringToWave(n) {
   if (!el.radio) return;
-  const all = [...el.radio.querySelectorAll(RING)];
-  const wave = all.filter((b) => b.classList.contains('rst'))[n];
-  const at = wave ? all.indexOf(wave) : -1;
-  if (at >= 0) radioRing.at(at);
+  const wave = el.radio.querySelectorAll('.rst')[n];
+  if (wave) radioRing.on(wave);
 }
 function closeRadio() { if (el.radio) el.radio.classList.remove('open'); radioRing.reset(); }
 

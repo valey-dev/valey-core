@@ -470,6 +470,25 @@ check('and its handler pulls', hueSet === 1, hueSet);
 UI.skinKey('ArrowDown');
 check('still leads down from the slider', !skin.btns[1].has('focus'), 'застряли');
 
+// A control without a box is not in the ring. The radio's volume sits under a
+// hidden row until the full Spotify player connects, and one press of the down
+// arrow used to go into it: no outline anywhere, a key that read as stuck.
+const box = (shown) => ({ getClientRects: () => (shown ? [{}] : []) });
+const three = () => [node('', box(true)), node('', box(false)), node('', box(true))];
+const seen = three();
+const seenRing = UI.focusRing(() => ({ ...box(true), querySelectorAll: () => seen }), '*');
+seenRing.paint();
+seenRing.key('ArrowDown', true);
+check('a hidden control is stepped over', seen[2].has('focus') && !seen[1].has('focus'),
+  seen.map((b) => b.has('focus')).join());
+seenRing.on(seen[0]);
+check('on() finds a control by itself, not by a count', seen[0].has('focus'), 'не нашла');
+// A panel may paint its ring a moment before it opens; while it has no box of
+// its own, nothing in it has one either, and the ring must not come up empty.
+const shut = three();
+UI.focusRing(() => ({ ...box(false), querySelectorAll: () => shut }), '*').paint();
+check('a panel painted before it opens still shows a focus', shut[0].has('focus'), 'пусто');
+
 // ------------------------------------------------- the language and the agents' names
 // A panel of two rows: the interface and the names. A flat round would lie to
 // the hand here — the down arrow has to lead into the second row rather than

@@ -163,7 +163,30 @@ export function markdownComments(src) {
 // evidence for the rule above it, and translated it stops being evidence. So
 // the quotes are cut out before the question is asked.
 const QUOTED = /«[^»]*»|"[^"]*"|'[^']*'|`[^`]*`|„[^“]*“/g;
+// A run of `//` or `#` lines is one comment wrapped by hand, and a quotation
+// gets wrapped with it. Only the paired quotes may cross a line there: an
+// apostrophe in "don't" would pair with one three lines down and blank
+// everything between, which is a missed violation the size of a paragraph.
+const PAIRED = /«[^»]*»|„[^“]*“/g;
 const CYRILLIC = /[а-яА-ЯёЁ]/;
+const blank = (q) => q.replace(/[^\n]/g, ' ');
+
+// Line comments on consecutive lines, joined into one { line, text, run }.
+// Block comments pass through as they are: they carry their own newlines.
+function joinRuns(found) {
+  const out = [];
+  for (const c of found) {
+    const single = !c.text.includes('\n') && /^(?:\/\/|#)/.test(c.text);
+    const prev = out[out.length - 1];
+    if (single && prev?.run && prev.line + prev.run === c.line) {
+      prev.text += '\n' + c.text;
+      prev.run += 1;
+    } else {
+      out.push({ ...c, run: single ? 1 : 0 });
+    }
+  }
+  return out;
+}
 
 /** The comment lines of a file that carry Russian outside quotes. */
 export function russianComments(src, syntax = 'slash') {
@@ -173,10 +196,12 @@ export function russianComments(src, syntax = 'slash') {
     : syntax === 'markdown' ? markdownComments(src)
     : syntax === 'html' ? [...markupComments(src), ...comments(src)]
     : comments(src);
-  for (const c of found) {
+  for (const c of joinRuns(found)) {
     // Remove quotations before splitting into lines so a quoted example may
     // span lines without turning its second line into a false violation.
-    const unquoted = c.text.replace(QUOTED, (q) => q.replace(/[^\n]/g, ' '));
+    const unquoted = c.run
+      ? c.text.replace(PAIRED, blank).split('\n').map((l) => l.replace(QUOTED, blank)).join('\n')
+      : c.text.replace(QUOTED, blank);
     const raw = c.text.split('\n');
     unquoted.split('\n').forEach((line, n) => {
       if (CYRILLIC.test(line)) hits.push({ line: c.line + n, text: raw[n].trim() });
