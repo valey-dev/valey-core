@@ -338,6 +338,23 @@ if (ship) {
     process.exit(1);
   }
 
+  // The repository being released may have a shop to feed: the Modules keep
+  // tools/publish.mjs, which cuts the buyers' archive from the tag and puts it
+  // on the buyers' repository with a release page. It is run here, not
+  // remembered: on 11 September 2026 the shop stood at v0.6.2 while the Modules
+  // were at v0.7.1 — two releases with the fixes for the feed and the voice
+  // never reached a buyer, and nothing in the tail said so. The same reasoning
+  // as the public remote: the merge is the owner's word, the tail carries it.
+  const shop = path.join(ROOT, 'tools/publish.mjs');
+  if (existsSync(shop)) {
+    console.log('\nshop:');
+    const r = spawnSync(process.execPath, [shop, tag], { cwd: ROOT, stdio: 'inherit' });
+    if (r.status !== 0) {
+      console.log(`\nshop publication failed. Tag ${tag} is already on origin; finish with:\n  node ${shop} ${tag}`);
+      process.exit(1);
+    }
+  }
+
   const pub = (() => { try { return git('remote', 'get-url', PUBLIC); } catch { return ''; } })();
   if (!pub) {
     console.log(`\nno remote called ${PUBLIC}; the public repository is not updated from here`);
