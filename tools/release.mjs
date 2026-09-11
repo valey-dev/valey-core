@@ -309,7 +309,13 @@ if (ship) {
   const remote = (() => { try { return git('remote', 'get-url', 'origin'); } catch { return ''; } })();
   if (!remote) die(`tag ${tag} exists locally, but origin is not configured; there is nowhere to push`);
   console.log(`\npushing to origin (${remote}):`);
-  git('push', 'origin', 'HEAD:main', tag);
+  // --atomic or nothing: two refspecs in one push are pushed independently, so a
+  // main rejected as non-fast-forward still lets the tag through. That happened
+  // on 6 September 2026 — v0.18.0 existed for an hour as a tag pointing at a
+  // commit no branch could see, package.json on main still said 0.17.0, and the
+  // next release could not cut because the version it wanted was taken. Either
+  // both refs land or neither, and a rejection is then an ordinary rerun.
+  git('push', '--atomic', 'origin', 'HEAD:main', tag);
   console.log(`  main and ${tag} pushed`);
 
   console.log('\nrelease page:');
