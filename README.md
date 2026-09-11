@@ -109,7 +109,7 @@ Two exceptions, both yours to switch on, both named out loud:
 * **The weather** outside the corridor window is invented until you turn on the real one — then a pair of coordinates goes to open-meteo, and nothing else.
 * **The radio** plays through your own Spotify app, with a client id you create yourself. It is a module; delete the folder and the radio is gone.
 
-There are no accounts, no telemetry and no analytics. The server is twelve files and you can read every one of them before you run it — that is the point of the licence below.
+There are no accounts, no telemetry and no analytics. The server is the handful of files in `server/`, and you can read every one of them before you run it — that is the point of the licence below.
 
 ## Modules
 
