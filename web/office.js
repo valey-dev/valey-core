@@ -5,6 +5,7 @@ import { WALL, LIFT_DOOR_H } from './layout.js';
 import { drawSky, flash } from './weather.js';
 import { drawPainting, drawPoster, artOf } from './paintings.js';
 import * as PF from './pixfont.js';
+import { trinketsOf, drawTrinkets } from './trinkets.js';
 
 const px = (ctx, x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); };
 
@@ -561,9 +562,15 @@ export function drawDesk(ctx, d, agent, t) {
     ctx.fillStyle = glow; ctx.fillRect(x - 16, y - 28, 56, 42);
     ctx.globalAlpha = 1;
   }
+  // The mug and the paper are handed out by the place, not by the agent. A
+  // thing the agent earned pushes them out of its slot rather than standing on
+  // top of them — see trinkets.js.
+  const earned = agent && agent.trinkets ? trinketsOf(agent.id, agent.trinkets) : [];
+  const taken = (slot) => earned.some((e) => e.slot === slot);
   const h = hash('d' + x + y);
-  if (h % 2) { px(ctx, x + 20, y - 1, 4, 4, '#d8d2c4'); px(ctx, x + 19, y, 1, 2, '#d8d2c4'); }
-  if ((h >>> 3) % 2) px(ctx, x - 22, y - 1, 7, 4, '#efe6d2');
+  if (h % 2 && !taken('right')) { px(ctx, x + 20, y - 1, 4, 4, '#d8d2c4'); px(ctx, x + 19, y, 1, 2, '#d8d2c4'); }
+  if ((h >>> 3) % 2 && !taken('left')) px(ctx, x - 22, y - 1, 7, 4, '#efe6d2');
+  if (earned.length) drawTrinkets(ctx, x, y, earned);
 }
 
 // The microwave in the kitchen corner. Everything interesting about it is behind the

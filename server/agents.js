@@ -8,6 +8,7 @@ import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { getSettings, patchSettings } from './settings.js';
 import { projectInfo, repoRoot, repoRootCached } from './stack.js';
+import { trinketTier } from '../web/trinkets.js';
 
 // Where the office reads sessions from. The variable is for the stands: until
 // 4 September 2026 the directory was pinned to the home one, and transcript
@@ -137,6 +138,7 @@ async function deepSkills(st, file, until) {
     let r;
     try { r = JSON.parse(line); } catch { continue; }
     if (r.type !== 'assistant' || !r.message) continue;
+    born(st, r.timestamp);
     // The head keeps its own clock. It runs after the tail has been applied and
     // its stamps are all older, so sharing one would produce negative gaps; the
     // single gap across the boundary is lost, and that is one per session.
@@ -417,6 +419,15 @@ const INTERRUPTED_RE = /^\[Request interrupted by user/;
 const RECENT_MAX = 16;
 const MSG_MAX = 12000;
 
+// The first reply in the transcript: how old the conversation is. Both passes
+// feed it — the deep one starts at byte zero, and a file short enough to be
+// read whole as a tail never gets a deep pass at all. startedAt is no use for
+// this: it is when the process started, and a restart of the app resets it.
+function born(st, ts) {
+  const at = Date.parse(ts || '') || 0;
+  if (at && (!st.bornAt || at < st.bornAt)) st.bornAt = at;
+}
+
 function remember(st, role, text, ts) {
   st.recent.push({ role, text: text.slice(0, MSG_MAX), ts: ts ? Date.parse(ts) : Date.now() });
   if (st.recent.length > RECENT_MAX) st.recent.splice(0, st.recent.length - RECENT_MAX);
@@ -427,6 +438,7 @@ function emptyState() {
     lastTs: 0, lastTool: null, lastToolInput: null, lastAssistantText: '',
     lastUserPrompt: '', awaitingUser: false, acts: [], role: '', files: new Map(),
     turns: 0, model: '', branch: '', slug: '', title: '', aiTitle: '', task: null,
+    bornAt: 0,             // the first reply in the file, see born()
     skills: newSkills(),   // the grade counter: it grows and is never trimmed
     shift: newShift(),     // replies, characters and idle gaps, over the whole file
     clock: { last: 0 },    // the tail's own last-seen stamp, see gap()
@@ -448,6 +460,7 @@ function applyLine(st, line) {
   if (r.type === 'last-prompt' && r.lastPrompt) st.lastUserPrompt = String(r.lastPrompt).slice(0, 400);
 
   if (r.type === 'assistant' && r.message) {
+    born(st, r.timestamp);
     gap(st.shift, Date.parse(r.timestamp || '') || 0, st.clock);
     st.model = r.message.model || st.model;
     const content = r.message.content || [];
@@ -890,6 +903,10 @@ export async function snapshot() {
       idleFor: Number.isFinite(idleFor) ? Math.round(idleFor / 1000) : null,
       startedAt: s.startedAt,
       turns: t.turns,
+      // One digit, 0–3: how many things stand on the desk. Only the digit
+      // leaves the server, so a guest sees the same desk without learning the
+      // conversation's age or how much was said in it.
+      trinkets: trinketTier(t.bornAt, t.shift.turns, Date.now()),
       // Raw per-branch counters. Whoever shows them turns them into grades:
       // the ladder belongs to the filing cabinet, not to the core.
       skills: { ...t.skills },

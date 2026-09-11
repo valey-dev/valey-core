@@ -67,7 +67,7 @@ let taskSeq = 0;
 const SHOWN = [
   'id', 'name', 'gender', 'project', 'seat', 'role', 'roleKey',
   'status', 'act', 'activity', 'mood', 'idleFor', 'startedAt',
-  'limited', 'version', 'stack',
+  'limited', 'version', 'stack', 'trinkets',
 ];
 
 // Who was granted what: guest id -> Set of agent ids. Lives in memory and only

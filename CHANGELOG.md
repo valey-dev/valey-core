@@ -4,6 +4,25 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.32.0 — 11 September 2026
+
+### Added
+
+- **release:** the release page carries the feature note, pictures and all (4e5b0e3)
+## v0.31.0 — 11 September 2026
+
+### Added
+
+- **office:** veterans' desks gather trinkets — a duck, a cactus, and a cup for the third rung (8d5a79b)
+
+### Other
+
+- docs(notes): the veterans' desks note, for the release that ships them (74bf5dd)
+## v0.30.2 — 11 September 2026
+
+### Fixed
+
+- **release:** a rejected main no longer lets the tag through on its own (ff4c3d7)
 ## v0.30.1 — 11 September 2026
 
 ### Fixed

@@ -6,6 +6,7 @@
 //   node tools/gh-release.mjs --all      # every tag that has no release yet
 //   node tools/gh-release.mjs --dry      # print what would be sent
 //   node tools/gh-release.mjs --all --remote public   # the pages of another remote
+//   node tools/gh-release.mjs --all --refresh          # rewrite bodies already published
 //
 // Why this exists. Until 5 September 2026 the project had three tags and zero
 // releases on GitHub: the notes were written, assembled from the commits, and
@@ -13,20 +14,23 @@
 // a human opens. Calling the first one "a release" in conversation and never
 // making the second is how the word quietly stops meaning anything.
 //
-// The body is not composed here. It is the section of CHANGELOG.md for that
-// version, verbatim — one text, one source. A release whose notes were written
-// separately drifts from the changelog on the second edit, and then nobody knows
-// which of the two is the truth.
+// The body is not composed here. It is the version's feature note when it has
+// one — notes/vX.Y.Z.md, pictures and all — and otherwise the section of
+// CHANGELOG.md for that version, verbatim. Still one text, one source: the note
+// embeds that same changelog section word for word under «What changed», so the
+// bullet list is never written twice. What the note adds is the half a commit
+// subject cannot carry, and until 11 September 2026 none of it reached the page.
 //
 // The page also carries what install.sh downloads: the tarball of the tag and
 // the checksum beside it, built by tools/dist.mjs. valey.dev/dist/ is a redirect
 // to these assets, so a release without them is a version the one-liner cannot
 // install — the four files are as much a part of the release as the notes.
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { releaseBody } from './notes.mjs';
 
 // The root comes from this file rather than from the cwd, for the reason
 // release.mjs carries in its own header: git and the files have to look at one
@@ -40,6 +44,10 @@ const die = (m) => { console.error('gh-release: ' + m); process.exit(1); };
 const args = process.argv.slice(2);
 const dry = args.includes('--dry');
 const all = args.includes('--all');
+// A page published before its note existed — every backfilled release, and
+// every release cut before notes reached the page — keeps its old body until
+// somebody rewrites it. --refresh does that, and only where the body differs.
+const refresh = args.includes('--refresh');
 // The remote decides the repository. Since 11 September 2026 this tree has
 // two — the private staging `origin` and the public one — and a release page
 // belongs to whichever the tag was pushed to. `--remote` names it; the
@@ -47,7 +55,11 @@ const all = args.includes('--all');
 // with two remotes would answer for whichever it was told to prefer.
 const remoteAt = args.indexOf('--remote');
 const remote = remoteAt < 0 ? 'origin' : args[remoteAt + 1];
-const asked = args.find((a, i) => !a.startsWith('--') && i !== remoteAt + 1);
+// `remoteAt + 1` is the remote's name, not a tag — but only when --remote was
+// given. Without the guard it is index 0, and `gh-release.mjs v0.4.0` threw the
+// tag away and published the newest one instead. Nobody noticed because the one
+// caller that passes a tag, release.mjs, always passes the newest.
+const asked = args.find((a, i) => !a.startsWith('--') && !(remoteAt >= 0 && i === remoteAt + 1));
 
 // Sorted by version rather than by date: a tag put on an older commit later
 // would otherwise claim to be the newest.
@@ -70,6 +82,33 @@ function notes(tag) {
   // The heading itself is dropped: GitHub prints the version above the body, and
   // repeating it puts the same line on the page twice.
   return lines.slice(from + 1, to).join('\n').trim();
+}
+
+// The body for one tag: the note if there is one the remote can serve, the
+// changelog section otherwise. «Can serve» is the part that bites. The pictures
+// are linked at the commit that last touched the note, and a commit the remote
+// has never received is a page of broken images — so a note whose commit is
+// not on the remote's main yet falls back to the changelog, out loud.
+function bodyFor(tag) {
+  const file = path.join(ROOT, 'notes', `${tag}.md`);
+  if (!existsSync(file)) return { text: notes(tag), from: 'changelog' };
+  const sha = git('log', '-1', '--format=%H', '--', `notes/${tag}.md`, `notes/${tag}`);
+  const remoteMain = execFileSync('git', ['-C', ROOT, 'ls-remote', remote, 'refs/heads/main'],
+    { encoding: 'utf8' }).split(/\s/)[0];
+  let served = false;
+  try { git('merge-base', '--is-ancestor', sha, remoteMain); served = true; } catch { /* not there, or unknown here */ }
+  if (!served) {
+    console.log(`${tag}: the note's commit ${sha.slice(0, 7)} is not on ${remote}/main; using the changelog`);
+    return { text: notes(tag), from: 'changelog' };
+  }
+  return { text: releaseBody(readFileSync(file, 'utf8'), { repo, sha }), from: 'note' };
+}
+
+function currentBody(tag) {
+  try {
+    return execFileSync('gh', ['release', 'view', tag, '-R', repo, '--json', 'body', '-q', '.body'],
+      { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch { return null; }
 }
 
 // What is already published, and with how many files. `gh` answers with an
@@ -120,15 +159,30 @@ for (const tag of wanted) {
     { encoding: 'utf8' }).trim();
   if (!onRemote) { console.log(`${tag}: tag is absent from ${remote}; push it before creating a release`); skipped++; continue; }
 
-  const body = notes(tag);
+  const { text: body, from } = bodyFor(tag);
   if (!body) { console.log(`${tag}: CHANGELOG.md has no section; skipping`); skipped++; continue; }
 
   const have = published(tag);
-  if (have && have.assets > 0) { console.log(`${tag}: release already exists`); skipped++; continue; }
+  // --refresh touches bodies and nothing else: it neither creates a page nor
+  // uploads the files a page is missing. Those are the ordinary run's job, and a
+  // flag meant to fix prose should not start building tarballs of old tags.
+  if (refresh && !have) { console.log(`${tag}: no release page to refresh`); skipped++; continue; }
+  if (have && (have.assets > 0 || refresh)) {
+    if (!refresh) { console.log(`${tag}: release already exists`); skipped++; continue; }
+    // Compared after trimming: GitHub hands the body back without the final
+    // newline, and a refresh that rewrites every page to add one is noise.
+    if ((currentBody(tag) || '').trim() === body.trim()) { console.log(`${tag}: body already current`); skipped++; continue; }
+    if (dry) { console.log(`\n=== ${tag} → ${repo}: body would be rewritten from the ${from}\n${body}`); made++; continue; }
+    execFileSync('gh', ['release', 'edit', tag, '-R', repo, '--notes', body],
+      { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+    console.log(`${tag}: body rewritten from the ${from}`);
+    made++;
+    continue;
+  }
 
   if (dry) {
     const names = assets(tag);
-    console.log(`\n=== ${tag} → ${repo}${have ? ' (page exists, assets missing)' : ''}\n${body}\n`);
+    console.log(`\n=== ${tag} → ${repo}${have ? ' (page exists, assets missing)' : ''}, body from the ${from}\n${body}\n`);
     console.log(names.files.map((f) => '  + ' + path.basename(f)).join('\n'));
     rmSync(names.dir, { recursive: true, force: true });
     made++;
@@ -144,7 +198,7 @@ for (const tag of wanted) {
     } else {
       execFileSync('gh', ['release', 'create', tag, '-R', repo, '--title', tag, '--notes', body, ...built.files],
         { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
-      console.log(`${tag}: published with ${built.files.length} assets`);
+      console.log(`${tag}: published with ${built.files.length} assets, body from the ${from}`);
     }
   } finally {
     rmSync(built.dir, { recursive: true, force: true });
@@ -152,4 +206,4 @@ for (const tag of wanted) {
   made++;
 }
 
-console.log(`\n${dry ? 'dry run: ' : ''}created ${made}, skipped ${skipped}`);
+console.log(`\n${dry ? 'dry run: ' : ''}${refresh ? 'written' : 'created'} ${made}, skipped ${skipped}`);
