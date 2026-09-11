@@ -7,7 +7,9 @@
 // The boundary is what is checked, not the button. We hide the button from a
 // guest, but hiding is not forbidding: the page is theirs, and everything it can
 // send, it will send.
-import { startOffice } from './lib/office.mjs';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { startOffice, ROOT } from './lib/office.mjs';
 
 const TOKEN = 'test-owner-token-0001';
 
@@ -101,17 +103,25 @@ try {
     list.j.invites[0].name === 'Костя' && list.j.invites[0].used === true, list.j.invites[0]);
 
   // ------------------------------------------------ what a guest may load at all
-  // The manifest decides, and the free build declares both of its modules open.
-  // So the thing this checks live is the other failure: filtering that keeps a
-  // guest from loading anything and empties the shared floor. The filter itself
-  // is checked over fixtures in tools/test-modules.mjs, where there is a module
-  // to hide.
+  // The manifest decides, and the expectation is read off the manifests rather
+  // than assumed to be "everything": the free build declares both of its
+  // modules open, but a developer's tree holds paid modules beside them that say
+  // nothing — hidden, by the rule that silence is no. Until 11 September 2026
+  // this line compared the guest's list with the owner's whole one, and was red
+  // in every tree with a paid module and green only in CI. The filter itself is
+  // checked over fixtures in tools/test-modules.mjs, where there is a module to
+  // hide; what this checks live is the other failure — filtering that keeps a
+  // guest from loading anything and empties the shared floor.
   const mineMods = await call('/api/modules', { as: 'owner', method: 'GET' });
   const theirMods = await call('/api/modules', { as: 'guest', method: 'GET' });
   ok('the owner gets the module list', mineMods.status === 200 && Array.isArray(mineMods.j), mineMods.status);
   ok('and so does a guest, rather than a refusal', theirMods.status === 200 && Array.isArray(theirMods.j), theirMods.status);
-  const open = (r) => (r.j || []).map((m) => m.id).sort().join();
-  ok('the ones declared open reach a guest', open(theirMods) === open(mineMods), [open(mineMods), open(theirMods)]);
+  const ids = (list) => list.map((m) => m.id).sort().join();
+  const shown = (mineMods.j || []).filter((m) => {
+    try { return JSON.parse(readFileSync(path.join(ROOT, 'modules', m.id, 'module.json'), 'utf8')).guests === 'shown'; }
+    catch { return false; }
+  });
+  ok('the ones declared open reach a guest, and only those', ids(theirMods.j || []) === ids(shown), [ids(shown), ids(theirMods.j || [])]);
   ok('and they have something to load with', (theirMods.j || []).every((m) => !!m.client), theirMods.j);
 
   // ------------------------------------------------------------- evicting
