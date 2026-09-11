@@ -261,12 +261,14 @@ export function buildLayout(agents, opts = {}) {
     // the right end of the corridor is now the lift hall — the water cooler and the
     // bench are moved further left, or they stand exactly on the reception desk
     props.push({ kind: i === 0 ? 'cooler' : 'bench', x: MARGIN + 300, y: my + 8 });
-    if (i === 0) {
-      props.push({ kind: 'bench', x: MARGIN + 150, y: my + 12 });
-      // the little language-switch figure: at the entrance, on the walkway, so as to
-      // catch the eye before a person goes deeper into the floor
-      props.push({ kind: 'lang', x: MARGIN + 118, y: my + 4 });
-    }
+    if (i === 0) props.push({ kind: 'bench', x: MARGIN + 150, y: my + 12 });
+    // the little language-switch figure: at the entrance, on the walkway, so as to
+    // catch the eye before a person goes deeper into the floor. The entrance is the
+    // corridor of the bottom row — the spawn stands above the first slot's room —
+    // and the bottom row is laid last. It stood on the first band until 11
+    // September 2026, which is the top row: with three rows the figure was a lift
+    // ride away from anyone who had just walked in.
+    if (i === bands.length - 1) props.push({ kind: 'lang', x: MARGIN + 118, y: my + 4 });
   });
 
   props.push({ kind: 'lounge', x: lounge.x, y: lounge.y + 5 });
