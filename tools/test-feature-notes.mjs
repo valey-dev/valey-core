@@ -13,7 +13,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { parseFragment, readFragments, renderNote, checkNotes, missingShots, assemble, shotSource, beforeSource, findBefore, cmpTag } from './notes.mjs';
+import { parseFragment, readFragments, renderNote, checkNotes, missingShots, assemble, shotSource, beforeSource, findBefore, cmpTag, releaseBody } from './notes.mjs';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -103,6 +103,20 @@ ok('and before comes first, which is the whole sentence',
 ok('the old frame keeps its tag in the released name',
   withBefore.includes('![The arrows stop at the ends, before](v0.26.0/arrows-standup.before-v0.12.0.png)'), withBefore);
 ok('versions sort by number, not as text', cmpTag('v0.9.0', 'v0.12.0') < 0, cmpTag('v0.9.0', 'v0.12.0'));
+
+// --- the note as a release page -------------------------------------------
+// Until 11 September 2026 the page got the changelog section alone, and every
+// frame stayed in notes/ where nobody opening a release would meet it.
+const page = releaseBody(withBefore, { repo: 'valey-dev/valey-core', sha: 'abc123' });
+ok('the version heading goes — GitHub prints it above the body already',
+  !page.startsWith('# ') && page.startsWith('## The arrows stop at the ends'), page.slice(0, 60));
+ok('pictures become absolute and pinned to the commit, not to a branch',
+  page.includes('](https://github.com/valey-dev/valey-core/raw/abc123/notes/v0.26.0/arrows-standup.png)')
+  && page.includes('](https://github.com/valey-dev/valey-core/raw/abc123/notes/v0.26.0/arrows-standup.before-v0.12.0.png)'), page);
+ok('no relative picture survives', !/!\[[^\]]*\]\((?!https:)/.test(page), page);
+ok('the changelog section rides along unchanged', page.includes('- **office:** the arrows stop (abc1234)'), page);
+ok('a picture that is already absolute is left alone',
+  releaseBody('# v1\n\n![x](https://example.com/a.png)\n', { repo: 'r/r', sha: 's' }).includes('](https://example.com/a.png)'));
 
 // --- the guard -----------------------------------------------------------
 const feats = [{ hash: 'abc1234', subject: 'feat(office): the arrows stop' }];
