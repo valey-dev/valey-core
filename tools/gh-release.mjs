@@ -5,6 +5,7 @@
 //   node tools/gh-release.mjs v0.4.0     # a particular one
 //   node tools/gh-release.mjs --all      # every tag that has no release yet
 //   node tools/gh-release.mjs --dry      # print what would be sent
+//   node tools/gh-release.mjs --all --remote public   # the pages of another remote
 //
 // Why this exists. Until 5 September 2026 the project had three tags and zero
 // releases on GitHub: the notes were written, assembled from the commits, and
@@ -39,7 +40,14 @@ const die = (m) => { console.error('gh-release: ' + m); process.exit(1); };
 const args = process.argv.slice(2);
 const dry = args.includes('--dry');
 const all = args.includes('--all');
-const asked = args.find((a) => !a.startsWith('--'));
+// The remote decides the repository. Since 11 September 2026 this tree has
+// two — the private staging `origin` and the public one — and a release page
+// belongs to whichever the tag was pushed to. `--remote` names it; the
+// repository is read off that remote's URL rather than asked of `gh`, which
+// with two remotes would answer for whichever it was told to prefer.
+const remoteAt = args.indexOf('--remote');
+const remote = remoteAt < 0 ? 'origin' : args[remoteAt + 1];
+const asked = args.find((a, i) => !a.startsWith('--') && i !== remoteAt + 1);
 
 // Sorted by version rather than by date: a tag put on an older commit later
 // would otherwise claim to be the newest.
@@ -88,15 +96,16 @@ function assets(tag) {
   return { dir: out, files: readdirSync(out).sort().map((f) => path.join(out, f)) };
 }
 
-// The repository is asked of git rather than hardcoded: this tree has two remotes
-// in its future — the private staging one and the public one — and a release must
-// land where the tag was pushed.
+// The repository is read off the remote rather than hardcoded, so a release
+// lands where the tag was pushed.
 let repo;
 try {
-  repo = execFileSync('gh', ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'],
-    { cwd: ROOT, encoding: 'utf8' }).trim();
-} catch {
-  die('gh did not respond: it is missing, unauthorized, or this is not a GitHub repository');
+  const url = git('remote', 'get-url', remote);
+  const m = url.match(/github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?$/);
+  if (!m) die(`remote ${remote} is not on GitHub: ${url}`);
+  repo = m[1];
+} catch (e) {
+  die(`no remote called ${remote}: ${e.message.split('\n')[0]}`);
 }
 
 const wanted = all ? tags : [asked || tags[tags.length - 1]];
@@ -107,9 +116,9 @@ for (const tag of wanted) {
 
   // A release for a tag nobody else can fetch would point at nothing. The tag has
   // to be on the remote first — that is a separate, deliberate step.
-  const onRemote = execFileSync('git', ['-C', ROOT, 'ls-remote', '--tags', 'origin', `refs/tags/${tag}`],
+  const onRemote = execFileSync('git', ['-C', ROOT, 'ls-remote', '--tags', remote, `refs/tags/${tag}`],
     { encoding: 'utf8' }).trim();
-  if (!onRemote) { console.log(`${tag}: tag is absent from origin; push it before creating a release`); skipped++; continue; }
+  if (!onRemote) { console.log(`${tag}: tag is absent from ${remote}; push it before creating a release`); skipped++; continue; }
 
   const body = notes(tag);
   if (!body) { console.log(`${tag}: CHANGELOG.md has no section; skipping`); skipped++; continue; }
