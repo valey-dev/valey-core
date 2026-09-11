@@ -170,6 +170,26 @@ export function renderNote(tag, date, fragments, section) {
   return out.join('\n');
 }
 
+// The note as the body of a release page. The page is where a person actually
+// looks: until 11 September 2026 gh-release sent only the changelog section,
+// and six releases' worth of frames sat in notes/ where nobody opening the
+// release would ever meet them.
+//
+// Two rewrites and nothing else. The heading goes, because GitHub prints the
+// version above the body and a second one reads as a stutter. And the pictures
+// become absolute: a release body has no file next to it, so a relative path
+// resolves to nothing. They are pinned to a commit rather than to a branch or
+// the tag — a note written after its release is not at that tag at all (every
+// backfilled one is like this), and a branch moves, so a picture renamed next
+// month would quietly break a page nobody re-reads.
+export function releaseBody(md, { repo, sha }) {
+  const base = `https://github.com/${repo}/raw/${sha}/${NOTES_DIR}/`;
+  return md
+    .replace(/^# .*\n+/, '')
+    .replace(/!\[([^\]]*)\]\((?![a-z]+:)([^)\s]+)\)/gi, (_, alt, rel) => `![${alt}](${base}${rel})`)
+    .trim() + '\n';
+}
+
 // The guard. A repository without a `notes/` folder has not opted in, and the
 // release goes on as it did — the modules repository borrows this suite and has
 // no audience for notes.
