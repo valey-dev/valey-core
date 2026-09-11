@@ -560,6 +560,54 @@ function openStream() {
   };
 }
 
+// A module can affect the composition of the plan — the easel does not stand in every
+// room, only where a file is named in the settings. The signature has to take that into
+// account, or the plan will not be rebuilt when the composition changed: the thing would
+// appear only after the next arrival or departure of an agent. Says whether it rebuilt.
+function replan() {
+  const sig = planSignature(state.agents) + collect('sig', state).join('');
+  if (sig === state.sig) return false;
+  state.sig = sig;
+  // The plan is rebuilt whole, and the rooms in it stand in new places: the rows grow
+  // from the top, so somebody else's project that began a minute ago shifts the whole
+  // floor down. World coordinates after that point into the neighbouring room, while the
+  // person has gone nowhere. So before the rebuild we remember where he stood relative to
+  // his room, and afterwards put him back in the same place.
+  const wasP = anchorOf(state.layout, state.player);
+  const wasC = anchorOf(state.layout, state.cat);
+  // The rooms of modules are asked for inside the assembly: the plan has to know about
+  // them before the height of the world is counted and the lift is put together.
+  state.layout = buildLayout(state.agents, { rooms: (anchor) => collect('room', anchor, state) });
+  // The modules hang their own things on the finished plan: a thing, an approach point
+  // and a rectangle nobody walks through.
+  collect('layout', state.layout, state);
+  applyAnchor(state.layout, state.player, wasP);
+  applyAnchor(state.layout, state.cat, wasC);
+  if (wasC) { state.cat.tx = state.cat.x; state.cat.ty = state.cat.y; }
+  return true;
+}
+
+// A room asked for by key — #room= in the address or a line on the entrance
+// screen. A module's room is not in the plan until the modules have come up and
+// the plan has been rebuilt with them, and until 11 September 2026 the key was
+// looked up once, at the door: the reading room opened on one entrance and put
+// you by the first project room on the next, which read as "the module did not
+// come up". So a key that finds nothing waits for the rebuilds that follow, and
+// gives up the moment the person walks off on their own.
+let roomWanted = null;
+function goToRoom(key) {
+  const r = key && pickRoom(state.layout, key);
+  if (!r) return false;
+  state.player.x = r.x + r.w / 2;
+  state.player.y = r.y + r.h - 60;
+  state.cat.x = state.player.x + 30; state.cat.y = state.player.y;
+  state.currentRoom = r;
+  return true;
+}
+function roomArrived() {
+  if (roomWanted && goToRoom(roomWanted)) roomWanted = null;
+}
+
 const onSnapshot = (e) => {
   const data = JSON.parse(e.data);
   state.agents = data.agents || [];
@@ -581,30 +629,7 @@ const onSnapshot = (e) => {
   if (wornCode !== dressCode()) dressAll();
   else for (const a of state.agents) if (!state.looks.has(a.id)) state.looks.set(a.id, dressed(a));
 
-  // A module can affect the composition of the plan — the easel does not stand in every
-  // room, only where a file is named in the settings. The signature has to take that into
-  // account, or the plan will not be rebuilt when the composition changed: the thing would
-  // appear only after the next arrival or departure of an agent.
-  const sig = planSignature(state.agents) + collect('sig', state).join('');
-  if (sig !== state.sig) {
-    state.sig = sig;
-    // The plan is rebuilt whole, and the rooms in it stand in new places: the rows grow
-    // from the top, so somebody else's project that began a minute ago shifts the whole
-    // floor down. World coordinates after that point into the neighbouring room, while the
-    // person has gone nowhere. So before the rebuild we remember where he stood relative to
-    // his room, and afterwards put him back in the same place.
-    const wasP = anchorOf(state.layout, state.player);
-    const wasC = anchorOf(state.layout, state.cat);
-    // The rooms of modules are asked for inside the assembly: the plan has to know about
-    // them before the height of the world is counted and the lift is put together.
-    state.layout = buildLayout(state.agents, { rooms: (anchor) => collect('room', anchor, state) });
-    // The modules hang their own things on the finished plan: a thing, an approach point
-    // and a rectangle nobody walks through.
-    collect('layout', state.layout, state);
-    applyAnchor(state.layout, state.player, wasP);
-    applyAnchor(state.layout, state.cat, wasC);
-    if (wasC) { state.cat.tx = state.cat.x; state.cat.ty = state.cat.y; }
-  }
+  replan();
   syncActors(state.actors, state.agents, state.layout);
 
   if (!state.spawned && state.layout.projectRooms.length) {
@@ -616,6 +641,7 @@ const onSnapshot = (e) => {
     state.cat.x = state.player.x + 30; state.cat.y = state.player.y;
     state.spawned = true;
   }
+  roomArrived();
 
   for (const a of state.agents) {
     const was = state.prevStatus.get(a.id);
@@ -1524,6 +1550,8 @@ function update(dt, now) {
     const iy = pad.y || (held('move.down') ? 1 : 0) - (held('move.up') ? 1 : 0);
     // Somebody sitting is lifted by the very first movement — and in the same frame he is already walking.
     if (state.seat && (ix || iy)) standUp();
+    // A room still on its way is no longer wanted once the person has set off.
+    if (ix || iy) roomWanted = null;
     let dx = 0, dy = 0;
     if (p.skate) {
       // on a board the keys set not a displacement but a push: the speed lives between
@@ -2102,13 +2130,7 @@ initTitle(state, {
     // We search among all the rooms, not only the project ones: the service ones — the
     // control room, the meeting room — cannot be opened otherwise at all, and there is
     // nothing to check in them.
-    const r = key && (state.layout.rooms || []).find((x) => x.key === key);
-    if (r) {
-      state.player.x = r.x + r.w / 2;
-      state.player.y = r.y + r.h - 60;
-      state.cat.x = state.player.x + 30; state.cat.y = state.player.y;
-      state.currentRoom = r;
-    }
+    roomWanted = key && !goToRoom(key) ? key : null;
     closeTitle();
     document.body.classList.remove('titling');
     // The entrance is drawn in a fixed 400×225 and the office is not: the canvas has to
@@ -2159,7 +2181,11 @@ await initStand();
 // nothing to draw, though the module came up and its dictionary was poured in. That is
 // exactly how the card-index cabinet disappeared on 1 September 2026: it was in the
 // registry, it was not on the screen.
-// We catch up once; the point has to be idempotent.
-if (state.layout) collect('layout', state.layout, state);
+// We catch up once, and with the whole plan rather than the layout point alone: a
+// module's room is asked for inside the assembly, so a plan built before the modules
+// has no room for them to hang anything in, and a module without a signature of its
+// own would not change the signature to bring the rebuild on. A room key that found
+// nothing at the door gets its second look here.
+if (state.layout) { state.sig = null; replan(); roomArrived(); }
 
 rafId = requestAnimationFrame(loop);
