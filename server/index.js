@@ -17,6 +17,7 @@ import { releaseNudge } from './release.js';
 import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff } from './modules.js';
 import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
 import { MIME, fileType, fileHeaders } from './files.js';
+import { listenFree } from './port.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const WEB = path.join(ROOT, 'web');
@@ -514,6 +515,12 @@ async function handle(req, res) {
 
   // Who is asking. The page learns this before it draws a single button a guest
   // should not have.
+  // The office's name tag, for a second office that finds this port taken: no
+  // settings, no owner check, nothing a guest could not read off the page anyway.
+  if (url.pathname === '/api/version') {
+    return send(res, 200, { valey: true, version: VERSION });
+  }
+
   if (url.pathname === '/api/whoami') {
     const s = await getSettings();
     const guest = await guestOf(req);
@@ -1004,7 +1011,13 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   const HOST = host || (external ? '0.0.0.0' : '127.0.0.1');
   const server = http.createServer(createHandler());
 
-  await new Promise((resolve) => server.listen(port, HOST, resolve));
+  // A taken port is asked who it is before anything is concluded. Another
+  // office there means this one has nothing to do; something else means the
+  // next port up, said out loud — the canonical-port line below then explains
+  // what that costs.
+  const bound = await listenFree(server, port, HOST, { log: console.log });
+  if (bound === null) return null;
+  port = bound;
   const token = await ownerToken();
   const s = await getSettings();
   console.log(`Valey office at http://localhost:${port}`);
@@ -1046,5 +1059,8 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
 // `node server/index.js` are the same thing, and a stand should not have to do
 // anything special.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await start();
+  // Another office already answering is a clean exit, not a failure: the
+  // message above says where it is. Modules loaded on the way may hold timers,
+  // so the process is ended rather than left to drain.
+  if (await start() === null) process.exit(0);
 }
