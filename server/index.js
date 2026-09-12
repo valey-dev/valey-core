@@ -159,7 +159,7 @@ function project(snapshot, guestId) {
 
 // ------------------------------------------------------------------ the owner
 // Anyone may watch; only the owner may command. The right lives in the token in
-// .settings.json, and the page presents it in a header.
+// the settings file, and the page presents it in a header.
 //
 // Until the office is declared shared, everything from this same machine counts
 // as the owner's: that is how the office always worked, and local work must not
@@ -1126,7 +1126,7 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   for (const e of moduleErrors()) console.log(`  module failed to start: ${e.id} — ${e.error}`);
   // The owner link is printed every time, not only in shared mode: open it once
   // and you stay the owner in this browser even after the office becomes shared.
-  // Looking it up in .settings.json later is an extra step at a bad moment.
+  // Looking it up in the settings file later is an extra step at a bad moment.
   console.log(`  owner: http://localhost:${port}/#owner=${token}`);
   if (s.access.mode === 'private') {
     console.log('  mode: private — everything from this machine is treated as the owner.');
