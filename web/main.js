@@ -16,6 +16,8 @@ import { mealAt, DROP, MEAL, MAX_BONES } from './aquarium.js';
 import { drawBubble } from './badges.js';
 import { skateStep, rolling, drawSkateboard, ollieStep, canOllie, OLLIE_POP } from './skate.js';
 import { readPad, edges as padEdges } from './pad.js';
+import { touchHint } from './touch.js';
+import { initTouch, readTouch, showTouch, sheetOpen, closeSheet, touchOn } from './touchlayer.js';
 import { viewport, stepScale, SCALE_MIN, SCALE_MAX } from './viewport.js';
 // ui.scale is the interface size: the HUD and hint strips are stretched by it,
 // and fit() must account for that when it measures their height.
@@ -26,7 +28,7 @@ import { has as hasPlace } from './places.js';
 // t was renamed to tr: in main.js `t` is the frame time in draw(t), and the import
 // was silently shadowed by a number inside every drawing callback
 import { t as tr, lang, setLang, onLang } from './i18n.js';
-import { initTitle, drawTitle, renderTitle, titleKey, titleOpen, closeTitle, layoutTitle, tickTitle } from './title.js';
+import { initTitle, drawTitle, renderTitle, titleKey, titleOpen, closeTitle, layoutTitle, tickTitle, titleTap } from './title.js';
 
 // Changed by fit(): the canvas takes the window instead of standing in letterbox bars.
 let VW = 400, VH = 225;
@@ -728,6 +730,9 @@ function onKey(e) {
   // person does an ordinary browser thing and gets a panel on top. Shift does not count —
   // it is ours here: Shift+F9 and running.
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+  // The ≡ sheet is over everything while it is open, and ESC is its way out —
+  // from a keyboard someone has plugged into the tablet as much as from its ✕.
+  if (sheetOpen()) { if (code === 'Escape') closeSheet(); e.preventDefault(); return; }
   // the open board eats the arrows before the office sees them
   if (UI.viewerKey(e.key, e.shiftKey)) { e.preventDefault(); return; }
   // The lift panel and the reception desk are the same: while they are open the arrows
@@ -872,7 +877,7 @@ addEventListener('mousedown', () => driving(false), true);
 addEventListener('wheel', () => driving(false), { capture: true, passive: true });
 // The entrance screen is open and nothing is over it — so both the keys and the walking
 // along the corridor belong to it.
-const titleFree = () => titleOpen()
+const titleFree = () => titleOpen() && !sheetOpen()
   && ['bag', 'sky', 'viewer', 'roster', 'lang'].every((id) => document.getElementById(id).hidden);
 const NO_KEYS = new Set();
 
@@ -897,7 +902,15 @@ function tickPad() {
   let gp = null;
   for (const g of list) if (g) { gp = g; break; }
   if (gp && !pad.seen) { pad.seen = true; UI.toast(tr('toast.pad')); }
-  const next = readPad(gp);
+  // The touch layer answers in the gamepad's shape and rides the same loop: its
+  // stick is the analogue, its ● and ✕ are SPACE and ESC. Whichever stick is
+  // tilted wins the axes; the keys of both are pressed.
+  const fromPad = readPad(gp), fromTouch = readTouch();
+  const next = {
+    x: fromTouch.x || fromPad.x,
+    y: fromTouch.y || fromPad.y,
+    down: new Set([...fromPad.down, ...fromTouch.down]),
+  };
   const { pressed, released } = padEdges(pad, next);
   for (const key of pressed) {
     sound.init();
@@ -909,6 +922,33 @@ function tickPad() {
   for (const key of released) { const c = codeOf({ key }); if (c) keys.delete(c); }
   pad.x = next.x; pad.y = next.y; pad.down = next.down;
 }
+
+// The tablet. A button on the ≡ sheet is a key pressed and let go at once — the
+// release matters, or the key would stay in `keys` and read as held for ever.
+initTouch({
+  canvas,
+  press(ev) {
+    sound.init();
+    onKey({ ...ev, shiftKey: false, target: { tagName: 'TOUCH' }, preventDefault() {} });
+    keys.delete(ev.code);
+  },
+  scale: () => (state.zoom ? state.zoom.dev : 1),
+  entrance: () => titleOpen(),
+  // What the entrance screen itself answers (see titleKey in title.js); the
+  // rest of the sheet is dimmed there.
+  entranceActions: ['panel.bag', 'panel.sky'],
+});
+
+// The door and the switch on the entrance screen are places you stand at and
+// press SPACE; a finger — or a mouse — on them is the same press without the
+// walk. The canvas draws the entrance at its logical size, so the point is
+// scaled from the canvas box to it.
+canvas.addEventListener('click', (e) => {
+  if (!titleFree()) return;
+  const r = canvas.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  titleTap(((e.clientX - r.left) / r.width) * VW, ((e.clientY - r.top) / r.height) * VH);
+});
 
 function toggle(id, open, close) {
   const node = document.getElementById(id);
@@ -1506,6 +1546,7 @@ function panelsOpen() {
   return titleOpen() || state.dialogOpen || state.cctv.on || UI.inviteOpen() || state.lift.phase !== 'idle'
     // A module panel holds the screen too: the core does not know its ids and must not.
     || keysOpen()
+    || sheetOpen()
     || collect('busy').some(Boolean)
     || ['viewer', 'roster', 'bag', 'sky', 'lift', 'invite', 'lang'].some((id) => !document.getElementById(id).hidden);
 }
@@ -1755,6 +1796,7 @@ function nightAmount() {
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
 function label(x, y, text, color = '#f6e3c0') {
+  if (touchOn()) text = touchHint(text);
   ctx.font = '7px "JetBrains Mono", "Courier New", monospace';
   const w = ctx.measureText(text).width;
   ctx.fillStyle = 'rgba(24,18,14,0.75)';
@@ -2070,6 +2112,9 @@ let rafId = 0;
 function loop(now) {
   const dt = Math.min(3, (now - lastT) / 16.67); lastT = now;
   state.t = now;
+  // The layer is there while the floor, or the free entrance screen, is what
+  // is in front of the person; a panel takes the screen and the layer steps aside.
+  showTouch(titleOpen() ? titleFree() : !panelsOpen());
   tickPad();
   update(dt, now); draw(now);
   if (!document.hidden) { cancelAnimationFrame(rafId); rafId = requestAnimationFrame(loop); }

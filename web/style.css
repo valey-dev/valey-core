@@ -254,7 +254,18 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .pmore{margin-left:auto; font-size:9px; color:var(--ink-dim)}
 
 /* ---- toasts ---- */
-#toasts{position:fixed; left:14px; bottom:52px; z-index:25; display:flex; flex-direction:column; gap:6px}
+#toasts{position:fixed; left:14px; bottom:52px; z-index:25; display:flex; flex-direction:column; gap:6px;
+  pointer-events:none}
+/* On touch the toasts stand where the stick rests. A finger landing on one had
+   the toast as its target and never reached the floor, so the stick went deaf
+   for the five seconds a toast lives — found on a tablet on 12 September 2026
+   with «office renamed» on the screen. Toasts answer nothing, so the finger goes
+   through them everywhere; on touch they also move out from under the ring, to
+   the bottom middle between the stick and the buttons. */
+body.touch #toasts{left:50%; right:auto; bottom:52px; transform:translateX(-50%); align-items:center}
+/* The entrance's version line and the «rooms will come» note stand in the stick's
+   zone too, and neither answers a tap. */
+body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .toast{background:rgba(26,18,12,.94); border:2px solid var(--frame); border-left:4px solid var(--accent);
   padding:5px 10px; font-size:12px; color:var(--ink); max-width:280px; animation:slide .25s ease-out}
 .toast.wait{border-left-color:var(--warn)} .toast.news{border-left-color:var(--lilac)}
@@ -1021,7 +1032,7 @@ body.titling #hud{visibility:hidden}
 .stand-mod.broken{border-color:var(--bad); color:var(--bad)}
 .stand-mod.broken i{color:var(--bad)}
 .stand-fine{font-size:9px; opacity:.65; margin-top:2px}
-.stand-tag{color:var(--warn); letter-spacing:.18em; font-size:9px}
+.stand-tag{color:var(--warn); letter-spacing:.18em; font-size:9px; pointer-events:auto; cursor:pointer}
 .stand-what{color:var(--ink); font-size:12px; margin:3px 0 4px}
 .stand-where{font-size:10px; opacity:.8}
 .stand-bad{color:var(--bad); font-size:10px; margin-top:3px}
@@ -1209,3 +1220,43 @@ body.stand-folded #standtab{display:block}
    still pointer fires mouseover, never mousemove — which is precisely the
    difference this needs, and the reason the wandering highlight existed. */
 html body.bykeys, html body.bykeys *{cursor:none}
+
+/* The tablet's layer — «WIP — Тач-управление на планшете», approved 12
+   September 2026. Off the frame: a ring of 140 with a knob of 56 bottom left,
+   ● 88, ✕ 64 and ≡ 48 bottom right, all 40 off the edges; positions are set
+   by web/touchlayer.js from the same numbers web/touch.js is tested with.
+   The layer itself lets every touch through; only its buttons take them.
+   The classes say tch-: .tmenu and .tbtn are the entrance menu's, and on 12
+   September 2026 ≡ inherited its 26% width and came out a long oval. */
+body.touch #game{touch-action:none}
+body.touch .tmeta.center{visibility:hidden}
+#touch{position:fixed; inset:0; z-index:27; pointer-events:none}
+#touch[hidden]{display:none}
+#touch .tchring{position:absolute; width:140px; height:140px; border-radius:50%;
+  border:2px solid var(--frame); background:rgba(20,13,8,.35); opacity:.7}
+#touch .tchring.live{opacity:1; border-color:var(--accent)}
+#touch .tchring.run{box-shadow:0 0 0 3px var(--accent)}
+#touch .tchknob{position:absolute; left:42px; top:42px; width:56px; height:56px; border-radius:50%;
+  background:var(--accent); opacity:.85}
+#touch .tchbtn{position:absolute; pointer-events:auto; border-radius:50%; touch-action:none;
+  background:var(--bg-deep); border:2px solid var(--frame); color:var(--ink);
+  font:18px "JetBrains Mono", "Courier New", monospace; padding:0; opacity:.9;
+  -webkit-tap-highlight-color:transparent; user-select:none}
+#touch .tchbtn.down{background:var(--wood); border-color:var(--accent)}
+#touch .tchaction{width:88px; height:88px; border-color:var(--accent)}
+#touch .tchaction span{display:block; width:18px; height:18px; margin:auto; border-radius:50%; background:var(--accent)}
+#touch .tchback{width:64px; height:64px}
+#touch .tchmenu{width:48px; height:48px; font-size:16px}
+/* The ≡ sheet: an office panel like the window on the world, its buttons the
+   panel's .obtn grown to a finger — 160×56. */
+#touchmenu{position:fixed; inset:0; z-index:28; background:rgba(12,8,5,.8); display:flex;
+  align-items:center; justify-content:center}
+#touchmenu[hidden]{display:none}
+.touchwrap{width:min(720px, calc(92vw / var(--ui, 1)))}
+.touchbody{padding:14px; display:flex; flex-direction:column; gap:18px; overflow-y:auto; min-height:0}
+.touchgrid{display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px}
+.touchgrid .obtn, .touchzoom .obtn{min-height:56px; font-size:13px; color:var(--ink)}
+.touchgrid .obtn:disabled{opacity:.35}
+.touchzoom{display:flex; align-items:center; gap:14px; color:var(--ink-dim); font-size:12px}
+.touchzoom .obtn{min-width:56px; font-size:18px}
+.touchzoom b{color:var(--ink); font-weight:normal; min-width:36px; text-align:center}

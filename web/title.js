@@ -6,6 +6,7 @@
 // cards are in markup: the text in them has to be readable rather than stretched
 // along with the canvas.
 import { pxText, drawSwitcher } from './office.js';
+import { touchHint } from './touch.js';
 import { t as tr, lang } from './i18n.js';
 import { esc } from './esc.js';
 import { drawPerson } from './sprites.js';
@@ -249,7 +250,9 @@ export function drawTitle(ctx, VW, VH, t, opts = {}) {
   // plaque. At the door it is lower: at the office height the VALEY plaque covered
   // it, and «офис агентов» was half readable. Found by the very first frame.
   const z = controls ? zone() : null;
-  if (z === 'door') label(ctx, SPAWN, FLOOR - 28, tr('title.hintDoor'));
+  // On touch the hint names the button: «[ ● ] войти».
+  const onTouch = typeof document !== 'undefined' && !!document.body && document.body.classList.contains('touch');
+  if (z === 'door') label(ctx, SPAWN, FLOOR - 28, onTouch ? touchHint(tr('title.hintDoor')) : tr('title.hintDoor'));
   if (z === 'lang') label(ctx, LANG_X, FLOOR - 44, tr('hint.lang'));
 
   // the vignette
@@ -452,8 +455,11 @@ function menuHtml(n) {
   // The nudge about the release video. Visible to the owner only and only when there
   // is something to nudge about — the state arrives from the server already decided,
   // it is not recomputed here. The frame: WIP — «Пинок про релизный ролик», approved
-  // 1 September 2026.
-  const rel = S && S.release;
+  // 1 September 2026. «Owner only» was a comment and not a check until 12 September
+  // 2026, when a tablet opened without the owner token showed the nudge, draft
+  // path and all: the server strips it for guests, and a viewer on the Wi-Fi in
+  // private mode is nobody's guest and got the whole snapshot.
+  const rel = S && S.owner === true ? S.release : null;
   const relCard = !rel ? '' : `<div class="tcard release">
          <span class="tlabel">${tr('title.releaseLabel')}</span>
          <b>${tr('title.releaseNot', { tag: esc(rel.tag) })}</b>
@@ -558,6 +564,24 @@ export function titleKey(ev) {
   // The walking keys are swallowed by the screen: otherwise a step along the
   // corridor would also reach the office standing behind it.
   return act === 'move.left' || act === 'move.right';
+}
+
+// A tap on the door or on the switch, in the entrance's own coordinates: the
+// same as walking up and pressing SPACE there. A little grace around both — a
+// door 36 pixels wide at ×6 is still a finger and a half on glass, and a
+// figure 14 wide is less. The menu needs none of this: its items are buttons.
+export function titleTap(gx, gy) {
+  if (!T.open || T.page !== 'menu' || !api) return false;
+  const pad = 6;
+  if (gx >= DOOR.x - pad && gx <= DOOR.x + DOOR.w + pad && gy >= DOOR.y - pad && gy <= FLOOR + pad) {
+    api.enter(null);
+    return true;
+  }
+  if (Math.abs(gx - LANG_X) <= 14 && gy >= FLOOR - 56 && gy <= FLOOR + pad) {
+    api.lang();
+    return true;
+  }
+  return false;
 }
 
 export function closeTitle() {

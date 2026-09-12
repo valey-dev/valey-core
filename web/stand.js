@@ -39,8 +39,9 @@ export async function initStand() {
     d.className = cls;
     d.textContent = text;
     box.appendChild(d);
+    return d;
   };
-  line('stand-tag', 'TEST STAND · ~ COLLAPSE');
+  const tag = line('stand-tag', 'TEST STAND · ~ COLLAPSE');
   line('stand-what', s.text);
   const where = [s.branch && `branch ${s.branch}`, s.port && `port ${s.port}`].filter(Boolean).join(' · ');
   if (where) line('stand-where', where);
@@ -106,6 +107,12 @@ export async function initStand() {
     try { localStorage.setItem(FOLD, on ? '1' : ''); } catch {}
   };
   tab.onclick = () => fold(false);
+  // The first line of the plaque folds it by a tap. «~» is a key, and a tablet
+  // has none: on 12 September 2026 the plaque sat over the top-left corner of
+  // the very screen the touch layer was being tested on, with no way to push it
+  // aside short of restarting the server.
+  tag.onclick = () => fold(true);
+  tag.title = 'collapse the stand label (~ or tap)';
 
   document.body.appendChild(box);
   document.body.appendChild(tab);

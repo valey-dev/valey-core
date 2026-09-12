@@ -20,6 +20,8 @@
 //   F9           the office's own 1:1 canvas shot into .shots (written by the office)
 //   shift-F9     the same, but ×4 with no smoothing
 //   ?            the keyboard panel; shift-<key> works for anything else too
+//   tap:.tchmenu a click on the first node matching a selector (no colons in it)
+// --touch makes the page report a coarse pointer, as a tablet does.
 // An ordinary --out captures the whole page with the panels; F9 inside the
 // office captures the canvas alone, but pixel for pixel.
 //
@@ -93,6 +95,10 @@ const video = arg('video', '');
 // means re-shooting everything.
 const size = arg('size', video ? '1920,1080' : '1400,820');
 const viewport = arg('viewport', '');
+// --touch: the page sees a coarse pointer and no hover, as a tablet reports them,
+// so whatever wakes on (pointer: coarse) wakes here — the touch layer of the
+// office cannot be photographed any other way, since keys are not fingers.
+const touch = process.argv.includes('--touch');
 const steps = arg('keys', '').split(',').filter(Boolean);
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -213,6 +219,10 @@ try {
   // a width it is not judged at. By default the flag is absent and the metrics
   // are left alone — otherwise every earlier frame of the office would change
   // height from ~733 to 820.
+  if (touch) {
+    await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+    await send('Emulation.setEmulatedMedia', { features: [{ name: 'pointer', value: 'coarse' }, { name: 'hover', value: 'none' }] });
+  }
   const forced = viewport || (video ? size : '');
   if (forced) {
     const [w, h] = forced.split(',').map(Number);
@@ -251,6 +261,17 @@ try {
   for (const step of steps) {
     const [what, ms] = step.split(':');
     if (what === 'wait') { await wait(Number(ms) || 500); continue; }
+    // tap:<selector> — a click on a button of the page, for what no key reaches:
+    // the ≡ of the touch layer has no key on purpose. The step is split on «:»
+    // like the others, so the selector cannot carry one.
+    if (what === 'tap') {
+      const r = await send('Runtime.evaluate', { returnByValue: true, expression:
+        `(function(){ const n = document.querySelector(${JSON.stringify(ms || '')}); if (!n) return 'no such node'; n.click(); return 'tapped'; })()` });
+      const got = r.result && r.result.value;
+      if (got !== 'tapped') throw new Error(`--keys: tap:${ms}: ${got || 'no answer'}`);
+      await wait(400);
+      continue;
+    }
     // shift-<anything>, not just shift-F9. The office documents its help on «?»,
     // and «?» is shift and slash: until 9 September 2026 the one key every panel
     // tells you to press was the one the camera could not press.
