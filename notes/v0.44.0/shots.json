@@ -1,0 +1,23 @@
+{
+  "tag": "v0.44.0",
+  "shots": [
+    {
+      "file": "pager-reaches-claude-permission.png",
+      "slug": "pager-reaches-claude",
+      "id": "permission",
+      "url": "",
+      "setup": "void fetch('/api/permit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({hook_event_name:'PermissionRequest',session_id:'aaaaaaaa-0000-4000-8000-00000000000a',tool_name:'Bash',tool_input:{command:'npm test -- src/cart.test.js',description:'Run the cart tests'},permission_suggestions:[{type:'addRules',rules:[{toolName:'Bash',ruleContent:'npm test:*'}],behavior:'allow',destination:'localSettings'}]})}); new Promise(r=>setTimeout(r,1200))",
+      "keys": "Enter,wait:3000,Enter,wait:1500",
+      "backfilled": "13 September 2026"
+    },
+    {
+      "file": "pager-reaches-claude-question.png",
+      "slug": "pager-reaches-claude",
+      "id": "question",
+      "url": "",
+      "setup": "void fetch('/api/permit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({hook_event_name:'PreToolUse',session_id:'aaaaaaaa-0000-4000-8000-00000000000a',tool_name:'AskUserQuestion',tool_input:{questions:[{question:'Which discount should the cart apply first?',header:'Discount',multiSelect:false,options:[{label:'Percentage',description:'10% off the whole cart'},{label:'Fixed amount',description:'$5 off orders over $30'},{label:'Both, best one wins',description:'Compute both, apply the larger'}]}]}})}); new Promise(r=>setTimeout(r,1200))",
+      "keys": "Enter,wait:3000,Enter,wait:1500",
+      "backfilled": "13 September 2026"
+    }
+  ]
+}
