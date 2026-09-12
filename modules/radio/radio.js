@@ -1,7 +1,15 @@
-// The office radio: a pixel receiver in the corridor with Spotify spinning inside it.
-// The player lives in one single iframe and is never recreated: the panel hides by
-// being shifted off screen rather than by display:none, or the music breaks off
-// mid-word.
+// The office radio: a pixel receiver in the corridor with Spotify spinning inside it —
+// or an internet radio station, played by the page's own <audio>.
+// The Spotify player lives in one single iframe and is never recreated: the panel
+// hides by being shifted off screen rather than by display:none, or the music breaks
+// off mid-word.
+//
+// Streams arrived on 12 September 2026, from the frames on WIP «Радио: интернет-станции
+// по потоку» (2045:565 on air, 2046:631 adding, 2046:4010 silent). YouTube was the first
+// idea and was turned down: its API policy forbids a player that is not on the page
+// (III.F.3) and separating the sound from the picture (III.I.7), which is exactly
+// what a radio in the corridor is. A stream is honest radio — NTS, Dublab, SomaFM —
+// and it asks for no account at all.
 import { auth, player } from './spotify.js';
 import { t as tr } from '../../web/i18n.js';
 
@@ -9,6 +17,56 @@ import { t as tr } from '../../web/i18n.js';
 // entered by the person. There is nothing to translate somebody else's name with and no
 // reason to, so one field will not do.
 export const stationName = (s) => (s ? (s.name || (s.key ? tr(s.key) : '')) : '');
+
+// Where a wave's sound comes from. A Spotify uri is Spotify's; anything else a station
+// holds is the address of a stream.
+export const kindOf = (s) => (s && /^spotify:/.test(s.uri || '') ? 'spotify' : 'stream');
+
+// Four live stations one press away. Each was played by hand on 12 September 2026; the
+// SomaFM address is the first server of its own .pls, and Radio Paradise is its mp3
+// stream rather than aac, because every browser plays mp3.
+export const PICKS = [
+  { name: 'NTS 2', uri: 'https://stream-relay-geo.ntslive.net/stream2' },
+  { name: 'Dublab', uri: 'https://dublab.out.airtime.pro/dublab_a' },
+  { name: 'SomaFM · Groove Salad', uri: 'https://ice6.somafm.com/groovesalad-128-mp3' },
+  { name: 'Radio Paradise', uri: 'https://stream.radioparadise.com/mp3-128' },
+];
+
+// How long a stream may take to start before the receiver says it is silent, and how
+// often a playing receiver asks what the station is playing.
+export const STREAM_WAIT = 10_000;
+const NOW_EVERY = 20_000;
+
+// An http stream on an https page is blocked by the browser as mixed content, and it
+// says so only in the console. The office is http on localhost, but a guest comes in
+// through a tunnel on https — so the receiver says it itself, before trying.
+export const mixedContent = (uri, page = globalThis.location) =>
+  !!page && page.protocol === 'https:' && /^http:/i.test(uri || '');
+
+// The stream player. One <audio> for the whole office, made on first use. The knob and
+// the damping by distance are kept apart, as in the Spotify player: the knob is the
+// person's, the damping is the corridor's.
+const saved = (k, d) => { try { return Number(localStorage.getItem(k) || d); } catch { return d; } };
+export const stream = {
+  audio: null, volume: saved('valey-stream-volume', 0.7), damp: 1,
+  el() {
+    if (!this.audio) { this.audio = new Audio(); this.audio.preload = 'none'; }
+    return this.audio;
+  },
+  apply() { if (this.audio) this.audio.volume = Math.max(0, Math.min(1, this.volume * this.damp)); },
+  setVolume(v) {
+    this.volume = Math.max(0, Math.min(1, v));
+    try { localStorage.setItem('valey-stream-volume', String(this.volume)); } catch { /* private mode */ }
+    this.apply();
+  },
+  // A live stream keeps buffering after pause; a station left behind is let go whole.
+  stop() {
+    if (!this.audio) return;
+    this.audio.pause();
+    this.audio.removeAttribute('src');
+    this.audio.load();
+  },
+};
 
 const KEY = 'valey-radio';
 
@@ -34,6 +92,11 @@ export const radio = {
   // and the panel has to understand that by what is drawn rather than by what was ordered.
   cover: null, coverBig: null, coverKey: '', coverFor: '', drm: 'unknown',
   sdk: false,          // the full player is playing, not the built-in one
+  // A stream on the air: what the station says is playing, its format, and since when.
+  // streamError is why a stream is silent — a reason key, said on the receiver's display.
+  // onAir is { title, format, bitrate } — the title from the station's metadata, the rest
+  // from the server's check. A guest, whom the server does not check for, sees the name.
+  onAir: null, streamError: '', streamSince: 0,
   needsLoopback: false, // the office is open at localhost, and Spotify will only allow 127.0.0.1
 
   load() {
@@ -51,20 +114,25 @@ export const radio = {
   },
 
   station() { return this.stations[this.current] || null; },
+  isStream() { return kindOf(this.station()) === 'stream'; },
 
   // How loudly the radio is heard from where the player stands. Only our own player can
   // control the volume: the built-in one has no such API.
   listenFrom(dist) {
-    if (!this.sdk) return;
     const t = Math.max(0, Math.min(1, (dist - NEAR) / (FAR - NEAR)));
     const near = 1 - t;
-    player.setDamp(FLOOR + (1 - FLOOR) * near * near);
+    const damp = FLOOR + (1 - FLOOR) * near * near;
+    // A stream is our own <audio>, so the corridor quiets it too — without any account.
+    if (this.isStream()) { stream.damp = damp; stream.apply(); return; }
+    if (!this.sdk) return;
+    player.setDamp(damp);
   },
 
   // How much of the track has played, 0..1 — for the strip on the body. With our own
   // player the time is counted by the clock, the built-in one sends it itself in
   // playback_update.
   progress() {
+    if (this.isStream()) return 0;   // a live stream has no length to be through
     if (this.sdk) return player.progress();
     return this.duration ? Math.max(0, Math.min(1, this.position / this.duration)) : 0;
   },
@@ -101,6 +169,12 @@ export const radio = {
     const st = this.station();
     const key = src || (st ? st.uri : '');
     if (!key || this.coverKey === key) return;
+    // A stream has no cover to fetch: the little window stays wooden glass.
+    if (!src && kindOf(st) === 'stream') {
+      this.coverKey = key; this.cover = null; this.coverBig = null; this.coverFor = '';
+      if (this.onChange) this.onChange();
+      return;
+    }
     this.coverKey = key;
     // we remove the old cover at once: an empty little window for a couple of moments is
     // better than somebody else's picture under an already playing track
@@ -156,7 +230,9 @@ export const radio = {
     const live = player.state === 'ready';
     if (live && !this.sdk && this.controller) this.controller.pause();
     this.sdk = live;
-    if (live) {
+    // A stream on the air is not the Spotify player's to describe: its events would
+    // switch the receiver's lamp off under music that is still playing.
+    if (live && !this.isStream()) {
       this.playing = player.playing;
       const url = player.coverUrl();
       if (url) this.loadCover(url);
@@ -169,6 +245,8 @@ export const radio = {
   // of its own inside the frame — the frame itself has to outlive that substitution.
   attach(host) {
     this.host = host;
+    // A stream plays without Spotify; its iframe waits until a Spotify wave is tuned.
+    if (this.isStream()) return;
     if (this.sdk || this.controller || this.pending) return;
     const st = this.station();
     if (!st) return;
@@ -206,6 +284,7 @@ export const radio = {
   },
 
   toggle() {
+    if (this.isStream()) { this.playing ? this.streamPause() : this.streamPlay(); return true; }
     if (this.sdk) { player.toggle(); return true; }
     if (!this.controller) return false;
     this.controller.togglePlay();
@@ -215,11 +294,115 @@ export const radio = {
   play() { if (this.controller) this.controller.play(); },
   pause() { if (this.controller) { this.controller.pause(); this.playing = false; } },
 
+  // A stream is started on a gesture and watched: if it has not begun playing within
+  // STREAM_WAIT it is called silent with a reason rather than left spinning.
+  streamPlay() {
+    const st = this.station();
+    if (!st) return;
+    if (mixedContent(st.uri)) { this.streamFail('mixed'); return; }
+    const a = stream.el();
+    if (!a.dataset.bound) {
+      a.dataset.bound = '1';
+      a.addEventListener('playing', () => {
+        clearTimeout(this.streamTimer);
+        this.playing = true; this.streamError = '';
+        if (!this.streamSince) this.streamSince = Date.now();
+        if (this.onChange) this.onChange();
+      });
+      a.addEventListener('pause', () => { this.playing = false; this.nowStop(); if (this.onChange) this.onChange(); });
+      // A live stream does not end; one that did was closed by the station.
+      a.addEventListener('ended', () => this.streamFail('silent'));
+      a.addEventListener('error', () => {
+        if (!a.getAttribute('src')) return;   // our own stop(), not the station's
+        clearTimeout(this.streamTimer);
+        const code = a.error ? a.error.code : 0;
+        // MEDIA_ERR_SRC_NOT_SUPPORTED is a format the browser does not play — HLS above all.
+        this.streamFail(code === 4 ? (/\.m3u8(\?|$)/i.test(a.src) ? 'hls' : 'format') : 'silent');
+      });
+    }
+    if (a.getAttribute('src') !== st.uri) { a.src = st.uri; this.streamSince = 0; }
+    stream.apply();
+    this.streamError = '';
+    clearTimeout(this.streamTimer);
+    this.streamTimer = setTimeout(() => { if (!this.playing) this.streamFail('timeout'); }, STREAM_WAIT);
+    a.play().catch((e) => { if (e && e.name === 'NotAllowedError') this.streamFail('gesture'); });
+    this.checkStream(st.uri);
+    this.nowStart(st.uri);
+    if (this.onChange) this.onChange();
+  },
+
+  streamPause() { clearTimeout(this.streamTimer); this.nowStop(); if (stream.audio) stream.audio.pause(); },
+
+  streamFail(reason, status = 0) {
+    clearTimeout(this.streamTimer);
+    this.nowStop();
+    stream.stop();
+    this.playing = false; this.streamError = reason; this.streamStatus = status; this.streamSince = 0;
+    if (this.onChange) this.onChange();
+  },
+
+  // The server's check on switching on: it names the reason a stream will not play —
+  // HLS, a closed stream, a page instead of sound — before the ten seconds run out, and
+  // it brings the format and bitrate for the display. A guest gets 403 and simply
+  // listens: <audio> will say soon enough whether there is anything to hear.
+  async checkStream(uri) {
+    try {
+      const r = await fetch('/api/radio/probe?url=' + encodeURIComponent(uri));
+      if (!r.ok) return;
+      const out = await r.json();
+      if (!this.station() || this.station().uri !== uri) return;   // tuned away meanwhile
+      if (!out.ok) {
+        // Timeout and unreachable are left to the player: the server's network is not
+        // the listener's, and a station that is slow for one may be quick for the other.
+        if (out.reason !== 'timeout' && out.reason !== 'unreachable') this.streamFail(out.reason, out.status || 0);
+        return;
+      }
+      this.onAir = { ...(this.onAir || {}), format: out.format, bitrate: out.bitrate };
+      if (this.onChange) this.onChange();
+    } catch { /* no answer is not a verdict */ }
+  },
+
+  // What is playing, asked of the server every twenty seconds while the stream plays.
+  nowStart(uri) {
+    this.nowStop();
+    const ask = async () => {
+      try {
+        const r = await fetch('/api/radio/now?url=' + encodeURIComponent(uri));
+        if (!r.ok) { if (r.status === 403) this.nowStop(); return; }
+        const { title } = await r.json();
+        if (!this.station() || this.station().uri !== uri) return;
+        this.onAir = { ...(this.onAir || {}), title: title || '' };
+        if (this.onChange) this.onChange();
+      } catch { /* the next round will ask again */ }
+    };
+    ask();
+    this.nowTimer = setInterval(ask, NOW_EVERY);
+  },
+
+  nowStop() { clearInterval(this.nowTimer); this.nowTimer = null; },
+
   tune(i) {
     if (!this.stations.length) return;
+    const was = this.station();
+    const wasPlaying = this.playing;
     this.current = (i + this.stations.length) % this.stations.length;
     this.save();
     const st = this.station();
+    // Leaving a stream lets it go; the next wave starts from its own silence.
+    if (kindOf(was) === 'stream') { clearTimeout(this.streamTimer); this.nowStop(); stream.stop(); }
+    this.onAir = null; this.streamError = ''; this.streamSince = 0;
+    if (kindOf(st) === 'stream') {
+      // Spotify falls silent: two sources at once is noise, not radio.
+      if (this.sdk && player.sdk && player.playing) player.sdk.pause();
+      else if (this.controller) this.controller.pause();
+      this.playing = false;
+      if (wasPlaying) this.streamPlay();
+      this.loadCover();
+      if (this.onChange) this.onChange();
+      return;
+    }
+    // A Spotify wave after a stream: the iframe may never have been built.
+    if (!this.sdk && !this.controller && this.host) this.attach(this.host);
     if (this.sdk && st) {
       player.playUri(st.uri).catch((e) => { this.error = e.message; });
       this.loadCover(player.coverUrl() || null);
@@ -229,16 +412,20 @@ export const radio = {
     if (this.controller && st) {
       this.controller.loadUri(st.uri);
       // loadUri stops the playback — if the radio was playing, we carry on on the new wave
-      if (this.playing) setTimeout(() => this.controller && this.controller.play(), 400);
+      if (wasPlaying) setTimeout(() => this.controller && this.controller.play(), 400);
     }
     this.loadCover();
     if (this.onChange) this.onChange();
   },
 
+  // A stream caught by hand starts playing at once: it was just checked, and the press
+  // that caught it is the gesture the browser wants before it lets sound out.
   add(name, uri) {
+    const was = this.playing;   // then tune() has already carried the music over
     this.stations.push({ name, uri });
     this.save();
     this.tune(this.stations.length - 1);
+    if (this.isStream() && !was) this.streamPlay();
   },
 
   remove(i) {
@@ -265,6 +452,18 @@ function pixelate(bmp, side) {
   }
   x.putImageData(img, 0, 0);
   return c;
+}
+
+// What a pasted line is: a Spotify link, the address of a stream, or neither. A stream
+// is any http(s) address — what it actually carries is for the server's check to say.
+export function parseWave(raw) {
+  const spotify = toUri(raw);
+  if (spotify) return { kind: 'spotify', uri: spotify };
+  const s = (raw || '').trim();
+  let u;
+  try { u = new URL(s); } catch { return null; }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+  return { kind: 'stream', uri: u.href };
 }
 
 // A link from "share" in Spotify -> the uri the built-in player understands.
