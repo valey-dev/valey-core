@@ -1,0 +1,21 @@
+{
+  "tag": "v0.45.0",
+  "shots": [
+    {
+      "file": "newsstand-stand.png",
+      "slug": "newsstand",
+      "id": "stand",
+      "url": "",
+      "keys": "Enter,wait:3000",
+      "backfilled": "13 September 2026"
+    },
+    {
+      "file": "newsstand-paper.png",
+      "slug": "newsstand",
+      "id": "paper",
+      "url": "",
+      "keys": "Enter,wait:3000,g,wait:1500",
+      "backfilled": "13 September 2026"
+    }
+  ]
+}

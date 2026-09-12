@@ -4,6 +4,34 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.48.1 — 13 September 2026
+
+### Fixed
+
+- **guest:** a guest whose browser once owned a stand on the same port no longer stands on an empty floor (7ca1bd8)
+- **guest:** a guest let in while another office saved the settings no longer lands in an empty office (78bbae0)
+## v0.48.0 — 13 September 2026
+
+### Added
+
+- **release:** a feature note shows the feature or says why it cannot (96e5625)
+
+### Other
+
+- docs(notes): the note for pictures owed in release notes (1810190)
+- docs(notes): six releases get the pictures they shipped without, and ten say why they have none (ab1e354)
+## v0.47.4 — 13 September 2026
+
+### Fixed
+
+- **office:** a long-running office no longer keeps every agent that ever passed through in memory (e0379d9)
+- **delivery:** a task that hangs no longer holds its agent busy until the server restarts (33f266f)
+- **delivery:** the office no longer says the CLI is missing while it is still looking for it (8372ed6)
+## v0.47.3 — 13 September 2026
+
+### Fixed
+
+- **office:** an agent's transcript is no longer empty after the office restarts (8e16405)
 ## v0.47.2 — 13 September 2026
 
 ### Fixed
