@@ -59,6 +59,30 @@ const bad = http.createServer();
 await assert.rejects(listenFree(bad, sPort, '203.0.113.7', { probe: async () => null }), (e) => e.code === 'EADDRNOTAVAIL', 'a foreign error was swallowed');
 n++;
 
+// An office from before /api/version: 404 there, but /api/whoami answers. On
+// 12 September 2026 exactly such an office held 5177 and was called a stranger.
+const elder = http.createServer((req, res) => {
+  if (req.url === '/api/whoami') { res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ owner: true, mode: 'private', guest: false })); }
+  res.writeHead(404); res.end('not found');
+});
+const ePort = await listen(elder);
+const eWho = await whoIsOn(ePort);
+ok(eWho && eWho.version === null, `an office older than /api/version was not recognised: ${JSON.stringify(eWho)}`);
+const logs3 = [];
+const third = http.createServer();
+eq(await listenFree(third, ePort, '127.0.0.1', { log: (l) => logs3.push(l), own: '9.9.9' }), null, 'walked past an older office');
+ok(logs3.some((l) => l.includes('(an older version)')), `the older office not named as such: ${logs3.join(' | ')}`);
+ok(logs3.some((l) => l.includes('To run v9.9.9 instead, stop that one')), 'no word on how to get the newer one running');
+await close(elder);
+
+// A different version on the port says so; the same version does not.
+const logs4 = [];
+await listenFree(http.createServer(), oPort, '127.0.0.1', { log: (l) => logs4.push(l), own: '1.0.0' });
+ok(logs4.some((l) => l.includes('To run v1.0.0 instead')), 'a different version running went unmentioned');
+const logs5 = [];
+await listenFree(http.createServer(), oPort, '127.0.0.1', { log: (l) => logs5.push(l), own: '9.9.9' });
+ok(!logs5.some((l) => l.includes('To run')), 'suggested replacing an office with its own version');
+
 // The real route answers with the name tag.
 const { createHandler } = await import('../server/index.js');
 const real = http.createServer(createHandler());

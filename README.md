@@ -12,7 +12,7 @@ Your Claude Code sessions become people in rooms — one room per project, one p
 curl -fsSL https://valey.dev/install.sh | sh
 ```
 
-One command puts the office into `~/valey` and tells you how to start it; add `--run` after `sh -s --` to have it started for you. The script is [in this repository](install.sh), short enough to read first, and it refuses an archive whose checksum does not match the one published beside it. Or clone the repository — there is nothing to build either way.
+One command asks where to put the office — `~/valey` if you just press Enter — and tells you how to start it; run it again and it offers to update the office already there; add `--run` after `sh -s --` to have it started for you. The script is [in this repository](install.sh), short enough to read first, and it refuses an archive whose checksum does not match the one published beside it. Or clone the repository — there is nothing to build either way.
 
 ## Run it
 
