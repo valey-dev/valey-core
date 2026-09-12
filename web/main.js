@@ -936,7 +936,7 @@ initTouch({
   entrance: () => titleOpen(),
   // What the entrance screen itself answers (see titleKey in title.js); the
   // rest of the sheet is dimmed there.
-  entranceActions: ['panel.bag', 'panel.sky'],
+  entranceActions: ['panel.bag', 'panel.sky', 'panel.standup'],
 });
 
 // The door and the switch on the entrance screen are places you stand at and
@@ -2248,7 +2248,11 @@ initTitle(state, {
   },
   bag: () => UI.renderBag('self'),
   sky: () => UI.renderSky(),
-  lang: () => switchLang(),
+  // The same panel the corridor figure opens: the hint over the entrance figure
+  // has promised «язык и имена» since 4 September 2026 while the figure went on
+  // switching in one press, names untouched — found on 12 September when the
+  // camera looked for the panel at the entrance and got two toasts instead.
+  lang: () => UI.openLang(),
   // The name typed on the entrance card is the same name the inventory edits and
   // presence sends: one field, stored in one place, so a guest who named himself
   // at the door is not «ГОСТЬ» a second later.
