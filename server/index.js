@@ -535,7 +535,11 @@ async function handle(req, res) {
     });
     // The stream remembers who is listening: there is one snapshot, and it is
     // seen differently.
-    const guest = await guestOf(req);
+    // The page sends both passes it holds (web/owned.js, passQuery), so the
+    // owner wins here as he does on every other route: an owner who once
+    // tried his own invitation link in this browser still gets his office,
+    // not a guest's projection of it.
+    const guest = (await isOwner(req)) ? null : await guestOf(req);
     const who = guest ? guest.guest : null;
     res.valeyGuest = who;
     // Who is on the other end of this stream, by the same id `/api/here` uses.

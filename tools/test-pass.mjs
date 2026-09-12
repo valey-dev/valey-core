@@ -41,9 +41,10 @@ for (const file of files) {
     // The call may spread over several lines, and the pass may be prepared just
     // above it — a query pass (?owner= / ?guest=) is the road for sendBeacon and
     // EventSource, which cannot set headers at all, and it is built before the
-    // call rather than inside it. So the window looks both ways.
+    // call rather than inside it. So the window looks both ways. passQuery() is
+    // that query pass built in web/owned.js, both tokens at once.
     const window = lines.slice(Math.max(0, i - 4), i + 6).join('\n');
-    if (/owned\(/.test(window) || /owner=|guest=/.test(window)) return;
+    if (/owned\(|passQuery\(/.test(window) || /owner=|guest=/.test(window)) return;
     missing.push(`${file}:${i + 1} ${url}`);
   });
 }

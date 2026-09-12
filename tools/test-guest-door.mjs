@@ -36,7 +36,8 @@ process.env.VALEY_CLAUDE_DIR = path.join(dir, 'no-claude');
 delete process.env.VALEY_STAND;
 
 const { createHandler, setSnapshot } = await import('../server/index.js');
-setSnapshot({ agents: [{ id: 'a1', name: 'Гоша', project: 'door', status: 'working' }] });
+// lastSaid is what a guest must not get: it tells the two projections apart.
+setSnapshot({ agents: [{ id: 'a1', name: 'Гоша', project: 'door', status: 'working', lastSaid: 'только хозяину' }] });
 
 const port = await freePort();
 const server = http.createServer(createHandler());
@@ -61,12 +62,13 @@ async function otherOfficeWrites() {
 }
 const onDisk = async () => JSON.parse(await fsp.readFile(FILE, 'utf8'));
 
-// The first frame of the stream, as the page gets it.
-async function firstFrame(guest) {
+// The first frame of the stream, as the page gets it. `pass` is the query the
+// page builds (web/owned.js, passQuery).
+async function firstFrame(pass) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 2000);
   try {
-    const r = await fetch(`${base}/api/stream?guest=${encodeURIComponent(guest)}`, { signal: ctl.signal });
+    const r = await fetch(`${base}/api/stream?${pass}`, { signal: ctl.signal });
     const reader = r.body.getReader();
     const { value } = await reader.read();
     await reader.cancel();
@@ -102,9 +104,30 @@ try {
 
   const who = await call('/api/whoami', { headers: { 'x-valey-guest': guest } });
   ok('the server knows the guest by it', who.j?.guest === true && who.j?.needsCode === false, who.j);
-  const frame = await firstFrame(guest);
+  const frame = await firstFrame(new URLSearchParams({ guest }).toString());
   ok('the stream opens for the guest', frame.status === 200, frame);
   ok('and the first snapshot has the agents in it', frame.data?.agents?.[0]?.name === 'Гоша', frame.data);
+
+  // ------------------------------------------- a browser that was an owner
+  // localStorage is per origin and stands reuse ports, so a guest's browser
+  // can still hold the owner token of whatever office stood on this port
+  // before. The page used to send the stream that token alone.
+  const { setTokens, passQuery } = await import('../web/owned.js');
+  setTokens({ owner: 'owner-of-an-old-stand', guest });
+  const both = passQuery();
+  ok('the page puts both passes into the stream address',
+    new URLSearchParams(both).get('owner') === 'owner-of-an-old-stand' && new URLSearchParams(both).get('guest') === guest, both);
+  const stale = await firstFrame(both);
+  ok('a guest holding a dead owner token still gets the stream', stale.status === 200, stale);
+  ok('with the agents, as a guest', stale.data?.agents?.[0]?.name === 'Гоша' && stale.data.agents[0].lastSaid === undefined, stale.data);
+  setTokens({ owner: '', guest });
+  ok('a guest alone sends the guest pass alone', passQuery() === new URLSearchParams({ guest }).toString(), passQuery());
+  setTokens({ owner: '', guest: '' });
+  ok('nobody sends nothing', passQuery() === '', passQuery());
+
+  const mine = await firstFrame(new URLSearchParams({ owner: OWNER, guest }).toString());
+  ok('an owner who also holds a guest pass gets the owner\'s office, not a projection',
+    mine.status === 200 && mine.data?.agents?.[0]?.lastSaid === 'только хозяину', mine.data);
 
   const again = await call('/api/enter', { method: 'POST', body: { code: inv.j.invite.code } });
   ok('the code still lets in only once', again.status === 403 && again.j?.errorKey === 'err.codeUsed', again);
