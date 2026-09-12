@@ -15,6 +15,21 @@
 // continue down the normal path, and the person sees the native dialog. That is
 // why "defer" and "timed out" are made the same way: the office steps aside
 // rather than deciding for the owner.
+//
+// A question the agent asks (`AskUserQuestion`) comes in through a different
+// door: the `PreToolUse` hook, not `PermissionRequest`. Measured on
+// 7–11 September 2026 in the desktop app: it draws its own question picker
+// without waiting for `PermissionRequest`, drops whatever that hook answers
+// later, and let the office's card die ~45 seconds in — every press on it
+// ended in «this question is already closed». On paper `PermissionRequest`
+// could carry an answer too — the reference lists `updatedInput` under its
+// allow — but an answer to a hook the client has stopped waiting for lands
+// nowhere. `PreToolUse` runs before the picker is drawn and may hand back
+// `updatedInput` with `answers` filled in — the shape the hooks reference
+// gives for exactly this — and a live probe on 11 September 2026 got the
+// chosen option to the agent with no picker shown at all. So questions
+// are held only when they arrive through `PreToolUse`, and ordinary tools never
+// are: holding those there would skip the permission flow entirely.
 // Frames: [19 · a permission request from Claude Code](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=1033-2)
 import crypto from 'node:crypto';
 
@@ -117,6 +132,25 @@ function ruleOf(suggestions) {
   return '';
 }
 
+// Which door a request may be held at. A payload without `hook_event_name` is
+// read as `PermissionRequest`: that is the only event this office listened to
+// before, and older hooks and the stands send nothing else.
+//
+// A batch of several questions is let through to the client. The card shows
+// one question and one row of options, and `answers` needs an entry for each —
+// a card that answered the first and dropped the rest would be the same lie
+// this door was opened to end. BACKLOG holds the frame it needs.
+export function holdable(payload, input) {
+  const event = String((payload && payload.hook_event_name) || 'PermissionRequest');
+  const tool = String((payload && payload.tool_name) || '');
+  if (tool !== 'AskUserQuestion') return event === 'PermissionRequest';
+  if (event !== 'PreToolUse') return false;
+  const list = input && Array.isArray(input.questions) ? input.questions : null;
+  if (list && list.length !== 1) return false;
+  const q = questionOf(input);
+  return !!(q && q.options.length);
+}
+
 // A request arrived. Returns a promise with the verdict for the hook; `null`
 // means "the office steps aside" — the hook answers with nothing and the
 // terminal asks.
@@ -127,6 +161,7 @@ export function ask(payload, { audience }) {
   // Nobody watching means nobody to answer. Holding a question in an office
   // nobody opened steals nine minutes from the person at the terminal.
   if (!audience) return { held: false, verdict: null };
+  if (!holdable(payload, input)) return { held: false, verdict: null };
 
   const e = {
     id: crypto.randomUUID().slice(0, 8),
@@ -135,8 +170,10 @@ export function ask(payload, { audience }) {
     command: cut(commandOf(tool, input)),
     description: cut((input && input.description) || ''),
     // The options of a question travel with it: «allow or deny» says nothing
-    // about a question whose answer is one of four.
-    question: questionOf(input),
+    // about a question whose answer is one of four. Only a real question gets
+    // them: an MCP tool with a `question` field is still a tool asking to run,
+    // and the card must offer it allow and deny, not options.
+    question: tool === 'AskUserQuestion' ? questionOf(input) : null,
     rule: ruleOf(payload && payload.permission_suggestions),
     suggestions: (payload && payload.permission_suggestions) || [],
     at: Date.now(),
@@ -164,10 +201,25 @@ function finish(id, verdict) {
 
 // The owner's answer. `always` is allow plus a rule in the project settings;
 // `terminal` is the office stepping aside, as on a timeout.
-export function answer(id, { decision, message } = {}) {
+//
+// A question takes `answer` with the label of the option pressed, and nothing
+// that allows: letting `AskUserQuestion` run without answers only draws the
+// client's own picker, which is `terminal` by a longer road. The label must be
+// one of the options — the key the hook sends back is the question's own
+// text, and a value the agent was never offered is not an answer to it.
+export function answer(id, { decision, message, label } = {}) {
   const e = waiting.get(id);
   if (!e) return null;
   if (decision === 'terminal') return finish(id, null) ? { ok: true, decision } : null;
+  if (e.question) {
+    if (decision === 'answer') {
+      const o = e.question.options.find((x) => x.label === String(label || ''));
+      if (!o) return null;
+      return finish(id, { decision: 'answer', answers: { [e.question.text]: o.label } })
+        ? { ok: true, decision } : null;
+    }
+    if (decision !== 'deny') return null;
+  }
   if (decision === 'allow' || decision === 'always') {
     return finish(id, {
       decision: 'allow',

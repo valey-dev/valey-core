@@ -86,6 +86,8 @@ Finished work goes on the board in the room. `.md` renders, code is highlighted,
 
 When Claude Code needs a yes — *Allow Claude to run …?* — it can ask you here instead of only in the terminal you are not looking at. A pager slides into the corner and beeps, `Enter` opens the request where you stand, `Esc` puts it off and leaves a counter in the top bar that `H` brings back. The card shows the command in full, the description the agent gave it, and the rule that "always allow" would write — the same rule the native button writes, into the same file.
 
+The same pager carries the agent's questions — the multiple-choice ones Claude Code asks with `AskUserQuestion`. The card shows the options with the sentence under each, and the one you press is the answer: the agent gets it exactly as if you had clicked it in the client.
+
 It is off until you install the hook, because it edits how your terminal behaves. In `~/.claude/settings.json`:
 
 ```json
@@ -93,10 +95,15 @@ It is off until you install the hook, because it edits how your terminal behaves
   "hooks": {
     "PermissionRequest": [
       { "hooks": [{ "type": "command", "command": "node /path/to/valey-core/tools/permit.mjs" }] }
+    ],
+    "PreToolUse": [
+      { "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "node /path/to/valey-core/tools/permit.mjs" }] }
     ]
   }
 }
 ```
+
+The second entry is what lets a question be answered from the office. It has to be `PreToolUse`: the desktop app draws its own question picker without waiting for `PermissionRequest`, so an answer sent there lands nowhere; `PreToolUse` runs before the picker is drawn. Keep the `matcher` — without it the hook runs before every tool call. A batch of several questions still goes to the client whole: the card has room for one.
 
 While the office holds a question, the terminal stays quiet — so the hook is built to get out of the way at the first sign of trouble. Office not running, nobody looking at it, nine minutes with no answer, the hook killed: every one of those hands the question straight back, and Claude Code asks you itself. `VALEY_URL` points it at an office on another port.
 

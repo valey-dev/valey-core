@@ -1,12 +1,28 @@
 #!/usr/bin/env node
-// The `PermissionRequest` hook: it carries the question "may I run this?" into
-// the office and brings the answer back. Installed in `~/.claude/settings.json`:
+// The hook that carries a request into the office and brings the answer back.
+// One script, two doors, told apart by `hook_event_name`:
+//
+//  - `PermissionRequest` — "may I run this?" for commands and edits;
+//  - `PreToolUse` on `AskUserQuestion` — a question the agent asks the person.
+//    It has to be this door: the desktop app draws its question picker without
+//    waiting for `PermissionRequest`, while `PreToolUse` runs before the picker
+//    and its answer was measured to land (server/permit.js tells the story).
+//
+// Installed in `~/.claude/settings.json`:
 //
 //   "hooks": {
 //     "PermissionRequest": [
 //       { "hooks": [{ "type": "command", "command": "node ~/…/valey-core/tools/permit.mjs" }] }
+//     ],
+//     "PreToolUse": [
+//       { "matcher": "AskUserQuestion",
+//         "hooks": [{ "type": "command", "command": "node ~/…/valey-core/tools/permit.mjs" }] }
 //     ]
 //   }
+//
+// The matcher matters: without it the hook runs before every tool call. The
+// office would let those through at once — it holds nothing but questions at
+// this door — but every call would still pay for a round trip.
 //
 // Everything here obeys one rule: **the office has no right to get in the way of
 // work**. It is off, it is busy, it answers nonsense, it is broken — the hook
@@ -20,6 +36,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { hookOutput } from './lib/permit-verdict.mjs';
 
 // Which office the questions go to. VALEY_URL wins — that is how a stand or a
 // second machine is pointed somewhere else on purpose — then the canonical port
@@ -81,20 +98,7 @@ try {
   // person.
 }
 
-if (!answer || !answer.decision) passThrough();
-
-// The office's verdict, in the shape Claude Code expects. The rules for "always
-// allow" travel as the very objects that arrived in permission_suggestions: the
-// office does not invent them, it returns them — and Claude Code writes them
-// itself, in the same place the "Always allow" button would have.
-const out = {
-  hookEventName: 'PermissionRequest',
-  decision: answer.decision,
-};
-if (answer.decision === 'allow' && (answer.updatedPermissions || []).length) {
-  out.updatedPermissions = answer.updatedPermissions;
-}
-if (answer.decision === 'deny') out.message = answer.message || 'denied in the office';
-
-process.stdout.write(JSON.stringify({ hookSpecificOutput: out }));
+const out = hookOutput(payload, answer);
+if (!out) passThrough();
+process.stdout.write(JSON.stringify(out));
 process.exit(0);
