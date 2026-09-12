@@ -10,6 +10,7 @@
 //   node tools/shot.mjs --url .../soon.html --viewport 390,900   # a phone's width
 //   node tools/shot.mjs --eval "document.title"   # look inside the live page
 //   node tools/shot.mjs --video .shots/v0.2.0.mp4 --keys Enter,hold-w:4000
+//   node tools/shot.mjs --help                 # this text, down to the traps
 //
 // --keys walks the office through CDP, step by step, to reach the right place:
 //   Enter        press and release
@@ -52,10 +53,12 @@
 //    So each frame's duration is taken from its own timestamp rather than
 //    computed as 1/30: otherwise the walk down the corridor runs faster and
 //    slower than it was recorded.
-// 4. A killed run leaves a live Chrome behind, and it holds port 9222. The next
-//    run then hangs in silence — wait as long as you like, no frame comes, and
-//    it looks like "the office broke" rather than "the screenshot broke". On
-//    2 September 2026 that cost two runs in a row. Cured before starting:
+// 4. A killed run leaves a live Chrome behind. Until 6 September 2026 it held
+//    port 9222 and the next run hung in silence, which looked like "the office
+//    broke" rather than "the screenshot broke" — two runs in a row on
+//    2 September. The port is free now, so the orphan only wastes memory and a
+//    profile in the temp folder, and since 12 September Ctrl-C and SIGTERM put
+//    Chrome away too: only SIGKILL still leaves one. Cured by hand:
 //        pgrep -f 'user-data-dir=/var/folders/.*/T/valey-shot-' | xargs kill
 //    The whole pattern is mandatory: `pkill -f chrome` takes the user's browser
 //    with it.
@@ -64,6 +67,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { cdp } from './cdp.mjs';
+
+// --help prints the header above rather than a copy of it: two texts about the
+// same flags drift apart on the first edit, and the header is the one people read.
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  const head = readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1);
+  const end = head.findIndex((l) => l.startsWith('// ---'));
+  console.log(head.slice(0, end).map((l) => l.replace(/^\/\/ ?/, '')).join('\n').trimEnd());
+  process.exit(0);
+}
 
 const CHROME = process.env.CHROME_PATH
   || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -166,22 +181,41 @@ const chrome = spawn(CHROME, [
   '--hide-scrollbars', `--remote-debugging-port=${PORT_CDP}`,
   `--window-size=${size}`, ...extraFlags, 'about:blank',
 ], { stdio: 'ignore', detached: true });
+// A wrong CHROME_PATH is an 'error' event on the child, and unheard it killed the
+// run with a Node stack trace — the hint below about CHROME_PATH never printed.
+let chromeFailed = null;
+chrome.on('error', (err) => { chromeFailed = err; });
 
 let ws;
+const exited = new Promise((r) => chrome.once('exit', r));
 const bye = async (code) => {
   try { ws?.close(); } catch { /* already closed */ }
   try { process.kill(-chrome.pid); } catch { try { chrome.kill(); } catch { /* already dead */ } }
+  // The profile goes only once Chrome is gone: a dying Chrome still writes into
+  // it, and removed any earlier the folder came back. Every run left one in the
+  // temp folder — 296 of them by 12 September 2026, five out of five runs.
+  if (chrome.exitCode === null && chrome.signalCode === null && !chromeFailed) {
+    await Promise.race([exited, wait(3000)]);
+  }
   await fs.rm(profile, { recursive: true, force: true }).catch(() => {});
   process.exit(code);
 };
+// A run stopped by Ctrl-C or by a timeout's SIGTERM used to leave its Chrome
+// and its profile behind: trap 4 above.
+process.on('SIGINT', () => bye(130));
+process.on('SIGTERM', () => bye(143));
 
 try {
   // the port does not open instantly, and asking too early is an ECONNREFUSED
   let ready = false;
-  for (let i = 0; i < 60 && !ready; i++) {
+  for (let i = 0; i < 60 && !ready && !chromeFailed; i++) {
     try { await fetch(`http://127.0.0.1:${PORT_CDP}/json/version`); ready = true; } catch { await wait(250); }
   }
+  if (chromeFailed) throw new Error(`Chrome did not start (${chromeFailed.code || chromeFailed.message}); check CHROME_PATH`);
   if (!ready) throw new Error('Chrome did not open its debugging port; check CHROME_PATH');
+  // Node 22 has a global WebSocket, Node 18 and 20 do not; without this line
+  // the run failed with a bare «WebSocket is not defined».
+  if (typeof WebSocket === 'undefined') throw new Error(`no global WebSocket in Node ${process.versions.node}; shot.mjs needs Node 22`);
 
   const target = await (await fetch(
     `http://127.0.0.1:${PORT_CDP}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' },
@@ -190,17 +224,7 @@ try {
   ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', rej); });
 
-  let id = 0;
-  const pending = new Map();
-  const onEvent = new Map();
-  ws.addEventListener('message', (e) => {
-    const m = JSON.parse(e.data);
-    if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); return; }
-    if (m.method && onEvent.has(m.method)) onEvent.get(m.method)(m.params);
-  });
-  const send = (method, params = {}) => new Promise((res) => {
-    const n = ++id; pending.set(n, res); ws.send(JSON.stringify({ id: n, method, params }));
-  });
+  const { send, on } = cdp(ws);
 
   // the tab is reused between runs, and without this you can get a frame of the
   // old code — fresh-looking and in fact stale
@@ -242,11 +266,13 @@ try {
     await fs.rm(framesDir, { recursive: true, force: true }).catch(() => {});
     await fs.mkdir(framesDir, { recursive: true });
     const writes = [];
-    onEvent.set('Page.screencastFrame', (p) => {
+    on('Page.screencastFrame', (p) => {
       const file = path.join(framesDir, `f${String(frames.length).padStart(5, '0')}.jpg`);
       frames.push({ file, at: p.metadata.timestamp });
       writes.push(fs.writeFile(file, Buffer.from(p.data, 'base64')));
-      send('Page.screencastFrameAck', { sessionId: p.sessionId });
+      // Nobody awaits an acknowledgement: a late one refused after the stream
+      // stopped must not become an unhandled rejection that ends the run.
+      send('Page.screencastFrameAck', { sessionId: p.sessionId }).catch(() => {});
     });
     frames.writes = writes;
     const [w, h] = size.split(',').map(Number);
