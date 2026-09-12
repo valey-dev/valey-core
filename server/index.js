@@ -14,7 +14,7 @@ import {
 import { deliver, deliveryStatus, forgetCli, isBusy, MODES } from './deliver.js';
 import { ask as askPermit, answer as answerPermit, permits, forgetGone } from './permit.js';
 import { releaseNudge } from './release.js';
-import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset } from './modules.js';
+import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleVisitors, moduleAll, setModuleOff, moduleAsset } from './modules.js';
 import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
 import { MIME, fileType, fileHeaders } from './files.js';
 import { listenFree } from './port.js';
@@ -70,11 +70,26 @@ let taskSeq = 0;
 // The list is an allowlist rather than a denylist, and that is not taste: the
 // snapshot is assembled from a transcript, and with a denylist the next field
 // added there would go out in silence.
+//
+// `visitor` is set only on an agent from another machine (see admitVisitors):
+// whose agent it is. A guest has to see it as much as the owner does, or the
+// guest's card says "the server withholds this" about a transcript this office
+// never had.
 const SHOWN = [
   'id', 'name', 'gender', 'project', 'seat', 'role', 'roleKey',
   'status', 'act', 'activity', 'mood', 'idleFor', 'startedAt',
-  'limited', 'version', 'stack', 'trinkets',
+  'limited', 'version', 'stack', 'trinkets', 'visitor',
 ];
+
+// One agent cut down to the projection. Handed to modules as well: an office
+// that sends its agents to somebody else's floor cuts them by this same list
+// before they leave, and a second copy of the list inside a module would drift
+// from this one without anybody noticing.
+function shown(a) {
+  const out = {};
+  for (const k of SHOWN) if (a[k] !== undefined) out[k] = a[k];
+  return out;
+}
 
 // Who was granted what: guest id -> Set of agent ids. Lives in memory and only
 // there — a grant must not survive an office restart, just as presence does
@@ -145,8 +160,7 @@ function project(snapshot, guestId) {
     release: null,
     agents: (snapshot.agents || []).map((a) => {
       if (granted(guestId, a.id)) return a;
-      const out = {};
-      for (const k of SHOWN) if (a[k] !== undefined) out[k] = a[k];
+      const out = shown(a);
       // outbox is the notes on the desk: a guest leaves them himself and they
       // are about him. The agent's reply is cut out of them by the same rule.
       out.outbox = (a.outbox || []).map((t) => ({
@@ -156,6 +170,78 @@ function project(snapshot, guestId) {
     }),
   };
 }
+
+// ------------------------------------------------------------- the visitors
+// Agents of another participant, brought onto this floor by a module (the
+// shared floor). What arrives came from somebody else's machine, so it is
+// sieved here by the same allowlist a guest's projection is cut by. The other
+// office has already cut it on its own side; this is the half of the promise
+// that does not depend on the other side keeping it. A transcript sent by a
+// broken or hostile office stops here rather than on the page.
+//
+// Every visitor carries `visitor: { id, name }` — whose agent it is. The page
+// reads it to close the card, and the core reads it to refuse what only the
+// agent's own machine could do: its conversation, its chat, a note on its desk.
+const VISITOR_ID = /^[A-Za-z0-9-]{1,64}$/;
+const VISITOR_TEXT = 200;
+
+// Values one level deep at most: `act` is { key, arg } and `limited` is
+// { text, resets }, and nothing in the projection goes deeper than that.
+function sieve(v, depth = 0) {
+  if (typeof v === 'string') return v.slice(0, VISITOR_TEXT);
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'boolean' || v === null) return v;
+  if (depth > 0 || typeof v !== 'object') return undefined;
+  if (Array.isArray(v)) return v.slice(0, 16).map((x) => sieve(x, 1)).filter((x) => x !== undefined);
+  const out = {};
+  for (const [k, x] of Object.entries(v).slice(0, 16)) {
+    const s = sieve(x, 1);
+    if (s !== undefined) out[k] = s;
+  }
+  return out;
+}
+
+// Seats are handed out here rather than taken from the other office: its seat
+// numbers count its own rooms, and a visitor in a project this office also
+// works on would sit on somebody's lap. Own agents keep their seats, visitors
+// take the free ones in the order they came. An id this floor already has is
+// dropped rather than merged — a copy of an agent's id is how a visitor would
+// put words in the mouth of one of ours.
+function admitVisitors(list, own) {
+  const ids = new Set(own.map((a) => a.id));
+  const used = new Map();
+  const take = (project, seat) => {
+    if (!used.has(project)) used.set(project, new Set());
+    used.get(project).add(seat);
+  };
+  for (const a of own) take(a.project, a.seat);
+  const out = [];
+  for (const raw of Array.isArray(list) ? list : []) {
+    if (!raw || typeof raw !== 'object' || !raw.visitor || !raw.visitor.id) continue;
+    const id = String(raw.id || '');
+    if (!VISITOR_ID.test(id) || ids.has(id)) continue;
+    const a = {};
+    for (const k of SHOWN) {
+      if (k === 'seat' || k === 'visitor') continue;
+      const s = sieve(raw[k]);
+      if (s !== undefined) a[k] = s;
+    }
+    if (typeof a.project !== 'string' || !a.project || typeof a.name !== 'string') continue;
+    ids.add(id);
+    let seat = 0;
+    while (used.get(a.project)?.has(seat)) seat += 1;
+    take(a.project, seat);
+    a.seat = seat;
+    a.visitor = {
+      id: String(raw.visitor.id).slice(0, 32),
+      name: String(raw.visitor.name || '').slice(0, 24),
+    };
+    out.push(a);
+  }
+  return out;
+}
+
+const visitorOf = (agentId) => (last.agents || []).find((a) => a.id === agentId && a.visitor) || null;
 
 // ------------------------------------------------------------------ the owner
 // Anyone may watch; only the owner may command. The right lives in the token in
@@ -316,6 +402,9 @@ async function tick() {
     // version and no release nudge yet. A stand caught exactly that on
     // 12 September 2026, once in a full run under load and never alone.
     const next = await snapshot();
+    // Visitors join before anything else reads the floor: the outbox, the
+    // question sweep and the observers all see one floor, with them on it.
+    next.agents.push(...admitVisitors(await moduleVisitors(), next.agents));
     next.version = VERSION;
     const settings = await getSettings();
     // The owner can put the video nudge away (releaseNudge: false) while videos
@@ -616,6 +705,9 @@ async function handle(req, res) {
     const b = await readJson(req);
     const agentId = String(b.agentId || '');
     if (!agentId) return send(res, 400, { error: 'agentId is required' });
+    // This owner has nothing of a visitor's to open: the conversation is on
+    // the other machine. Granting it here would be a yes with nothing behind it.
+    if (visitorOf(agentId)) return send(res, 409, { error: 'this agent lives on another machine', errorKey: 'err.visitor' });
     asks.set(askKey(guest.guest, agentId), {
       id: crypto.randomUUID().slice(0, 8),
       guestId: guest.guest, agentId,
@@ -795,6 +887,7 @@ async function handle(req, res) {
     }
     const agent = last.agents.find((a) => a.id === id);
     if (!agent) return send(res, 404, { error: 'this agent is not in the office', errorKey: 'err.noSuchAgent' });
+    if (agent.visitor) return send(res, 409, { error: 'this agent lives on another machine', errorKey: 'err.visitor' });
     return send(res, 200, { agent: { id, name: agent.name, title: agent.title }, messages: conversation(id) });
   }
 
@@ -807,6 +900,10 @@ async function handle(req, res) {
       // starts claude --resume in a live session, and with bypassPermissions
       // that is the terminal. Watching is allowed, commanding is not.
       if ((wantsDelivery || resend) && !(await isOwner(req))) return forbidden(res);
+      // A visitor's desk is on the other machine. A note left here would lie
+      // on a desk its agent never sits at, and sending into the chat would run
+      // claude --resume on this machine against a session id it has never had.
+      if (visitorOf(agentId)) return send(res, 409, { error: 'this agent lives on another machine', errorKey: 'err.visitor' });
       // A note already lying on the desk can be handed over to the chat as it is:
       // it moves rather than multiplies, so the desk does not keep a stale twin.
       const lying = resend
@@ -1086,7 +1183,11 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   // holding a secret in settings had nowhere to read it at request time. The
   // voice needs it for temporary relay credentials, which must be computed per
   // request and must never be written into the page.
-  const mods = await loadModules(ROOT, { people: livePeople, toPerson, settings: getSettings });
+  // `shown` and `guestOf` are the shared floor's: one office cuts its agents
+  // by the projection before they leave, the other asks whose invitation the
+  // arriving request holds. Both are the office's own answers, handed down
+  // rather than copied — a copy would drift from the one the guests get.
+  const mods = await loadModules(ROOT, { people: livePeople, toPerson, settings: getSettings, shown, guestOf });
   let boot = await getSettings();
   const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
   if (external && !(boot.network || {}).token) {
