@@ -65,7 +65,13 @@ const CORE = [
   // camera" is the same intent as "left", and a person who moves left onto
   // another key expects the cameras to follow. Only the cycling switch is the
   // control room's own.
-  { id: 'cams.auto', codes: ['KeyT'], group: 'panel', hint: 'hint.cams', more: 'hint.camsMore' },
+  //
+  // `only` names the one place the action answers in. onKey reaches cams.auto
+  // only inside the cctv branch, so on the floor T does nothing — and until
+  // 12 September 2026 the floor's keys board still offered it as «смена камер ·
+  // по кругу», a promise the key never kept. The control room's own board
+  // names T itself; every board built from the registry now leaves it out.
+  { id: 'cams.auto', codes: ['KeyT'], group: 'panel', hint: 'hint.cams', more: 'hint.camsMore', only: 'cctv' },
   { id: 'zoom.in', codes: ['Equal', 'NumpadAdd'], group: 'zoom', hint: 'hint.zoomIn' },
   { id: 'zoom.out', codes: ['Minus', 'NumpadSubtract'], group: 'zoom', hint: 'hint.zoomOut' },
   { id: 'zoom.reset', codes: ['Digit0', 'Numpad0'], group: 'zoom', hint: 'hint.zoomFit' },
