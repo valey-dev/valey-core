@@ -4,6 +4,34 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.39.0 — 12 September 2026
+
+### Added
+
+- **release:** ship stops at staging, and promote publishes a version the owner has looked at (fffea7d)
+
+### Other
+
+- docs(notes): the note for splitting release from publication (5a304fc)
+## v0.38.1 — 12 September 2026
+
+### Fixed
+
+- **install:** --run no longer promises an address before the office has one (42ae59e)
+## v0.38.0 — 12 September 2026
+
+### Added
+
+- **install:** the installer asks where the office goes, and updates the one already there (841e30a)
+
+### Fixed
+
+- **server:** an office from before v0.33.0 on the port is recognised, and a different version says how to replace it (0d3efce)
+
+### Other
+
+- docs(readme): drop the sentence about the "!" rather than explain it (da376c5)
+- docs(readme): sessions get a "!" over their heads, they do not wave (bba87a8)
 ## v0.37.0 — 12 September 2026
 
 ### Added

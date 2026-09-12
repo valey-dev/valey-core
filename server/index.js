@@ -1015,7 +1015,7 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   // office there means this one has nothing to do; something else means the
   // next port up, said out loud — the canonical-port line below then explains
   // what that costs.
-  const bound = await listenFree(server, port, HOST, { log: console.log });
+  const bound = await listenFree(server, port, HOST, { log: console.log, own: VERSION });
   if (bound === null) return null;
   port = bound;
   const token = await ownerToken();

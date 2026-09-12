@@ -42,13 +42,34 @@ const server = createServer((req, res) => {
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const BASE = `http://127.0.0.1:${server.address().port}`;
 
+// `dir` null leaves --dir out, which is what makes the script ask where to go.
 const run = (dir, extra = [], env = {}) => new Promise((resolve) => {
-  execFile('sh', [SCRIPT, `--dir=${dir}`, '--version=9.9.9', ...extra],
+  execFile('sh', [SCRIPT, ...(dir ? [`--dir=${dir}`] : []), '--version=9.9.9', ...extra],
     // Pinned, not inherited: the stand must not pass or fail on whoever's
-    // machine it runs on having a Russian locale.
-    { env: { ...process.env, VALEY_BASE: BASE, LC_ALL: 'ru_RU.UTF-8', LANG: 'ru_RU.UTF-8', ...env }, encoding: 'utf8' },
+    // machine it runs on having a Russian locale. And no terminal by default —
+    // run from a shell, the script would otherwise ask the person at it.
+    { env: { ...process.env, VALEY_BASE: BASE, LC_ALL: 'ru_RU.UTF-8', LANG: 'ru_RU.UTF-8',
+      VALEY_TTY: path.join(work, 'no-terminal'), ...env }, encoding: 'utf8' },
     (err, stdout, stderr) => resolve({ code: err ? err.code ?? 1 : 0, out: stdout + stderr }));
 });
+// A terminal that answers: one line per question, in order.
+let answersN = 0;
+const answers = (...lines) => {
+  const file = path.join(work, `answers-${++answersN}`);
+  writeFileSync(file, lines.map((l) => l + '\n').join(''));
+  return file;
+};
+// An office already on disk: a version and, optionally, a paid module in it.
+const office = (dir, version, modules = []) => {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'valey', version }) + '\n');
+  for (const m of modules) {
+    mkdirSync(path.join(dir, 'modules', m), { recursive: true });
+    writeFileSync(path.join(dir, 'modules', m, 'module.json'), JSON.stringify({ id: m }) + '\n');
+  }
+  return dir;
+};
+const versionOf = (dir) => JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')).version;
 
 try {
   // Happy path: the office lands and the script does not start it unasked.
@@ -64,10 +85,68 @@ try {
   assert.deepEqual(asked, ['/dist/9.9.9/valey-9.9.9.tar.gz', '/dist/9.9.9/valey-9.9.9.tar.gz.sha256'],
     `скрипт ходит не по тем адресам: ${asked.join(' ')}`);
 
-  // Refuses to write into a place that already has something in it.
+  // Without a terminal nobody can be asked, so a taken place is refused — and
+  // an office there is named, with the flag that updates it.
   r = await run(good);
-  assert.notEqual(r.code, 0, 'перезаписал непустую папку');
+  assert.notEqual(r.code, 0, 'без терминала перезаписал офис');
+  assert.match(r.out, /уже стоит офис v9\.9\.9.*--update/);
+  const junk = path.join(work, 'junk');
+  mkdirSync(junk); writeFileSync(path.join(junk, 'notes.txt'), 'mine\n');
+  r = await run(junk);
+  assert.notEqual(r.code, 0, 'перезаписал чужую непустую папку');
   assert.match(r.out, /уже что-то лежит/);
+  assert.equal(readFileSync(path.join(junk, 'notes.txt'), 'utf8'), 'mine\n', 'тронул чужой файл');
+
+  // --update: the old office moves aside, the new one takes its place, and a
+  // module the archive does not carry — a paid one — comes across.
+  const upd = office(path.join(work, 'upd'), '1.0.0', ['easel']);
+  r = await run(upd, ['--update']);
+  assert.equal(r.code, 0, `обновление упало: ${r.out}`);
+  assert.equal(versionOf(upd), '9.9.9', 'версия не сменилась');
+  assert.equal(versionOf(upd + '.v1.0.0'), '1.0.0', 'прежний офис не отложен в сторону');
+  assert.ok(existsSync(path.join(upd, 'modules', 'easel', 'module.json')), 'платный модуль потерялся');
+  assert.match(r.out, /Офис обновлён: v1\.0\.0 → v9\.9\.9/);
+  assert.match(r.out, /Перенёс модули: easel/);
+
+  // The same version is left alone: nothing to update, nothing moved aside.
+  r = await run(upd, ['--update']);
+  assert.equal(r.code, 0);
+  assert.match(r.out, /эта же версия/);
+  assert.ok(!existsSync(upd + '.v9.9.9'), 'отложил в сторону ту же версию');
+
+  // In a terminal the place is asked, Enter meaning ~/valey.
+  const home = path.join(work, 'home');
+  mkdirSync(home);
+  r = await run(null, [], { HOME: home, VALEY_TTY: answers('') });
+  assert.equal(r.code, 0, `установка по Enter упала: ${r.out}`);
+  assert.match(r.out, /Куда поставить офис\? Enter — ~\/valey/);
+  assert.equal(versionOf(path.join(home, 'valey')), '9.9.9', 'Enter не поставил в ~/valey');
+  // ~ in a typed answer is the home folder, not a folder called «~».
+  r = await run(null, [], { HOME: home, VALEY_TTY: answers('~/elsewhere') });
+  assert.equal(versionOf(path.join(home, 'elsewhere')), '9.9.9', '~/ в ответе не раскрылся');
+
+  // An office in the way: 2 puts a second one beside it and leaves the first.
+  const two = office(path.join(work, 'two'), '1.0.0');
+  r = await run(two, [], { VALEY_TTY: answers('2') });
+  assert.equal(r.code, 0, `установка рядом упала: ${r.out}`);
+  assert.match(r.out, /уже стоит офис v1\.0\.0, а ставится v9\.9\.9/);
+  assert.equal(versionOf(two), '1.0.0', 'первый офис тронут');
+  assert.equal(versionOf(two + '-2'), '9.9.9', 'второй не встал рядом');
+  // Enter is the first option, the update.
+  r = await run(two, [], { VALEY_TTY: answers('') });
+  assert.equal(versionOf(two), '9.9.9', 'Enter не обновил');
+  // 3 leaves, and nothing on disk changes.
+  const stay = office(path.join(work, 'stay'), '1.0.0');
+  r = await run(stay, [], { VALEY_TTY: answers('3') });
+  assert.equal(r.code, 0);
+  assert.match(r.out, /Ничего не менял/);
+  assert.equal(versionOf(stay), '1.0.0', 'выход тронул офис');
+
+  // Something that is not an office: offered the next free place, yes by Enter.
+  r = await run(junk, [], { VALEY_TTY: answers('') });
+  assert.equal(r.code, 0, `установка мимо чужой папки упала: ${r.out}`);
+  assert.match(r.out, /и это не офис/);
+  assert.equal(versionOf(junk + '-2'), '9.9.9', 'не поставил в свободную рядом');
 
   // A tampered archive must leave nothing behind. This is the whole reason the
   // checksum is fetched at all, and the one case worth being loud about.
@@ -126,7 +205,7 @@ try {
   const noPack = await run(path.join(work, 'nopack'), ['--pack=/nope/nothing.zip']);
   assert.notEqual(noPack.code, 0, 'проглотил отсутствующий пакет модулей');
 
-  console.log('установщик: 19 проверок прошли');
+  console.log('install.sh: 51 checks passed');
 } finally {
   server.close();
   rmSync(work, { recursive: true, force: true });
