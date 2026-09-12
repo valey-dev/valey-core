@@ -238,10 +238,15 @@ export function keyIn(placeId, code) {
   if (p.mute.includes(code)) return { lit: false, caption: null, action };
   // «?» answers everywhere the office is still listening at all.
   if (action && action.id === ALWAYS) return { lit: !p.deaf, caption: p.deaf ? null : action.hint, action };
-  // And the floor answers wherever the panel let the key through.
-  if (p.registry && action) return { lit: true, caption: action.hint || null, action };
+  // And the floor answers wherever the panel let the key through — except with
+  // an action that works in one other place only: that key is not the floor's.
+  if (p.registry && action && fits(action, p)) return { lit: true, caption: action.hint || null, action };
   return { lit: false, caption: null, action };
 }
+
+// An action declared with `only` answers in that place alone (see cams.auto in
+// web/keymap.js); a board built from the registry anywhere else leaves it dark.
+const fits = (action, p) => !action.only || action.only === p.id;
 
 /** Every code the place lights, for a stand to count without redrawing a board. */
 export function litCodes(placeId) {
@@ -249,7 +254,7 @@ export function litCodes(placeId) {
   if (!p) return [];
   const out = new Set(Object.keys(p.caps));
   if (!p.deaf) for (const c of codesOf(ALWAYS)) out.add(c);
-  if (p.registry) for (const a of all()) for (const c of a.codes) out.add(c);
+  if (p.registry) for (const a of all()) if (fits(a, p)) for (const c of a.codes) out.add(c);
   for (const c of p.mute) out.delete(c);
   return [...out];
 }

@@ -35,6 +35,13 @@ ok('the free letter on the floor is not lit', keyIn('floor', 'KeyA').lit === fal
 // Esc and the digits belong to panels; on the floor they are not from here.
 ok('Esc on the floor is not lit', keyIn('floor', 'Escape').lit === false, keyIn('floor', 'Escape'));
 ok('the number on the floor is not lit', keyIn('floor', 'Digit1').lit === false, keyIn('floor', 'Digit1'));
+// T cycles the cameras and nothing else, and only with the cameras on: onKey
+// reaches cams.auto inside the cctv branch alone. Until 12 September 2026 the
+// floor's board still captioned it «смена камер» — a key that did nothing there.
+ok('T on the floor is dark: the cameras are the control room’s',
+  keyIn('floor', 'KeyT').lit === false && keyIn('floor', 'KeyT').caption === null, keyIn('floor', 'KeyT'));
+ok('and the floor does not count it among its keys', !litCodes('floor').includes('KeyT'), litCodes('floor'));
+ok('nor does a panel opened on the floor', keyIn('card', 'KeyT').lit === false, keyIn('card', 'KeyT'));
 
 // ------------------------------------------------------ standing at something
 // The cooler keeps the floor and renames one key. If it stopped carrying the
