@@ -1,0 +1,19 @@
+{
+  "tag": "v0.37.0",
+  "shots": [
+    {
+      "file": "piranha-tank-piranha-tank.png",
+      "slug": "piranha-tank",
+      "id": "piranha-tank",
+      "url": "#x=652",
+      "keys": "Enter,wait:1200"
+    },
+    {
+      "file": "piranha-tank-piranha-feeding.png",
+      "slug": "piranha-tank",
+      "id": "piranha-feeding",
+      "url": "#x=652",
+      "keys": "Enter,wait:1200,Space,wait:1400"
+    }
+  ]
+}
