@@ -1,7 +1,7 @@
 // The two languages of the office. The dictionary is flat: key → string, one
 // string per language.
 //
-// The language lives in .settings.json next to the weather rather than in
+// The language lives in the settings file next to the weather rather than in
 // localStorage: a person has one office, but several tabs of it, and a switch by
 // the little figure in the corridor has to reach all of them at once — over the
 // same stream of events the weather already travels on. main.js picks up
@@ -528,7 +528,7 @@ const DICT = {
     'bag.dressCode': 'дресс-код',
     'bag.casual': 'свободная одежда', 'bag.office': 'офисная',
     'bag.dressWho': 'на этаже {n} · переоденутся все сразу',
-    'bag.dressNote': 'Настройка офиса, а не браузера: лежит в .settings.json рядом с погодой и разлетается по всем открытым вкладкам. Агенты переодеваются на месте, без перезагрузки.',
+    'bag.dressNote': 'Настройка офиса, а не браузера: лежит в ~/.config/valey/settings.json рядом с погодой и разлетается по всем открытым вкладкам. Агенты переодеваются на месте, без перезагрузки.',
     'bag.rest': 'остальное про офис · настройка живёт на предмете, здесь адрес',
     'bag.langRow': 'язык офиса', 'bag.langSub': 'переключается у таблички в коридоре',
     'bag.skinRow': 'цвет офиса', 'bag.skinSub': 'весь коричневый выведен из одного тона',
@@ -1203,7 +1203,7 @@ const DICT = {
     'bag.dressCode': 'dress code',
     'bag.casual': 'casual', 'bag.office': 'office wear',
     'bag.dressWho': '{n} on the floor · everyone changes at once',
-    'bag.dressNote': 'A setting of the office, not of this browser: it lives in .settings.json next to the weather and reaches every open tab. Agents change where they stand, no reload.',
+    'bag.dressNote': 'A setting of the office, not of this browser: it lives in ~/.config/valey/settings.json next to the weather and reaches every open tab. Agents change where they stand, no reload.',
     'bag.rest': 'the rest of the office · the setting lives on an object, here is its address',
     'bag.langRow': 'office language', 'bag.langSub': 'switched at the sign in the corridor',
     'bag.skinRow': 'office colour', 'bag.skinSub': 'every brown derived from a single hue',

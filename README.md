@@ -38,6 +38,8 @@ VALEY_EXTERNAL=1 npm start
 #   http://<this-machine-address>:5177/?token=…
 ```
 
+It can also be opened and closed while the office runs, without a restart: `POST /api/network` with `open`, `close` or `rotate` (a new token), owner only. The live feed module puts that switch on the key shelf, with a QR code for the phone.
+
 * **Loopback is always its own.** The browser on this machine knows nothing
   about tokens, or `npm start` would stop being enough.
 * **The token in the address lives one request.** It arrives as `?token=`,

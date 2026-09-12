@@ -91,3 +91,11 @@
    music, read as an instruction manual laid over a record player. */
 .radiotune{display:flex; align-items:center; gap:10px; margin-top:6px}
 .radiotune .hint{margin:0; flex:1 1 auto}
+/* «настроить» moved here from a .radiorow on 6 September 2026 and left its
+   button rule behind: it drew as the browser's grey system button in Arial,
+   the only one in the office. Frame 572:2 draws it as the way out of the panel
+   — wood, the accent edge, 11 px. */
+.radiotune button{background:var(--wood); color:var(--ink); border:2px solid var(--accent);
+  font:11px "JetBrains Mono", "Courier New", monospace; padding:3px 8px; cursor:pointer;
+  white-space:nowrap; flex:none}
+:where(body:not(.bykeys)) .radiotune button:hover{background:var(--wood-lit); color:var(--warn)}
