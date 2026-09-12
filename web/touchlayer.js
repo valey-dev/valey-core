@@ -131,6 +131,12 @@ function enable() {
   on = true;
   document.body.classList.add('touch');
   if (!layer) build();
+  // Shown at once rather than by the next frame's showTouch(): the touch that
+  // woke the layer goes on to stickDown() in the same event, and a layer still
+  // hidden there dropped it — the first finger on a touchscreen laptop walked
+  // nobody, and the office read as deaf. The loop corrects this within a frame
+  // if a panel is actually open.
+  layer.hidden = false;
 }
 
 export function initTouch(options) {
