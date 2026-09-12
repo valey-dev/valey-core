@@ -78,6 +78,20 @@ const grants = new Map();
 
 const granted = (guestId, agentId) => !!(guestId && grants.get(guestId)?.has(agentId));
 
+// A guest who is no longer invited: the streams on his token are closed, and
+// what he asked for and was granted is forgotten. Called on revoke, and on
+// every tick for a token the settings no longer know — a mode switched back to
+// private, or an invitation edited out of the file by hand.
+function dropGuest(guestId) {
+  grants.delete(guestId);
+  for (const k of [...asks.keys()]) if (k.startsWith(guestId + ':')) asks.delete(k);
+  for (const res of [...clients]) {
+    if (res.valeyGuest !== guestId) continue;
+    clients.delete(res);
+    try { res.end(); } catch { /* already gone */ }
+  }
+}
+
 // Access requests. The key is the pair of guest and agent: a second request
 // from the same person about the same agent replaces the first rather than
 // piling up next to it. That way "ask again" does not become a way to push.
@@ -310,6 +324,12 @@ async function tick() {
     // later.
     await moduleObserve(last, prev);
     const full = `data: ${JSON.stringify(last)}\n\n`;
+    // A stream is only as invited as the settings say right now.
+    const acc = (await getSettings()).access;
+    const invited = new Set((acc.invites || []).map((i) => i.guest).filter(Boolean));
+    for (const res of [...clients]) {
+      if (res.valeyGuest && (acc.mode !== 'shared' || !invited.has(res.valeyGuest))) dropGuest(res.valeyGuest);
+    }
     // Guests get their own projection: each has his own set of what is open.
     for (const res of clients) {
       res.write(res.valeyGuest ? `data: ${JSON.stringify(project(last, res.valeyGuest))}\n\n` : full);
@@ -632,6 +652,11 @@ async function handle(req, res) {
     const s = await getSettings();
     const left = (s.access.invites || []).filter((i) => i.id !== b.id);
     await patchSettings({ access: { ...s.access, invites: left } });
+    // The token dies with the invitation, and so does everything that held it.
+    // Until 12 September 2026 only the next request was refused: a stream
+    // opened on the token kept receiving the projection — with the agent the
+    // guest had been granted — after the invitation was gone.
+    for (const i of (s.access.invites || [])) if (i.id === b.id && i.guest) dropGuest(i.guest);
     return send(res, 200, { ok: true, invites: left.map(safeInvite) });
   }
 
