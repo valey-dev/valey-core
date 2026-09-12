@@ -472,6 +472,37 @@ function textOf(content) {
 const IMAGE_RE = /\.(png|jpe?g|gif|svg|webp)$/i;
 const INTERRUPTED_RE = /^\[Request interrupted by user/;
 
+// Background work: a shell command started with run_in_background, or a
+// subagent (they run in the background by default). The tool answers at once
+// with one of these lines, and the agent may end its turn right after — not to
+// wait for anybody, but for its own work, which wakes it with a
+// <task-notification> naming the same tool_use id. Formats read off live
+// transcripts on 13 September 2026.
+//
+// The notification does not always come as a user line. A job that finishes
+// while the turn is still open is queued into it instead — a
+// `queue-operation` line and a `queued_command` attachment — and a stand that
+// only read user lines left 9 of 37 jobs in one transcript running forever.
+// So the id is crossed off wherever it is named. A job stopped by hand leaves
+// no marker at all ("these leave no transcript marker", says the app), and
+// that is what the hour in isRunning is for.
+const BACKGROUND_RE = /^(Command running in background with ID|Async agent launched)/;
+const NOTIFIED_RE = /<task-notification>/;
+const TOOL_USE_ID_RE = /<tool-use-id>([^<\s\\]+)<\/tool-use-id>/g;
+
+// How a turn ended, by what the agent said last. This repository asks every
+// answer to end with a report whose last line is «Что нужно от меня», and the
+// agent's own word there beats any guess from the protocol: «Ничего» means the
+// work is handed over and nothing is being asked, so it is not «waiting on
+// you». Until 13 September 2026 every end_turn was — 52 of 695 turn ends over
+// four days said «Ничего» and still rang the pager.
+//   'asked'   — the report names what only the person can do;
+//   'settled' — the report says nothing is needed;
+//   'bare'    — no report: another project, a question, a short answer.
+// An answer with no report keeps the old reading, because nothing better is
+// known about it.
+const endOf = (said) => (!said ? 'bare' : said.need ? 'asked' : 'settled');
+
 const RECENT_MAX = 16;
 const MSG_MAX = 12000;
 
@@ -492,7 +523,9 @@ function remember(st, role, text, ts) {
 function emptyState() {
   return {
     lastTs: 0, lastTool: null, lastToolInput: null, lastAssistantText: '',
-    lastUserPrompt: '', awaitingUser: false, acts: [], role: '', files: new Map(),
+    lastUserPrompt: '', acts: [], role: '', files: new Map(),
+    ended: '',               // how the turn ended, if it did — see endOf()
+    background: new Map(),   // tool_use id -> when that background job started
     turns: 0, model: '', branch: '', slug: '', title: '', aiTitle: '', task: null,
     bornAt: 0,             // the first reply in the file, see born()
     skills: newSkills(),   // the grade counter: it grows and is never trimmed
@@ -507,6 +540,11 @@ function applyLine(st, line) {
   let r;
   try { r = JSON.parse(line); } catch { return; }
   if (r.timestamp) st.lastTs = Math.max(st.lastTs, Date.parse(r.timestamp) || 0);
+  // Read off the raw line: the notification may sit in a user line, a queue
+  // operation or an attachment, and the ids read the same in all three.
+  if (st.background.size && NOTIFIED_RE.test(line)) {
+    for (const m of line.matchAll(TOOL_USE_ID_RE)) st.background.delete(m[1]);
+  }
   if (r.gitBranch) st.branch = r.gitBranch;
   if (r.slug) st.slug = r.slug;
   // what the chat is called in the app — two sessions can share a name, so it is
@@ -521,6 +559,7 @@ function applyLine(st, line) {
     st.model = r.message.model || st.model;
     const content = r.message.content || [];
     const txt = textOf(content);
+    const said = txt ? reportTail(txt) : null;
     if (txt) {
       st.lastAssistantText = txt; st.turns++; remember(st, 'assistant', txt, r.timestamp);
       // The same three numbers the deep pass keeps for the head of the file.
@@ -530,15 +569,19 @@ function applyLine(st, line) {
       // tail — going by the last one, the line went out exactly during the
       // minutes the work is happening, which is when it is wanted. Found on a
       // live stand on 5 September 2026.
-      const said = reportTail(txt);
       if (said) st.task = said;
     }
-    st.awaitingUser = r.message.stop_reason === 'end_turn';
     // An API error is written as a synthetic assistant message — model
     // «<synthetic>», stop_sequence — and it ends the turn the way end_turn does:
     // the app is back at the prompt. Read as an open turn it kept the agent
     // «working» on an error nobody was going to retry for it.
-    if (r.isApiErrorMessage) st.awaitingUser = true;
+    if (r.isApiErrorMessage) st.ended = 'error';
+    // The other synthetic line is the app's own «No response requested.»,
+    // written when a session is resumed, just before the prompt that resumed
+    // it. Nobody said it and it ends nothing: taken for a reply it was read as
+    // the agent's, and on 13 September 2026 it was apologised for as one.
+    else if (r.message.model === '<synthetic>') { /* neither opens nor closes a turn */ }
+    else st.ended = r.message.stop_reason === 'end_turn' ? endOf(said) : '';
     for (const b of Array.isArray(content) ? content : []) {
       if (b?.type !== 'tool_use') continue;
       const d = describeTool(b.name, b.input);
@@ -569,14 +612,25 @@ function applyLine(st, line) {
       // a prompt it kept the turn open, and under the hour above an interrupted
       // agent would sit «working» at a desk nobody was working at.
       if (INTERRUPTED_RE.test(txt)) {
-        st.awaitingUser = true;
+        st.ended = 'stopped';
+      } else if (NOTIFIED_RE.test(txt)) {
+        // Background work reported back (crossed off above). The app hands the
+        // news to the model, which takes the turn back — so this opens it,
+        // without being a prompt anybody typed. A job stopped by a restart
+        // reports here too, on the next start.
+        st.ended = '';
       } else if (txt && !txt.startsWith('<')) {
         st.lastUserPrompt = txt.slice(0, 400);
-        st.awaitingUser = false;
+        st.ended = '';
         remember(st, 'user', txt, r.timestamp);
       }
     } else {
-      st.awaitingUser = false;
+      for (const b of content) {
+        if (b?.type === 'tool_result' && BACKGROUND_RE.test(textOf(b.content))) {
+          st.background.set(b.tool_use_id, Date.parse(r.timestamp || '') || st.lastTs);
+        }
+      }
+      st.ended = '';
     }
   }
 }
@@ -892,8 +946,23 @@ const STEP_MS = 60 * 60_000;
 
 // 'working' | 'awaiting' | 'idle', from the parsed transcript alone — so a stand
 // can drive it with lines and a clock of its own.
+//
+// «Awaiting» means the agent has done its part and the next move is the
+// person's. An explicit ask always is; an interrupt and an API error are too —
+// the agent stopped and will not go on by itself. A turn ended with background
+// work still running is not: the agent is waiting on its own job and will be
+// woken by it, so it is working, under the same hour as an open turn. A report
+// that says «Ничего» is the agent at rest.
+// A job counts for an hour from its start, the same hour an open turn gets: one
+// stopped by hand never reports, and without the limit the agent that started
+// it would never be seen waiting again.
+const isRunning = (t, now) => [...(t.background || new Map()).values()].some((at) => now - at < STEP_MS);
+
 export function statusOf(t, now = Date.now()) {
-  if (t.awaitingUser) return 'awaiting';
+  const own = isRunning(t, now);
+  if (t.ended === 'asked' || t.ended === 'stopped' || t.ended === 'error') return 'awaiting';
+  if (t.ended === 'bare' && !own) return 'awaiting';
+  if (t.ended === 'settled' && !own) return 'idle';
   const idleFor = t.lastTs ? now - t.lastTs : Infinity;
   return idleFor < STEP_MS ? 'working' : 'idle';
 }
@@ -945,8 +1014,8 @@ export async function snapshot() {
       role: roleInfo.role,
       roleKey: roleInfo.short,
       status,
-      act: busy ? { key: act.key, arg: act.arg || '' } : { key: t.awaitingUser ? 'awaiting' : 'idle', arg: '' },
-      activity: busy ? actEn(act) : (t.awaitingUser ? ACT_EN.awaiting : ACT_EN.idle),
+      act: busy ? { key: act.key, arg: act.arg || '' } : { key: status === 'awaiting' ? 'awaiting' : 'idle', arg: '' },
+      activity: busy ? actEn(act) : (status === 'awaiting' ? ACT_EN.awaiting : ACT_EN.idle),
       mood: act.mood,
       lastSaid: t.lastAssistantText.slice(0, 1500),
       // The limit notice is not something the agent said: it came from the
@@ -972,7 +1041,7 @@ export async function snapshot() {
         idleMin: Math.round(t.shift.idleMs / 60000) },
       files,
       artifacts,
-      hasNews: t.awaitingUser && artifacts.length > 0,
+      hasNews: !busy && !!t.ended && artifacts.length > 0,
     });
   }
 
