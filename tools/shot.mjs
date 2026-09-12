@@ -53,10 +53,12 @@
 //    So each frame's duration is taken from its own timestamp rather than
 //    computed as 1/30: otherwise the walk down the corridor runs faster and
 //    slower than it was recorded.
-// 4. A killed run leaves a live Chrome behind, and it holds port 9222. The next
-//    run then hangs in silence — wait as long as you like, no frame comes, and
-//    it looks like "the office broke" rather than "the screenshot broke". On
-//    2 September 2026 that cost two runs in a row. Cured before starting:
+// 4. A killed run leaves a live Chrome behind. Until 6 September 2026 it held
+//    port 9222 and the next run hung in silence, which looked like "the office
+//    broke" rather than "the screenshot broke" — two runs in a row on
+//    2 September. The port is free now, so the orphan only wastes memory and a
+//    profile in the temp folder, and since 12 September Ctrl-C and SIGTERM put
+//    Chrome away too: only SIGKILL still leaves one. Cured by hand:
 //        pgrep -f 'user-data-dir=/var/folders/.*/T/valey-shot-' | xargs kill
 //    The whole pattern is mandatory: `pkill -f chrome` takes the user's browser
 //    with it.
@@ -185,12 +187,24 @@ let chromeFailed = null;
 chrome.on('error', (err) => { chromeFailed = err; });
 
 let ws;
+const exited = new Promise((r) => chrome.once('exit', r));
 const bye = async (code) => {
   try { ws?.close(); } catch { /* already closed */ }
   try { process.kill(-chrome.pid); } catch { try { chrome.kill(); } catch { /* already dead */ } }
+  // The profile goes only once Chrome is gone: a dying Chrome still writes into
+  // it, and removed any earlier the folder came back. Every run left one in the
+  // temp folder — 296 of them by 12 September 2026, five out of five runs.
+  if (chrome.exitCode === null && chrome.signalCode === null && !chromeFailed) {
+    await Promise.race([exited, wait(3000)]);
+  }
   await fs.rm(profile, { recursive: true, force: true }).catch(() => {});
   process.exit(code);
 };
+// A run stopped by Ctrl-C or by a timeout's SIGTERM used to leave its Chrome
+// and its profile behind: trap 4 above.
+process.on('SIGINT', () => bye(130));
+process.on('SIGTERM', () => bye(143));
+
 try {
   // the port does not open instantly, and asking too early is an ECONNREFUSED
   let ready = false;
