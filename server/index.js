@@ -317,10 +317,13 @@ async function tick() {
     // 12 September 2026, once in a full run under load and never alone.
     const next = await snapshot();
     next.version = VERSION;
-    next.release = await releaseNudge(ROOT);
+    const settings = await getSettings();
+    // The owner can put the video nudge away (releaseNudge: false) while videos
+    // are not what the work is about; the drafts keep being written at release.
+    next.release = settings.releaseNudge === false ? null : await releaseNudge(ROOT);
     for (const a of next.agents) a.outbox = outbox.filter((t) => t.agentId === a.id).slice(-5);
     next.weather = await realWeather();
-    next.settings = publicSettings(await getSettings());
+    next.settings = publicSettings(settings);
     next.delivery = await deliveryStatus();
     next.people = livePeople();
     next.access = accessForOwner();
