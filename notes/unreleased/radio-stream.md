@@ -1,6 +1,10 @@
 ---
 title: The office radio plays internet radio stations, no account needed
 scope: radio
+shots:
+  - id: on-air
+    setup: "(async()=>{localStorage.setItem('valey-radio',JSON.stringify({stations:[{name:'NTS 1',uri:'https://stream-relay-geo.ntslive.net/stream'},{name:'Rinse FM',uri:'https://admin.stream.rinse.fm/proxy/rinse_uk/stream'},{key:'sp.lofi',uri:'spotify:playlist:37i9dQZF1DWWQRwui0ExPn'}],current:0}));const {radio}=await import('/modules/radio/radio.js');radio.load();radio.playing=true;radio.streamSince=Date.now()-42*60000;radio.onAir={title:'Floating Points — Silurian Blue',format:'mp3',bitrate:128};radio.play=()=>{};radio.toggle=()=>true;})()"
+    keys: "Enter,wait:2500,r,wait:1200"
 ---
 
 Until now the receiver by the entrance played Spotify only, and without your own connected Spotify app that meant thirty-second previews breaking off mid-track. YouTube was considered first and turned down: its API terms forbid a player that is not shown on the page and sound separated from the picture, which is exactly what a radio in a corridor is.
