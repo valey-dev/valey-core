@@ -35,8 +35,9 @@
 // reaches a public page. `fakeClaudeDir` exists for this and is what the stands
 // use, so the demo cast is the same one they check against.
 //
-// The office is raised without VALEY_STAND: the yellow plaque is for whoever is
-// testing, and it has no business in a picture that ships with the release.
+// The office is raised with PICTURE_ENV from tools/lib/office.mjs: whatever
+// speaks to the owner — the yellow stand plaque, the release-video nudge — has
+// no business in a picture that ships with the release.
 import { readdirSync, mkdirSync, existsSync } from 'node:fs';
 import { spawnSync, execFileSync } from 'node:child_process';
 import fsp from 'node:fs/promises';
@@ -44,7 +45,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFragments, shotSource, beforeSource, cmpTag, UNRELEASED } from './notes.mjs';
-import { startOffice, fakeClaudeDir, waitForAgent } from './lib/office.mjs';
+import { startOffice, fakeClaudeDir, waitForAgent, PICTURE_ENV } from './lib/office.mjs';
 
 const ROOT = process.env.VALEY_REPO
   ? path.resolve(process.env.VALEY_REPO)
@@ -105,10 +106,13 @@ if (before) {
   console.log(`replaying on ${before}, in a worktree of it`);
 }
 
-// Whatever stand sign the caller's shell carries must not reach these frames:
-// they go to a public repository. On 10 September 2026 a VALEY_STAND left over
-// from a stand on the same machine was photographed into a release note.
-const office = await startOffice({ claudeDir, root: worktree || ROOT, env: { VALEY_STAND: '' } });
+// These frames go to a public repository, so the office is raised with
+// PICTURE_ENV: no stand plaque from the caller's shell, no release-video nudge
+// on the entrance. Both have been photographed into a note once (10 and 12
+// September 2026). A --before run raises an older server, and one cut before
+// 12 September 2026 does not know VALEY_NUDGE — an entrance frame from it is
+// looked at for the nudge like any «before» frame is looked at for the place.
+const office = await startOffice({ claudeDir, root: worktree || ROOT, env: PICTURE_ENV });
 console.log(`demo office on ${office.base}`);
 try {
   await waitForAgent(async () => (await fetch(office.base + '/api/state')).json());
