@@ -61,14 +61,23 @@ const VER = /^v(\d+)\.(\d+)\.(\d+)$/;
 // The fields a fragment may carry. An unknown one is an error rather than a
 // field quietly ignored: a misspelled `keys:` is invisible in the rendered note,
 // and the whole point of the front matter is that it is machine-readable.
-const FIELDS = new Set(['title', 'scope', 'keys', 'shots']);
+// `nopicture` is the other half of `shots`: a feature owes a picture unless it
+// says why it has none, in words that stay with the note. Until 13 September
+// 2026 nothing asked for either — the template came with a shot, deleting it was
+// the short way, and 13 of the 17 feature notes since v0.32.0 went out as bare
+// text, six of them for things that are plainly on the screen.
+const FIELDS = new Set(['title', 'scope', 'keys', 'shots', 'nopicture']);
 const LISTS = new Set(['keys', 'shots']);
 // `shots` is a list of recipes rather than of strings: an id to name the file by,
 // and how to get the office to the right place. The recipe, not the picture, is
 // what a fragment carries — a recipe can be replayed on an older tag, and that is
 // where a real before-and-after comes from. A picture can only be looked at.
 const MAPS = new Set(['shots']);
-const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport', 'touch']);
+// `setup` is script run in the page after it loads and before the keys: the
+// state a picture needs that no walk reaches — a request waiting in the pager, a
+// switch the owner flips. The page is the office's audience by then, which is
+// exactly what makes it hold what the script sends.
+const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport', 'touch', 'setup']);
 
 // A three-line parser instead of a YAML dependency. The project has none, and a
 // front matter of three keys is not a reason for the first one.
@@ -114,7 +123,8 @@ export function parseFragment(text, name) {
     if (seen.has(sh.id)) fail(`two shots share the id \`${sh.id}\`; one would overwrite the other`);
     seen.add(sh.id);
   }
-  return { title: front.title, scope: front.scope || '', keys: front.keys || [], shots, body };
+  if (front.nopicture && shots.length) fail('`nopicture` and `shots` both: a note either has a picture or says why not');
+  return { title: front.title, scope: front.scope || '', keys: front.keys || [], shots, nopicture: front.nopicture || '', body };
 }
 
 function shotField(shot, key, value, fail) {
@@ -148,6 +158,9 @@ export function renderNote(tag, date, fragments, section) {
     out.push(`## ${f.title}`, '');
     if (f.scope) out.push(`*${f.scope}*`, '');
     out.push(f.body, '');
+    // The reason stays in the file and off the page: a reader of the release has
+    // no use for it, the next person wondering why there is no picture does.
+    if (f.nopicture) out.push(`<!-- no picture: ${f.nopicture.replace(/--/g, '—')} -->`, '');
     for (const sh of f.shots || []) {
       // Before first: it is the sentence «it used to look like this», and it
       // only reads that way when the reader meets it before the answer.
@@ -216,6 +229,12 @@ export function missingShots(root, fragments) {
   return out;
 }
 
+// A feature note owes a picture unless it says why it has none. Checked before
+// the tag, like the rendered shots: a note is not re-read after its release.
+export function unpictured(fragments) {
+  return fragments.filter((f) => !(f.shots || []).length && !f.nopicture).map((f) => f.slug);
+}
+
 export function assemble(root, tag, date, fragments, section) {
   const file = path.join(NOTES_DIR, `${tag}.md`);
   writeFileSync(path.join(root, file), renderNote(tag, date, fragments, section));
@@ -281,6 +300,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (existsSync(file)) die(`${path.join(UNRELEASED, slug)}.md already exists`);
     writeFileSync(file, TEMPLATE(slug));
     console.log(path.join(UNRELEASED, slug + '.md'));
+    console.log('  A visible feature keeps its shot; one with nothing to photograph replaces\n' +
+      '  `shots:` with `nopicture: <why>` — the release refuses a note with neither.');
   } else if (argv[0] && !argv[0].startsWith('--')) {
     const [a, b] = argv[0].includes('..') ? argv[0].split('..') : [argv[0], argv[0]];
     if (!VER.test(a) || !VER.test(b)) die(`not a version or a version range: ${argv[0]}`);

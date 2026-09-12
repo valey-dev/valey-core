@@ -20,7 +20,7 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { pickKind, check } from './release-kind.mjs';
-import { readFragments, checkNotes, missingShots, assemble } from './notes.mjs';
+import { readFragments, checkNotes, missingShots, unpictured, assemble } from './notes.mjs';
 
 // The root comes from this file rather than from the cwd: git and the files have
 // to look at one repository. Until 4 September 2026 git went to the cwd while
@@ -207,6 +207,14 @@ if (noShots.length)
   die(`the note declares pictures that have not been rendered: ${noShots.join(', ')}.\n` +
     '  They are taken in the feature branch, against a demo office:\n' +
     '    node tools/notes-shots.mjs');
+// And a note that neither shows the feature nor says why it cannot. Visible work
+// shipped as bare text is what this catches: 13 of 17 notes by 13 September 2026.
+const bare = unpictured(fragments);
+if (bare.length)
+  die(`the note has no picture and no reason for none: ${bare.join(', ')}.\n` +
+    '  A feature you can see gets a shot, rendered against the demo office:\n' +
+    '    node tools/notes-shots.mjs\n' +
+    '  One with nothing on the screen says why in its fragment:  nopicture: <why>');
 if (fragments.length)
   console.log(`\nfeature note ${tag}.md, from ${fragments.length} fragment${fragments.length > 1 ? 's' : ''}: ` +
     fragments.map((f) => f.slug).join(', '));

@@ -13,7 +13,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { parseFragment, readFragments, renderNote, checkNotes, missingShots, assemble, shotSource, beforeSource, findBefore, cmpTag, releaseBody } from './notes.mjs';
+import { parseFragment, readFragments, renderNote, checkNotes, missingShots, unpictured, assemble, shotSource, beforeSource, findBefore, cmpTag, releaseBody } from './notes.mjs';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -182,6 +182,26 @@ ROOTS: {
   ok('and the recipe records which tag the before half came from',
     side.shots[0].before.tag === 'v0.12.0'
     && side.shots[0].before.file === 'arrows-standup.before-v0.12.0.png', side.shots[0]);
+}
+
+// ---------------------------------------------------------- a picture is owed
+// 13 September 2026: 13 of the 17 feature notes since v0.32.0 had no picture,
+// six of them for things plainly on the screen. A note now carries a shot or
+// says why it has none; the release refuses one with neither.
+{
+  const bare = { slug: 'bare', ...parseFragment('---\ntitle: A thing\n---\n\nIt does a thing.\n', 'bare.md') };
+  const why = { slug: 'why', ...parseFragment('---\ntitle: A tool\nnopicture: a terminal tool, nothing in the office changes\n---\n\nIt prints.\n', 'why.md') };
+  const shot = { slug: 'shot', ...parseFragment('---\ntitle: A room\nshots:\n  - id: room\n    url: "#room=standup"\n---\n\nIt shows.\n', 'shot.md') };
+  ok('the reason for no picture is read', why.nopicture === 'a terminal tool, nothing in the office changes', why.nopicture);
+  ok('a note with neither a shot nor a reason is owed a picture', JSON.stringify(unpictured([bare, why, shot])) === '["bare"]', unpictured([bare, why, shot]));
+  ok('a shot and a reason together are a contradiction, not a choice',
+    /both/.test(fails(() => parseFragment('---\ntitle: x\nnopicture: no\nshots:\n  - id: a\n---\n\nbody\n', 'x.md'))));
+  const md = renderNote('v0.99.0', '13 September 2026', [why], '## v0.99.0\n\n- **tools:** a thing\n');
+  ok('the reason stays in the file as a comment, off the page', md.includes('<!-- no picture: a terminal tool, nothing in the office changes -->'), md);
+  ok('a double dash cannot close the comment early',
+    !renderNote('v0.99.0', 'd', [{ ...why, nopicture: 'a -- b' }], '## v\n').includes('a -- b'));
+  const setup = parseFragment('---\ntitle: The pager\nshots:\n  - id: card\n    setup: "fetch(\x27/api/permit\x27)"\n    keys: "Enter"\n---\n\nIt asks.\n', 'p.md');
+  ok('a recipe may prepare the page before its keys', setup.shots[0].setup === "fetch('/api/permit')", setup.shots[0]);
 }
 
 console.log(bad ? `\nFAILED: ${bad}` : '\nall green');

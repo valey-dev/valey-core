@@ -9,6 +9,7 @@
 //   node tools/shot.mjs --out /tmp/office.png --wait 6000
 //   node tools/shot.mjs --url .../soon.html --viewport 390,900   # a phone's width
 //   node tools/shot.mjs --eval "document.title"   # look inside the live page
+//   node tools/shot.mjs --setup "fetch(...)"      # prepare the page before the keys
 //   node tools/shot.mjs --video .shots/v0.2.0.mp4 --keys Enter,hold-w:4000
 //   node tools/shot.mjs --help                 # this text, down to the traps
 //
@@ -102,6 +103,10 @@ const arg = (name, fallback) => {
 const port = arg('port', '5179');
 const url = arg('url', `http://localhost:${port}/`);
 const evalJs = arg('eval', '');
+// --setup: script run in the page once it has loaded and before any key — the
+// state a frame needs that no walk reaches, such as a request waiting in the
+// pager. Unlike --eval it is part of the picture, so a failure stops the shot.
+const setupJs = arg('setup', '');
 const out = arg('out', path.join(process.cwd(), '.shots', 'shot.png'));
 const settle = Number(arg('wait', 5000));
 const video = arg('video', '');
@@ -256,6 +261,10 @@ try {
   }
   await send('Page.reload', { ignoreCache: true });
   await wait(settle);
+  if (setupJs) {
+    const r = await send('Runtime.evaluate', { expression: setupJs, awaitPromise: true, returnByValue: true });
+    if (r.exceptionDetails) throw new Error('--setup failed: ' + (r.exceptionDetails.exception?.description || r.exceptionDetails.text));
+  }
 
   // Recording starts before the keys: the first frame of the video is the office
   // at rest, not a person already stepping through the door.
