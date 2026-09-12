@@ -517,6 +517,18 @@ check('a step back removes the price', langPanel.warn.hidden === true, langPanel
 UI.langKey('ArrowRight');
 UI.langKey('Enter');
 check('Enter presses what the focus is on', langPanel.btns[4].clicked === 1, langPanel.btns[4].clicked);
+// The marks follow the language. Enter on «English» switched the office and,
+// until 12 September 2026, left ● on «Русский» for as long as the panel stayed
+// open: nothing redrew the panel on a language change.
+{
+  const { setLang, lang } = await import('../web/i18n.js');
+  const was = lang();
+  setLang('en');
+  check('after a language change the mark moves to the new language',
+    /class="langbtn on" data-lang="en"/.test(langPanel.innerHTML) && !/class="langbtn on" data-lang="ru"/.test(langPanel.innerHTML),
+    langPanel.innerHTML.match(/class="langbtn[^>]*/g));
+  setLang(was);
+}
 UI.closeLang();
 check('closed arrow tongue panel does not eat', UI.langKey('ArrowDown') === false, 'съела');
 

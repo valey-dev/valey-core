@@ -15,6 +15,18 @@ import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.dirname(path.dirname(path.dirname(fileURLToPath(import.meta.url))));
 
+// The environment of an office raised to be photographed for the public —
+// release notes, the social card. Everything in the office that speaks to its
+// owner rather than about the product is switched off here, in one place, so
+// the next such thing is one more line rather than one more incident:
+//   VALEY_STAND  the yellow stand plaque — a leftover from the caller's shell
+//                was photographed into a release note on 10 September 2026;
+//   VALEY_NUDGE  the release-video nudge on the entrance — «v0.39.0 — not
+//                shot» with a path on the owner's disk reached the public
+//                v0.40.0 note on 12 September 2026.
+// tools/test-picture-office.mjs raises an office with it and checks both.
+export const PICTURE_ENV = Object.freeze({ VALEY_STAND: '', VALEY_NUDGE: 'off' });
+
 // The port is asked of the system rather than assigned: a fixed number is two
 // worktrees colliding, which the stand reports as its own failure.
 export const freePort = () => new Promise((resolve, reject) => {

@@ -69,7 +69,7 @@ export function toast(text, kind = '') {
 // ---------------------------------------------------------------------- hud
 // tr, not t: in ui.js `t` is already taken by local variables in several
 // functions, and the import there was silently shadowed
-import { t as tr, lang, fmtStamp, fmtClock } from './i18n.js';
+import { t as tr, lang, onLang, fmtStamp, fmtClock } from './i18n.js';
 import { cardClosed } from './pager.js';
 
 const WEATHER_ICON = { clear: '☀', clouds: '☁', rain: '☂', storm: '⚡', snow: '❄', fog: '≋' };
@@ -2927,6 +2927,12 @@ const langRing = focusRing(() => el.lang, '.langbtn, .packbtn', {
   rows: '.langrow', onMove: langWarn,
 });
 export function langKey(raw) { return langRing.key(raw, el.lang && !el.lang.hidden); }
+// The panel's two rows carry the mark of the current language and pack, and
+// until 12 September 2026 nothing redrew them when the language changed: Enter
+// on «English» switched the office and left ● on «Русский» for as long as the
+// panel stayed open. The panel listens to the dictionary itself rather than
+// riding relabel(), so it follows a switch from a neighbouring tab as well.
+onLang(() => { if (el.lang && !el.lang.hidden) renderLang(); });
 export function langOpen() { return el.lang && !el.lang.hidden; }
 
 const skyRing = focusRing(() => el.sky, '#skytoggle, #skyq, .skyhit, #skygeo');

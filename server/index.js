@@ -14,10 +14,11 @@ import {
 import { deliver, deliveryStatus, forgetCli, isBusy, MODES } from './deliver.js';
 import { ask as askPermit, answer as answerPermit, permits, forgetGone } from './permit.js';
 import { releaseNudge } from './release.js';
-import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff } from './modules.js';
+import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset } from './modules.js';
 import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
 import { MIME, fileType, fileHeaders } from './files.js';
 import { listenFree } from './port.js';
+import { createExposure, lanAddresses } from './expose.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const WEB = path.join(ROOT, 'web');
@@ -31,6 +32,10 @@ const POLL_MS = 2500;
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 
 let last = { now: 0, agents: [], version: VERSION };
+// The switch that opens the running office to the network (expose.js). Set by
+// start(); a stand that only builds the handler has none, and the route below
+// then flips the settings without any listener to open.
+let exposure = null;
 
 // The dictionaries as a list: how many names a pack holds and four samples. It
 // never changes, so it is computed once and rides out with the settings — the
@@ -77,6 +82,20 @@ const SHOWN = [
 const grants = new Map();
 
 const granted = (guestId, agentId) => !!(guestId && grants.get(guestId)?.has(agentId));
+
+// A guest who is no longer invited: the streams on his token are closed, and
+// what he asked for and was granted is forgotten. Called on revoke, and on
+// every tick for a token the settings no longer know — a mode switched back to
+// private, or an invitation edited out of the file by hand.
+function dropGuest(guestId) {
+  grants.delete(guestId);
+  for (const k of [...asks.keys()]) if (k.startsWith(guestId + ':')) asks.delete(k);
+  for (const res of [...clients]) {
+    if (res.valeyGuest !== guestId) continue;
+    clients.delete(res);
+    try { res.end(); } catch { /* already gone */ }
+  }
+}
 
 // Access requests. The key is the pair of guest and agent: a second request
 // from the same person about the same agent replaces the first rather than
@@ -140,7 +159,7 @@ function project(snapshot, guestId) {
 
 // ------------------------------------------------------------------ the owner
 // Anyone may watch; only the owner may command. The right lives in the token in
-// .settings.json, and the page presents it in a header.
+// the settings file, and the page presents it in a header.
 //
 // Until the office is declared shared, everything from this same machine counts
 // as the owner's: that is how the office always worked, and local work must not
@@ -292,24 +311,35 @@ async function tick() {
     // Observers need the previous snapshot: an event is a difference, not a
     // state. The core does not compute it — it only hands over both sides.
     const prev = last;
-    last = await snapshot();
-    last.version = VERSION;
-    last.release = await releaseNudge(ROOT);
-    for (const a of last.agents) a.outbox = outbox.filter((t) => t.agentId === a.id).slice(-5);
-    last.weather = await realWeather();
-    last.settings = publicSettings(await getSettings());
-    last.delivery = await deliveryStatus();
-    last.people = livePeople();
-    last.access = accessForOwner();
+    // Assembled in full before it becomes `last`: the fields below are awaited
+    // one by one, and /api/state served in between handed out a snapshot with a
+    // version and no release nudge yet. A stand caught exactly that on
+    // 12 September 2026, once in a full run under load and never alone.
+    const next = await snapshot();
+    next.version = VERSION;
+    next.release = await releaseNudge(ROOT);
+    for (const a of next.agents) a.outbox = outbox.filter((t) => t.agentId === a.id).slice(-5);
+    next.weather = await realWeather();
+    next.settings = publicSettings(await getSettings());
+    next.delivery = await deliveryStatus();
+    next.people = livePeople();
+    next.access = accessForOwner();
     // A question asked by a session the office no longer has is released: there
     // is nobody to answer it, and waiting nine minutes holds someone's terminal.
-    forgetGone(last.agents.map((a) => a.id));
-    last.permits = permits();
+    forgetGone(next.agents.map((a) => a.id));
+    next.permits = permits();
     // Observers run before the broadcast: a module may add its own to the
     // snapshot, and the client should get it on this tick, not 2.5 seconds
     // later.
-    await moduleObserve(last, prev);
+    await moduleObserve(next, prev);
+    last = next;
     const full = `data: ${JSON.stringify(last)}\n\n`;
+    // A stream is only as invited as the settings say right now.
+    const acc = (await getSettings()).access;
+    const invited = new Set((acc.invites || []).map((i) => i.guest).filter(Boolean));
+    for (const res of [...clients]) {
+      if (res.valeyGuest && (acc.mode !== 'shared' || !invited.has(res.valeyGuest))) dropGuest(res.valeyGuest);
+    }
     // Guests get their own projection: each has his own set of what is open.
     for (const res of clients) {
       res.write(res.valeyGuest ? `data: ${JSON.stringify(project(last, res.valeyGuest))}\n\n` : full);
@@ -526,6 +556,41 @@ async function handle(req, res) {
     return send(res, 200, { valey: true, version: VERSION });
   }
 
+  // Opening the office to the network from the office itself: the live feed's
+  // key card is the button, this is the switch. Owner only — the answer carries
+  // the network token, which the settings stream never does (publicSettings
+  // sends hasToken): the card has to put it into a QR code and a link, and only
+  // the owner is shown it, in this one response.
+  if (url.pathname === '/api/network') {
+    if (!(await isOwner(req))) return forbidden(res);
+    if (req.method === 'POST') {
+      const { action } = await readJson(req);
+      const n = (await getSettings()).network || {};
+      if (action === 'open') {
+        await patchSettings({ network: { external: true, token: n.token || newToken() } });
+        if (exposure) await exposure.open();
+      } else if (action === 'close') {
+        await patchSettings({ network: { external: false } });
+        if (exposure) await exposure.close();
+      } else if (action === 'rotate') {
+        // Phones holding the old token get 401 on their next request, and the
+        // feed already reads that as «ask for a new code».
+        await patchSettings({ network: { token: newToken() } });
+      } else {
+        return send(res, 400, { error: 'action is open, close or rotate' });
+      }
+    }
+    const n = (await getSettings()).network || {};
+    const st = exposure ? exposure.state() : { since: null, addresses: lanAddresses() };
+    return send(res, 200, {
+      external: !!n.external,
+      token: n.token || '',
+      port: req.socket.localPort,
+      since: n.external ? st.since : null,
+      addresses: n.external && st.addresses.length ? st.addresses : lanAddresses(),
+    });
+  }
+
   if (url.pathname === '/api/whoami') {
     const s = await getSettings();
     const guest = await guestOf(req);
@@ -632,6 +697,11 @@ async function handle(req, res) {
     const s = await getSettings();
     const left = (s.access.invites || []).filter((i) => i.id !== b.id);
     await patchSettings({ access: { ...s.access, invites: left } });
+    // The token dies with the invitation, and so does everything that held it.
+    // Until 12 September 2026 only the next request was refused: a stream
+    // opened on the token kept receiving the projection — with the agent the
+    // guest had been granted — after the invitation was gone.
+    for (const i of (s.access.invites || [])) if (i.id === b.id && i.guest) dropGuest(i.guest);
     return send(res, 200, { ok: true, invites: left.map(safeInvite) });
   }
 
@@ -951,8 +1021,15 @@ async function handle(req, res) {
   // there is no modules/ folder at all, and confusing it with the core's static
   // files means serving one day what was never put there.
   if (url.pathname.startsWith('/modules/')) {
-    const file = path.join(MODS, url.pathname.slice('/modules/'.length));
-    if (!file.startsWith(MODS)) return send(res, 403, { error: 'nope' });
+    // Only what a module's page needs, decided by the loader and never by the
+    // path (see moduleAsset). The invitation gate covers this branch as it
+    // covers /api/: a person without a code loads no modules, and a guest gets
+    // the files of the modules shown to him and a 404 for the rest.
+    if (!(await admitted(req))) return send(res, 403, { error: 'an invitation is required', errorKey: 'err.needCode' });
+    const [id, ...rest] = url.pathname.slice('/modules/'.length).split('/');
+    let file = null;
+    try { file = await moduleAsset(decodeURIComponent(id), rest.map(decodeURIComponent).join('/'), await isOwner(req)); } catch { file = null; }
+    if (!file) return send(res, 404, 'not found', 'text/plain');
     try {
       const buf = await fsp.readFile(file);
       return send(res, 200, buf, MIME[path.extname(file).toLowerCase()] || 'application/octet-stream');
@@ -1014,7 +1091,8 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
     console.log('A network token was created and saved to the office settings');
   }
   const HOST = host || (external ? '0.0.0.0' : '127.0.0.1');
-  const server = http.createServer(createHandler());
+  const handler = createHandler();
+  const server = http.createServer(handler);
 
   // A taken port is asked who it is before anything is concluded. Another
   // office there means this one has nothing to do; something else means the
@@ -1023,6 +1101,8 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   const bound = await listenFree(server, port, HOST, { log: console.log, own: VERSION });
   if (bound === null) return null;
   port = bound;
+  exposure = createExposure({ handler, port, host: HOST });
+  if (external) await exposure.open();
   const token = await ownerToken();
   const s = await getSettings();
   console.log(`Valey office at http://localhost:${port}`);
@@ -1046,7 +1126,7 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   for (const e of moduleErrors()) console.log(`  module failed to start: ${e.id} — ${e.error}`);
   // The owner link is printed every time, not only in shared mode: open it once
   // and you stay the owner in this browser even after the office becomes shared.
-  // Looking it up in .settings.json later is an extra step at a bad moment.
+  // Looking it up in the settings file later is an extra step at a bad moment.
   console.log(`  owner: http://localhost:${port}/#owner=${token}`);
   if (s.access.mode === 'private') {
     console.log('  mode: private — everything from this machine is treated as the owner.');

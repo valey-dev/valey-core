@@ -4,6 +4,80 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.41.4 — 12 September 2026
+
+### Fixed
+
+- **notes:** the text of a note in the Notes panel can be selected with the mouse (b66dd0e)
+## v0.41.3 — 12 September 2026
+
+### Fixed
+
+- **radio:** the receiver says what a preview is in one line — 30 seconds without your own Spotify (d5b245a)
+- **radio:** «настроить» in the receiver is a button of the office again, not the browser's grey one (f813697)
+
+### Other
+
+- docs(notes): the receiver's note, with the panel before and after (c92037a)
+## v0.41.2 — 12 September 2026
+
+### Fixed
+
+- **panels:** six panel bodies scroll inside their frame instead of hanging out below it at 175% (bdafc41)
+## v0.41.1 — 12 September 2026
+
+### Fixed
+
+- **inventory:** the dress-code note names the settings file the office reads (c260f1e)
+## v0.41.0 — 12 September 2026
+
+### Added
+
+- **server:** the office opens to the network and closes again without a restart (c8b6604)
+
+### Other
+
+- docs(notes): the feature note for opening the office to the network (43b8635)
+## v0.40.5 — 12 September 2026
+
+### Fixed
+
+- **office:** /api/state never hands out a half-built snapshot (0610330)
+- **entrance:** the figure at the door opens the language panel, as its hint promises (aeadec6)
+- **entrance:** TAB opens «Who's inside» again (0ea38f9)
+## v0.40.4 — 12 September 2026
+
+### Fixed
+
+- **lang:** the marks in the language panel follow the language it just switched to (4bd9936)
+## v0.40.3 — 12 September 2026
+
+### Fixed
+
+- **release:** a Modules release page no longer carries the office's installer (87664ba)
+## v0.40.2 — 12 September 2026
+
+### Fixed
+
+- **notes:** pictures for a release no longer show the video nudge or the owner's path (0bf980c)
+
+### Other
+
+- docs(notes): the v0.40.0 note drops its entrance frame, which showed the video nudge (90bab58)
+## v0.40.1 — 12 September 2026
+
+### Fixed
+
+- **port:** walking for a free port stops at 65535 instead of dying on 65536 (09e5162)
+- **settings:** the config folder is made 0700 when the office makes it (4e8bff1)
+- **settings:** the settings file is written 0600 — it holds the owner token and the invitations (e619fe6)
+- **install:** the pack's path is a path, not a shell program (a4d92d0)
+- **access:** revoking an invitation closes the guest's open stream and forgets his grants (d15aa2e)
+- **modules:** /modules/ hands out a module's page files only, and only to the invited (6313201)
+
+### Other
+
+- test(guest): a shown module with no page of its own is not a broken build (2e73900)
 ## v0.40.0 — 12 September 2026
 
 ### Added

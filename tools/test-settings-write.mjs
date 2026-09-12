@@ -36,6 +36,12 @@ try {
   const left = (await fsp.readdir(dir)).filter((f) => f.includes('.tmp-'));
   ok('no temporary files left', left.length === 0, left);
   ok('cache matches disk', (await getSettings()).lang === onDisk.lang, null);
+  // The file holds the owner token and the invitations: nobody else on the
+  // machine reads it. Found world-readable by the audit of 12 September 2026.
+  if (process.platform !== 'win32') {
+    const mode = (await fsp.stat(file)).mode & 0o777;
+    ok('the file is readable by its owner only', mode === 0o600, mode.toString(8));
+  }
 
   // ------------------------------------------- another process changed it
   const external = { lang: 'en', names: { outside: 'Kept' }, dress: { code: 'casual' } };

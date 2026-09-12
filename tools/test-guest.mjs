@@ -26,6 +26,7 @@ const { base, stop } = await startOffice({
 });
 
 let GUEST = '';
+let revoked = 0;
 const call = (p, { as = 'nobody', method = 'POST', body = {} } = {}) => {
   const headers = { 'content-type': 'application/json' };
   if (as === 'owner') headers['x-valey-owner'] = TOKEN;
@@ -71,8 +72,21 @@ try {
   ok('and walks on it', here.status === 200, here.status);
   const note = await call('/api/task', { as: 'guest', body: { agentId: 'нет-такого', text: 'привет' } });
   ok('and leaves a note on the table', note.status !== 403, note.status);
-  const stream = await fetch(base + '/api/stream?guest=' + encodeURIComponent(GUEST)).then((r) => r.status);
+  const streamRes = await fetch(base + '/api/stream?guest=' + encodeURIComponent(GUEST));
+  const stream = streamRes.status;
   ok('the thread starts using the same gap in the query line', stream === 200, stream);
+  // Kept open until the revoke below: resolves true when the server ends it,
+  // false if it is still open eight seconds after the invitation went.
+  const streamClosed = (async () => {
+    const reader = streamRes.body.getReader();
+    const deadline = Date.now() + 20000;
+    while (Date.now() < deadline) {
+      const { done } = await Promise.race([reader.read(), new Promise((r) => setTimeout(() => r({ done: null }), 500))]);
+      if (done === true) return true;
+      if (done === null && revoked && Date.now() > revoked + 8000) return false;
+    }
+    return false;
+  })();
   // EventSource cannot set headers, so without this the owner in shared mode
   // lost his own office: the page is alive and the stream is refused to it.
   const ownerStream = await fetch(base + '/api/stream?owner=' + encodeURIComponent(TOKEN)).then((r) => r.status);
@@ -122,7 +136,10 @@ try {
     catch { return false; }
   });
   ok('the ones declared open reach a guest, and only those', ids(theirMods.j || []) === ids(shown), [ids(shown), ids(theirMods.j || [])]);
-  ok('and they have something to load with', (theirMods.j || []).every((m) => !!m.client), theirMods.j);
+  // A module may be shown and have no page of its own — the feed is a server
+  // route and a PWA, and lists with client null. The audit of 12 September 2026
+  // found this line red on exactly that, reading it as a broken build.
+  ok('and each names its client, or says it has none', (theirMods.j || []).every((m) => m.client === null || typeof m.client === 'string'), theirMods.j);
 
   // The release nudge names a draft on the owner's disk; a guest's snapshot
   // carries none, whatever the owner's says.
@@ -130,11 +147,28 @@ try {
   ok('the guest snapshot arrives', theirState.status === 200 && !!theirState.j, theirState.status);
   ok('and carries no release nudge', theirState.j && theirState.j.release === null, theirState.j && theirState.j.release);
 
+  // --------------------------------------------- the files under /modules/
+  // The private repository sits under modules/ on a developer's machine, and
+  // until 12 September 2026 any file of it was one URL away for anyone past
+  // the network gate. Now the invitation gate covers the folder, and a module
+  // hands out only what its page needs.
+  const raw = (p, as) => fetch(base + p, { headers: as === 'owner' ? { 'x-valey-owner': TOKEN } : as === 'guest' ? { 'x-valey-guest': GUEST } : {} }).then((r) => r.status);
+  ok('without an invitation a module file is refused', await raw('/modules/plan/client.js') === 403, await raw('/modules/plan/client.js'));
+  ok('a guest gets the client of a module shown to him', await raw('/modules/plan/client.js', 'guest') === 200, await raw('/modules/plan/client.js', 'guest'));
+  ok('the manifest and the server are not files of the page', await raw('/modules/plan/module.json', 'owner') === 404 && await raw('/modules/plan/server.js', 'owner') === 404);
+  ok('nothing at the root of modules/ is served', await raw('/modules/AGENTS.md', 'owner') === 404 && await raw('/modules/.git/HEAD', 'owner') === 404);
+  ok('nor a path that climbs out', await raw('/modules/plan/..%2F..%2Fpackage.json', 'owner') === 404);
+
   // ------------------------------------------------------------- evicting
   const out = await call('/api/invite/revoke', { as: 'owner', body: { id: list.j.invites[0].id } });
+  revoked = Date.now();
   ok('the host cancels the invitation', out.status === 200, out.status);
   const after = await call('/api/state', { as: 'guest', method: 'GET' });
   ok('and the one kicked out doesn\'t look anymore', after.status === 403, after.status);
+  // The stream opened before the revoke ends with it: until 12 September 2026
+  // it went on receiving the projection — the granted agent included — for as
+  // long as the tab stayed open. Only a fresh request was refused.
+  ok('and the stream he had open is closed too', await streamClosed, streamClosed);
 } catch (e) {
   bad += 1;
   console.log('FAIL  | test did not complete →', e.message);
