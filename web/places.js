@@ -56,6 +56,9 @@ const PLACES = [
   // Standing at something. The floor still answers; only the thing under your
   // hand renames SPACE.
   { id: 'cooler', title: 'place.cooler', registry: true, caps: { Space: 'place.cooler.space' } },
+  // The piranha tank: SPACE throws in a piece of meat. Added on a live demo on
+  // 11 September 2026 without the board's frame, on the owner's word.
+  { id: 'aquarium', title: 'place.aquarium', registry: true, caps: { Space: 'place.aquarium.space' } },
 
   // ------------------------------------------------------- panels of the core
   //

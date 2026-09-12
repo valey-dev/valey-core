@@ -12,6 +12,7 @@ import { proceduralWeather, fromWeatherCode, flash } from './weather.js';
 import { sound, tickSound } from './sound.js';
 import { initPager, seePermits, renderPager, pagerKey, recall, waitingCount, forgetPermit } from './pager.js';
 import { titleOf } from './paintings.js';
+import { mealAt, DROP, MEAL, MAX_BONES } from './aquarium.js';
 import { drawBubble } from './badges.js';
 import { skateStep, rolling, drawSkateboard, ollieStep, canOllie, OLLIE_POP } from './skate.js';
 import { readPad, edges as padEdges } from './pad.js';
@@ -1005,6 +1006,15 @@ function nearest() {
     if (d < bestD) { bestD = d; best = { kind: 'water', prop }; }
   }
 
+  // The tank is wide: it is measured from its nearest edge, not its middle, so
+  // the whole front of the glass is somewhere to stand and throw from.
+  for (const prop of (state.layout.props || [])) {
+    if (prop.kind !== 'aquarium') continue;
+    const dx = Math.max(0, Math.abs(prop.x - p.x) - prop.w / 2);
+    const d = Math.hypot(dx, prop.y + 6 - p.y);
+    if (d < bestD) { bestD = d; best = { kind: 'tank', prop }; }
+  }
+
   // The benches: for the corridor one the seats are counted from its width (34 px, drawn
   // from the centre), for the conservatory one they lie ready in the layout. They are
   // approached from the front — both have a back behind.
@@ -1109,6 +1119,29 @@ function pictureSlots() {
 // A cup at the cooler or the coffee machine: you stand still, drink, and feel
 // slightly better about the day.
 const DRINK_MS = 2800;
+
+// The piranhas' meal. One piece at a time: a second throw while they are still
+// eating would be lost in the churn, so SPACE waits for the bone to land. The
+// splash sounds as the piece hits the water, the chomps while it lasts, and the
+// bone joins the heap on the gravel when the meal is over.
+function feedPiranhas() {
+  if (mealAt(state.tankMeal, state.t)) return;
+  state.tankMeal = { at: state.t, chomp: 0 };
+  setTimeout(() => { sound.bubble(1.2); sound.gulp(1.4); }, DROP);
+}
+function tickMeal(now) {
+  const m = state.tankMeal;
+  if (!m) return;
+  const at = mealAt(m, now);
+  if (at && at.phase === 'eat' && now - m.chomp > 200 + Math.random() * 120) {
+    m.chomp = now;
+    sound.gulp(0.5);
+  }
+  if (now - m.at < MEAL) return;
+  state.tankMeal = null;
+  state.tankBones = Math.min(MAX_BONES, (state.tankBones || 0) + 1);
+  if (!state.piranhasFed) { state.piranhasFed = true; UI.toast(tr('toast.piranhasFed')); }
+}
 
 function startDrink(target) {
   if (state.drink) return;
@@ -1293,6 +1326,8 @@ function interact() {
     UI.toast(`«${tr('poster.name')}» · ${tr('poster.medium')}`);
   } else if (n.kind === 'water' || n.kind === 'coffee') {
     startDrink(n);
+  } else if (n.kind === 'tank') {
+    feedPiranhas();
   } else if (n.kind === 'seat') {
     sitDown(n);
   } else if (n.kind === 'hook') {
@@ -1510,6 +1545,7 @@ function currentPlace() {
   // thing under your hand renames SPACE.
   const near = nearest();
   if (near && near.kind === 'water') return 'cooler';
+  if (near && near.kind === 'tank') return 'aquarium';
   return 'floor';
 }
 
@@ -1633,6 +1669,25 @@ function update(dt, now) {
 
   const room = roomAt(L, p.x, p.y);
   if (room !== state.currentRoom) { state.currentRoom = room; UI.renderHud(); }
+
+  // The piranhas notice whoever stands at the glass and swim to that side. The
+  // turn is eased — about half a second either way — so walking up reads as the
+  // school coming over, not as fish teleporting. The first visit says a line.
+  for (const tank of L.props) {
+    if (tank.kind !== 'aquarium') continue;
+    const near = Math.abs(p.x - tank.x) < 64 && p.y > tank.y - 50 && p.y < tank.y + 44;
+    if (near) tank.lure = p.x;
+    tank.lureK = (tank.lureK || 0) + ((near ? 1 : 0) - (tank.lureK || 0)) * Math.min(1, 0.06 * dt);
+    if (!near && tank.lureK < 0.02) tank.lure = null;
+    // Not while the entrance screen is up: #x= can put a person at the glass
+    // before they have walked in, and the line would be said behind the menu.
+    if (near && !state.piranhasMet && !titleOpen()) { state.piranhasMet = true; UI.toast(tr('toast.piranhas')); }
+    // The meal lives in the state, not on the prop: the plan is rebuilt whenever
+    // an agent comes or goes, and the heap of bones must not vanish with it.
+    tank.meal = state.tankMeal;
+    tank.bones = state.tankBones || 0;
+  }
+  tickMeal(now);
 
   // the reader recognises you a couple of steps away and holds the doors open while you are near
   const sec = L.security;
@@ -1917,6 +1972,11 @@ function draw(t) {
   if (near && near.kind === 'water' && !state.drink) {
     const w = near.prop;
     draws.push({ y: 1e9, fn: () => label(w.x, w.y + 16, tr('hint.water'), '#9fd4e8') });
+  }
+  // The tank's line goes quiet while they eat: SPACE waits for the bone.
+  if (near && near.kind === 'tank' && !mealAt(state.tankMeal, state.t)) {
+    const w = near.prop;
+    draws.push({ y: 1e9, fn: () => label(w.x, w.y + 16, tr('hint.piranha'), '#e35d5d') });
   }
   if (near && (near.kind === 'pot' || near.kind === 'tap' || near.kind === 'hook')) {
     const left = canLeft();
