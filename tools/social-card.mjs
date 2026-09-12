@@ -96,10 +96,10 @@ await office.stop();
 
 // The card's colours are the office's own, read from :root rather than typed
 // here, so a palette change reaches the card on the next run.
-const css = fs.readFileSync(path.join(ROOT, 'web', 'style.css'), 'utf8');
+const css = fs.readFileSync(path.join(ROOT, 'web', 'tokens.css'), 'utf8');
 const token = (name) => {
   const m = css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{3,8})`));
-  if (!m) die(`--${name} is not in web/style.css`);
+  if (!m) die(`--${name} is not in web/tokens.css`);
   return m[1];
 };
 const font = fs.readFileSync(path.join(ROOT, 'web', 'fonts', 'JetBrainsMono-Bold.woff2')).toString('base64');

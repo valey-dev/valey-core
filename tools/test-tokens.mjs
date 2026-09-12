@@ -13,6 +13,11 @@
 // behind while its neighbours move. The three literals that are still in the
 // file are exactly that bug, standing still and named in ALLOWED below.
 //
+// Since 12 September 2026 :root is a file of its own, web/tokens.css, so that
+// valey.dev can link the palette without the office's layout. The rule moves
+// with it and does not loosen: style.css now declares no colours at all, and
+// tokens.css may hold a literal only inside :root.
+//
 // A rule in AGENTS.md works on whoever opened AGENTS.md. This works on
 // everyone: it runs in `npm test`, in CI and in the pre-commit hook.
 import fs from 'node:fs';
@@ -21,7 +26,9 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const FILE = 'web/style.css';
+const TOKENS = 'web/tokens.css';
 const css = fs.readFileSync(path.join(ROOT, FILE), 'utf8');
+const tokens = fs.readFileSync(path.join(ROOT, TOKENS), 'utf8');
 
 // The literals that stay, each with the reason it stays. This is not a "we will
 // get to it" list: every line here has to say why the colour cannot simply
@@ -103,8 +110,11 @@ ok('several colors in a line are counted one at a time',
   literals('.a{color:#fff;border-color:#000}').length === 2);
 
 // -------------------------------------------------------------------- :root
-const root = css.match(/:root\{([\s\S]*?)\n\}/);
-ok('the :root block is in place', !!root);
+ok('style.css declares no :root of its own', !/:root\s*\{/.test(blank(css)));
+const root = tokens.match(/:root\{([\s\S]*?)\n\}/);
+ok('the :root block is in place in tokens.css', !!root);
+const strays = literals(tokens).filter((h) => h.sel !== ':root');
+ok('tokens.css holds colours only inside :root', strays.length === 0, strays);
 const declared = new Set([...(root ? root[1] : '').matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
 ok(`${declared.size} variables are declared in :root`, declared.size > 20, declared.size);
 

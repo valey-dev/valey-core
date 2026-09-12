@@ -1,0 +1,76 @@
+/* The office's palette and typeface, and nothing else. They live apart from
+   style.css so that a page which is not the office can take them without the
+   office's layout: valey.dev carries this repository as a submodule and ships
+   core/web whole, yet it kept its own copy of these values, and by 12 September
+   2026 the copy had drifted from them in five names. A page that wants the
+   office's colours links this file; the office links it before style.css.
+
+   Nothing here may assume the office's DOM. A selector in this file lands on
+   every page that links it. */
+
+/* The font ships as a repository file rather than from a CDN: the office works
+   offline, and the only external request it can make is weather, explicitly
+   enabled by a person. Its required license travels beside it in fonts/OFL.txt.
+   There are two faces, regular and bold; the office uses no italics.
+
+   JetBrains Mono advances each glyph by 0.6 em, exactly like Courier New
+   (measured from hmtx/head in TTF 2.304). Canvas-label arithmetic relies on it:
+   the sign above reception was calculated as "6px, 3.6 step," and remains so.
+
+   Use swap rather than block: Courier draws the office while the font loads.
+   No first-frame wait or special code is needed because the canvas redraws
+   every frame and all four measureText calls run in that frame, uncached. Once
+   the font arrives, the next frame uses it. The only one-shot canvas is the
+   text-free radio cover, now owned by its module. */
+@font-face{
+  font-family:"JetBrains Mono"; font-style:normal; font-weight:400; font-display:swap;
+  src:url("fonts/JetBrainsMono-Regular.woff2") format("woff2");
+}
+@font-face{
+  font-family:"JetBrains Mono"; font-style:normal; font-weight:700; font-display:swap;
+  src:url("fonts/JetBrainsMono-Bold.woff2") format("woff2");
+}
+
+/* Palette. theme.js sets the brown tones; these are fallbacks for before it
+   runs. Role accents remain unchanged. */
+:root{
+  --bg:#1b120c; --bg-hi:#2c1e15; --bg-deep:#140d08; --field:#1f150f;
+  --wood-dark:#2a1d15; --wood-hi:#3a2a1e; --wood:#4a3325; --wood-lit:#6b4a2e;
+  --frame:#8a6247; --frame-dim:#6d5040;
+  --muted:#8c7660; --muted-dim:#6d5a48;
+  --ink:#f6e3c0; --ink-dim:#c9b391;
+  --cab:#8a5f3a; --cab2:#6b472a; --cab-edge:#a9784c; --cab-in:#5e3f27; --cab-dial:#c9a06a;
+  --accent:#9fe0a8; --warn:#ffd166;
+  /* Accents above brown: roles, states, and the pager screen. theme.js does NOT
+     rotate these—it touches only brown tones and --accent—so an agent role and
+     the word "broken" read consistently in every office hue. */
+  --info:#8fc8ff; --info-edge:#3f5c78;
+  --lilac:#c39bff; --lilac-edge:#5a4478;
+  --warn-edge:#6d5a2a; --warn-dim:#c98a5e;
+  --accent-edge:#3f6a48;
+  /* Fill of a pressed "on" button. --accent supplies its border and text, while
+     the fill stays static: even with a pink cherry accent, green still reads as on. */
+  --on:#3f5c48;
+  --ink-hi:#fff;
+  /* Roles with their own tones: design and research use --lilac and --info,
+     plan uses --warn, and code uses --accent. --role-qa differs from --bad by
+     one channel and remains separate: they serve different places, and merging
+     them would shift a deliberately measured colour. */
+  --role-qa:#ff9b8f; --role-qa-edge:#78453f;
+  --role-rel:#7fd4d0; --role-rel-edge:#35625f;
+  --bad:#ff9f8f; --bad-dim:#e08a6a;
+  /* Armed button: the next press sends the task into a live chat. */
+  --arm:#7a3a2e; --arm-edge:#c9694b; --arm-ink:#ffd9c0;
+  --retry:#7a5a2e; --retry-hi:#96702f; --retry-edge:#c9a04b; --retry-ink:#ffe9b8;
+  /* Pager screen. --lcd-ink matches the default green --accent but remains a
+     separate token: --accent changes with office hue, while pager glass is
+     always green. */
+  --lcd:#16200f; --lcd-edge:#0d1409; --lcd-ink:#9fe0a8; --lcd-dim:#6f9c76;
+  /* The OFF label on a disabled module in the stand plaque. */
+  --off:#c2795f;
+  /* Room tile from web/office.js. Like the accents above, it deliberately does
+     not rotate with office hue: it holds inventory objects, while interface
+     recolouring leaves the canvas alone. A dark cap vanished completely on a
+     dark tile, which the first live frame exposed. */
+  --tile:#4b433c;
+}
