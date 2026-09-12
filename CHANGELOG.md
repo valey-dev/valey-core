@@ -4,6 +4,20 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.40.1 — 12 September 2026
+
+### Fixed
+
+- **port:** walking for a free port stops at 65535 instead of dying on 65536 (09e5162)
+- **settings:** the config folder is made 0700 when the office makes it (4e8bff1)
+- **settings:** the settings file is written 0600 — it holds the owner token and the invitations (e619fe6)
+- **install:** the pack's path is a path, not a shell program (a4d92d0)
+- **access:** revoking an invitation closes the guest's open stream and forgets his grants (d15aa2e)
+- **modules:** /modules/ hands out a module's page files only, and only to the invited (6313201)
+
+### Other
+
+- test(guest): a shown module with no page of its own is not a broken build (2e73900)
 ## v0.40.0 — 12 September 2026
 
 ### Added
