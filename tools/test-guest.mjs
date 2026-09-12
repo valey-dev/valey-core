@@ -136,7 +136,10 @@ try {
     catch { return false; }
   });
   ok('the ones declared open reach a guest, and only those', ids(theirMods.j || []) === ids(shown), [ids(shown), ids(theirMods.j || [])]);
-  ok('and they have something to load with', (theirMods.j || []).every((m) => !!m.client), theirMods.j);
+  // A module may be shown and have no page of its own — the feed is a server
+  // route and a PWA, and lists with client null. The audit of 12 September 2026
+  // found this line red on exactly that, reading it as a broken build.
+  ok('and each names its client, or says it has none', (theirMods.j || []).every((m) => m.client === null || typeof m.client === 'string'), theirMods.j);
 
   // The release nudge names a draft on the owner's disk; a guest's snapshot
   // carries none, whatever the owner's says.
