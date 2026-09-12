@@ -4,6 +4,24 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.40.0 — 12 September 2026
+
+### Added
+
+- **touch:** the office on a tablet — a stick, ● and ✕, and a ≡ sheet of the panel keys (9ee0a67)
+
+### Fixed
+
+- **touch:** the stick no longer goes deaf under a toast (dc4841f)
+- **entrance:** the release nudge stays with the owner, and a guest's entrance does not carry it (b1b5760)
+- **stand:** the plaque folds by a tap, for a screen that has no «~» (41e6594)
+- **touch:** the first finger on a screen that did not call itself coarse takes the stick (a714e5d)
+
+### Other
+
+- docs(notes): the tablet's note and its three frames (6cd9703)
+- chore(shot): the camera can pretend to be a tablet, and tap a button (e6e83fb)
+- test(touch): the tablet's stick and buttons as arithmetic, with a stand (b870a12)
 ## v0.39.1 — 12 September 2026
 
 ### Other

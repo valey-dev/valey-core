@@ -1,0 +1,32 @@
+{
+  "tag": "v0.40.0",
+  "shots": [
+    {
+      "file": "touch-floor.png",
+      "slug": "touch",
+      "id": "floor",
+      "url": "",
+      "keys": "Enter,wait:2500",
+      "viewport": "1280,800",
+      "touch": "true"
+    },
+    {
+      "file": "touch-sheet.png",
+      "slug": "touch",
+      "id": "sheet",
+      "url": "",
+      "keys": "Enter,wait:2500,tap:.tchmenu,wait:600",
+      "viewport": "1280,800",
+      "touch": "true"
+    },
+    {
+      "file": "touch-entrance.png",
+      "slug": "touch",
+      "id": "entrance",
+      "url": "",
+      "keys": "wait:1500",
+      "viewport": "1280,800",
+      "touch": "true"
+    }
+  ]
+}
