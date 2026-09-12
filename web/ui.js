@@ -2992,6 +2992,44 @@ function openHtml() {
     </li>`).join('')}</ul>`;
 }
 
+// Owner devices. A device asking to become the owner comes first in the panel:
+// it is the one thing here with a clock on it — two minutes — and a phone in the
+// owner's hand is waiting for the answer. Everything needed to decide precedes
+// the buttons, the code most of all: it is the same four digits the device
+// shows, and it is what tells this request from somebody else's.
+// Frames: WIP «Owner devices» (#devices), «Panel · Pairing request».
+function pairingHtml() {
+  const list = ((S.access || {}).pairings) || [];
+  return list.map((p) => `<div class="pairreq">
+      <p class="say">${tr('pair.lead', { name: esc(p.name) })}</p>
+      <div class="orow"><b>${tr('pair.device')}</b><span>${esc(p.name)}</span></div>
+      <div class="orow"><b>${tr('pair.from')}</b><span>${tr('pair.fromLan', { ip: esc(p.ip) })}</span></div>
+      <div class="orow"><b>${tr('pair.code')}</b><span>${tr('pair.codeSub')}</span><i class="paircode">${esc(p.code.split('').join(' '))}</i></div>
+      <div class="orow"><b>${tr('pair.howLong')}</b><span>${tr('pair.howLongSub')}</span></div>
+      <p class="act">${tr('pair.warn')}</p>
+      <div class="prow">
+        <button class="primary" data-pairyes="${esc(p.id)}">${tr('pair.yes')}</button>
+        <button data-pairno="${esc(p.id)}">${tr('pair.no')}</button>
+      </div>
+      <p class="hint dim">${tr('pair.foot')}</p>
+    </div>`).join('');
+}
+
+// The devices that may command this office. This machine heads the list and has
+// no button: it is the owner by being here, and there is nothing to revoke.
+function devicesHtml() {
+  const list = ((S.access || {}).devices) || [];
+  return `<p class="hint">${tr('pair.devices')}</p>
+    <ul class="notes">
+      <li><b>${tr('pair.thisMachine')}</b><span>${tr('pair.always')}</span></li>
+      ${list.map((d) => `<li>
+        <b>${esc(d.name)}</b>
+        <span>${d.lapsed ? tr('pair.lapsed') : tr('pair.since', { at: when(d.pairedAt), seen: when(d.lastSeen) })}</span>
+        <button data-unpair="${esc(d.id)}">${tr('pair.revoke')}</button>
+      </li>`).join('')}
+    </ul>`;
+}
+
 export function inviteOpen() { return el.invite && !el.invite.hidden; }
 export function closeInvite() { if (el.invite) el.invite.hidden = true; }
 
@@ -3009,6 +3047,8 @@ const accessSig = () => {
   return JSON.stringify([
     (a.requests || []).map((r) => [r.id, r.state, r.who, r.agentId]),
     (a.open || []).map((o) => [o.guestId, o.agentId]),
+    (a.pairings || []).map((p) => p.id),
+    (a.devices || []).map((d) => [d.id, d.lastSeen]),
   ]);
 };
 let inviteSig = '';
@@ -3042,6 +3082,7 @@ async function renderInvite() {
   el.invite.innerHTML = `<div class="rwrap invwrap">
     <div class="vhead">${tr('inv.title')}<button id="invx">✕</button></div>
     <div class="invbody">
+      ${pairingHtml()}
       <p class="say">${tr('inv.lead')}</p>
       <div class="sendrow">
         <input id="invWho" placeholder="${tr('inv.who')}" maxlength="24">
@@ -3061,7 +3102,9 @@ async function renderInvite() {
           <span>${i.used ? tr('inv.entered', { at: when(i.usedAt) }) : tr('inv.pending', { at: when(i.at) })}</span>
           <button data-douse="${esc(i.id)}">${i.used ? tr('inv.evict') : tr('inv.douse')}</button>
         </li>`).join('')}</ul>` : `<p class="hint dim">${tr('inv.none')}</p>`}
+      ${devicesHtml()}
       <p class="hint dim">${tr('inv.note')}</p>
+      <p class="hint dim">${tr('pair.note')}</p>
     </div></div>`;
 
   $('#invx').onclick = closeInvite;
@@ -3069,6 +3112,15 @@ async function renderInvite() {
   // waiting for the 2.5-second snapshot. Otherwise the clicked button would look
   // untouched during that entire interval.
   const took = async (r) => { if (r && r.access) S.access = r.access; inviteSig = accessSig(); await renderInvite(); };
+  el.invite.querySelectorAll('[data-pairyes]').forEach((b) => {
+    b.onclick = async () => took(await api.answerPair(b.dataset.pairyes, true));
+  });
+  el.invite.querySelectorAll('[data-pairno]').forEach((b) => {
+    b.onclick = async () => took(await api.answerPair(b.dataset.pairno, false));
+  });
+  el.invite.querySelectorAll('[data-unpair]').forEach((b) => {
+    b.onclick = async () => took(await api.revokeDevice(b.dataset.unpair));
+  });
   el.invite.querySelectorAll('[data-yes]').forEach((b) => {
     b.onclick = async () => took(await api.answerAccess(b.dataset.yes, true));
   });
