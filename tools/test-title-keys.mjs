@@ -168,7 +168,7 @@ ok('and SPACEBAR does nothing there', calls.enter.length === 0 && calls.lang ===
 // -------------------------------------------------------- walked up to the switch
 walk('ArrowRight', 80);
 key(' ');
-ok('SPACEBAR at the switch changes the language', calls.lang === 1, calls.lang);
+ok('SPACEBAR at the switch calls the language panel', calls.lang === 1, calls.lang);
 ok('and does not enter the office', calls.enter.length === 0, calls.enter);
 
 // ---------------------------------------------------------------- walked up to the menu
@@ -193,6 +193,12 @@ ok('Enter enters the selected room', calls.enter.at(-1) === 'kennel', calls.ente
 key('Escape');
 renderTitle();
 ok('ESC returned to the menu, but did not close the screen', titleOpen() && overlay.querySelectorAll('.tbtn').length === 4, overlay.querySelectorAll('.tbtn').length);
+// TAB is the menu's own promise («Who's inside · TAB») and the registry's
+// panel.standup; until 12 September 2026 the screen waited for a name nothing
+// sent, and the key did nothing here.
+ok('TAB opens the list of rooms', key('Tab') === true && overlay.querySelectorAll('.trow').length === 3, overlay.querySelectorAll('.trow').length);
+key('Escape');
+renderTitle();
 
 // --------------------------------------------------------- the other keys
 calls.enter.length = 0;
