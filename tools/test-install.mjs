@@ -13,6 +13,21 @@ import path from 'node:path';
 
 const ROOT = path.dirname(path.dirname(new URL(import.meta.url).pathname));
 const SCRIPT = path.join(ROOT, 'install.sh');
+
+// The pack's path is a path. Until 12 September 2026 it went through `eval
+// echo`, and a pack named `$(cmd).zip` — quoted correctly by the person who
+// typed it — ran cmd. place() is what expands ~ now, and nothing else moves.
+{
+  const text = readFileSync(SCRIPT, 'utf8');
+  assert.ok(!/^[^#\n]*\beval\b/m.test(text), 'install.sh must not eval anything');
+  const fn = text.match(/^place\(\) \{[\s\S]*?^\}/m)[0];
+  const place = (arg) => execFileSync('sh', ['-c', fn + '\nplace "$1"', '_', arg], { encoding: 'utf8' });
+  const tricky = '$(printf AUDIT_COMMAND_EXECUTED).zip';
+  assert.strictEqual(place(tricky), process.cwd() + '/' + tricky, 'a $(…) in the name stays literal');
+  assert.strictEqual(place('a b;c`d`.zip'), process.cwd() + '/a b;c`d`.zip', 'spaces, ; and backticks stay literal');
+  assert.strictEqual(place('~/Downloads/x.zip'), process.env.HOME + '/Downloads/x.zip', '~ still expands');
+  console.log('ok    | the pack path is a path, not a shell program');
+}
 const work = mkdtempSync(path.join(tmpdir(), 'valey-install-'));
 
 // A fake release: one file is enough — the stand is about the script, not the
