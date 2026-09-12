@@ -124,20 +124,53 @@ const cache = new Map(); // sessionId -> { file, offset, pending, st }
 // same pass, for the same reason: on the tail it would be a percentage of a
 // day. The filter widens from a tool call to any assistant line, which is what
 // a reply is; measured at the same 350 ms on the largest file here.
+//
+// The conversation is collected in the same pass too, and that one is a fix.
+// After a restart the office knows only what the last megabyte holds, and a
+// megabyte is one screenshot: a tool result carrying a base64 PNG is a single
+// line of 1.1–1.3 MB. On 13 September 2026 three of fourteen live sessions here
+// had no reply at all in their last megabyte against 48–123 in the file, and
+// their transcript opened empty after the office was restarted. So the head
+// hands over its own last replies, the reply said last and the task named last,
+// and the tail's newer ones stay in front of them.
 async function deepSkills(st, file, until) {
   if (until <= 0) return;
   const own = { last: 0 };
+  const said = [];
+  let lastText = '';
+  let lastTask = null;
+  const keep = (role, text, ts) => {
+    said.push({ role, text: text.slice(0, MSG_MAX), ts: ts ? Date.parse(ts) : 0 });
+    if (said.length > RECENT_MAX) said.shift();
+  };
   const rl = createInterface({
     input: createReadStream(file, { encoding: 'utf8', start: 0, end: until - 1 }),
     crlfDelay: Infinity,
   });
   for await (const line of rl) {
-    // JSON.parse only where the agent speaks: on 63 MB that is the difference
-    // between 350 ms and parsing the whole file for nothing.
-    if (line.length < 40 || !line.includes('"assistant"')) continue;
+    // JSON.parse only where the agent speaks or the person does: on 63 MB that
+    // is the difference between 350 ms and parsing the whole file for nothing.
+    // A tool result is a user line too, and the heaviest kind — every one of
+    // them carries a tool_use_id, and none of the person's prompts does.
+    if (line.length < 40) continue;
+    const speaks = line.includes('"assistant"');
+    if (!speaks && !(line.includes('"user"') && !line.includes('"tool_use_id"'))) continue;
     let r;
     try { r = JSON.parse(line); } catch { continue; }
+    if (r.type === 'user' && r.message && !r.isSidechain) {
+      const content = r.message.content;
+      if (Array.isArray(content) && content.some((b) => b?.type === 'tool_result')) continue;
+      const txt = textOf(content);
+      if (txt && !txt.startsWith('<') && !INTERRUPTED_RE.test(txt)) keep('user', txt, r.timestamp);
+      continue;
+    }
     if (r.type !== 'assistant' || !r.message) continue;
+    const txt = textOf(r.message.content || []);
+    if (txt) {
+      keep('assistant', txt, r.timestamp);
+      lastText = txt;
+      lastTask = reportTail(txt) || lastTask;
+    }
     born(st, r.timestamp);
     // The head keeps its own clock. It runs after the tail has been applied and
     // its stamps are all older, so sharing one would produce negative gaps; the
@@ -151,6 +184,11 @@ async function deepSkills(st, file, until) {
       if (SKILL_OF[mood]) st.skills[SKILL_OF[mood]]++;
     }
   }
+  // Older than anything the tail found, so they go in front; the tail may have
+  // grown while this pass ran, and its replies stay the newest either way.
+  if (said.length) st.recent = [...said, ...st.recent].slice(-RECENT_MAX);
+  if (!st.lastAssistantText && lastText) st.lastAssistantText = lastText;
+  if (!st.task && lastTask) st.task = lastTask;
 }
 
 async function readRange(file, start, length) {
@@ -946,5 +984,5 @@ export function fileAllowed(p, snap) {
 export {
   fs, inferRole, describeTool, ROLES, ROLE_WINDOW_MS, ROLE_STALE_MS,
   // exported for the stand alone: it runs the parser on real transcript lines
-  applyLine, emptyState, SKILL_OF, SKILL_BRANCHES,
+  applyLine, emptyState, SKILL_OF, SKILL_BRANCHES, follow, deepSkills,
 };
