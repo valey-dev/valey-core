@@ -12,7 +12,18 @@ export const MODES = new Set(['default', 'acceptEdits', 'bypassPermissions']);
 // headless runs cannot answer a permission prompt, so a blocked agent just says so
 const BLOCKED_RE = /(упер[а-яё]* в прав|требу[а-яё]* (?:тво[а-яё]* )?подтвержд|нужн[а-яё]* (?:тво[а-яё]* )?разрешени|не хватает прав|нет прав[а-яё]* на|permission (?:denied|required)|requires? (?:your )?approval|not allowed to)/i;
 
-let cli = { checked: false, path: null, error: null };
+// A run that has not finished in TIMEOUT_MS gets SIGTERM, and one that ignores
+// it gets SIGKILL after the grace. Without the second step a hung run kept its
+// agent «busy» until the server restarted: nothing else ever clears the flag.
+const GRACE_MS = 5000;
+
+const NO_CLI = { checked: false, path: null, error: null, errorKey: null, at: 0 };
+let cli = NO_CLI;
+let looking = null;
+// A found CLI is kept for good, a miss for a minute: somebody may install the
+// CLI while the office runs, and «not found» after an install reads as the
+// office being broken. The key card's button asks at once (forgetCli).
+const MISS_TTL = 60_000;
 // The CLI account changes underfoot — somebody logs in as someone else, and
 // the office has to notice, so the answer lives a minute rather than until the
 // server restarts.
@@ -20,21 +31,35 @@ let acc = { at: 0, value: null };
 const ACC_TTL = 60_000;
 const busy = new Set();
 
-export async function findCli() {
-  if (cli.checked) return cli;
-  cli.checked = true;
+async function lookup() {
+  const found = { ...NO_CLI, checked: true, at: Date.now() };
   const explicit = process.env.CLAUDE_BIN;
-  if (explicit) { cli.path = explicit; return cli; }
+  if (explicit) { found.path = explicit; return found; }
   try {
     // a login shell, so nvm/homebrew paths are in place
     const { stdout } = await run('/bin/sh', ['-lc', 'command -v claude'], { timeout: 5000 });
-    const p = stdout.trim().split('\n')[0];
-    if (p) cli.path = p;
-    else { cli.error = 'claude was not found in PATH'; cli.errorKey = 'err.noCli'; }
-  } catch {
-    cli.error = 'claude was not found in PATH'; cli.errorKey = 'err.noCli';
+    found.path = stdout.trim().split('\n')[0] || null;
+  } catch { /* not found — the same answer as an empty one */ }
+  if (!found.path) { found.error = 'claude was not found in PATH'; found.errorKey = 'err.noCli'; }
+  return found;
+}
+
+// One lookup at a time, and nobody reads its answer before it arrives. Until
+// 13 September 2026 the «checked» flag went up before the shell answered, so a
+// second caller inside those seconds — the tick and a task sent at the same
+// moment — was told «not installed» about a CLI that was there.
+// `look` is for the stand: the real lookup depends on what this machine has.
+export function findCli(look = lookup) {
+  if (cli.checked && (cli.path || Date.now() - cli.at < MISS_TTL)) return Promise.resolve(cli);
+  if (!looking) {
+    // forgetCli may drop this lookup halfway; its answer then goes only to
+    // those who were already waiting for it, and the next call asks again
+    const p = look()
+      .then((c) => { if (looking === p) cli = c; return c; })
+      .finally(() => { if (looking === p) looking = null; });
+    looking = p;
   }
-  return cli;
+  return looking;
 }
 
 // Which account the CLI continues conversations as. This is a separate login
@@ -64,10 +89,8 @@ async function account(path) {
 // Logged in as someone else — the office learns it at once, without waiting out the minute
 export function forgetAccount() { acc = { at: 0, value: null }; }
 // The full recheck behind the key card's button: the binary and the account
-// both. findCli caches forever, which is right for the hot path — but somebody
-// may have installed the CLI a minute ago, and «not found» after an install
-// reads as the office being broken.
-export function forgetCli() { cli = { checked: false, path: null, error: null }; forgetAccount(); }
+// both, without waiting out the minute a miss is kept.
+export function forgetCli() { cli = NO_CLI; looking = null; forgetAccount(); }
 
 export async function deliveryStatus() {
   const c = await findCli();
@@ -90,8 +113,9 @@ export async function deliveryStatus() {
 
 export function isBusy(agentId) { return busy.has(agentId); }
 
-// task is mutated in place so the game can watch it move through its states
-export async function deliver(task, agent, mode = 'default') {
+// task is mutated in place so the game can watch it move through its states;
+// the timings are for the stand, which cannot wait ten minutes
+export async function deliver(task, agent, mode = 'default', { timeout = TIMEOUT_MS, grace = GRACE_MS } = {}) {
   const c = await findCli();
   if (!c.path) { task.state = 'failed'; task.error = 'claude CLI is not installed'; task.errorKey = 'err.notInstalled'; return task; }
   if (busy.has(agent.id)) { task.state = 'failed'; task.error = 'another message is already being sent to this agent'; task.errorKey = 'err.busy'; return task; }
@@ -113,19 +137,34 @@ export async function deliver(task, agent, mode = 'default') {
   child.stdout.on('data', (d) => { out += d; if (out.length > 200_000) out = out.slice(-200_000); });
   child.stderr.on('data', (d) => { err += d; if (err.length > 20_000) err = err.slice(-20_000); });
 
-  const timer = setTimeout(() => child.kill('SIGTERM'), TIMEOUT_MS);
+  let timedOut = false, kill = null;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    child.kill('SIGTERM');
+    kill = setTimeout(() => child.kill('SIGKILL'), grace);
+  }, timeout);
+  const stop = () => { clearTimeout(timer); clearTimeout(kill); busy.delete(agent.id); };
+  // 'close' waits for the pipes as well as the process, and whatever the run
+  // started — a tool's shell — inherits them and outlives the kill. A stopped
+  // run has nothing more to say, so its pipes are closed from this side.
+  child.on('exit', () => { if (timedOut) { child.stdout.destroy(); child.stderr.destroy(); } });
 
   return new Promise((resolve) => {
     child.on('error', (e) => {
-      clearTimeout(timer); busy.delete(agent.id);
+      stop();
       task.state = 'failed'; task.error = e.message; task.finishedAt = Date.now();
       console.error('[deliver]', e.message);
       resolve(task);
     });
     child.on('close', (code) => {
-      clearTimeout(timer); busy.delete(agent.id);
+      stop();
       task.finishedAt = Date.now();
-      if (code === 0) {
+      if (timedOut) {
+        // a killed run closes with no code, which used to read «exited with code null»
+        task.state = 'failed';
+        task.error = `claude did not finish in ${Math.round(timeout / 60000)} minutes and was stopped`;
+        task.errorKey = 'err.timedOut';
+      } else if (code === 0) {
         task.state = 'delivered';
         task.reply = out.trim().slice(0, 2000);
         task.mode = mode;
