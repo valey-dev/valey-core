@@ -31,6 +31,16 @@ const oPort = await listen(office);
 const who = await whoIsOn(oPort);
 ok(who && who.version === '9.9.9', 'the office on the port was not recognised');
 
+// The top of the range: 65535 taken means «no free port», not a crash on 65536.
+{
+  const top = http.createServer();
+  const held = await new Promise((r) => { top.once('error', () => r(false)); top.listen(65535, '127.0.0.1', () => r(true)); });
+  await assert.rejects(listenFree(http.createServer(), 65535, '127.0.0.1', { probe: async () => null, tries: 3 }),
+    (e) => /no free port/.test(e.message), 'walking past 65535 did not fail with the office\'s own sentence');
+  n++;
+  if (held) await close(top);
+}
+
 // The fallback: the stranger holds the port, the office goes one up and says so.
 const logs = [];
 const mine = http.createServer();
