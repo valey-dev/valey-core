@@ -96,6 +96,15 @@ ok('in the input field "~" is printed rather than collapsed', !classes.has('stan
 press('Backquote', { target: { tagName: 'TEXTAREA' } });
 ok('and in a multiline field too', !classes.has('stand-folded'), [...classes]);
 
+// ------------------------------------------------------------------- the tap
+// A tablet has no «~»: the plaque's first line folds it by a tap, the tab unfolds.
+const tag = document.body.children[0].children[0];
+ok('the first line of the plaque answers a tap', typeof tag.onclick === 'function', typeof tag.onclick);
+tag.onclick();
+ok('a tap on it folds', classes.has('stand-folded'), [...classes]);
+tab.onclick();
+ok('and the tab unfolds again', !classes.has('stand-folded'), [...classes]);
+
 // ------------------------------------------------------------- between reloads
 press('Backquote');
 ok('the collapsed state is written', store.get('valey-stand-folded') === '1', store.get('valey-stand-folded'));

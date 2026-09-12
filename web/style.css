@@ -1085,7 +1085,7 @@ body.titling #hud{visibility:hidden}
 .stand-mod.broken{border-color:var(--bad); color:var(--bad)}
 .stand-mod.broken i{color:var(--bad)}
 .stand-fine{font-size:9px; opacity:.65; margin-top:2px}
-.stand-tag{color:var(--warn); letter-spacing:.18em; font-size:9px}
+.stand-tag{color:var(--warn); letter-spacing:.18em; font-size:9px; pointer-events:auto; cursor:pointer}
 .stand-what{color:var(--ink); font-size:12px; margin:3px 0 4px}
 .stand-where{font-size:10px; opacity:.8}
 .stand-bad{color:var(--bad); font-size:10px; margin-top:3px}
