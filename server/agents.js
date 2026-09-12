@@ -309,7 +309,14 @@ const ACT_EN = {
   figma: 'drawing in Figma', jira: 'working in Jira', slack: 'writing in Slack',
   mail: 'going through the mail', mcp: 'calling {arg}', work: 'working', thinking: 'thinking',
   awaiting: 'waiting on your word', idle: 'staring out of the window',
+  stopped: 'stopped mid-step',
 };
+
+// A stopped agent's line says where it was cut off: the file of the step it
+// never finished, when the step had one. Without it «stopped mid-step» leaves
+// the person guessing what to say «continue» to.
+const stoppedAct = (status, act) => (status !== 'stopped' ? null
+  : act.arg ? { key: 'stoppedAt', arg: act.arg } : { key: 'stopped', arg: '' });
 const ACT_FALLBACK_EN = { edit: 'code', read: 'a file' };
 const actEn = (a) => (ACT_EN[a.key] || ACT_EN.work).replace('{arg}', a.arg || ACT_FALLBACK_EN[a.key] || '');
 
@@ -948,8 +955,12 @@ const STEP_MS = 60 * 60_000;
 // can drive it with lines and a clock of its own.
 //
 // «Awaiting» means the agent has done its part and the next move is the
-// person's. An explicit ask always is; an interrupt and an API error are too —
-// the agent stopped and will not go on by itself. A turn ended with background
+// person's. An explicit ask always is; an API error is too — the app is back at
+// the prompt with nothing to retry. An interrupt is «stopped»: the agent was cut
+// off mid-step and will not go on by itself, but it asks for nothing either, so
+// it rings neither the pager nor «! N» and is counted by a chip of its own.
+// 21 interrupts in four days, 20 of them followed by the app's resume line —
+// most were a restart of the process, which the person never saw happen. A turn ended with background
 // work still running is not: the agent is waiting on its own job and will be
 // woken by it, so it is working, under the same hour as an open turn. A report
 // that says «Ничего» is the agent at rest.
@@ -960,7 +971,8 @@ const isRunning = (t, now) => [...(t.background || new Map()).values()].some((at
 
 export function statusOf(t, now = Date.now()) {
   const own = isRunning(t, now);
-  if (t.ended === 'asked' || t.ended === 'stopped' || t.ended === 'error') return 'awaiting';
+  if (t.ended === 'stopped') return 'stopped';
+  if (t.ended === 'asked' || t.ended === 'error') return 'awaiting';
   if (t.ended === 'bare' && !own) return 'awaiting';
   if (t.ended === 'settled' && !own) return 'idle';
   const idleFor = t.lastTs ? now - t.lastTs : Infinity;
@@ -1014,8 +1026,8 @@ export async function snapshot() {
       role: roleInfo.role,
       roleKey: roleInfo.short,
       status,
-      act: busy ? { key: act.key, arg: act.arg || '' } : { key: status === 'awaiting' ? 'awaiting' : 'idle', arg: '' },
-      activity: busy ? actEn(act) : (status === 'awaiting' ? ACT_EN.awaiting : ACT_EN.idle),
+      act: busy ? { key: act.key, arg: act.arg || '' } : stoppedAct(status, act) || { key: status === 'awaiting' ? 'awaiting' : 'idle', arg: '' },
+      activity: busy ? actEn(act) : (status === 'stopped' ? ACT_EN.stopped : status === 'awaiting' ? ACT_EN.awaiting : ACT_EN.idle),
       mood: act.mood,
       lastSaid: t.lastAssistantText.slice(0, 1500),
       // The limit notice is not something the agent said: it came from the
