@@ -12,25 +12,35 @@
 // to the code.
 import http from 'node:http';
 
-// Who answers on a port. An office says so on /api/version; anything else —
-// another program, a closed port, a hung socket — is `null`. The timeout is
-// short on purpose: this runs on the way to a startup message, not a request.
-export function whoIsOn(port, { host = '127.0.0.1', timeout = 1500 } = {}) {
+// A small JSON GET, or null for anything that is not JSON in time.
+function getJson(port, host, path, timeout) {
   return new Promise((resolve) => {
-    const req = http.get({ host, port, path: '/api/version', timeout }, (res) => {
+    const req = http.get({ host, port, path, timeout }, (res) => {
       let body = '';
       res.setEncoding('utf8');
       res.on('data', (c) => { body += c; if (body.length > 4096) req.destroy(); });
-      res.on('end', () => {
-        try {
-          const j = JSON.parse(body);
-          resolve(j && j.valey === true ? { version: String(j.version || '?') } : null);
-        } catch { resolve(null); }
-      });
+      res.on('end', () => { try { resolve(JSON.parse(body)); } catch { resolve(null); } });
     });
     req.on('timeout', () => req.destroy());
     req.on('error', () => resolve(null));
   });
+}
+
+// Who answers on a port. An office says so on /api/version; anything else —
+// another program, a closed port, a hung socket — is `null`. The timeout is
+// short on purpose: this runs on the way to a startup message, not a request.
+//
+// Offices older than /api/version (before 11 September 2026, v0.33.0) answer
+// 404 there, and on 12 September one of them — started the day before and never
+// restarted — was called «not Valey», and the new office walked past it. They
+// do answer /api/whoami, with a shape nothing else would: that is the fallback,
+// and the version is then unknown (`null`).
+export async function whoIsOn(port, { host = '127.0.0.1', timeout = 1500 } = {}) {
+  const v = await getJson(port, host, '/api/version', timeout);
+  if (v && v.valey === true) return { version: String(v.version || '?') };
+  const w = await getJson(port, host, '/api/whoami', timeout);
+  if (w && typeof w === 'object' && 'owner' in w && 'mode' in w) return { version: null };
+  return null;
 }
 
 const listenOnce = (server, port, host) => new Promise((resolve, reject) => {
@@ -49,7 +59,7 @@ const listenOnce = (server, port, host) => new Promise((resolve, reject) => {
  * said where the running office is. Any error other than a taken port is
  * thrown as it was.
  */
-export async function listenFree(server, port, host, { probe = whoIsOn, tries = 10, log = () => {} } = {}) {
+export async function listenFree(server, port, host, { probe = whoIsOn, tries = 10, log = () => {}, own = null } = {}) {
   for (let i = 0; i <= tries; i++) {
     const p = port + i;
     try {
@@ -59,7 +69,11 @@ export async function listenFree(server, port, host, { probe = whoIsOn, tries = 
       if (!err || err.code !== 'EADDRINUSE') throw err;
       const other = await probe(p);
       if (other) {
-        log(`Valey is already running at http://localhost:${p} (v${other.version}) — open that one.`);
+        const which = other.version ? `v${other.version}` : 'an older version';
+        log(`Valey is already running at http://localhost:${p} (${which}) — open that one.`);
+        // A different version running is usually the office this one was
+        // meant to replace: the installer updates the folder, not the process.
+        if (own && other.version !== own) log(`  To run v${own} instead, stop that one and start again.`);
         log(`  A second office beside it: PORT=${p + 1} npm start`);
         return null;
       }
