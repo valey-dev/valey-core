@@ -707,7 +707,7 @@ const DICT = {
     // and not always.
     'hint.walk': 'ходить', 'hint.run': 'бежать', 'hint.runMore': 'с F9 — кадр ×4',
     'hint.interact': 'действие',
-    'hint.interactMore': 'поговорить, попить, нажать выбранное; на доске без соседей — прыжок',
+    'hint.interactMore': 'поговорить, попить, покормить пираний, нажать выбранное; на доске без соседей — прыжок',
     'hint.skate': 'скейт',
     'hint.sound': 'звук', 'hint.standup': 'планёрка', 'hint.notes': 'заметки',
     'hint.bag': 'одежда',
@@ -1373,7 +1373,7 @@ const DICT = {
 
     'hint.walk': 'walk', 'hint.run': 'run', 'hint.runMore': 'with F9 — a ×4 frame',
     'hint.interact': 'action',
-    'hint.interactMore': 'talk, drink, press what is chosen; on the board with nobody near — an ollie',
+    'hint.interactMore': 'talk, drink, feed the piranhas, press what is chosen; on the board with nobody near — an ollie',
     'hint.skate': 'skateboard',
     'hint.sound': 'sound', 'hint.standup': 'the standup', 'hint.notes': 'notes',
     'hint.bag': 'clothes',
