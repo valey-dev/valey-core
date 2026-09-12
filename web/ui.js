@@ -552,20 +552,25 @@ function bindPermit(a) {
     e.preventDefault();
     el.dialog.querySelector('.prow [data-a="deny"]')?.click();
   };
-  // An option is the answer. The hook has no field for one — it returns allow or
-  // deny with a message — so the words travel as the message of a deny: the tool
-  // call is refused and the agent reads what was said. The word «deny» stays
-  // inside the protocol; the card calls it «ответить».
+  // An option is the answer, and it goes out as one: the label travels to the
+  // hook, which hands it back to Claude Code as `answers` — the agent gets the
+  // choice exactly as if it had been clicked in the client's own picker. Until
+  // 11 September 2026 it went out as the message of a deny, and the desktop app
+  // ignored it: its picker was already up, and every press ended in «this
+  // question is already closed».
   for (const b of [...el.dialog.querySelectorAll('.qopt')]) {
     b.onclick = async () => {
       if (!p || !p.question) return;
       const o = p.question.options[Number(b.dataset.opt)];
       if (!o) return;
       const label = typeof o === 'string' ? o : (o.label || '');
-      const note = typeof o === 'string' ? '' : (o.note || '');
       for (const x of el.dialog.querySelectorAll('.qopt, .prow button')) x.disabled = true;
-      await api.answerPermit(p.id, 'deny', note ? `${label} — ${note}` : label);
+      const r = await api.answerPermit(p.id, 'answer', '', label);
       denying = false;
+      if (r && r.error) UI_toastKey(r);
+      else api.toast(tr('toast.permitAnswered', { who: a.name, answer: label, a: a.gender === 'f' ? 'а' : '' }));
+      api.forgetPermit(p.id);
+      S.page = 'talk';
       renderDialog();
     };
   }

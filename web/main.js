@@ -271,9 +271,9 @@ UI.initUI(state, {
     }
     return r;
   }).catch((e) => ({ error: e.message })),
-  answerPermit: (id, decision, message) => fetch('/api/permit/answer', {
+  answerPermit: (id, decision, message, label) => fetch('/api/permit/answer', {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
-    body: JSON.stringify({ id, decision, message }),
+    body: JSON.stringify({ id, decision, message, label }),
   }).then((r) => r.json()).catch((e) => ({ error: e.message })),
   forgetPermit: (id) => { forgetPermit(id); state.pagerWaiting = waitingCount(); UI.renderHud(); },
   askAccess: (agentId) => fetch('/api/access', {
