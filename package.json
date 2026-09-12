@@ -18,6 +18,7 @@
     "notes": "node tools/notes.mjs",
     "release": "node tools/release.mjs",
     "ship": "node tools/release.mjs --ship",
+    "promote": "node tools/promote.mjs",
     "land": "node tools/land.mjs"
   },
   "repository": {

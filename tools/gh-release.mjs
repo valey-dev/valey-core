@@ -7,6 +7,7 @@
 //   node tools/gh-release.mjs --dry      # print what would be sent
 //   node tools/gh-release.mjs --all --remote public   # the pages of another remote
 //   node tools/gh-release.mjs --all --refresh          # rewrite bodies already published
+//   node tools/gh-release.mjs v0.41.0 --remote public --since v0.38.0   # one page for three versions
 //
 // Why this exists. Until 5 September 2026 the project had three tags and zero
 // releases on GitHub: the notes were written, assembled from the commits, and
@@ -31,6 +32,7 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { releaseBody } from './notes.mjs';
+import { carried } from './promote-plan.mjs';
 
 // The root comes from this file rather than from the cwd, for the reason
 // release.mjs carries in its own header: git and the files have to look at one
@@ -55,11 +57,21 @@ const refresh = args.includes('--refresh');
 // with two remotes would answer for whichever it was told to prefer.
 const remoteAt = args.indexOf('--remote');
 const remote = remoteAt < 0 ? 'origin' : args[remoteAt + 1];
+// A publication carries every version since the last published one (see
+// promote-plan.mjs), and its page has to say so: `--since v0.38.0` makes the
+// body of v0.41.0 the sections of v0.41.0, v0.40.0 and v0.39.0, newest first.
+// The owner asked for exactly that on 12 September 2026 — iterations checked
+// at home go out together, with notes for all of them.
+const sinceAt = args.indexOf('--since');
+const since = sinceAt < 0 ? null : args[sinceAt + 1];
 // `remoteAt + 1` is the remote's name, not a tag — but only when --remote was
 // given. Without the guard it is index 0, and `gh-release.mjs v0.4.0` threw the
 // tag away and published the newest one instead. Nobody noticed because the one
-// caller that passes a tag, release.mjs, always passes the newest.
-const asked = args.find((a, i) => !a.startsWith('--') && !(remoteAt >= 0 && i === remoteAt + 1));
+// caller that passes a tag, release.mjs, always passes the newest. The value of
+// --since is skipped the same way.
+const asked = args.find((a, i) => !a.startsWith('--')
+  && !(remoteAt >= 0 && i === remoteAt + 1) && !(sinceAt >= 0 && i === sinceAt + 1));
+if (since && args.includes('--all')) die('--since speaks for one publication; it cannot be combined with --all');
 
 // Sorted by version rather than by date: a tag put on an older commit later
 // would otherwise claim to be the newest.
@@ -102,6 +114,23 @@ function bodyFor(tag) {
     return { text: notes(tag), from: 'changelog' };
   }
   return { text: releaseBody(readFileSync(file, 'utf8'), { repo, sha }), from: 'note' };
+}
+
+// The body of a publication that carries several versions: each one's own body
+// under its changelog heading, newest first. One version is its body as before,
+// so a page that carries a single release reads exactly as it always did.
+function bodyOver(tag) {
+  const span = carried(tags, since, tag).reverse();
+  if (span.length < 2) return bodyFor(tag);
+  const md = readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8').split('\n');
+  const parts = [];
+  for (const t of span) {
+    const { text } = bodyFor(t);
+    if (!text) continue;
+    const head = md.find((l) => l.startsWith(`## ${t} `) || l.trim() === `## ${t}`);
+    parts.push(head || `## ${t}`, '', text.trim(), '');
+  }
+  return { text: parts.join('\n').trim(), from: `${span.length} versions since ${since}` };
 }
 
 function currentBody(tag) {
@@ -159,7 +188,7 @@ for (const tag of wanted) {
     { encoding: 'utf8' }).trim();
   if (!onRemote) { console.log(`${tag}: tag is absent from ${remote}; push it before creating a release`); skipped++; continue; }
 
-  const { text: body, from } = bodyFor(tag);
+  const { text: body, from } = since ? bodyOver(tag) : bodyFor(tag);
   if (!body) { console.log(`${tag}: CHANGELOG.md has no section; skipping`); skipped++; continue; }
 
   const have = published(tag);

@@ -5,13 +5,16 @@
 //   node tools/release.mjs             # the range picks the digit
 //   node tools/release.mjs minor       # the same, said out loud and checked
 //   node tools/release.mjs patch --dry
-//   node tools/release.mjs --ship      # cut, push, and open the release page
+//   node tools/release.mjs --ship      # cut, push to staging, open its release page
 //
 // The digit is no longer taken on trust — see release-kind.mjs for why and for
 // the rules. Pushing stays out of the default run: what has gone to origin
 // cannot be rewritten. `--ship` is the opt-in that does the whole tail, and it
 // runs the stands first, because that is the last moment the commit is still
 // cheap to change.
+//
+// The tail ends at the private origin. Publishing — the public core, the
+// buyers' shop front — is promote.mjs, a separate step and the owner's word.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -41,12 +44,30 @@ const gitQuiet = (...a) =>
   execFileSync('git', ['-C', ROOT, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
 const die = (m) => { console.error('release: ' + m); process.exit(1); };
 
+// «The same repo» is not «the same path». Since land.mjs cuts every release in a
+// temporary worktree with VALEY_REPO pointing at it, a path comparison answered
+// «someone else's repository» for every landed release: v0.22.0, v0.23.0 and
+// v0.24.0 all went out without a video draft, and ~/.config/valey/scripts
+// stopped at v0.21.0. What actually separates the two cases is the git object
+// store, which a worktree shares with its checkout and a second repository
+// does not.
+const commonDir = (dir) => {
+  try {
+    const out = execFileSync('git', ['-C', dir, 'rev-parse', '--git-common-dir'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    // `--git-common-dir` answers relative to the cwd of the git call, not to -C,
+    // so it is resolved against the same directory git was pointed at.
+    return realpathSync(path.resolve(dir, out));
+  } catch { return null; }
+};
+const ownRepo = ROOT === TOOL_ROOT || (() => {
+  const a = commonDir(ROOT), b = commonDir(TOOL_ROOT);
+  return a !== null && a === b;
+})();
+
 const argv = process.argv.slice(2);
 const dry = argv.includes('--dry');
 const ship = argv.includes('--ship');
-// The public remote's name. One name rather than "every remote but origin":
-// a stray remote to somebody's fork must not become a publication by accident.
-const PUBLIC = process.env.VALEY_PUBLIC_REMOTE || 'public';
 // Cutting several features into one version is admitting a release was skipped.
 // It has to be said out loud, in the command, rather than in the changelog after
 // the fact — so the guard below refuses and this flag is how you agree.
@@ -234,6 +255,27 @@ if (ship) {
 }
 
 pkg.version = next;
+// A release of another repository — the Modules — records the core its stands
+// just ran against. promote.mjs will not put these modules on the shop front
+// until that core commit is public: a buyer's modules must never need core code
+// the buyer cannot have. Recorded here rather than declared by hand, because a
+// hand-kept minimum is correct on the day it is written and on no day after.
+if (!ownRepo) {
+  const coreCommit = execFileSync('git', ['-C', TOOL_ROOT, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  let described = coreCommit.slice(0, 7);
+  try {
+    described = execFileSync('git', ['-C', TOOL_ROOT, 'describe', '--tags', '--match', 'v[0-9]*'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {}
+  // Uncommitted core edits ran in the stands but are in no commit anybody can
+  // publish; the record says so instead of pretending the commit is the truth.
+  if (execFileSync('git', ['-C', TOOL_ROOT, 'status', '--porcelain', '--untracked-files=no'], { encoding: 'utf8' }).trim()) {
+    described += '+dirty';
+    console.log(`WARNING: the core tree the stands ran against has uncommitted edits; recorded as ${described}\n`);
+  }
+  pkg.valey = { ...(pkg.valey || {}), core: { commit: coreCommit, described } };
+  console.log(`checked against core ${described}`);
+}
 writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
 
 const changelogPath = path.join(ROOT, 'CHANGELOG.md');
@@ -266,27 +308,8 @@ if (!ship) {
 // cheaper than talking yourself into sitting down later.
 // The video is the office's own rule: a minor of the office is shown to people.
 // The modules repository is released by the same tooling and has no video and no
-// audience for one, so the draft belongs to the repo this script lives in.
-//
-// «The same repo» is not «the same path». Since land.mjs cuts every release in a
-// temporary worktree with VALEY_REPO pointing at it, a path comparison answered
-// «someone else's repository» for every landed release: v0.22.0, v0.23.0 and
-// v0.24.0 all went out without a draft, and ~/.config/valey/scripts stopped at
-// v0.21.0. What actually separates the two cases is the git object store, which
-// a worktree shares with its checkout and a second repository does not.
-const commonDir = (dir) => {
-  try {
-    const out = execFileSync('git', ['-C', dir, 'rev-parse', '--git-common-dir'],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-    // `--git-common-dir` answers relative to the cwd of the git call, not to -C,
-    // so it is resolved against the same directory git was pointed at.
-    return realpathSync(path.resolve(dir, out));
-  } catch { return null; }
-};
-const ownRepo = ROOT === TOOL_ROOT || (() => {
-  const a = commonDir(ROOT), b = commonDir(TOOL_ROOT);
-  return a !== null && a === b;
-})();
+// audience for one, so the draft belongs to the repo this script lives in —
+// `ownRepo` at the top of the file says which.
 if (next.endsWith('.0') && ownRepo) {
   try {
     const out = execFileSync(process.execPath, [fileURLToPath(new URL('script.mjs', import.meta.url)), tag],
@@ -307,14 +330,13 @@ if (next.endsWith('.0') && ownRepo) {
 // Pushing `origin` without asking is safe because it is a PRIVATE staging
 // repository: nobody outside reads it, and the project's rules grant the push.
 //
-// The public repository — the remote called `public`, valey-dev/valey-core since
-// 11 September 2026 — is pushed by the same tail, and that is deliberate. What
-// reaches it is exactly one thing: a release the owner accepted by merging.
-// The merge is the act of publishing; this only carries it. On opening day the
-// public side was caught up by hand after every release, by three sessions in
-// parallel, and valey.dev/dist/latest — a redirect to the newest public page —
-// lagged behind each one until somebody noticed. A remote that is not there
-// (a fork, a clone without the public half) is skipped and said so.
+// And the tail stops there. From 11 to 12 September 2026 it went on to the
+// public core and the buyers' shop front, on the reasoning that the merge was
+// the owner's word to publish. It was not: the owner releases to staging to
+// look at a version himself — to catch up one he skipped, to follow a release
+// with a fix — and every one of those was public the moment it was cut. Now
+// publishing is promote.mjs, it takes a tag the owner has looked at, and it
+// carries every version since the last publication in one page.
 if (ship) {
   const remote = (() => { try { return git('remote', 'get-url', 'origin'); } catch { return ''; } })();
   if (!remote) die(`tag ${tag} exists locally, but origin is not configured; there is nowhere to push`);
@@ -338,41 +360,9 @@ if (ship) {
     process.exit(1);
   }
 
-  // The repository being released may have a shop to feed: the Modules keep
-  // tools/publish.mjs, which cuts the buyers' archive from the tag and puts it
-  // on the buyers' repository with a release page. It is run here, not
-  // remembered: on 11 September 2026 the shop stood at v0.6.2 while the Modules
-  // were at v0.7.1 — two releases with the fixes for the feed and the voice
-  // never reached a buyer, and nothing in the tail said so. The same reasoning
-  // as the public remote: the merge is the owner's word, the tail carries it.
-  const shop = path.join(ROOT, 'tools/publish.mjs');
-  if (existsSync(shop)) {
-    console.log('\nshop:');
-    const r = spawnSync(process.execPath, [shop, tag], { cwd: ROOT, stdio: 'inherit' });
-    if (r.status !== 0) {
-      console.log(`\nshop publication failed. Tag ${tag} is already on origin; finish with:\n  node ${shop} ${tag}`);
-      process.exit(1);
-    }
-  }
-
-  const pub = (() => { try { return git('remote', 'get-url', PUBLIC); } catch { return ''; } })();
-  if (!pub) {
-    console.log(`\nno remote called ${PUBLIC}; the public repository is not updated from here`);
-  } else {
-    console.log(`\npushing to ${PUBLIC} (${pub}):`);
-    try {
-      git('push', PUBLIC, 'HEAD:main', tag);
-      console.log(`  main and ${tag} pushed`);
-    } catch (err) {
-      console.log(`\npush to ${PUBLIC} failed: ${String(err.message || err).trim().split('\n')[0]}\n` +
-        `origin already has the release; finish with:\n` +
-        `  git push ${PUBLIC} ${tag}^{commit}:refs/heads/main ${tag}\n${finish(PUBLIC)}`);
-      process.exit(1);
-    }
-    console.log('\npublic release page:');
-    if (page(PUBLIC).status !== 0) {
-      console.log(`\npublic release page creation failed. Tag ${tag} is already on ${PUBLIC}; finish with:\n${finish(PUBLIC)}`);
-      process.exit(1);
-    }
-  }
+  // Said every time, so that «released» is never read as «published».
+  const shop = existsSync(path.join(ROOT, 'tools/publish.mjs'));
+  console.log(`\n${tag} is in staging only. Look at it; when it is good, publish it —\n` +
+    `  ${shop ? 'cd modules && ' : ''}npm run promote -- ${tag}\n` +
+    `  (npm run promote -- --status shows everything waiting)`);
 }
