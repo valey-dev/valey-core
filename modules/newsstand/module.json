@@ -1,0 +1,9 @@
+{
+  "id": "newsstand",
+  "name": { "ru": "Газетная стойка", "en": "The newsstand" },
+  "tier": "core",
+  "guests": "shown",
+  "client": "client.js",
+  "style": "style.css",
+  "server": "server.js"
+}
