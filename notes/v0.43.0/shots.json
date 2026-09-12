@@ -1,0 +1,19 @@
+{
+  "tag": "v0.43.0",
+  "shots": [
+    {
+      "file": "polaroid-table.png",
+      "slug": "polaroid",
+      "id": "table",
+      "url": "#x=162&y=701",
+      "keys": "Enter,wait:2500"
+    },
+    {
+      "file": "polaroid-sofa.png",
+      "slug": "polaroid",
+      "id": "sofa",
+      "url": "#x=162&y=701",
+      "keys": "Enter,wait:2500,Space,wait:1200"
+    }
+  ]
+}
