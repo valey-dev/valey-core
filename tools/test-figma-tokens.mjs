@@ -1,7 +1,7 @@
 // node tools/test-figma-tokens.mjs — the design file's palette is a copy of
 // :root, and this is the only thing that notices when the copy stops matching.
 //
-// The office's colours live in one place, `:root` in web/style.css, and the
+// The office's colours live in one place, `:root` in web/tokens.css, and the
 // Figma collection `System` mirrors them under `palette/*`. Nothing connected
 // the two: an agent could raise --muted for contrast and the mockups would keep
 // the old value for months, or a designer could pick a new brown in Figma and
@@ -23,7 +23,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const CSS = 'web/style.css';
+const CSS = 'web/tokens.css';
 const SNAP = 'tools/figma-tokens.json';
 
 let bad = 0;
