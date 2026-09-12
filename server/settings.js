@@ -88,6 +88,11 @@ const withModules = () => ({ ...DEFAULTS, ...moduleDefaults() });
 
 const DEFAULTS = {
   weather: { enabled: false, lat: null, lon: null, label: '' },
+  // The card on the entrance about a release with no video yet. false puts it
+  // away without touching the drafts: the owner said on 12 September 2026 that
+  // videos are not in focus for now, and a checklist ticked by hand to silence
+  // it would be the lie server/release.js was written to avoid.
+  releaseNudge: true,
   // the interface language. Lives here rather than in the browser: the switch
   // stands in the corridor, and one click of it must reach every open tab.
   //
