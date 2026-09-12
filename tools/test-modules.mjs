@@ -12,7 +12,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { loadModules, moduleList, moduleAll, moduleDefaults, moduleErrors, moduleRoute, moduleObserve, moduleAsset } from '../server/modules.js';
+import { loadModules, moduleList, moduleAll, moduleDefaults, moduleErrors, moduleRoute, moduleObserve, moduleAsset, setModuleOff } from '../server/modules.js';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -199,6 +199,33 @@ ok('but it answers the owner', (await call('hidden', true))?.code === 200, await
 const shelf = Object.fromEntries(moduleAll().map((m) => [m.id, m.guests]));
 ok('the office can say what a guest sees',
   shelf['shown'] === 'shown' && shelf['hidden'] === 'hidden' && shelf['silent'] === 'hidden', shelf);
+
+// Switched off in the manifest — voice on 12 September 2026, a paid module not
+// yet for sale. The office must not run a line of it: the server file is not
+// even imported (it would leave a trace on disk if it were), the client is not
+// listed, the route is nobody's, and the stand's switch cannot bring it back.
+const offRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-modules-off-'));
+await fsp.writeFile(path.join(offRoot, 'package.json'), JSON.stringify({ type: 'module' }));
+const offDir = path.join(offRoot, 'modules', 'выключен');
+const trace = path.join(offRoot, 'imported.txt');
+await fsp.mkdir(offDir, { recursive: true });
+await fsp.writeFile(path.join(offDir, 'module.json'), JSON.stringify({
+  id: 'выключен', tier: 'floor', active: false, guests: 'shown', client: 'client.js', server: 'server.js',
+}));
+await fsp.writeFile(path.join(offDir, 'server.js'),
+  `import fs from "node:fs"; fs.writeFileSync(${JSON.stringify(trace)}, "yes");\n` +
+  'export const route = async (url, req, res, send) => { send(res, 200, { ok: true }); return true; };\n');
+await loadModules(offRoot);
+ok('an inactive module\'s server is never imported',
+  !(await fsp.access(trace).then(() => true, () => false)));
+ok('its client is not listed', !moduleList(true).some((m) => m.id === 'выключен'), moduleList(true));
+ok('its route is nobody\'s',
+  (await moduleRoute(new URL('http://x/api/anything'), {}, {}, () => {}, { isOwner: async () => true })) === false);
+const offRow = moduleAll().find((m) => m.id === 'выключен');
+ok('the stand sees it, off and marked as the manifest\'s', offRow && offRow.off && offRow.inactive, offRow);
+ok('and its switch cannot turn it on', setModuleOff('выключен', false) === false);
+ok('and none of its files are served to the page', (await moduleAsset('выключен', 'client.js', true)) === null);
+await fsp.rm(offRoot, { recursive: true, force: true });
 
 await fsp.rm(root, { recursive: true, force: true });
 console.log(bad ? `\n${bad} failed` : '\nall passed');

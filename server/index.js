@@ -1013,7 +1013,7 @@ async function handle(req, res) {
     if (!process.env.VALEY_STAND) return send(res, 404, { error: 'stand mode is not active' });
     if (!(await isOwner(req))) return forbidden(res);
     const body = await readJson(req);
-    if (!setModuleOff(body.id, !!body.off)) return send(res, 404, { error: 'no such module' });
+    if (!setModuleOff(body.id, !!body.off)) return send(res, 404, { error: 'no such module, or switched off in its manifest' });
     return send(res, 200, { ok: true, all: moduleAll() });
   }
 
