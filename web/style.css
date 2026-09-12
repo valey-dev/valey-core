@@ -120,8 +120,11 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
    same, and in the transcript neither a link nor a path nor an ordinary line
    could be selected. Found on 5 September 2026 while asking why a link from an
    agent's answer cannot be copied: the button on code blocks exists because of
-   this ban, not because a block is special. */
-.single, .chatlog, .md, .notes, .lcard, .tcard{user-select:text}
+   this ban, not because a block is special.
+   `.notes` is the `<ul>` of notes in the agent card and the standup, not the
+   Notes panel: that one is built from `.nrow`, and until 12 September 2026 not
+   a word of a note could be selected there, only in the transcript. */
+.single, .chatlog, .md, .notes, .nrow, .lcard, .tcard{user-select:text}
 /* The prompt for digit mode goes in the panel header, next to the file name:
    the bottom line already carries the key list, and the top line is where the
    panel says what it is doing right now. */
