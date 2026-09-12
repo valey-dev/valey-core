@@ -5,7 +5,8 @@
 // the office's own blocked(): 64 points out of 200 were free in the band under
 // that desk, and the spot just under it could not be reached from the door at
 // all — the owner had to wriggle through a gap to get to the desk. The corner
-// moved to the bottom wall (frame: WIP «Kitchen corner by the bottom wall»).
+// moved to the bottom wall (frame: Prod «Офис · кухонный угол у нижней стены»,
+// node 2122:6225).
 //
 // Walking is checked the way a person walks: a flood from the room's door over
 // the points blocked() lets through, so "free" also means "you can get there".

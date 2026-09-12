@@ -163,8 +163,8 @@ export function buildLayout(agents, opts = {}) {
     // microwave's shelf sat right under the last desk of the right column: the
     // floor below that desk was 64 points free out of 200, and the spot under it
     // could not be reached from the door at all. Against the wall the band is
-    // free end to end. Frame: WIP «Kitchen corner by the bottom wall», node
-    // 2122:6097.
+    // free end to end. Frame: Prod «02 · Офис · сцены», «Офис · кухонный угол
+    // у нижней стены», node 2122:6225.
     r.coffee.y = r.y + r.h - 16;
     // The microwave is to the left of the coffee machine, in the same kitchen
     // corner. Everyone has one: fish can be heated in any room, and that is the whole
