@@ -184,19 +184,149 @@ const readWithRevision = async (file) => {
     const after = await revisionOf(file);
     if (before === after) return { raw, revision: after };
   }
-  throw new Error(`Settings changed repeatedly while being read: ${file}`);
+  // Neighbours saving back to back can outpace three attempts: under a stress
+  // run of four offices the read gave up and took the office down with it
+  // (13 September 2026). Under the lock no office that takes it can save, so
+  // one more read is a steady one.
+  return withLock(async () => {
+    let raw = null;
+    try { raw = await fsp.readFile(file, 'utf8'); } catch (e) {
+      if (e.code !== 'ENOENT') throw e;
+    }
+    return { raw, revision: await revisionOf(file) };
+  });
 };
+
+// Every office on this machine saves into the same file, and a revision check
+// alone could not keep them apart: between comparing the revision and the
+// rename a neighbour could rename its own copy in, both saves reported success
+// and one of them was gone — a name, a seat, a guest's pass. The same window
+// sat between the rename and reading the new revision, and there the office
+// took the neighbour's file for its own and dropped its keys on the next save.
+// A stress run on 13 September 2026 lost about a hundred keys a run, three runs
+// out of three. The file system has no compare-and-swap, so the check, the
+// rename and the new revision happen under a lock file every office takes:
+// created with `wx`, so exactly one creator wins.
+const LOCK = `${FILE}.lock`;
+// A save holds the lock for milliseconds. A lock whose holder is gone, or
+// which is ten seconds old, was left by a save that died halfway, and waiting
+// for it would stop every office on the machine from saving at all.
+const LOCK_STALE_MS = 10_000;
+const LOCK_WAIT_MS = 5_000;
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+const holderAlive = (pid) => {
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+};
+
+// True when the lock is gone or was removed as stale, so the caller tries
+// again at once. The holder is read twice and removed only if it did not
+// change in between: two offices meeting the same stale lock would otherwise
+// let the second remove the fresh lock the first had just taken. A narrower
+// window remains between the second read and the removal; it needs a crashed
+// save and two offices at the same millisecond, and costs one save made
+// without the lock — the revision check still stands behind it.
+async function breakStaleLock() {
+  let text, stat;
+  try {
+    [text, stat] = await Promise.all([fsp.readFile(LOCK, 'utf8'), fsp.stat(LOCK)]);
+  } catch (e) {
+    if (e.code === 'ENOENT') return true;
+    throw e;
+  }
+  // An empty lock is one being written this instant: judged by its age only.
+  const pid = Number(text.split(' ')[0]);
+  const gone = Number.isInteger(pid) && pid > 0 && !holderAlive(pid);
+  const old = Date.now() - stat.mtimeMs > LOCK_STALE_MS;
+  if (!gone && !old) return false;
+  try {
+    if (await fsp.readFile(LOCK, 'utf8') !== text) return true;
+  } catch (e) {
+    if (e.code === 'ENOENT') return true;
+    throw e;
+  }
+  await fsp.rm(LOCK, { force: true });
+  console.log(`Settings lock ${LOCK} was left by ${gone ? `process ${pid}, which is gone` : 'a save that never finished'}; removed it.`);
+  return true;
+}
+
+async function withLock(fn) {
+  const mine = `${process.pid} ${crypto.randomUUID()}\n`;
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      await fsp.writeFile(LOCK, mine, { flag: 'wx', mode: 0o600 });
+      break;
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+    }
+    if (await breakStaleLock()) continue;
+    if (Date.now() > deadline) {
+      throw new Error(`Settings were not saved: another office has held ${LOCK} for over ${LOCK_WAIT_MS / 1000} s. `
+        + 'Try again; if it stays, the office holding it is stuck.');
+    }
+    await sleep(2 + Math.random() * 8);
+  }
+  try {
+    return await fn();
+  } finally {
+    // Only our own lock is removed. If it was taken for stale while we held
+    // it, the one lying there now belongs to somebody else.
+    try {
+      if (await fsp.readFile(LOCK, 'utf8') === mine) await fsp.rm(LOCK, { force: true });
+    } catch (e) {
+      if (e.code !== 'ENOENT') console.log(`Settings lock ${LOCK} could not be released: ${e.message}`);
+    }
+  }
+}
+
+// A save refused because a neighbour changed the file first. The refusal is
+// right for a request — the person is told to reload — but a save the office
+// makes by itself has nobody to tell.
+const staleError = () => Object.assign(
+  new Error(`Settings were not saved because ${FILE} changed after this process read it. Reload and try again.`),
+  { code: 'SETTINGS_STALE' },
+);
+
+// For the saves the office makes by itself at start: build the patch from the
+// settings as they are now, and after a refusal read the file again and ask
+// once more — a neighbour may have written exactly what was missing. Two
+// offices started together on a file without an owner token both made one,
+// the second save was refused, and the refusal took that office down before
+// it had opened its port (13 September 2026). `make` returns null when there
+// is nothing to save.
+export async function patchFresh(make) {
+  for (let attempt = 1; ; attempt += 1) {
+    const patch = make(await getSettings());
+    if (!patch) return getSettings();
+    try {
+      return await patchSettings(patch);
+    } catch (e) {
+      if (e.code !== 'SETTINGS_STALE' || attempt >= 5) throw e;
+    }
+  }
+}
 
 // The token is created once and lives in the file. Without it the office
 // cannot tell an owner from a guest, so it must exist before the first request.
 export async function ownerToken() {
-  const s = await getSettings();
-  if (!s.access.token) await patchSettings({ access: { ...s.access, token: crypto.randomUUID() } });
-  return (await getSettings()).access.token;
+  const s = await patchFresh((now) => (now.access.token ? null : { access: { ...now.access, token: crypto.randomUUID() } }));
+  return s.access.token;
 }
 
+// One read at a time. After a refusal the cache is empty and every request
+// arriving then reads the file; with a read each, a slower one could finish
+// last and put an older file and its older revision over a newer cache, and
+// the next save was refused for nothing. Everybody waiting for the same read
+// gets the same object.
+let loading = null;
 export async function getSettings() {
   if (cache) return cache;
+  if (!loading) loading = loadSettings().finally(() => { loading = null; });
+  return loading;
+}
+
+async function loadSettings() {
   try {
     const m = await migrateSettings();
     if (m.done) console.log(`Settings moved to ${m.file}; the legacy file was left in place.`);
@@ -248,7 +378,16 @@ export async function getSettings() {
 }
 
 export async function patchSettings(patch) {
-  const s = await getSettings();
+  // The patch goes on top of the cache as it is at this instant, with no
+  // await between reading it and replacing it. It used to go on top of what
+  // getSettings() had returned before an await: two saves in one office took
+  // the same snapshot, the second built its cache without the first one's
+  // change, and wrote it with a revision that matched — so nothing refused it.
+  // A stress run lost 26 to 41 saves a run this way with the lock already in
+  // (13 September 2026), and one office alone was enough: the tick saving
+  // names while a request saves the language.
+  while (!cache) await getSettings();
+  const s = cache;
   cache = {
     ...s, ...patch,
     weather: { ...s.weather, ...(patch.weather || {}) },
@@ -300,35 +439,39 @@ function persist() {
   const generation = writeGeneration;
   writing = writing.catch(() => {}).then(async () => {
     if (generation !== writeGeneration) {
-      throw new Error(`Settings were not saved because ${FILE} changed after this process read it. Reload and try again.`);
+      throw staleError();
     }
     const expected = diskRevision;
     const changed = async () => (await revisionOf(FILE)) !== expected;
     const refuseStaleWrite = () => {
       cache = null;
       writeGeneration += 1;
-      throw new Error(`Settings were not saved because ${FILE} changed after this process read it. Reload and try again.`);
+      throw staleError();
     };
-    if (await changed()) refuseStaleWrite();
     // The folder is made 0700 when it is made here; one that already exists is
     // left as its owner set it — tightening somebody's ~/.config from a save
     // would be a surprise, and the files inside are 0600 either way.
     await fsp.mkdir(path.dirname(FILE), { recursive: true, mode: 0o700 });
-    const tmp = `${FILE}.tmp-${process.pid}`;
-    try {
-      // The file holds the owner token, the network token and the invitations.
-      // A temporary file written with the default mode came out world-readable
-      // wherever the umask allowed, and the rename carried that mode over the
-      // file it replaced — found by the audit of 12 September 2026. 0600 on
-      // every write here, the migration and the broken-file copy alike.
-      await fsp.writeFile(tmp, text, { mode: 0o600 });
-      // Catch an edit made while the temporary file was being written too.
+    await withLock(async () => {
       if (await changed()) refuseStaleWrite();
-      await fsp.rename(tmp, FILE);
-      diskRevision = await revisionOf(FILE);
-    } finally {
-      await fsp.rm(tmp, { force: true });
-    }
+      const tmp = `${FILE}.tmp-${process.pid}`;
+      try {
+        // The file holds the owner token, the network token and the invitations.
+        // A temporary file written with the default mode came out world-readable
+        // wherever the umask allowed, and the rename carried that mode over the
+        // file it replaced — found by the audit of 12 September 2026. 0600 on
+        // every write here, the migration and the broken-file copy alike.
+        await fsp.writeFile(tmp, text, { mode: 0o600 });
+        // Offices take the lock; a hand edit or an older office does not, so
+        // an edit made while the temporary file was being written is still
+        // caught here.
+        if (await changed()) refuseStaleWrite();
+        await fsp.rename(tmp, FILE);
+        diskRevision = await revisionOf(FILE);
+      } finally {
+        await fsp.rm(tmp, { force: true });
+      }
+    });
   });
   return writing;
 }

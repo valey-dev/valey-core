@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { snapshot, fileOwners, conversation, PACK_IDS, namePool, nameSample, effectivePack, previewPack } from './agents.js';
 import { realWeather, forgetWeather, geocode } from './weather.js';
 import {
-  getSettings, patchSettings, publicSettings, ownerToken, warnIfSharedSettingsWorktree,
+  getSettings, patchSettings, patchFresh, publicSettings, ownerToken, warnIfSharedSettingsWorktree,
 } from './settings.js';
 import { deliver, deliveryStatus, forgetCli, isBusy, MODES } from './deliver.js';
 import { ask as askPermit, answer as answerPermit, permits, forgetGone } from './permit.js';
@@ -1090,7 +1090,8 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   let boot = await getSettings();
   const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
   if (external && !(boot.network || {}).token) {
-    boot = await patchSettings({ network: { external: true, token: newToken() } });
+    // patchFresh: an office started beside this one may save a token first.
+    boot = await patchFresh((now) => ((now.network || {}).token ? null : { network: { external: true, token: newToken() } }));
     console.log('A network token was created and saved to the office settings');
   }
   const HOST = host || (external ? '0.0.0.0' : '127.0.0.1');
