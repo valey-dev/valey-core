@@ -5,7 +5,7 @@
 // writes down where it was sent. The four picks were played by hand on 12 September
 // 2026; this stand is for the branches no station would show on demand — HLS, a
 // playlist, a closed stream, a page instead of sound, a guest.
-import { parseWave, kindOf, mixedContent, PICKS } from './radio.js';
+import { parseWave, kindOf, mixedContent, PICKS, radio, stream } from './radio.js';
 import { route, probe, classify, formatOf, playlistEntry, parseIcy } from './server.js';
 
 let bad = 0;
@@ -121,6 +121,43 @@ r = await ask('/api/radio/now?url=file%3A%2F%2F%2Fetc%2Fpasswd', true);
 ok('the title is asked of http(s) only', r.code === 400, r);
 r = await ask('/api/radio/other', true);
 ok('another path is not the radio’s', r.took === false, r);
+
+// ---------------------------------------------------------------- the ✕
+// Reported 13 September 2026: removing a wave nobody was listening to broke the
+// music off — a stream for a second, a Spotify playlist back to its first track.
+const store = {};
+globalThis.localStorage = { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = String(v); } };
+const spotify = (n) => ({ name: 'sp' + n, uri: 'spotify:playlist:' + n });
+const loads = [];
+const ctl = { loadUri: (u) => loads.push(u), pause() {}, play() {} };
+const audio = () => {
+  const a = { stops: 0, src: 'x', pause() {}, load() {}, getAttribute: () => a.src, removeAttribute() { a.stops += 1; a.src = null; } };
+  return a;
+};
+
+Object.assign(radio, { stations: [spotify(1), spotify(2), spotify(3)], current: 0, playing: true, sdk: false, controller: ctl });
+radio.remove(2);
+ok('removing a Spotify wave that is not playing leaves the playlist alone', loads.length === 0 && radio.current === 0 && radio.playing, loads);
+
+Object.assign(radio, { stations: [spotify(1), spotify(2), spotify(3)], current: 2 });
+radio.remove(0);
+ok('removing a wave above the current one keeps the same wave current',
+  loads.length === 0 && radio.station().uri === 'spotify:playlist:3', { loads, current: radio.current });
+
+const nts = { name: 'NTS 1', uri: 'https://relay/stream' };
+stream.audio = audio();
+Object.assign(radio, { stations: [spotify(1), nts, spotify(2)], current: 1, playing: true });
+radio.remove(2);
+ok('removing another wave does not touch a playing stream', stream.audio.stops === 0 && radio.station() === nts, stream.audio.stops);
+
+radio.remove(1);
+ok('removing the playing stream lets it go', stream.audio.stops === 1, stream.audio.stops);
+ok('and tunes the wave that took its place', loads.at(-1) === 'spotify:playlist:1', loads);
+
+radio.stations = [spotify(1)];
+radio.remove(0);
+ok('the last wave stays', radio.stations.length === 1);
+radio.playing = false;
 
 console.log(bad ? `\n${bad} failed` : '\nall good');
 process.exit(bad ? 1 : 0);

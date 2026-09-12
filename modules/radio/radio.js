@@ -381,9 +381,10 @@ export const radio = {
 
   nowStop() { clearInterval(this.nowTimer); this.nowTimer = null; },
 
-  tune(i) {
+  // `was` is the wave being left. It is the current one, except when that wave has just
+  // been taken out of the list — then remove() names it, since the list no longer can.
+  tune(i, was = this.station()) {
     if (!this.stations.length) return;
-    const was = this.station();
     const wasPlaying = this.playing;
     this.current = (i + this.stations.length) % this.stations.length;
     this.save();
@@ -428,12 +429,20 @@ export const radio = {
     if (this.isStream() && !was) this.streamPlay();
   },
 
+  // Taking a wave out of the list retunes only when it was the one playing. Until
+  // 13 September 2026 every ✕ ended in tune(current): a stream broke off for a second,
+  // and a Spotify playlist started again from its first track — for the removal of a
+  // wave nobody was listening to.
   remove(i) {
-    if (this.stations.length <= 1) return;
+    if (this.stations.length <= 1 || i < 0 || i >= this.stations.length) return;
+    const gone = this.stations[i];
+    const wasCurrent = i === this.current;
     this.stations.splice(i, 1);
-    if (this.current >= this.stations.length) this.current = this.stations.length - 1;
+    if (i < this.current) this.current -= 1;   // the same wave, one row higher
+    else if (this.current >= this.stations.length) this.current = this.stations.length - 1;
     this.save();
-    this.tune(this.current);
+    if (wasCurrent) this.tune(this.current, gone);
+    else if (this.onChange) this.onChange();
   },
 };
 
