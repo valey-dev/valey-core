@@ -6,6 +6,7 @@ import { drawSky, flash } from './weather.js';
 import { drawPainting, drawPoster, artOf } from './paintings.js';
 import * as PF from './pixfont.js';
 import { trinketsOf, drawTrinkets } from './trinkets.js';
+import { drawAquarium } from './aquarium.js';
 
 const px = (ctx, x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); };
 
@@ -311,6 +312,7 @@ function drawKicker(ctx, x, y, t) {
 function drawCorridorProp(ctx, p, t) {
   const { x, y, kind } = p;
   if (kind === 'lang') { drawSwitcher(ctx, p, t); return; }
+  if (kind === 'aquarium') { drawAquarium(ctx, p, t); return; }
   if (kind === 'plant') {
     px(ctx, x - 6, y - 10, 12, 10, '#8a4a34');
     px(ctx, x - 6, y - 10, 12, 2, '#a85c40');

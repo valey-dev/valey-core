@@ -269,6 +269,12 @@ export function buildLayout(agents, opts = {}) {
     // September 2026, which is the top row: with three rows the figure was a lift
     // ride away from anyone who had just walked in.
     if (i === bands.length - 1) props.push({ kind: 'lang', x: MARGIN + 118, y: my + 4 });
+    // The piranha tank, in the same entrance corridor: the first live thing a
+    // visitor walks past. It stands over the middle of the second room, clear of
+    // every door (a room is 328 wide, its door at +34) and of the bench and cooler
+    // at +300. Added 11 September 2026 on a live demo, the design phase skipped on
+    // the owner's word; the frame is owed afterwards.
+    if (i === bands.length - 1) props.push({ kind: 'aquarium', x: MARGIN + 560, y: my + 8, w: 62, h: 44 });
   });
 
   props.push({ kind: 'lounge', x: lounge.x, y: lounge.y + 5 });
