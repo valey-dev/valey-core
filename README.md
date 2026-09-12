@@ -116,7 +116,7 @@ The office reads `~/.claude` on your own machine and draws the floor from it. Tr
 Three exceptions, all yours to switch on, all named out loud:
 
 * **The weather** outside the corridor window is invented until you turn on the real one — then a pair of coordinates goes to open-meteo, and nothing else.
-* **The radio** plays through your own Spotify app, with a client id you create yourself. It is a module; delete the folder and the radio is gone.
+* **The radio** plays Spotify through your own Spotify app, with a client id you create yourself, or internet radio stations by their stream. For a stream you add, the office server asks that station — and only that one — whether it answers and what is playing. When you search for a station by name or genre, the word goes from the office server to the open radio-browser.info catalogue, and a station you then play is reported to it as one click, which is how it ranks stations; nothing goes there until you search. It is a module; delete the folder and the radio is gone.
 * **The newsstand** reads public Telegram channels you put on it, as newspapers. With no channels it makes no requests at all; with some, the office server fetches each channel’s open web feed from t.me — no login, no token, no phone number — at most once every fifteen minutes, and fetches the pictures itself so your browser never talks to Telegram. It is a module too: `modules/newsstand`.
 
 There are no accounts, no telemetry and no analytics. The server is the handful of files in `server/`, and you can read every one of them before you run it — that is the point of the licence below.
