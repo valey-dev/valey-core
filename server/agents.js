@@ -107,7 +107,25 @@ async function indexTranscripts() {
 }
 
 // Incremental tail: each session is read once deep, then only the new bytes.
-const cache = new Map(); // sessionId -> { file, offset, pending, st }
+const cache = new Map(); // sessionId -> { file, offset, pending, st, seen }
+
+// A session that left the office is dropped from the cache ten minutes later.
+// Nothing reads it once the agent is gone — /api/chat answers only about agents
+// in the snapshot — and until 13 September 2026 the map kept every session that
+// ever passed through a running server, each with its files and conversation.
+// The ten minutes are for a session that blinks out of the list for a tick: it
+// should not pay for the deep pass over its transcript again.
+const FORGET_MS = 10 * 60 * 1000;
+
+export function pruneTranscripts(liveIds, now = Date.now()) {
+  const live = new Set(liveIds);
+  let dropped = 0;
+  for (const [id, c] of cache) {
+    if (live.has(id) || c.seen === undefined) c.seen = now;
+    else if (now - c.seen > FORGET_MS) { cache.delete(id); dropped++; }
+  }
+  return dropped;
+}
 
 // Grades are counted over the whole transcript, not over the tail follow reads.
 // Measured on this machine's ~/.claude on 5 September 2026: a 63 MB file holds
@@ -1027,6 +1045,7 @@ export async function snapshot() {
     });
   }
 
+  pruneTranscripts(sessions.map((s) => s.sessionId));
   agents.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
   return { now: Date.now(), agents };
 }

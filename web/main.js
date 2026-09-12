@@ -2,7 +2,7 @@ import { lookOf, drawPerson, drawCat, normalizeLook, isSelfLabel, dressOf, dress
 import { potState, water as waterPot, tally, CAN_FULL } from './garden.js';
 import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, pickRoom, WALL } from './layout.js';
 import { loadModules, collect, first, attachStreams } from './modules.js';
-import { owned, setTokens } from './owned.js';
+import { owned, passQuery, setTokens } from './owned.js';
 import { initStand } from './stand.js';
 import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, pxText, kickerBusy } from './office.js';
 import { drawCamera, buildCameras } from './cctv.js';
@@ -491,9 +491,8 @@ addEventListener('pagehide', () => {
   try {
     // sendBeacon cannot set headers, so the pass travels in the query string —
     // the same road the stream takes, and for the same reason.
-    const pass = OWNER ? '?owner=' + encodeURIComponent(OWNER)
-      : GUEST ? '?guest=' + encodeURIComponent(GUEST) : '';
-    navigator.sendBeacon('/api/gone' + pass, new Blob([JSON.stringify({ id: MY_ID })], { type: 'application/json' }));
+    const pass = passQuery();
+    navigator.sendBeacon('/api/gone' + (pass ? '?' + pass : ''), new Blob([JSON.stringify({ id: MY_ID })], { type: 'application/json' }));
   } catch { /* not delivered — the TTL will remove him in eight seconds */ }
 });
 
@@ -539,8 +538,7 @@ let es = null;
 let streamRetry = 2000;
 function openStream() {
   if (es) es.close();
-  const pass = OWNER ? 'owner=' + encodeURIComponent(OWNER)
-    : GUEST ? 'guest=' + encodeURIComponent(GUEST) : '';
+  const pass = passQuery();
   // The stream says whose it is. Presence goes to everybody and never needed a
   // name; an event addressed to one person does — that is how the meeting room's
   // hub sends an offer to one browser and not to the floor.
