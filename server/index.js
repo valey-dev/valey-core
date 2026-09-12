@@ -727,9 +727,22 @@ async function handle(req, res) {
   // Entry by code. One use: it worked, it is spent, and the same link does not
   // let anyone in twice. In exchange a guest token is issued, so a page reload
   // does not put the person back outside the door.
+  //
+  // The code is spent when the guest presses Enter at the door, not when the page
+  // opens: `peek` checks it and names the inviter without spending it. Until
+  // 13 September 2026 the first thing to run the page spent it — on
+  // 5 September a link forwarded in Telegram was burnt by the messenger's
+  // built-in browser, and the guest's laptop was told the invitation was not valid.
+  //
+  // A spent code still opens the door for the browser it was spent in: the
+  // request carries the pass that code gave out. That grants nothing new —
+  // whoever holds the pass is already in — and it keeps the link working for
+  // the person it was sent to. Any other browser is told the code is used.
   if (url.pathname === '/api/enter' && req.method === 'POST') {
     const b = await readJson(req);
     const code = String(b.code || '');
+    const peek = b.peek === true;
+    const presented = String(req.headers['x-valey-guest'] || '');
     // Decided against the file as it is now, and again if another office wrote
     // it meanwhile (see updateSettings): a pass that is handed out has to be
     // the one on disk.
@@ -738,7 +751,13 @@ async function handle(req, res) {
       const invites = s.access.invites || [];
       const invite = invites.find((i) => i.code === code);
       if (!invite) { answer = [403, { error: 'this invitation does not exist', errorKey: 'err.codeUnknown' }]; return null; }
-      if (invite.usedAt) { answer = [403, { error: 'this code has already been used', errorKey: 'err.codeUsed' }]; return null; }
+      if (invite.usedAt) {
+        answer = presented && presented === invite.guest
+          ? [200, { ok: true, guest: invite.guest, from: invite.from }]
+          : [403, { error: 'this code has already been used', errorKey: 'err.codeUsed' }];
+        return null;
+      }
+      if (peek) { answer = [200, { ok: true, peek: true, from: invite.from }]; return null; }
       const guest = crypto.randomUUID();
       answer = [200, { ok: true, guest, from: invite.from }];
       return {

@@ -134,12 +134,46 @@ try {
   const unknown = await call('/api/enter', { method: 'POST', body: { code: 'nosuchcode00' } });
   ok('an unknown code is still refused as unknown', unknown.status === 403 && unknown.j?.errorKey === 'err.codeUnknown', unknown);
 
+  // ------------------------------------------------ spent on «Войти», not on arrival
+  // A messenger's built-in browser opening the link used to spend it; the page
+  // now only peeks on arrival and spends on «Войти».
+  const inv2 = await call('/api/invite', { method: 'POST', headers: owner, body: { name: 'Второй', from: 'Сергей' } });
+  const code2 = inv2.j?.invite?.code;
+  const peek = await call('/api/enter', { method: 'POST', body: { code: code2, peek: true } });
+  ok('a peek names the inviter', peek.status === 200 && peek.j?.peek === true && peek.j?.from === 'Сергей', peek);
+  ok('and hands out no pass', !peek.j?.guest, peek.j);
+  const peekAgain = await call('/api/enter', { method: 'POST', body: { code: code2, peek: true } });
+  ok('so the link can be opened again, by anything', peekAgain.status === 200 && peekAgain.j?.peek === true, peekAgain);
+  const unspent = (await onDisk()).access.invites.find((i) => i.code === code2) || {};
+  ok('a peeked code stays unspent on disk', !unspent.usedAt && !unspent.guest, unspent);
+
+  const spend = await call('/api/enter', { method: 'POST', body: { code: code2 } });
+  const guest2 = spend.j?.guest || '';
+  ok('entering spends it for a pass', spend.status === 200 && !!guest2, spend);
+  const usedAt = ((await onDisk()).access.invites.find((i) => i.code === code2) || {}).usedAt;
+
+  // The same browser carries the pass the code gave it: the link still works there.
+  const mine2 = { 'x-valey-guest': guest2 };
+  const back = await call('/api/enter', { method: 'POST', headers: mine2, body: { code: code2 } });
+  ok('the browser that spent it gets in by the same link again', back.status === 200 && back.j?.guest === guest2, back);
+  const backPeek = await call('/api/enter', { method: 'POST', headers: mine2, body: { code: code2, peek: true } });
+  ok('its peek is an entry too, with the same pass', backPeek.status === 200 && backPeek.j?.guest === guest2 && !backPeek.j?.peek, backPeek);
+  ok('and none of that spends it again',
+    ((await onDisk()).access.invites.find((i) => i.code === code2) || {}).usedAt === usedAt, usedAt);
+
+  const other = await call('/api/enter', { method: 'POST', body: { code: code2 } });
+  ok('another browser is told the code is used', other.status === 403 && other.j?.errorKey === 'err.codeUsed', other);
+  const otherPeek = await call('/api/enter', { method: 'POST', body: { code: code2, peek: true } });
+  ok('its peek too', otherPeek.status === 403 && otherPeek.j?.errorKey === 'err.codeUsed', otherPeek);
+  const forged = await call('/api/enter', { method: 'POST', headers: { 'x-valey-guest': guest }, body: { code: code2 } });
+  ok('a pass from another invitation does not open this one', forged.status === 403 && forged.j?.errorKey === 'err.codeUsed', forged);
+
   // ------------------------------------------------------------ the revoke
   await otherOfficeWrites();
   const rev = await call('/api/invite/revoke', { method: 'POST', headers: owner, body: { id: inv.j.invite.id } });
-  ok('an invitation is revoked while another office writes the file', rev.status === 200 && rev.j?.invites?.length === 0, rev);
+  ok('an invitation is revoked while another office writes the file', rev.status === 200 && !(rev.j?.invites || []).some((i) => i.id === inv.j.invite.id), rev);
   disk = await onDisk();
-  ok('it is gone from disk, and the other office\'s change is not', disk.access.invites.length === 0 && disk.names['other-3'] === 'Вера', disk);
+  ok('it is gone from disk, and the other office\'s change is not', !disk.access.invites.some((i) => i.id === inv.j.invite.id) && disk.names['other-3'] === 'Вера', disk);
   const out = await call('/api/whoami', { headers: { 'x-valey-guest': guest } });
   ok('and the pass it gave out no longer lets in', out.j?.guest === false && out.j?.needsCode === true, out.j);
 } catch (e) {
