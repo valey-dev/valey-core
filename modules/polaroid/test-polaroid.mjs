@@ -8,7 +8,7 @@
 // hookah and two smokers stand. Arithmetic against a stand-in floor would not
 // catch the next such move; the real floor does.
 import { buildLayout, blocked } from '../../web/layout.js';
-import { placeFor, tableProp, freed, TABLE } from './polaroid.js';
+import { placeFor, tableProp, freed, TABLE, dockRect, PHONE } from './polaroid.js';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -55,6 +55,25 @@ ok('the first snapshot calls nobody', freed(seen, [{ id: 'g', status: 'awaiting'
 ok('working → awaiting calls', freed(seen, [{ id: 'g', status: 'awaiting' }, { id: 'k', status: 'awaiting' }]).map((a) => a.id).join() === 'k');
 ok('and only once', freed(seen, [{ id: 'k', status: 'awaiting' }]).length === 0);
 ok('idle → awaiting does not', freed(seen, [{ id: 'z', status: 'idle' }]).length === 0 && freed(seen, [{ id: 'z', status: 'awaiting' }]).length === 0);
+
+// The window over the office: pressed to the right edge, below the tabs, not
+// past the bottom, phone-wide — on an ordinary window, one on a second monitor
+// left of the main one, and one too small for the whole phone.
+const cases = [
+  ['an ordinary window', { screenX: 0, screenY: 25, outerWidth: 1440, outerHeight: 875, innerWidth: 1440, innerHeight: 790 }],
+  ['a window on a monitor to the left', { screenX: -1920, screenY: 0, outerWidth: 1600, outerHeight: 1000, innerWidth: 1600, innerHeight: 900 }],
+  ['a small window', { screenX: 100, screenY: 100, outerWidth: 360, outerHeight: 500, innerWidth: 360, innerHeight: 420 }],
+];
+for (const [name, w] of cases) {
+  const r = dockRect(w);
+  ok(`${name}: phone-wide`, r.width === PHONE.w, r);
+  ok(`${name}: starts below the office's tabs`, r.top === w.screenY + (w.outerHeight - w.innerHeight), r);
+  ok(`${name}: never left of the office window`, r.left >= w.screenX, r);
+  if (w.outerWidth > PHONE.w + PHONE.gap) {
+    ok(`${name}: pressed to the right edge`, r.left + r.width === w.screenX + w.outerWidth - PHONE.gap, r);
+    ok(`${name}: its outer edge ends inside the office`, r.top + r.height + PHONE.chrome <= w.screenY + w.outerHeight, r);
+  }
+}
 
 console.log(bad ? `\n${bad} failed` : '\nall good');
 process.exit(bad ? 1 : 0);

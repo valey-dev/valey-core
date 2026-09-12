@@ -36,6 +36,26 @@ export function tableProp(place) {
   return { kind: 'polaroid-table', x: place.table.x, y: place.table.y, w: TABLE.w, h: TABLE.h - 2 };
 }
 
+// Where the Instagram window goes: over the office's own window, pressed to its
+// right edge, as tall as the page, phone-wide. instagram.com answers
+// X-Frame-Options: DENY, so a panel inside the office is not an option — the
+// nearest thing is a separate window laid over the office where a side panel
+// would be. The owner asked for exactly that on 12 September 2026, after the
+// first version opened the window wherever the browser chose.
+//
+// `w` is what the office window knows about itself: screenX/Y, outer and inner
+// sizes. The difference between outer and inner height is the browser's own
+// tabs and address bar; the window starts below them. `chrome` is the height a
+// popup's own title and address bar take, so the popup's outer edge ends at
+// the office's bottom rather than past it.
+export const PHONE = { w: 390, minH: 480, gap: 12, chrome: 64 };
+export function dockRect(w) {
+  const top = Math.round(w.screenY + Math.max(0, w.outerHeight - w.innerHeight));
+  const left = Math.round(w.screenX + w.outerWidth - PHONE.w - PHONE.gap);
+  const height = Math.max(PHONE.minH, Math.round(w.innerHeight - PHONE.chrome - PHONE.gap));
+  return { left: Math.max(w.screenX, left), top, width: PHONE.w, height };
+}
+
 // Who has just come free: the same transition the core toasts on — working, then
 // awaiting you (toast.freed in web/main.js). `seen` is the module's own memory of
 // statuses, so the polaroid calls on exactly the occasions the toast appears.

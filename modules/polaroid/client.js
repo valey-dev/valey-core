@@ -2,7 +2,8 @@
 //
 // A polaroid lies on a side table between the kicker and the sofa. SPACE by it
 // seats you on the sofa's left place with the camera in your hands and opens
-// Instagram in a browser window the size of a phone. The office reads nothing
+// Instagram in a phone-wide browser window laid over the office's right edge,
+// where a side panel would be. The office reads nothing
 // from Instagram and holds no password: the window is the owner's own browser,
 // logged in as the owner, and instagram.com refuses to be framed inside the
 // office anyway. What the office does is watch: while that window is open and
@@ -12,14 +13,28 @@
 // Frame: WIP — Polaroid in the lounge, v2 (section #polaroid).
 import { t as tr } from '../../web/i18n.js';
 import { toast } from '../../web/ui.js';
-import { placeFor, tableProp, freed } from './polaroid.js';
+import { placeFor, tableProp, freed, dockRect, PHONE } from './polaroid.js';
 
 const URL = 'https://www.instagram.com/';
 // One name for the window: SPACE again brings the same window forward instead
 // of opening a second one or reloading the feed someone is halfway down.
 const NAME = 'valey-polaroid';
-const FEATURES = 'popup,width=390,height=844';
 const FLASH_MS = 900;
+
+// The window's place, from the office window as it stands right now (dockRect
+// in polaroid.js): over its right edge, page-tall, phone-wide.
+function features() {
+  const r = dockRect(window);
+  return `popup,left=${r.left},top=${r.top},width=${r.width},height=${r.height}`;
+}
+
+// A popup opened by this page may be moved and resized by it; anything else is
+// refused by the browser, and a refusal here is not worth a word.
+function dock() {
+  if (!win || win.closed) return;
+  const r = dockRect(window);
+  try { win.resizeTo(r.width, r.height + PHONE.chrome); win.moveTo(r.left, r.top); } catch { /* not ours to move */ }
+}
 
 const DICT = {
   ru: {
@@ -88,8 +103,12 @@ const seen = new Map();  // agent id → status, for the freed transition
 const watching = () => !!(win && !win.closed);
 
 function openWindow() {
-  if (watching()) { try { win.focus(); } catch { /* another origin; focus is a courtesy */ } return true; }
-  win = window.open(URL, NAME, FEATURES);
+  if (watching()) {
+    dock();
+    try { win.focus(); } catch { /* another origin; focus is a courtesy */ }
+    return true;
+  }
+  win = window.open(URL, NAME, features());
   return !!win;
 }
 
@@ -132,6 +151,8 @@ function standUp(state) {
 
 export function register(api) {
   api.i18n(DICT);
+  // The office window resized: the panel-like window follows its right edge.
+  window.addEventListener('resize', dock);
 
   api.on('layout', (L) => {
     const place = placeFor(L);
