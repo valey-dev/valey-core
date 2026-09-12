@@ -1,0 +1,8 @@
+---
+title: Claiming a backlog item is one command, from any working tree
+scope: tools
+---
+
+Agents working on this repository in parallel write down what they have taken before they start, so two of them do not fix the same bug in the same hour. That list lives outside git in the main checkout, and an agent isolated in its own working tree could not write to it — the owner ended up writing the claims for them by hand.
+
+Now `node tools/claim.mjs take "<item>"` claims an item from wherever the work is, filling in the repository, the branch and the date itself, and refuses an item that is already taken, naming who has it. `drop` gives it back, and with no arguments the tool lists what is taken. Two claims at once do not overwrite each other. It changes nothing in the office itself.
