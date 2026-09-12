@@ -157,7 +157,15 @@ function published(tag) {
 // the run. dist.mjs is asked rather than imported: it is a command, and it
 // prints where the bytes came from.
 const TOOLS = path.dirname(fileURLToPath(import.meta.url));
+// Only the office has an installer. dist.mjs builds from the repository it lives
+// in — the core — whatever it is called for, so on a Modules release it went
+// looking for a core tag of the same name. The core has an old v0.8.0 and
+// v0.9.0, and those Modules pages quietly carried the office tarballs of a
+// month ago; v0.9.1 has no namesake and the page failed. The office is known by
+// its server, which the Modules do not have.
+const carries = existsSync(path.join(ROOT, 'server/index.js'));
 function assets(tag) {
+  if (!carries) return { dir: null, files: [] };
   const out = mkdtempSync(path.join(tmpdir(), 'valey-dist-'));
   execFileSync(process.execPath, [path.join(TOOLS, 'dist.mjs'), tag, '--out', out],
     { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'ignore', 'inherit'] });
@@ -196,7 +204,8 @@ for (const tag of wanted) {
   // uploads the files a page is missing. Those are the ordinary run's job, and a
   // flag meant to fix prose should not start building tarballs of old tags.
   if (refresh && !have) { console.log(`${tag}: no release page to refresh`); skipped++; continue; }
-  if (have && (have.assets > 0 || refresh)) {
+  // A page without files is finished when there is nothing to attach.
+  if (have && (have.assets > 0 || refresh || !carries)) {
     if (!refresh) { console.log(`${tag}: release already exists`); skipped++; continue; }
     // Compared after trimming: GitHub hands the body back without the final
     // newline, and a refresh that rewrites every page to add one is noise.
@@ -212,8 +221,8 @@ for (const tag of wanted) {
   if (dry) {
     const names = assets(tag);
     console.log(`\n=== ${tag} → ${repo}${have ? ' (page exists, assets missing)' : ''}, body from the ${from}\n${body}\n`);
-    console.log(names.files.map((f) => '  + ' + path.basename(f)).join('\n'));
-    rmSync(names.dir, { recursive: true, force: true });
+    console.log(names.files.map((f) => '  + ' + path.basename(f)).join('\n') || '  (no installer files: not the office)');
+    if (names.dir) rmSync(names.dir, { recursive: true, force: true });
     made++;
     continue;
   }
@@ -230,7 +239,7 @@ for (const tag of wanted) {
       console.log(`${tag}: published with ${built.files.length} assets, body from the ${from}`);
     }
   } finally {
-    rmSync(built.dir, { recursive: true, force: true });
+    if (built.dir) rmSync(built.dir, { recursive: true, force: true });
   }
   made++;
 }
