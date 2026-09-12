@@ -4,6 +4,15 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.40.2 — 12 September 2026
+
+### Fixed
+
+- **notes:** pictures for a release no longer show the video nudge or the owner's path (0bf980c)
+
+### Other
+
+- docs(notes): the v0.40.0 note drops its entrance frame, which showed the video nudge (90bab58)
 ## v0.40.1 — 12 September 2026
 
 ### Fixed
