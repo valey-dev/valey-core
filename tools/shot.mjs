@@ -64,6 +64,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
+import { cdp } from './cdp.mjs';
 
 const CHROME = process.env.CHROME_PATH
   || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -166,6 +167,10 @@ const chrome = spawn(CHROME, [
   '--hide-scrollbars', `--remote-debugging-port=${PORT_CDP}`,
   `--window-size=${size}`, ...extraFlags, 'about:blank',
 ], { stdio: 'ignore', detached: true });
+// A wrong CHROME_PATH is an 'error' event on the child, and unheard it killed the
+// run with a Node stack trace — the hint below about CHROME_PATH never printed.
+let chromeFailed = null;
+chrome.on('error', (err) => { chromeFailed = err; });
 
 let ws;
 const bye = async (code) => {
@@ -174,14 +179,17 @@ const bye = async (code) => {
   await fs.rm(profile, { recursive: true, force: true }).catch(() => {});
   process.exit(code);
 };
-
 try {
   // the port does not open instantly, and asking too early is an ECONNREFUSED
   let ready = false;
-  for (let i = 0; i < 60 && !ready; i++) {
+  for (let i = 0; i < 60 && !ready && !chromeFailed; i++) {
     try { await fetch(`http://127.0.0.1:${PORT_CDP}/json/version`); ready = true; } catch { await wait(250); }
   }
+  if (chromeFailed) throw new Error(`Chrome did not start (${chromeFailed.code || chromeFailed.message}); check CHROME_PATH`);
   if (!ready) throw new Error('Chrome did not open its debugging port; check CHROME_PATH');
+  // Node 22 has a global WebSocket, Node 18 and 20 do not; without this line
+  // the run failed with a bare «WebSocket is not defined».
+  if (typeof WebSocket === 'undefined') throw new Error(`no global WebSocket in Node ${process.versions.node}; shot.mjs needs Node 22`);
 
   const target = await (await fetch(
     `http://127.0.0.1:${PORT_CDP}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' },
@@ -190,17 +198,7 @@ try {
   ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', rej); });
 
-  let id = 0;
-  const pending = new Map();
-  const onEvent = new Map();
-  ws.addEventListener('message', (e) => {
-    const m = JSON.parse(e.data);
-    if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); return; }
-    if (m.method && onEvent.has(m.method)) onEvent.get(m.method)(m.params);
-  });
-  const send = (method, params = {}) => new Promise((res) => {
-    const n = ++id; pending.set(n, res); ws.send(JSON.stringify({ id: n, method, params }));
-  });
+  const { send, on } = cdp(ws);
 
   // the tab is reused between runs, and without this you can get a frame of the
   // old code — fresh-looking and in fact stale
@@ -242,11 +240,13 @@ try {
     await fs.rm(framesDir, { recursive: true, force: true }).catch(() => {});
     await fs.mkdir(framesDir, { recursive: true });
     const writes = [];
-    onEvent.set('Page.screencastFrame', (p) => {
+    on('Page.screencastFrame', (p) => {
       const file = path.join(framesDir, `f${String(frames.length).padStart(5, '0')}.jpg`);
       frames.push({ file, at: p.metadata.timestamp });
       writes.push(fs.writeFile(file, Buffer.from(p.data, 'base64')));
-      send('Page.screencastFrameAck', { sessionId: p.sessionId });
+      // Nobody awaits an acknowledgement: a late one refused after the stream
+      // stopped must not become an unhandled rejection that ends the run.
+      send('Page.screencastFrameAck', { sessionId: p.sessionId }).catch(() => {});
     });
     frames.writes = writes;
     const [w, h] = size.split(',').map(Number);
