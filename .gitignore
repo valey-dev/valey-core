@@ -22,6 +22,7 @@ dist/
 !/modules/radio/
 !/modules/plan/
 !/modules/polaroid/
+!/modules/newsstand/
 
 # The agent rulebook is not committed. It entered the tree on 3 September 2026
 # for a valid reason: worktrees contain only tracked files, so an agent on a new
