@@ -318,7 +318,18 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .pmore{margin-left:auto; font-size:9px; color:var(--ink-dim)}
 
 /* ---- toasts ---- */
-#toasts{position:fixed; left:14px; bottom:52px; z-index:25; display:flex; flex-direction:column; gap:6px}
+#toasts{position:fixed; left:14px; bottom:52px; z-index:25; display:flex; flex-direction:column; gap:6px;
+  pointer-events:none}
+/* On touch the toasts stand where the stick rests. A finger landing on one had
+   the toast as its target and never reached the floor, so the stick went deaf
+   for the five seconds a toast lives — found on a tablet on 12 September 2026
+   with «office renamed» on the screen. Toasts answer nothing, so the finger goes
+   through them everywhere; on touch they also move out from under the ring, to
+   the bottom middle between the stick and the buttons. */
+body.touch #toasts{left:50%; right:auto; bottom:52px; transform:translateX(-50%); align-items:center}
+/* The entrance's version line and the «rooms will come» note stand in the stick's
+   zone too, and neither answers a tap. */
+body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .toast{background:rgba(26,18,12,.94); border:2px solid var(--frame); border-left:4px solid var(--accent);
   padding:5px 10px; font-size:12px; color:var(--ink); max-width:280px; animation:slide .25s ease-out}
 .toast.wait{border-left-color:var(--warn)} .toast.news{border-left-color:var(--lilac)}
