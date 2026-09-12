@@ -557,7 +557,10 @@ export function titleKey(ev) {
     else if (z === 'lang') api.lang();
     return true;
   }
-  if (act === 'panel.round') { T.page = 'rooms'; T.roomIdx = 0; renderTitle(); return true; }
+  // The registry calls the standup key panel.standup; until 12 September 2026
+  // this line waited for panel.round, a name nothing ever sent, and TAB on the
+  // entrance did nothing while the menu promised «Who's inside · TAB».
+  if (act === 'panel.standup') { T.page = 'rooms'; T.roomIdx = 0; renderTitle(); return true; }
   if (act === 'panel.bag') { api.bag(); return true; }
   if (act === 'panel.sky') { api.sky(); return true; }
   if (k === 'escape') return true;   // there is nowhere to leave the office to, ESC means nothing here

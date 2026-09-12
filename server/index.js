@@ -306,23 +306,28 @@ async function tick() {
     // Observers need the previous snapshot: an event is a difference, not a
     // state. The core does not compute it — it only hands over both sides.
     const prev = last;
-    last = await snapshot();
-    last.version = VERSION;
-    last.release = await releaseNudge(ROOT);
-    for (const a of last.agents) a.outbox = outbox.filter((t) => t.agentId === a.id).slice(-5);
-    last.weather = await realWeather();
-    last.settings = publicSettings(await getSettings());
-    last.delivery = await deliveryStatus();
-    last.people = livePeople();
-    last.access = accessForOwner();
+    // Assembled in full before it becomes `last`: the fields below are awaited
+    // one by one, and /api/state served in between handed out a snapshot with a
+    // version and no release nudge yet. A stand caught exactly that on
+    // 12 September 2026, once in a full run under load and never alone.
+    const next = await snapshot();
+    next.version = VERSION;
+    next.release = await releaseNudge(ROOT);
+    for (const a of next.agents) a.outbox = outbox.filter((t) => t.agentId === a.id).slice(-5);
+    next.weather = await realWeather();
+    next.settings = publicSettings(await getSettings());
+    next.delivery = await deliveryStatus();
+    next.people = livePeople();
+    next.access = accessForOwner();
     // A question asked by a session the office no longer has is released: there
     // is nobody to answer it, and waiting nine minutes holds someone's terminal.
-    forgetGone(last.agents.map((a) => a.id));
-    last.permits = permits();
+    forgetGone(next.agents.map((a) => a.id));
+    next.permits = permits();
     // Observers run before the broadcast: a module may add its own to the
     // snapshot, and the client should get it on this tick, not 2.5 seconds
     // later.
-    await moduleObserve(last, prev);
+    await moduleObserve(next, prev);
+    last = next;
     const full = `data: ${JSON.stringify(last)}\n\n`;
     // A stream is only as invited as the settings say right now.
     const acc = (await getSettings()).access;
