@@ -79,7 +79,7 @@ msg() {
       packing)   echo "Ставлю платные модули из $2…" ;;
       no_pack)   echo "Не нашёл пакет модулей: $2" ;;
       packed)    echo "Модули на месте: $2" ;;
-      starting)  echo "Запускаю. Открой http://localhost:$2" ;;
+      starting)  echo "Запускаю…" ;;
       howto)     echo "Запустить:" ;;
       thencmd)   echo "  cd $2 && npm start" ;;
       thenopen)  echo "Потом открой http://localhost:$2" ;;
@@ -114,7 +114,7 @@ msg() {
       packing)   echo "Adding the paid modules from $2…" ;;
       no_pack)   echo "Module pack not found: $2" ;;
       packed)    echo "Modules in place: $2" ;;
-      starting)  echo "Starting. Open http://localhost:$2" ;;
+      starting)  echo "Starting…" ;;
       howto)     echo "To start it:" ;;
       thencmd)   echo "  cd $2 && npm start" ;;
       thenopen)  echo "Then open http://localhost:$2" ;;
@@ -310,7 +310,7 @@ fi
 
 if [ "$RUN" -eq 1 ]; then
   say ""
-  say "$(msg starting "$PORT")"
+  say "$(msg starting)"
   cd "$DEST"
   exec npm start
 else
