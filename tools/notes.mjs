@@ -68,7 +68,7 @@ const LISTS = new Set(['keys', 'shots']);
 // what a fragment carries — a recipe can be replayed on an older tag, and that is
 // where a real before-and-after comes from. A picture can only be looked at.
 const MAPS = new Set(['shots']);
-const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport']);
+const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport', 'touch']);
 
 // A three-line parser instead of a YAML dependency. The project has none, and a
 // front matter of three keys is not a reason for the first one.
