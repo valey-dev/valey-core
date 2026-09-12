@@ -31,7 +31,11 @@ const scripts = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-scripts-'));
 async function state(base) {
   for (let i = 0; i < 60; i++) {
     const j = await fetch(base + '/api/state').then((r) => r.json()).catch(() => null);
-    if (j && j.version) return j;
+    // `now` is 0 on the placeholder the office answers with before its first
+    // tick; a real snapshot is the first that carries a time. The version alone
+    // is on the placeholder too, and waiting for it caught an office that had
+    // not looked at its tags yet.
+    if (j && j.version && j.now) return j;
     await new Promise((r) => setTimeout(r, 150));
   }
   return null;
