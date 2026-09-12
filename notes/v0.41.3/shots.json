@@ -1,0 +1,15 @@
+{
+  "tag": "v0.41.3",
+  "shots": [
+    {
+      "file": "radio-receiver-radio-receiver.png",
+      "slug": "radio-receiver",
+      "id": "radio-receiver",
+      "keys": "Enter,wait:2500,r,wait:2000",
+      "before": {
+        "tag": "v0.41.2",
+        "file": "radio-receiver-radio-receiver.before-v0.41.2.png"
+      }
+    }
+  ]
+}

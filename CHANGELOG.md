@@ -4,6 +4,16 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.41.3 — 12 September 2026
+
+### Fixed
+
+- **radio:** the receiver says what a preview is in one line — 30 seconds without your own Spotify (d5b245a)
+- **radio:** «настроить» in the receiver is a button of the office again, not the browser's grey one (f813697)
+
+### Other
+
+- docs(notes): the receiver's note, with the panel before and after (c92037a)
 ## v0.41.2 — 12 September 2026
 
 ### Fixed
