@@ -61,7 +61,13 @@ const VER = /^v(\d+)\.(\d+)\.(\d+)$/;
 // The fields a fragment may carry. An unknown one is an error rather than a
 // field quietly ignored: a misspelled `keys:` is invisible in the rendered note,
 // and the whole point of the front matter is that it is machine-readable.
-const FIELDS = new Set(['title', 'scope', 'keys', 'shots']);
+//
+// `event` names the product event a feature is meant to move — "Stick Moved" —
+// so the Mixpanel panel can show, under a release mark, whether the feature is
+// used. The fragment is the one place a feature is described while it is fresh,
+// and it stays in the history with the version, so the event goes here rather
+// than into a setting nobody would keep up to date.
+const FIELDS = new Set(['title', 'scope', 'keys', 'shots', 'event']);
 const LISTS = new Set(['keys', 'shots']);
 // `shots` is a list of recipes rather than of strings: an id to name the file by,
 // and how to get the office to the right place. The recipe, not the picture, is
@@ -114,7 +120,7 @@ export function parseFragment(text, name) {
     if (seen.has(sh.id)) fail(`two shots share the id \`${sh.id}\`; one would overwrite the other`);
     seen.add(sh.id);
   }
-  return { title: front.title, scope: front.scope || '', keys: front.keys || [], shots, body };
+  return { title: front.title, scope: front.scope || '', event: front.event || '', keys: front.keys || [], shots, body };
 }
 
 function shotField(shot, key, value, fail) {
@@ -146,6 +152,11 @@ export function renderNote(tag, date, fragments, section) {
   const out = [`# ${tag} — ${date}`, ''];
   for (const f of fragments) {
     out.push(`## ${f.title}`, '');
+    // The event rides in the assembled note as a comment: invisible on the
+    // release page, readable at the tag by whoever needs it — the metrics
+    // module reads it with `git show <tag>:notes/<tag>.md`. Without this line
+    // the field would die with the fragment the release deletes.
+    if (f.event) out.push(`<!-- event: ${f.event} -->`, '');
     if (f.scope) out.push(`*${f.scope}*`, '');
     out.push(f.body, '');
     for (const sh of f.shots || []) {
