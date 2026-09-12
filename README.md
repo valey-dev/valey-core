@@ -113,10 +113,11 @@ Guests never see any of this: a command is paths and branches from your machine.
 
 The office reads `~/.claude` on your own machine and draws the floor from it. Transcripts, code and project names are never sent anywhere.
 
-Two exceptions, both yours to switch on, both named out loud:
+Three exceptions, all yours to switch on, all named out loud:
 
 * **The weather** outside the corridor window is invented until you turn on the real one — then a pair of coordinates goes to open-meteo, and nothing else.
 * **The radio** plays through your own Spotify app, with a client id you create yourself. It is a module; delete the folder and the radio is gone.
+* **The newsstand** reads public Telegram channels you put on it, as newspapers. With no channels it makes no requests at all; with some, the office server fetches each channel’s open web feed from t.me — no login, no token, no phone number — at most once every fifteen minutes, and fetches the pictures itself so your browser never talks to Telegram. It is a module too: `modules/newsstand`.
 
 There are no accounts, no telemetry and no analytics. The server is the handful of files in `server/`, and you can read every one of them before you run it — that is the point of the licence below.
 
@@ -132,7 +133,7 @@ The repository is called `valey-core` because that is what it is. The office is 
 
 ## Keys
 
-Arrow keys walk · `SHIFT` runs · `SPACE` is the action — talk, drink at the cooler, feed the piranhas, sit on a bench · `TAB` the standup — who is on what · `N` notes · `C` clothes · `P` window on the world · `U` office colour · `M` sound · `R` radio · `S` starts and stops the music wherever you are · `K` the office plan · `H` the pager you put off · `F9` a 1:1 frame · `+` `0` scale · `ESC` back. The security room is below the floor and has the cameras. Press `?` in the office for the whole keyboard, which is generated from the same list the office answers to and cannot drift from this one.
+Arrow keys walk · `SHIFT` runs · `SPACE` is the action — talk, drink at the cooler, feed the piranhas, sit on a bench · `TAB` the standup — who is on what · `N` notes · `C` clothes · `P` window on the world · `U` office colour · `M` sound · `R` radio · `S` starts and stops the music wherever you are · `K` the office plan · `G` the newspaper stand · `H` the pager you put off · `F9` a 1:1 frame · `+` `0` scale · `ESC` back. The security room is below the floor and has the cameras. Press `?` in the office for the whole keyboard, which is generated from the same list the office answers to and cannot drift from this one.
 
 The office fills the window. The scale is a whole number of screen dots per game pixel and is counted from the width — it promises at least 400 pixels of world across, and everything else the window gives goes into showing more of the floor, so a tall or a vertical monitor shows more of it rather than black bars. `+` and `−` pick the step by hand between ×2 and ×8, `0` hands the count back to the window.
 

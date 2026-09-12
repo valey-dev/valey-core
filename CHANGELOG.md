@@ -4,6 +4,17 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.45.0 — 12 September 2026
+
+### Added
+
+- **newsstand:** a channel is added from the keyboard — Tab reaches «+ канал», and + opens it (9f462c3)
+- **newsstand:** public Telegram channels as newspapers on a stand in the entrance corridor (33580ad)
+
+### Other
+
+- docs(notes): the note for the newsstand (43ad14c)
+- docs(readme): name the newsstand among the things that leave the machine, and its G key (1087782)
 ## v0.44.0 — 12 September 2026
 
 ### Added
