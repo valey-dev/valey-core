@@ -119,6 +119,11 @@ function project(snapshot, guestId) {
     // branches, keys in the arguments. A guest is shown neither the pager nor
     // the count: nothing to decide and nothing to judge by.
     permits: [],
+    // The release nudge is the owner's chore and names a file on the owner's
+    // disk; on 12 September 2026 a guest's entrance screen carried it, path
+    // and all. The page hides it from anyone who is not the owner as well —
+    // in private mode a viewer on the Wi-Fi is not projected at all.
+    release: null,
     agents: (snapshot.agents || []).map((a) => {
       if (granted(guestId, a.id)) return a;
       const out = {};

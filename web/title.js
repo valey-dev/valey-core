@@ -455,8 +455,11 @@ function menuHtml(n) {
   // The nudge about the release video. Visible to the owner only and only when there
   // is something to nudge about — the state arrives from the server already decided,
   // it is not recomputed here. The frame: WIP — «Пинок про релизный ролик», approved
-  // 1 September 2026.
-  const rel = S && S.release;
+  // 1 September 2026. «Owner only» was a comment and not a check until 12 September
+  // 2026, when a tablet opened without the owner token showed the nudge, draft
+  // path and all: the server strips it for guests, and a viewer on the Wi-Fi in
+  // private mode is nobody's guest and got the whole snapshot.
+  const rel = S && S.owner === true ? S.release : null;
   const relCard = !rel ? '' : `<div class="tcard release">
          <span class="tlabel">${tr('title.releaseLabel')}</span>
          <b>${tr('title.releaseNot', { tag: esc(rel.tag) })}</b>

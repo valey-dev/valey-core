@@ -124,6 +124,12 @@ try {
   ok('the ones declared open reach a guest, and only those', ids(theirMods.j || []) === ids(shown), [ids(shown), ids(theirMods.j || [])]);
   ok('and they have something to load with', (theirMods.j || []).every((m) => !!m.client), theirMods.j);
 
+  // The release nudge names a draft on the owner's disk; a guest's snapshot
+  // carries none, whatever the owner's says.
+  const theirState = await call('/api/state', { as: 'guest', method: 'GET' });
+  ok('the guest snapshot arrives', theirState.status === 200 && !!theirState.j, theirState.status);
+  ok('and carries no release nudge', theirState.j && theirState.j.release === null, theirState.j && theirState.j.release);
+
   // ------------------------------------------------------------- evicting
   const out = await call('/api/invite/revoke', { as: 'owner', body: { id: list.j.invites[0].id } });
   ok('the host cancels the invitation', out.status === 200, out.status);
