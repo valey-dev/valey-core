@@ -4,6 +4,21 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.49.0 — 13 September 2026
+
+### Added
+
+- **radio:** the receiver plays internet radio by its stream — no account, a display that says what is on and why it is silent (50f575f)
+
+### Fixed
+
+- **radio:** removing a wave nobody is listening to no longer breaks the music off or restarts the playlist (9660f1d)
+
+### Other
+
+- docs(notes): the radio-stream note shows the receiver on the air (67827fc)
+- docs(notes): the note for internet radio streams (b44d841)
+- test(radio): a stand for streams — the pasted line, a station's answer, playlists, ICY titles and who may ask (c09535d)
 ## v0.48.1 — 13 September 2026
 
 ### Fixed
