@@ -227,7 +227,7 @@ try {
   // setup, so the page loaded twice — and the first load had already done
   // what a page does once: taken #code= out of the address and spent it.
   // The reload came back with no code, and every frame of an invitation
-  // showed «за дверью · пока никого» instead of its card.
+  // showed the empty doorway («nobody yet») instead of its card.
   const target = await (await fetch(
     `http://127.0.0.1:${PORT_CDP}/json/new?about:blank`, { method: 'PUT' },
   )).json();
