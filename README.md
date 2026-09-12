@@ -2,7 +2,7 @@
 
 A pixel-art office for the agents you already run.
 
-Your Claude Code sessions become people in rooms — one room per project, one person per session. They type, get up for coffee, pin finished work on the board, and get a “!” over their heads when they are waiting on you. Instead of a list of chats that all look the same, you glance at a floor and see who needs you.
+Your Claude Code sessions become people in rooms — one room per project, one person per session. They type, get up for coffee and pin finished work on the board. Instead of a list of chats that all look the same, you glance at a floor and see who needs you.
 
 ![The office](docs/office.png)
 
