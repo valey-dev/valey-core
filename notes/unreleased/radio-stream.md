@@ -1,0 +1,18 @@
+---
+title: The office radio plays internet radio stations, no account needed
+scope: radio
+shots:
+  - id: on-air
+    setup: "(async()=>{localStorage.setItem('valey-radio',JSON.stringify({stations:[{name:'NTS 1',uri:'https://stream-relay-geo.ntslive.net/stream'},{name:'Rinse FM',uri:'https://admin.stream.rinse.fm/proxy/rinse_uk/stream'},{key:'sp.lofi',uri:'spotify:playlist:37i9dQZF1DWWQRwui0ExPn'}],current:0}));const {radio}=await import('/modules/radio/radio.js');radio.load();radio.playing=true;radio.streamSince=Date.now()-42*60000;radio.onAir={title:'Floating Points — Silurian Blue',format:'mp3',bitrate:128};radio.play=()=>{};radio.toggle=()=>true;})()"
+    keys: "Enter,wait:2500,r,wait:1200"
+---
+
+Until now the receiver by the entrance played Spotify only, and without your own connected Spotify app that meant thirty-second previews breaking off mid-track. YouTube was considered first and turned down: its API terms forbid a player that is not shown on the page and sound separated from the picture, which is exactly what a radio in a corridor is.
+
+Now «своя волна» takes the address of a stream as well as a Spotify link: .mp3, .aac, Icecast, Shoutcast, or a .pls playlist. The office's server checks the address first — does it answer, is it sound, what format and bitrate — and says so in one line: «✓ это поток: отвечает · mp3 · 128 kbps». An address carries no name, so the receiver asks for one, filled in from what the station calls itself. Enter catches the wave, Esc cancels. A row of four picks — NTS 2, Dublab, SomaFM · Groove Salad, Radio Paradise — adds a station in one press.
+
+A stream plays in the page's own audio element: whole tracks, no account, volume on the knob, quieter as you walk off down the corridor, and the office steps back while it plays. Instead of Spotify's glass the receiver shows a display: on air, bitrate, what the station says is playing (read by the server every twenty seconds, since the browser is not allowed to read it), and for how long. The list marks each wave ПОТОК or SPOTIFY.
+
+When a stream is silent the display says why and what to do, and the wave stays in the list: no answer in ten seconds; HLS (.m3u8), which browsers do not play; an http stream on the office's https page; the station closed the stream (404).
+
+The server only ever talks to stations the owner added or picked, and only while checking or playing one. Checking and the track title are the owner's: a guest's receiver plays streams just the same, but cannot send the office's server to arbitrary addresses. Mixcloud and SoundCloud are the next step and not part of this one.
