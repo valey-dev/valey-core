@@ -7,7 +7,9 @@
 // The office is raised by the stand helper on a free port and temporary settings,
 // in shared mode: that way both sides are checked — the owner with a token, and a
 // guest who sees no requests at all.
-import { startOffice } from './lib/office.mjs';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { startOffice, ROOT } from './lib/office.mjs';
 
 const OWNER = 'owner-token-for-the-test';
 const GUEST = 'guest-pass-for-the-test';
@@ -27,7 +29,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // sessions, and as many free numbers off the top of one's head as one managed to
 // invent. `startOffice` asks the kernel for a port with a zero, raises the office
 // on temporary settings and cleans up after itself.
-const { base, stop } = await startOffice({
+const { base, stop, settingsFile } = await startOffice({
   settings: {
     access: { mode: 'shared', token: OWNER, invites: [{ id: 'i1', guest: GUEST, from: 'Костя' }] },
   },
@@ -201,6 +203,112 @@ try {
   await post('/api/permit/answer', { id: s.permits[0].id, decision: 'terminal' });
   await held;
 
+  // ------------------------------------------------ a question, and its door
+  // Questions are held only at PreToolUse: the desktop app does not wait for
+  // PermissionRequest on them, and that door has no field for an answer.
+  const QUESTION = (event, questions) => ({
+    hook_event_name: event,
+    session_id: 'sess-1',
+    tool_name: 'AskUserQuestion',
+    tool_input: { questions },
+  });
+  const ONE = [{ question: 'Кого берём?', header: 'Зверь',
+    options: [{ label: 'Кит', description: 'большой' }, { label: 'Слон', description: 'тоже' }],
+    multiSelect: false }];
+
+  const wrongDoor = await askPermit(QUESTION('PermissionRequest', ONE));
+  ok('a question at PermissionRequest is let through at once',
+    wrongDoor.status === 200 && !wrongDoor.j.decision, wrongDoor);
+
+  const batch = await askPermit(QUESTION('PreToolUse', [...ONE,
+    { question: 'А когда?', header: 'Срок', options: [{ label: 'сейчас' }, { label: 'потом' }] }]));
+  ok('a batch of questions goes to the client - the card answers one',
+    batch.status === 200 && !batch.j.decision, batch);
+
+  const tool = await askPermit({ ...BASH('ls'), hook_event_name: 'PreToolUse' });
+  ok('an ordinary tool is never held at PreToolUse',
+    tool.status === 200 && !tool.j.decision, tool);
+
+  held = askPermit(QUESTION('PreToolUse', ONE));
+  s = await untilPermits(1);
+  const q1 = s.permits[0];
+  ok('a question at PreToolUse waits for the owner', q1.tool === 'AskUserQuestion' && !!q1.question, q1);
+
+  const allowQ = await post('/api/permit/answer', { id: q1.id, decision: 'allow' });
+  ok('allow is no answer to a question', allowQ.status === 404, allowQ);
+  const alien = await post('/api/permit/answer', { id: q1.id, decision: 'answer', label: 'Жираф' });
+  ok('an option the agent never offered is refused', alien.status === 404, alien);
+  s = await state();
+  ok('and the question is still waiting', (s.permits || []).some((x) => x.id === q1.id), s.permits);
+
+  await post('/api/permit/answer', { id: q1.id, decision: 'answer', label: 'Слон' });
+  got = await held;
+  ok('the pressed option comes back as answers keyed by the question',
+    got.j.decision === 'answer' && got.j.answers && got.j.answers['Кого берём?'] === 'Слон', got.j);
+
+  held = askPermit(QUESTION('PreToolUse', ONE));
+  s = await untilPermits(1);
+  await post('/api/permit/answer', { id: s.permits[0].id, decision: 'deny', message: 'спроси потом' });
+  got = await held;
+  ok('“no answer” still goes out as a refusal with words',
+    got.j.decision === 'deny' && got.j.message === 'спроси потом', got.j);
+
+  held = askPermit(QUESTION('PreToolUse', ONE));
+  s = await untilPermits(1);
+  await post('/api/permit/answer', { id: s.permits[0].id, decision: 'terminal' });
+  got = await held;
+  ok('“in the terminal” hands the question back empty', got.status === 200 && !got.j.decision, got.j);
+
+  // An MCP tool that happens to take a `question` is a tool asking to run.
+  held = askPermit({ hook_event_name: 'PermissionRequest', session_id: 'sess-1',
+    tool_name: 'mcp__docs__search', tool_input: { question: 'как деплоить?', options: ['a', 'b'] } });
+  s = await untilPermits(1);
+  ok('a tool with a question field gets allow and deny, not options', s.permits[0].question === null, s.permits[0]);
+  await post('/api/permit/answer', { id: s.permits[0].id, decision: 'allow' });
+  got = await held;
+  ok('and allow still works for it', got.j.decision === 'allow', got.j);
+
+  // ------------------------------------------- the hook script itself, end to end
+  // Every check above reads the office's answer. What broke on 11 September
+  // 2026 was the step after it — what the hook printed to Claude Code — so the
+  // real script runs here, against this office, with this office's token.
+  const runHook = (payload) => new Promise((resolve) => {
+    const child = spawn(process.execPath, [path.join(ROOT, 'tools', 'permit.mjs')], {
+      env: { ...process.env, VALEY_URL: base, VALEY_SETTINGS: settingsFile },
+    });
+    let out = '';
+    child.stdout.on('data', (c) => { out += c; });
+    child.on('close', (code) => {
+      let json = null;
+      try { json = out ? JSON.parse(out) : null; } catch { json = { unparsed: out }; }
+      resolve({ code, json });
+    });
+    child.stdin.end(JSON.stringify(payload));
+  });
+
+  let hook = runHook(QUESTION('PreToolUse', ONE));
+  s = await untilPermits(1);
+  await post('/api/permit/answer', { id: s.permits[0].id, decision: 'answer', label: 'Кит' });
+  let printed = await hook;
+  const hs = printed.json && printed.json.hookSpecificOutput;
+  ok('the hook exits clean', printed.code === 0, printed);
+  ok('the hook prints an allow for PreToolUse',
+    hs && hs.hookEventName === 'PreToolUse' && hs.permissionDecision === 'allow', printed.json);
+  ok('with the questions and the answer in updatedInput',
+    hs && hs.updatedInput && hs.updatedInput.questions.length === 1
+    && hs.updatedInput.answers['Кого берём?'] === 'Кит', hs && hs.updatedInput);
+
+  hook = runHook({ ...BASH('git push'), hook_event_name: 'PermissionRequest' });
+  s = await untilPermits(1);
+  await post('/api/permit/answer', { id: s.permits[0].id, decision: 'allow' });
+  printed = await hook;
+  const dec = printed.json && printed.json.hookSpecificOutput && printed.json.hookSpecificOutput.decision;
+  ok('the hook prints allow for PermissionRequest as {behavior}', dec && dec.behavior === 'allow', printed.json);
+
+  hook = runHook(QUESTION('PermissionRequest', ONE));
+  printed = await hook;
+  ok('a question at PermissionRequest leaves the hook silent', printed.code === 0 && printed.json === null, printed);
+
   await o.close(); await g.close();
 
   // ------------------------------------- the deferral rule itself, without a server
@@ -249,15 +357,16 @@ console.log('FAIL  | exception →', e.message);
     flat && flat.options[0].label === 'да' && flat.options[0].note === '', flat && flat.options[0]);
   ok('team is not a question', has && P2.questionOf({ command: 'ls' }) === null, has && P2.questionOf({ command: 'ls' }));
 
-  const asked = P2.ask({ session_id: 'sess-q', tool_name: 'AskUserQuestion',
+  const asked = P2.ask({ hook_event_name: 'PreToolUse', session_id: 'sess-q', tool_name: 'AskUserQuestion',
     tool_input: { questions: [{ question: 'Мержим?', options: [{ label: 'да' }, { label: 'позже' }] }] } },
     { audience: true });
   const shown = P2.permits().find((x) => x.tool === 'AskUserQuestion');
   ok('the application contains the text of the question, not JSON', shown && shown.command === 'Мержим?', shown && shown.command);
   ok('and there are no curly braces in it', shown && !/[{}]/.test(shown.command), shown && shown.command);
   ok('options reach the office', shown && shown.question && shown.question.options.length === 2, shown && shown.question);
-  P2.answer(shown.id, { decision: 'allow' });
-  await asked.verdict;
+  P2.answer(shown.id, { decision: 'answer', label: 'позже' });
+  const v = await asked.verdict;
+  ok('and the answer is keyed by the question text', v && v.answers && v.answers['Мержим?'] === 'позже', v);
 }
 
 await stop();

@@ -1,12 +1,28 @@
 #!/usr/bin/env node
-// The `PermissionRequest` hook: it carries the question "may I run this?" into
-// the office and brings the answer back. Installed in `~/.claude/settings.json`:
+// The hook that carries a request into the office and brings the answer back.
+// One script, two doors, told apart by `hook_event_name`:
+//
+//  - `PermissionRequest` — "may I run this?" for commands and edits;
+//  - `PreToolUse` on `AskUserQuestion` — a question the agent asks the person.
+//    It has to be this door: the desktop app draws its question picker without
+//    waiting for `PermissionRequest`, while `PreToolUse` runs before the picker
+//    and its answer was measured to land (server/permit.js tells the story).
+//
+// Installed in `~/.claude/settings.json`:
 //
 //   "hooks": {
 //     "PermissionRequest": [
 //       { "hooks": [{ "type": "command", "command": "node ~/…/valey-core/tools/permit.mjs" }] }
+//     ],
+//     "PreToolUse": [
+//       { "matcher": "AskUserQuestion",
+//         "hooks": [{ "type": "command", "command": "node ~/…/valey-core/tools/permit.mjs" }] }
 //     ]
 //   }
+//
+// The matcher matters: without it the hook runs before every tool call. The
+// office would let those through at once — it holds nothing but questions at
+// this door — but every call would still pay for a round trip.
 //
 // Everything here obeys one rule: **the office has no right to get in the way of
 // work**. It is off, it is busy, it answers nonsense, it is broken — the hook

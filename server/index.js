@@ -883,7 +883,7 @@ async function handle(req, res) {
   if (url.pathname === '/api/permit/answer' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
     const b = await readJson(req);
-    const done = answerPermit(String(b.id || ''), { decision: String(b.decision || ''), message: b.message });
+    const done = answerPermit(String(b.id || ''), { decision: String(b.decision || ''), message: b.message, label: b.label });
     if (!done) return send(res, 404, { error: 'this request no longer exists', errorKey: 'err.permitGone' });
     broadcastPermits();
     return send(res, 200, { ok: true, ...done, permits: permits() });

@@ -8,6 +8,7 @@
 export function hookOutput(payload, answer) {
   if (!answer || !answer.decision) return null;
   const event = String((payload && payload.hook_event_name) || 'PermissionRequest');
+  if (event === 'PreToolUse') return preToolUse(payload, answer);
   if (event !== 'PermissionRequest') return null;
 
   // `decision` is an object with `behavior`, not a bare word. Until
@@ -28,4 +29,36 @@ export function hookOutput(payload, answer) {
   }
   if (answer.decision === 'deny') decision.message = answer.message || 'denied in the office';
   return { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } };
+}
+
+// A question answered in the office. The hooks reference spells the shape out:
+// `allow` alone is not enough for `AskUserQuestion`, it needs `updatedInput`
+// with the original `questions` echoed back and `answers` mapping each
+// question's text to the chosen label. `updatedInput` replaces the whole input,
+// so everything that came in goes back out with the answers added.
+//
+// A refusal goes out as `deny`, and its reason is what the agent reads: the
+// card's «не отвечу» with the owner's words under it.
+function preToolUse(payload, answer) {
+  if (answer.decision === 'answer' && answer.answers && typeof answer.answers === 'object') {
+    const input = (payload && payload.tool_input) || {};
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'allow',
+        permissionDecisionReason: 'answered in the office',
+        updatedInput: { ...input, answers: answer.answers },
+      },
+    };
+  }
+  if (answer.decision === 'deny') {
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: answer.message || 'no answer in the office',
+      },
+    };
+  }
+  return null;
 }

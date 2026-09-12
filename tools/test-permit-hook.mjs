@@ -47,5 +47,36 @@ const old = hookOutput({ tool_name: 'Bash' }, { decision: 'allow' });
 ok('no event name is read as PermissionRequest',
   old && old.hookSpecificOutput.hookEventName === 'PermissionRequest', old);
 
+// ---------------------------------------------------- PreToolUse: a question
+// The shape is the hooks reference's, word for word: allow alone does not
+// answer AskUserQuestion, it needs updatedInput with the questions echoed back
+// and answers added. A live probe on 11 September 2026 returned exactly this
+// and the agent got «Кит» with no picker drawn.
+const QS = [{ question: 'Кого берём?', header: 'Зверь',
+  options: [{ label: 'Кит', description: 'большой' }, { label: 'Слон' }], multiSelect: false }];
+const ASK = { hook_event_name: 'PreToolUse', tool_name: 'AskUserQuestion', tool_input: { questions: QS } };
+
+const answered = hookOutput(ASK, { decision: 'answer', answers: { 'Кого берём?': 'Кит' } });
+const h = answered && answered.hookSpecificOutput;
+ok('an answer names PreToolUse', h && h.hookEventName === 'PreToolUse', answered);
+ok('an answer is an allow', h && h.permissionDecision === 'allow', h);
+ok('the questions go back as they came', h && h.updatedInput.questions === QS, h && h.updatedInput);
+ok('and the answers ride with them', h && h.updatedInput.answers['Кого берём?'] === 'Кит', h && h.updatedInput);
+ok('PreToolUse has no decision object', h && !('decision' in h), h);
+
+const refused = hookOutput(ASK, { decision: 'deny', message: 'спроси потом' });
+ok('a refusal is a deny with the words as its reason',
+  refused.hookSpecificOutput.permissionDecision === 'deny'
+  && refused.hookSpecificOutput.permissionDecisionReason === 'спроси потом', refused);
+
+// An allow without answers would only draw the client's own picker — which is
+// what printing nothing does too, without pretending to have decided.
+ok('allow at PreToolUse prints nothing', hookOutput(ASK, { decision: 'allow' }) === null,
+  hookOutput(ASK, { decision: 'allow' }));
+ok('answer without answers prints nothing', hookOutput(ASK, { decision: 'answer' }) === null,
+  hookOutput(ASK, { decision: 'answer' }));
+ok('an unknown event prints nothing',
+  hookOutput({ ...ASK, hook_event_name: 'PostToolUse' }, { decision: 'allow' }) === null, null);
+
 console.log(bad ? `\n${bad} failures` : '\nall green');
 process.exit(bad ? 1 : 0);
