@@ -88,6 +88,19 @@ export function buttonAt(px, py, w, h, grace = 8) {
   return null;
 }
 
+// A button on the ≡ sheet presses a key, and some panels still compare `key`
+// rather than `code`: `UI.notesKey(e.key)` wants «n», not «KeyN». So the sheet
+// sends both, and the key is read back off the registry's code here.
+const NAMED = { Space: ' ', Slash: '/', Equal: '+', Minus: '-', ShiftLeft: 'Shift', ShiftRight: 'Shift' };
+export function keyOfCode(code) {
+  if (NAMED[code]) return NAMED[code];
+  let m = /^Key([A-Z])$/.exec(code);
+  if (m) return m[1].toLowerCase();
+  m = /^(?:Digit|Numpad)(\d)$/.exec(code);
+  if (m) return m[1];
+  return code;                       // Tab, Escape, the arrows, F9 are their own names
+}
+
 // A hint over a thing names the key; on touch it names the button. Only what
 // is in the brackets changes: «[ ПРОБЕЛ ] попить воды» → «[ ● ] попить воды».
 export function touchHint(text) {

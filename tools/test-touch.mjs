@@ -6,8 +6,9 @@
 // main.js can take it as one — and that the buttons sit where the frame puts
 // them, clear of each other and of the ring.
 import {
-  RING, EDGE, RUN, restCentre, grab, tilt, snapshot, buttonsAt, buttonAt, touchHint,
+  RING, EDGE, RUN, restCentre, grab, tilt, snapshot, buttonsAt, buttonAt, touchHint, keyOfCode,
 } from '../web/touch.js';
+import { codeOf } from '../web/keymap.js';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -66,6 +67,15 @@ ok('the floor is no button', buttonAt(W / 2, H / 2, W, H) === null);
 // A small window must still fit them: a phone in landscape is 740×360.
 const small = buttonsAt(740, 360);
 ok('on a phone in landscape they stay on the screen', Object.values(small).every((q) => q.y - q.r >= 0 && q.x - q.r > 740 / 3), small);
+
+// ----------------------------------------------------------- the ≡ sheet keys
+// The sheet sends { key, code }: the code is what codeOf() reads, the key is
+// what a panel still comparing `e.key` expects.
+const pairs = { KeyN: 'n', Tab: 'Tab', Slash: '/', Equal: '+', Minus: '-', Digit0: '0', Space: ' ', KeyT: 't' };
+for (const [code, key] of Object.entries(pairs)) {
+  ok(`${code} is pressed as «${key}»`, keyOfCode(code) === key, keyOfCode(code));
+}
+ok('the sheet’s event is read by its code', codeOf({ key: '/', code: 'Slash' }) === 'Slash');
 
 // -------------------------------------------------------------------- hints
 ok('a Russian hint names the button', touchHint('[ ПРОБЕЛ ] попить воды') === '[ ● ] попить воды');
