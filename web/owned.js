@@ -27,3 +27,21 @@ export function owned(extra = {}) {
   if (guest) h['x-valey-guest'] = guest;
   return h;
 }
+
+// The same pass for the two roads that cannot carry headers: the stream
+// (EventSource) and the goodbye beacon (sendBeacon). Both tokens go, as they do
+// in the headers, and the server decides which one counts.
+//
+// Until 13 September 2026 these two sent the owner's token *instead of* the
+// guest's. localStorage is per origin, and a port on this machine is reused by
+// stand after stand, so a browser that had once been the owner of a stand on
+// 5192 still held that token when it walked into the next office on 5192 by an
+// invitation. The door worked — the headers carry both — and the stream went
+// out with the dead owner token alone, got 403 on every reconnect, and the
+// guest stood on an empty floor under «жду агентов…» for good.
+export function passQuery() {
+  const q = new URLSearchParams();
+  if (owner) q.set('owner', owner);
+  if (guest) q.set('guest', guest);
+  return q.toString();
+}
