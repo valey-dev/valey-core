@@ -18,10 +18,17 @@ let loaded = [];
 // what lives here is a simulation — the office stops knowing about the module
 // while the files stay on disk.
 const off = new Set();
-const live = () => loaded.filter((m) => !m.error && !off.has(m.id));
+// Switched off for good, in the manifest: `"active": false`. Not a stand's
+// simulation but the owner's decision — voice on 12 September 2026, a paid
+// module not yet for sale — so the office does not run a line of it: its
+// server file is never imported, its client never reaches the page, and the
+// stand's switch cannot turn it back on. Only an edit to module.json can.
+const inactive = (m) => m.manifest.active === false;
+const live = () => loaded.filter((m) => !m.error && !off.has(m.id) && !inactive(m));
 
 export function setModuleOff(id, value) {
-  if (!loaded.some((m) => m.id === id)) return false;
+  const m = loaded.find((x) => x.id === id);
+  if (!m || inactive(m)) return false;
   if (value) off.add(id); else off.delete(id);
   return true;
 }
@@ -41,7 +48,10 @@ const shownToGuests = (m) => m.manifest.guests === 'shown';
 // so the office can say what an invited person sees without asking twice; a rule
 // nobody can read is a rule nobody trusts.
 export function moduleAll() {
-  return loaded.map((m) => ({ id: m.id, off: off.has(m.id), broken: !!m.error, guests: shownToGuests(m) ? 'shown' : 'hidden' }));
+  return loaded.map((m) => ({
+    id: m.id, off: off.has(m.id) || inactive(m), inactive: inactive(m),
+    broken: !!m.error, guests: shownToGuests(m) ? 'shown' : 'hidden',
+  }));
 }
 
 export async function loadModules(root, ctx = null) {
@@ -75,7 +85,7 @@ export async function loadModules(root, ctx = null) {
     // downloaded.
     if (manifest.id !== e.name) continue;
     const mod = { id: manifest.id, manifest, dir: base, server: null, error: null };
-    if (manifest.server) {
+    if (manifest.server && !inactive(mod)) {
       try {
         mod.server = await import(pathToFileURL(path.join(base, manifest.server)).href);
       } catch (err) {
