@@ -33,8 +33,9 @@ const DICT = {
     'news.hint': 'газета',
     'news.title': 'Газета',
     'news.titleChannels': 'Газета · каналы',
-    'news.keysPaper': '⇥ газета · ← → выпуск · Enter — в Telegram',
-    'news.keysList': '↑↓ канал · Del — убрать · Esc — к газете',
+    'news.keysPaper': '⇥ газета · + канал · ← → выпуск · Enter — в Telegram',
+    'news.keysPaperGuest': '⇥ газета · ← → выпуск · Enter — в Telegram',
+    'news.keysList': '⇥ газета · ↑↓ канал · Del — убрать · Esc — к газете',
     'news.keysEmpty': 'Enter — добавить · Esc — закрыть',
     'news.keysGuest': 'Esc — закрыть',
     'news.addTab': '+ канал',
@@ -94,8 +95,9 @@ const DICT = {
     'news.hint': 'newspaper',
     'news.title': 'Newspaper',
     'news.titleChannels': 'Newspaper · channels',
-    'news.keysPaper': '⇥ paper · ← → issue · Enter — to Telegram',
-    'news.keysList': '↑↓ channel · Del — remove · Esc — back to the paper',
+    'news.keysPaper': '⇥ paper · + channel · ← → issue · Enter — to Telegram',
+    'news.keysPaperGuest': '⇥ paper · ← → issue · Enter — to Telegram',
+    'news.keysList': '⇥ paper · ↑↓ channel · Del — remove · Esc — back to the paper',
     'news.keysEmpty': 'Enter — add · Esc — close',
     'news.keysGuest': 'Esc — close',
     'news.addTab': '+ channel',
@@ -276,7 +278,7 @@ async function loadIssue() {
     if (!r.ok) throw new Error(j.error || r.status);
     j.cursor = before;
     nav.data = j;
-    markRead(c, j);
+    if (stand.view === 'paper' && curChannel() === c) markRead(c, j);
   } catch (e) {
     nav.error = String(e.message || e);
     // An older issue the server no longer knows (it restarted) is not an error
@@ -284,7 +286,7 @@ async function loadIssue() {
     if (before && nav.error === 'unknown issue') { nav.stack = []; nav.loading = false; return loadIssue(); }
   }
   nav.loading = false;
-  paint();
+  if (stand.view === 'paper' && curChannel() === c) paint();
 }
 
 // Opening the newest issue is reading it: the flag on the stand goes down.
@@ -539,11 +541,14 @@ function paint() {
   if (!el.root || !isOpen()) return;
   const c = curChannel();
   const listView = stand.view === 'channels' || !c;
-  const keysHint = !c ? (owner ? 'news.keysEmpty' : 'news.keysGuest') : listView ? 'news.keysList' : 'news.keysPaper';
+  const keysHint = !c ? (owner ? 'news.keysEmpty' : 'news.keysGuest') : listView ? 'news.keysList' : owner ? 'news.keysPaper' : 'news.keysPaperGuest';
   const keep = $('.nsbody', el.root);
   const scroll = keep && !listView ? keep.scrollTop : 0;
   const typed = $('#nsaddr', el.root);
   const draft = typed ? typed.value : '';
+  // A repaint that lands while the address is being typed — an issue arriving
+  // late, the stand list refreshing — must not take the caret away with it.
+  const typing = typed && document.activeElement === typed ? [typed.selectionStart, typed.selectionEnd] : null;
   el.root.innerHTML = `<div class="rwrap nswrap${ui() >= 1.5 ? ' tight' : ''}">
     <div class="vhead"><span>${esc(tr(listView && c ? 'news.titleChannels' : 'news.title'))}</span>
       <span class="nshead"><span class="nskeys">${esc(tr(keysHint))}</span><button id="nsx">✕</button></span></div>
@@ -555,6 +560,7 @@ function paint() {
   if (scroll) body.scrollTop = scroll;
   const addr = $('#nsaddr', el.root);
   if (addr && draft) addr.value = draft;
+  if (addr && typing) { addr.focus(); addr.setSelectionRange(typing[0], typing[1]); }
   bind();
   const mast = $('.nsmast', el.root);
   if (mast) paintMast(mast, mast.dataset.title, ui() >= 1.5 ? 4 : 6);
@@ -567,7 +573,7 @@ function bind() {
   $('#nsx', r).onclick = close;
   r.querySelectorAll('.nstab[data-i]').forEach((b) => { b.onclick = () => pickPaper(Number(b.dataset.i)); });
   const addTab = $('.nsaddtab', r);
-  if (addTab) addTab.onclick = () => { stand.view = 'channels'; stand.msg = ''; paint(); };
+  if (addTab) addTab.onclick = () => openAdd();
   const on = (sel, fn) => { const b = $(sel, r); if (b) b.onclick = fn; };
   on('.nsearlier', () => turn(-1));
   on('.nslater', () => turn(1));
@@ -583,6 +589,9 @@ function bind() {
     addr.onkeydown = (e) => {
       if (e.key === 'Escape') { e.preventDefault(); addr.blur(); ring.paint(); return; }
       if (e.key === 'Enter') { e.preventDefault(); addChannel(); }
+      // Tab from the field goes on round the tabs like everywhere else in the
+      // panel; left to the browser it stopped on «добавить» and stayed there.
+      if (e.key === 'Tab' && stand.channels.length) { e.preventDefault(); addr.blur(); cycle(e.shiftKey ? -1 : 1); }
     };
   }
 }
@@ -650,16 +659,37 @@ async function removeChannel(i) {
 
 // --------------------------------------------------------- keys
 
-function onKey(raw) {
+// «+ канал» as a place of its own: the list with the ring and the real focus
+// already in the address field, so the next thing typed is the address.
+function openAdd() {
+  if (!owner) return false;
+  stand.view = 'channels';
+  stand.msg = '';
+  ringOn = true;
+  paint();
+  const input = el.root && $('#nsaddr', el.root);
+  if (input) { ring.on(input); input.focus(); }
+  return true;
+}
+
+// Tab walks the papers and then «+ канал», the way the tabs are laid out; it
+// used to skip the last one, so adding a channel needed the mouse. A guest has
+// no «+ канал» and goes straight round.
+function cycle(step) {
+  const n = stand.channels.length;
+  if (!n) return;
+  const stops = n + (owner ? 1 : 0);
+  const at = stand.view === 'channels' ? n : stand.cur;
+  const next = (at + step + stops) % stops;
+  if (next === n) openAdd(); else pickPaper(next);
+}
+
+function onKey(raw, shift) {
   if (!isOpen()) return false;
   const k = String(raw).toLowerCase();
   const c = curChannel();
   const listView = stand.view === 'channels' || !c;
-  if (k === 'tab') {
-    if (!stand.channels.length) return true;
-    if (stand.view === 'channels') pickPaper(stand.cur); else pickPaper(stand.cur + 1);
-    return true;
-  }
+  if (k === 'tab') { cycle(shift ? -1 : 1); return true; }
   const n = Number(k);
   if (Number.isInteger(n) && n >= 1 && n <= 9) {
     if (n <= stand.channels.length) pickPaper(n - 1);
@@ -757,11 +787,17 @@ export function register(a) {
   // it only inside its own panel.
   api.keys([{ id: 'toggle', codes: ['KeyG'], group: 'panel', hint: 'news.hint' }]);
   api.on('action', (id) => {
-    if (id !== 'newsstand.toggle') return false;
-    isOpen() ? close() : open();
-    return true;
+    if (id === 'newsstand.toggle') { isOpen() ? close() : open(); return true; }
+    if (!isOpen()) return false;
+    // While the paper is open, + is «add a channel» and the other scale keys
+    // do nothing: the office behind a panel has nothing to zoom for, and a
+    // reader who presses + wants the tab labelled with it. Actions reach
+    // modules before the core, so taking them here keeps them from the zoom.
+    if (id === 'zoom.in') { openAdd(); return true; }
+    if (id === 'zoom.out' || id === 'zoom.reset') return true;
+    return false;
   });
-  api.on('key', (raw) => onKey(raw));
+  api.on('key', (raw, shift) => onKey(raw, shift));
   api.on('esc', () => {
     if (!isOpen()) return false;
     // Esc in the channel list goes back to the paper, as the frame says; from
