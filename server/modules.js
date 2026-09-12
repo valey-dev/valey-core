@@ -26,6 +26,57 @@ export function setModuleOff(id, value) {
   return true;
 }
 
+// What a module may hand to the page: its client and its style, whatever those
+// import or reference relative to themselves, and whatever the manifest lists
+// under `assets` for what a static read cannot see. Nothing else — not the
+// server, not the tests, not the manifest, and not a file of the repository the
+// module happens to be linked in from. Until 12 September 2026 /modules/<path>
+// read any file under modules/ for anyone past the network gate: the private
+// repository's BACKLOG.md, its .git/HEAD, every server.js.
+const IMPORT_RE = /(?:^|[\n;])\s*(?:import|export)\s[^;]*?from\s*['"](\.{1,2}\/[^'"]+)['"]|import\(\s*['"](\.{1,2}\/[^'"]+)['"]\s*\)/g;
+const URL_RE = /url\(\s*['"]?(?!data:|https?:|\/)([^'")]+)['"]?\s*\)/g;
+async function clientAssets(base, manifest) {
+  const seen = new Set();
+  const queue = [];
+  const push = (rel) => {
+    const n = path.posix.normalize(String(rel)).replace(/^\.\//, '');
+    if (!n || n.startsWith('../') || n.startsWith('/') || n.split('/').some((p) => p.startsWith('.'))) return;
+    if (!seen.has(n)) { seen.add(n); queue.push(n); }
+  };
+  if (manifest.client) push(manifest.client);
+  if (manifest.style) push(manifest.style);
+  for (const a of Array.isArray(manifest.assets) ? manifest.assets : []) push(a);
+  while (queue.length) {
+    const rel = queue.shift();
+    if (!/\.(m?js|css)$/.test(rel)) continue;
+    let text;
+    try { text = await fsp.readFile(path.join(base, rel), 'utf8'); } catch { continue; }
+    const from = path.posix.dirname(rel);
+    for (const m of text.matchAll(rel.endsWith('.css') ? URL_RE : IMPORT_RE)) {
+      const ref = (m[1] || m[2] || '').split(/[?#]/)[0];
+      if (ref) push(path.posix.join(from, ref));
+    }
+  }
+  return seen;
+}
+
+// The file behind /modules/<id>/<rel>, or null. Guests get only modules shown to
+// them; every request is checked against the module's asset list and then
+// against the real path on disk — the module folder is usually a symlink into
+// the other repository, so both ends are resolved before they are compared.
+export async function moduleAsset(id, rel, forOwner = false) {
+  const m = live().find((x) => x.id === id);
+  if (!m || !(forOwner || shownToGuests(m))) return null;
+  const n = path.posix.normalize(String(rel || '')).replace(/^\.\//, '');
+  if (!m.assets.has(n)) return null;
+  try {
+    const root = await fsp.realpath(m.dir);
+    const file = await fsp.realpath(path.join(m.dir, n));
+    if (!file.startsWith(root + path.sep)) return null;
+    return file;
+  } catch { return null; }
+}
+
 // Who is allowed to see a module: `"guests": "shown"` in the manifest, and
 // nothing else counts as yes.
 //
@@ -74,7 +125,7 @@ export async function loadModules(root, ctx = null) {
     // it, and once they drift you get a module whose client cannot be
     // downloaded.
     if (manifest.id !== e.name) continue;
-    const mod = { id: manifest.id, manifest, dir: base, server: null, error: null };
+    const mod = { id: manifest.id, manifest, dir: base, server: null, error: null, assets: await clientAssets(base, manifest) };
     if (manifest.server) {
       try {
         mod.server = await import(pathToFileURL(path.join(base, manifest.server)).href);

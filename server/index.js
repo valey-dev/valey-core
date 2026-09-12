@@ -14,7 +14,7 @@ import {
 import { deliver, deliveryStatus, forgetCli, isBusy, MODES } from './deliver.js';
 import { ask as askPermit, answer as answerPermit, permits, forgetGone } from './permit.js';
 import { releaseNudge } from './release.js';
-import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff } from './modules.js';
+import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset } from './modules.js';
 import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
 import { MIME, fileType, fileHeaders } from './files.js';
 import { listenFree } from './port.js';
@@ -77,6 +77,20 @@ const SHOWN = [
 const grants = new Map();
 
 const granted = (guestId, agentId) => !!(guestId && grants.get(guestId)?.has(agentId));
+
+// A guest who is no longer invited: the streams on his token are closed, and
+// what he asked for and was granted is forgotten. Called on revoke, and on
+// every tick for a token the settings no longer know — a mode switched back to
+// private, or an invitation edited out of the file by hand.
+function dropGuest(guestId) {
+  grants.delete(guestId);
+  for (const k of [...asks.keys()]) if (k.startsWith(guestId + ':')) asks.delete(k);
+  for (const res of [...clients]) {
+    if (res.valeyGuest !== guestId) continue;
+    clients.delete(res);
+    try { res.end(); } catch { /* already gone */ }
+  }
+}
 
 // Access requests. The key is the pair of guest and agent: a second request
 // from the same person about the same agent replaces the first rather than
@@ -310,6 +324,12 @@ async function tick() {
     // later.
     await moduleObserve(last, prev);
     const full = `data: ${JSON.stringify(last)}\n\n`;
+    // A stream is only as invited as the settings say right now.
+    const acc = (await getSettings()).access;
+    const invited = new Set((acc.invites || []).map((i) => i.guest).filter(Boolean));
+    for (const res of [...clients]) {
+      if (res.valeyGuest && (acc.mode !== 'shared' || !invited.has(res.valeyGuest))) dropGuest(res.valeyGuest);
+    }
     // Guests get their own projection: each has his own set of what is open.
     for (const res of clients) {
       res.write(res.valeyGuest ? `data: ${JSON.stringify(project(last, res.valeyGuest))}\n\n` : full);
@@ -632,6 +652,11 @@ async function handle(req, res) {
     const s = await getSettings();
     const left = (s.access.invites || []).filter((i) => i.id !== b.id);
     await patchSettings({ access: { ...s.access, invites: left } });
+    // The token dies with the invitation, and so does everything that held it.
+    // Until 12 September 2026 only the next request was refused: a stream
+    // opened on the token kept receiving the projection — with the agent the
+    // guest had been granted — after the invitation was gone.
+    for (const i of (s.access.invites || [])) if (i.id === b.id && i.guest) dropGuest(i.guest);
     return send(res, 200, { ok: true, invites: left.map(safeInvite) });
   }
 
@@ -951,8 +976,15 @@ async function handle(req, res) {
   // there is no modules/ folder at all, and confusing it with the core's static
   // files means serving one day what was never put there.
   if (url.pathname.startsWith('/modules/')) {
-    const file = path.join(MODS, url.pathname.slice('/modules/'.length));
-    if (!file.startsWith(MODS)) return send(res, 403, { error: 'nope' });
+    // Only what a module's page needs, decided by the loader and never by the
+    // path (see moduleAsset). The invitation gate covers this branch as it
+    // covers /api/: a person without a code loads no modules, and a guest gets
+    // the files of the modules shown to him and a 404 for the rest.
+    if (!(await admitted(req))) return send(res, 403, { error: 'an invitation is required', errorKey: 'err.needCode' });
+    const [id, ...rest] = url.pathname.slice('/modules/'.length).split('/');
+    let file = null;
+    try { file = await moduleAsset(decodeURIComponent(id), rest.map(decodeURIComponent).join('/'), await isOwner(req)); } catch { file = null; }
+    if (!file) return send(res, 404, 'not found', 'text/plain');
     try {
       const buf = await fsp.readFile(file);
       return send(res, 200, buf, MIME[path.extname(file).toLowerCase()] || 'application/octet-stream');

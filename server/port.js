@@ -62,6 +62,10 @@ const listenOnce = (server, port, host) => new Promise((resolve, reject) => {
 export async function listenFree(server, port, host, { probe = whoIsOn, tries = 10, log = () => {}, own = null } = {}) {
   for (let i = 0; i <= tries; i++) {
     const p = port + i;
+    // Ports end at 65535. Walking past it asked Node to bind 65536 and died
+    // with ERR_SOCKET_BAD_PORT instead of the sentence below: the stand hit it
+    // on 12 September 2026 when the system handed it 65535 as an ephemeral port.
+    if (p > 65535) break;
     try {
       await listenOnce(server, p, host);
       return p;

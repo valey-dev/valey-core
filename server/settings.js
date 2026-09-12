@@ -74,8 +74,8 @@ export async function migrateSettings() {
   if (!hasOld) return { done: false, reason: 'nothing-to-move' };
   const raw = await fsp.readFile(LEGACY, 'utf8');
   JSON.parse(raw);                                   // a broken file is not moved
-  await fsp.mkdir(path.dirname(FILE), { recursive: true });
-  await fsp.writeFile(FILE, raw, { flag: 'wx' });    // wx — do not let a race overwrite it
+  await fsp.mkdir(path.dirname(FILE), { recursive: true, mode: 0o700 });
+  await fsp.writeFile(FILE, raw, { flag: 'wx', mode: 0o600 });    // wx — do not let a race overwrite it
   return { done: true, reason: 'moved', file: FILE, legacy: LEGACY };
 }
 
@@ -212,7 +212,7 @@ export async function getSettings() {
   if (raw !== null) {
     try { saved = JSON.parse(raw); } catch (e) {
       const backup = `${FILE}.broken-${new Date().toISOString().replace(/[:.]/g, '-')}`;
-      try { await fsp.writeFile(backup, raw); } catch { /* at least say it */ }
+      try { await fsp.writeFile(backup, raw, { mode: 0o600 }); } catch { /* at least say it */ }
       console.error(`Settings could not be read: ${e.message}. The file was moved to ${backup}; `
         + `the office is starting with defaults, and the next save will overwrite ${FILE}. `
         + 'Names, the token, and invitations remain in the backup.');
@@ -305,10 +305,18 @@ function persist() {
       throw new Error(`Settings were not saved because ${FILE} changed after this process read it. Reload and try again.`);
     };
     if (await changed()) refuseStaleWrite();
-    await fsp.mkdir(path.dirname(FILE), { recursive: true });
+    // The folder is made 0700 when it is made here; one that already exists is
+    // left as its owner set it — tightening somebody's ~/.config from a save
+    // would be a surprise, and the files inside are 0600 either way.
+    await fsp.mkdir(path.dirname(FILE), { recursive: true, mode: 0o700 });
     const tmp = `${FILE}.tmp-${process.pid}`;
     try {
-      await fsp.writeFile(tmp, text);
+      // The file holds the owner token, the network token and the invitations.
+      // A temporary file written with the default mode came out world-readable
+      // wherever the umask allowed, and the rename carried that mode over the
+      // file it replaced — found by the audit of 12 September 2026. 0600 on
+      // every write here, the migration and the broken-file copy alike.
+      await fsp.writeFile(tmp, text, { mode: 0o600 });
       // Catch an edit made while the temporary file was being written too.
       if (await changed()) refuseStaleWrite();
       await fsp.rename(tmp, FILE);

@@ -12,7 +12,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { loadModules, moduleList, moduleAll, moduleDefaults, moduleErrors, moduleRoute, moduleObserve } from '../server/modules.js';
+import { loadModules, moduleList, moduleAll, moduleDefaults, moduleErrors, moduleRoute, moduleObserve, moduleAsset } from '../server/modules.js';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -70,9 +70,33 @@ await fsp.mkdir(path.join(mods, 'мусор'), { recursive: true });
 await fsp.mkdir(path.join(mods, 'чужой'), { recursive: true });
 await fsp.writeFile(path.join(mods, 'чужой', 'module.json'), JSON.stringify({ id: 'не-тот-id', client: 'client.js' }));
 
+// The sample's client imports a helper and its style references a font; a
+// test, the server and a dotfile lie next to them. What the page may fetch is
+// the client, the style and what they pull in — decided by reading them, not by
+// the path in the request.
+await fsp.writeFile(path.join(mods, 'пример', 'client.js'), "import { x } from './shared.js';\nimport('./lazy.js');\nexport const setup = () => x;\n");
+await fsp.writeFile(path.join(mods, 'пример', 'shared.js'), 'export const x = 1;\n');
+await fsp.writeFile(path.join(mods, 'пример', 'lazy.js'), 'export default 2;\n');
+await fsp.writeFile(path.join(mods, 'пример', 'style.css'), '@font-face{src:url("fonts/a.woff2")}\n');
+await fsp.mkdir(path.join(mods, 'пример', 'fonts'), { recursive: true });
+await fsp.writeFile(path.join(mods, 'пример', 'fonts', 'a.woff2'), 'font');
+await fsp.writeFile(path.join(mods, 'пример', 'test-x.mjs'), '// a stand\n');
+await fsp.writeFile(path.join(mods, 'пример', '.secret'), 'no\n');
+await fsp.writeFile(path.join(mods, 'BACKLOG.md'), '# private\n');
+
 const loaded = await loadModules(root);
 ok('Exactly one module loaded', loaded.length === 1, loaded.map(m => m.id));
 ok('it\'s him', loaded[0]?.id === 'пример');
+
+const served = async (rel, owner = true) => !!(await moduleAsset('пример', rel, owner));
+ok('the client and the style are served', await served('client.js') && await served('style.css'));
+ok('and what they import, statically and lazily', await served('shared.js') && await served('lazy.js'));
+ok('and the font the style references', await served('fonts/a.woff2'));
+ok('the server is not', !(await served('server.js')));
+ok('nor the manifest, a stand, or a dotfile', !(await served('module.json')) && !(await served('test-x.mjs')) && !(await served('.secret')));
+ok('nor anything above the module', !(await served('../BACKLOG.md')) && !(await served('../../package.json')));
+ok('a module nobody knows serves nothing', (await moduleAsset('нет', 'client.js', true)) === null);
+ok('the answer is the real path on disk', path.isAbsolute((await moduleAsset('пример', 'client.js', true)) || ''));
 ok('in the list for the client there is a path to the client and style',
   moduleList(true)[0]?.client === 'client.js' && moduleList(true)[0]?.style === 'style.css', moduleList(true));
 ok('the module delivered its settings', moduleDefaults()['пример']?.ключ === '', moduleDefaults());

@@ -286,7 +286,10 @@ if [ -n "$PACK" ]; then
     http://*|https://*)
       curl -fsSL "$PACK" -o "$TMP/pack.zip" || die "$(msg no_pack "$PACK")" ;;
     *)
-      PACK=$(eval echo "$PACK")
+      # A path, not a shell program: until 12 September 2026 this was
+      # `eval echo`, and a pack named `$(cmd).zip` ran cmd. place() knows ~
+      # and relative paths, which is all eval was ever there for.
+      PACK=$(place "$PACK")
       [ -f "$PACK" ] || die "$(msg no_pack "$PACK")"
       cp "$PACK" "$TMP/pack.zip" ;;
   esac
