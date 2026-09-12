@@ -44,6 +44,9 @@ const die = (m) => { console.error('release: ' + m); process.exit(1); };
 const argv = process.argv.slice(2);
 const dry = argv.includes('--dry');
 const ship = argv.includes('--ship');
+// The public remote's name. One name rather than "every remote but origin":
+// a stray remote to somebody's fork must not become a publication by accident.
+const PUBLIC = process.env.VALEY_PUBLIC_REMOTE || 'public';
 // Cutting several features into one version is admitting a release was skipped.
 // It has to be said out loud, in the command, rather than in the changelog after
 // the fact — so the guard below refuses and this flag is how you agree.
@@ -301,35 +304,75 @@ if (next.endsWith('.0') && ownRepo) {
 // at all. Advice that has to be followed every single time is not advice, it is
 // a step somebody forgot to write down.
 //
-// This is safe to do without asking for one specific reason: `origin` is a
-// PRIVATE staging repository. Nobody outside reads it, and the project's rules
-// grant that push. Pointed at a public remote, this flag would be an act of
-// publishing and would belong to a person, not to a script.
+// Pushing `origin` without asking is safe because it is a PRIVATE staging
+// repository: nobody outside reads it, and the project's rules grant the push.
+//
+// The public repository — the remote called `public`, valey-dev/valey-core since
+// 11 September 2026 — is pushed by the same tail, and that is deliberate. What
+// reaches it is exactly one thing: a release the owner accepted by merging.
+// The merge is the act of publishing; this only carries it. On opening day the
+// public side was caught up by hand after every release, by three sessions in
+// parallel, and valey.dev/dist/latest — a redirect to the newest public page —
+// lagged behind each one until somebody noticed. A remote that is not there
+// (a fork, a clone without the public half) is skipped and said so.
 if (ship) {
   const remote = (() => { try { return git('remote', 'get-url', 'origin'); } catch { return ''; } })();
   if (!remote) die(`tag ${tag} exists locally, but origin is not configured; there is nowhere to push`);
   console.log(`\npushing to origin (${remote}):`);
-  // --atomic or nothing: two refspecs in one push are pushed independently, so a
-  // main rejected as non-fast-forward still lets the tag through. That happened
-  // on 6 September 2026 — v0.18.0 existed for an hour as a tag pointing at a
-  // commit no branch could see, package.json on main still said 0.17.0, and the
-  // next release could not cut because the version it wanted was taken. Either
-  // both refs land or neither, and a rejection is then an ordinary rerun.
-  git('push', '--atomic', 'origin', 'HEAD:main', tag);
+  git('push', 'origin', 'HEAD:main', tag);
   console.log(`  main and ${tag} pushed`);
 
-  console.log('\nrelease page:');
   // The released repository can borrow this release suite without carrying a
   // duplicate tools/ directory. The page builder therefore lives beside this
   // script, just like release-kind.mjs and the video-script helper above.
-  const r = spawnSync(process.execPath, [path.join(TOOL_ROOT, 'tools/gh-release.mjs'), tag],
-    { cwd: ROOT, stdio: 'inherit' });
+  const page = (where) => spawnSync(process.execPath,
+    [path.join(TOOL_ROOT, 'tools/gh-release.mjs'), tag, '--remote', where], { cwd: ROOT, stdio: 'inherit' });
   // The tag is already pushed by now, so a failure here is not fatal to the
   // release — it is one command away from being finished, and saying which one
   // beats a stack trace.
-  if (r.status !== 0) {
-    console.log(`\nrelease page creation failed. Tag ${tag} is already on origin; finish with:\n` +
-      `  VALEY_REPO=${ROOT} node ${path.join(TOOL_ROOT, 'tools/gh-release.mjs')} ${tag}`);
+  const finish = (where) => `  VALEY_REPO=${ROOT} node ${path.join(TOOL_ROOT, 'tools/gh-release.mjs')} ${tag} --remote ${where}`;
+
+  console.log('\nrelease page:');
+  if (page('origin').status !== 0) {
+    console.log(`\nrelease page creation failed. Tag ${tag} is already on origin; finish with:\n${finish('origin')}`);
     process.exit(1);
+  }
+
+  // The repository being released may have a shop to feed: the Modules keep
+  // tools/publish.mjs, which cuts the buyers' archive from the tag and puts it
+  // on the buyers' repository with a release page. It is run here, not
+  // remembered: on 11 September 2026 the shop stood at v0.6.2 while the Modules
+  // were at v0.7.1 — two releases with the fixes for the feed and the voice
+  // never reached a buyer, and nothing in the tail said so. The same reasoning
+  // as the public remote: the merge is the owner's word, the tail carries it.
+  const shop = path.join(ROOT, 'tools/publish.mjs');
+  if (existsSync(shop)) {
+    console.log('\nshop:');
+    const r = spawnSync(process.execPath, [shop, tag], { cwd: ROOT, stdio: 'inherit' });
+    if (r.status !== 0) {
+      console.log(`\nshop publication failed. Tag ${tag} is already on origin; finish with:\n  node ${shop} ${tag}`);
+      process.exit(1);
+    }
+  }
+
+  const pub = (() => { try { return git('remote', 'get-url', PUBLIC); } catch { return ''; } })();
+  if (!pub) {
+    console.log(`\nno remote called ${PUBLIC}; the public repository is not updated from here`);
+  } else {
+    console.log(`\npushing to ${PUBLIC} (${pub}):`);
+    try {
+      git('push', PUBLIC, 'HEAD:main', tag);
+      console.log(`  main and ${tag} pushed`);
+    } catch (err) {
+      console.log(`\npush to ${PUBLIC} failed: ${String(err.message || err).trim().split('\n')[0]}\n` +
+        `origin already has the release; finish with:\n` +
+        `  git push ${PUBLIC} ${tag}^{commit}:refs/heads/main ${tag}\n${finish(PUBLIC)}`);
+      process.exit(1);
+    }
+    console.log('\npublic release page:');
+    if (page(PUBLIC).status !== 0) {
+      console.log(`\npublic release page creation failed. Tag ${tag} is already on ${PUBLIC}; finish with:\n${finish(PUBLIC)}`);
+      process.exit(1);
+    }
   }
 }
