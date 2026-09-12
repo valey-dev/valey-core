@@ -305,6 +305,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .single{scroll-padding:14px}
 .rbody{scroll-padding:10px 14px}
 .bbody, .dbody{scroll-padding:14px}
+.skybody, .recbody, .liftbody, .invbody, .skinbody{scroll-padding:14px}
 /* ---- standup: team columns, one card per person ----
    It shares .rwrap and .rbody with the round it replaced, but has its own width:
    three 300 px columns ask for 1000. Dividing by scale is mandatory, not merely
@@ -928,6 +929,19 @@ body.titling #hud{visibility:hidden}
    divide it; otherwise at 150% the viewer is taller than the screen. */
 .vwrap{max-height:calc(90vh / var(--ui, 1))}
 .rwrap{max-height:calc(84vh / var(--ui, 1))}
+/* The body under that ceiling scrolls in every panel, not only in .rbody. Six
+   bodies did not: the frame was capped and they were not, and at 175% in a
+   733 px window they fitted only by luck — the wardrobe asked 543 of 616 on
+   6 September 2026. The next row would have hung out under the border, as the
+   radio's third wave did before the same fix in its own stylesheet. So: the
+   body is the one scroller (min-height:0 is the half that lets it shrink), and
+   in the column bodies nothing inside shrinks — a child that is itself a
+   scroller would otherwise be squashed to nothing, which is how the radio's
+   list of waves disappeared. The self card (.dbody) is a wrapping row whose
+   columns need their width, so it gets the scroll and keeps its children. */
+.skybody,.recbody,.liftbody,.invbody,.skinbody,.dbody{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain}
+.skybody > *,.recbody > *,.liftbody > *,.invbody > *,.skinbody > *{flex:none}
+.dbody{align-content:flex-start}
 .chatlog{max-height:calc(72vh / var(--ui, 1))}
 .zoomwrap{max-height:calc(70vh / var(--ui, 1))}
 .body{max-height:min(300px, calc(40vh / var(--ui, 1)))}
