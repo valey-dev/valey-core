@@ -1187,7 +1187,12 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   // by the projection before they leave, the other asks whose invitation the
   // arriving request holds. Both are the office's own answers, handed down
   // rather than copied — a copy would drift from the one the guests get.
-  const mods = await loadModules(ROOT, { people: livePeople, toPerson, settings: getSettings, shown, guestOf });
+  // `patch` is the floor's too: joining somebody's floor trades their code for
+  // a guest token, and the token has to live where the office's other secrets
+  // do — in the settings, cut out of the page by the module's publicView.
+  const mods = await loadModules(ROOT, {
+    people: livePeople, toPerson, settings: getSettings, patch: patchSettings, shown, guestOf,
+  });
   let boot = await getSettings();
   const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
   if (external && !(boot.network || {}).token) {

@@ -324,7 +324,21 @@ function buildDialog(a) {
     // "never left the machine" would be false here: these sessions belong to this
     // office and the server simply withholds them.
     const st = isGuest() ? accessOf(a.id) : 'open';
-    if (st !== 'open') {
+    // An agent from another participant's machine. Here "never left the
+    // machine" is the truth, and it is what the card says: the server did not
+    // get the reply, so there is nothing for anybody on this floor to be
+    // granted. No button — access is that participant's to give, and a request
+    // does not reach their machine yet.
+    // Design: [Foreign agent · v2](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=1074-2),
+    // words from [v1](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=378-3).
+    if (a.visitor) {
+      const who = esc(a.visitor.name || tr('vis.someone'));
+      body = `<p class="q">${tr('dlg.whatUp')}</p>
+        <p class="say">${tr('vis.whose', { who })}</p>
+        <p class="hint">${tr('vis.closed')}</p>
+        <p class="hint dim">${tr('vis.note', { who })}</p>`;
+    }
+    else if (st !== 'open') {
       const btn = st === 'pending' ? ''
         : `<button id="askAccess">${tr(st === 'refused' ? 'acc.askAgain' : 'acc.ask')}</button>`;
       body = `<p class="q">${tr('dlg.whatUp')}</p>
@@ -350,7 +364,8 @@ function buildDialog(a) {
     }
   }
   else if (S.page === 'work') {
-    body = (a.files || []).length
+    body = a.visitor ? `<p class="say">${tr('vis.noFiles')}</p>`
+      : (a.files || []).length
       ? `<p class="q">${tr('dlg.showWork')}</p><ul class="files">${fileList(a)}</ul>`
       : `<p class="say">${tr('dlg.noFiles')}</p>`;
   } else if (S.page === 'task') {
@@ -439,7 +454,7 @@ function buildDialog(a) {
       <div class="acts">
         <button data-p="talk" class="${S.page === 'talk' ? 'on' : ''}">${tr('tab.talk')} <kbd>1</kbd></button>
         <button data-p="work" class="${S.page === 'work' ? 'on' : ''}">${tr('tab.work')} <kbd>2</kbd></button>
-        <button data-p="task" class="${S.page === 'task' ? 'on' : ''}" ${permitOf(a.id) ? 'disabled' : ''}>${tr('tab.task')} <kbd>3</kbd></button>
+        <button data-p="task" class="${S.page === 'task' ? 'on' : ''}" ${permitOf(a.id) || a.visitor ? 'disabled' : ''}>${tr('tab.task')} <kbd>3</kbd></button>
         <button data-p="close">${tr('tab.close')} <kbd>Esc</kbd></button>
       </div>
     </div>`;
