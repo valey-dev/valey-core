@@ -49,6 +49,12 @@ let cache = { at: 0, value: null };
 const TTL = 60000;
 
 export async function releaseNudge(root, now = Date.now()) {
+  // An office raised to be photographed for the public says so with
+  // VALEY_NUDGE=off (see PICTURE_ENV in tools/lib/office.mjs). The nudge is
+  // the owner's chore and names a file on the owner's disk: on 12 September
+  // 2026 the entrance frame of the v0.40.0 note carried «v0.39.0 — not shot»
+  // and /Users/<owner>/.config/valey/scripts into a public release page.
+  if (process.env.VALEY_NUDGE === 'off') return null;
   if (now - cache.at < TTL) return cache.value;
   let info = null;
   try {

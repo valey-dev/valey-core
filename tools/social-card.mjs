@@ -26,7 +26,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { ROOT, startOffice, fakeClaudeDir, waitForAgent } from './lib/office.mjs';
+import { ROOT, startOffice, fakeClaudeDir, waitForAgent, PICTURE_ENV } from './lib/office.mjs';
 
 const arg = (name, fallback) => {
   const i = process.argv.indexOf('--' + name);
@@ -62,8 +62,8 @@ for (const [slot, project, branch, asked, said] of CAST) {
     branch, asked, said, file: P + project + '/src/index.js',
   })).dir;
 }
-// No stand plaque: the card goes to a public page.
-const office = await startOffice({ claudeDir, env: { VALEY_STAND: '' } });
+// The card goes to a public page: no stand plaque, no release nudge.
+const office = await startOffice({ claudeDir, env: PICTURE_ENV });
 const shotTool = path.join(path.dirname(fileURLToPath(import.meta.url)), 'shot.mjs');
 
 // The canvas itself, 1:1, read out of the page — the panels and the HUD are
