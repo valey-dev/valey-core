@@ -1,0 +1,6 @@
+{
+  "id": "polaroid",
+  "name": { "ru": "Полароид в курилке", "en": "The polaroid" },
+  "tier": "core",
+  "client": "client.js"
+}
