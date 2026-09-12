@@ -10,6 +10,7 @@
 //   node tools/shot.mjs --url .../soon.html --viewport 390,900   # a phone's width
 //   node tools/shot.mjs --eval "document.title"   # look inside the live page
 //   node tools/shot.mjs --video .shots/v0.2.0.mp4 --keys Enter,hold-w:4000
+//   node tools/shot.mjs --help                 # this text, down to the traps
 //
 // --keys walks the office through CDP, step by step, to reach the right place:
 //   Enter        press and release
@@ -64,7 +65,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { cdp } from './cdp.mjs';
+
+// --help prints the header above rather than a copy of it: two texts about the
+// same flags drift apart on the first edit, and the header is the one people read.
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  const head = readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1);
+  const end = head.findIndex((l) => l.startsWith('// ---'));
+  console.log(head.slice(0, end).map((l) => l.replace(/^\/\/ ?/, '')).join('\n').trimEnd());
+  process.exit(0);
+}
 
 const CHROME = process.env.CHROME_PATH
   || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';

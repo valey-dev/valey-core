@@ -6,6 +6,7 @@
 // Chrome never answered hung the run until somebody killed it. None of the three
 // can be staged with a real browser on demand, and CI has no browser, so the
 // socket here is a fake one that answers — or does not — as each check needs.
+import { spawnSync } from 'node:child_process';
 import { cdp } from './cdp.mjs';
 
 let bad = 0;
@@ -87,6 +88,17 @@ const outcome = (p) => p.then((v) => ({ v }), (e) => ({ e: e.message }));
   ws.answer({ method: 'Page.screencastFrame', params: { sessionId: 7 } });
   ws.answer({ method: 'Page.loadEventFired', params: {} });
   ok('events reach the handler for their method and no other', got.length === 1 && got[0] === 7, got);
+}
+
+{
+  // --help must answer without a browser: it is what someone runs first, on a
+  // machine where Chrome may be missing — as it is here in CI.
+  const r = spawnSync(process.execPath, [new URL('./shot.mjs', import.meta.url).pathname, '--help'],
+    { encoding: 'utf8', env: { ...process.env, CHROME_PATH: '/nonexistent/chrome' }, timeout: 10000 });
+  ok('shot.mjs --help exits 0 without starting Chrome', r.status === 0, { status: r.status, err: r.stderr });
+  ok('and prints the usage from the header', /--keys walks the office/.test(r.stdout) && /--help/.test(r.stdout), r.stdout.slice(0, 120));
+  ok('and stops before the traps, with the comment marks gone',
+    !/Two of these cost two hours/.test(r.stdout) && !r.stdout.split('\n').some((l) => l.startsWith('//')), r.stdout.split('\n').slice(-3));
 }
 
 console.log(bad ? `\n${bad} failed` : '\nall intact');
