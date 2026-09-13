@@ -8,6 +8,7 @@ import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { getSettings, patchSettings } from './settings.js';
 import { projectInfo, repoRoot, repoRootCached } from './stack.js';
+import { present } from './files.js';
 import { trinketTier } from '../web/trinkets.js';
 
 // Where the office reads sessions from. The variable is for the stands: until
@@ -982,7 +983,8 @@ export async function snapshot() {
   for (const s of sessions) {
     const file = await transcriptFor(s.sessionId, s.cwd);
     const t = (file ? await follow(s.sessionId, file, applyLine, emptyState, deepSkills) : null) || emptyState();
-    const files = [...t.files.values()].sort((a, b) => b.ts - a.ts).slice(0, 16);
+    // Only what can still be opened: see present() in files.js.
+    const files = await present([...t.files.values()].sort((a, b) => b.ts - a.ts), 16);
     const artifacts = files.filter((f) => f.made || f.image);
     const idleFor = t.lastTs ? Date.now() - t.lastTs : Infinity;
     const status = statusOf(t);

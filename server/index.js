@@ -16,7 +16,7 @@ import { ask as askPermit, answer as answerPermit, permits, forgetGone } from '.
 import { releaseNudge } from './release.js';
 import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset } from './modules.js';
 import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
-import { MIME, fileType, fileHeaders } from './files.js';
+import { MIME, MAX_VIEW, fileType, fileHeaders } from './files.js';
 import { listenFree } from './port.js';
 import { createExposure, lanAddresses } from './expose.js';
 
@@ -993,7 +993,7 @@ async function handle(req, res) {
     }
     try {
       const st = await fsp.stat(p);
-      if (st.size > 8 * 1024 * 1024) return send(res, 413, { error: 'too big' });
+      if (st.size > MAX_VIEW) return send(res, 413, { error: 'too big' });
       // Show but do not run: html and svg go out as an attachment, see files.js.
       return send(res, 200, await fsp.readFile(p), fileType(p), fileHeaders(p));
     } catch {
