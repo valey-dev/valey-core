@@ -474,16 +474,25 @@ check('the owner has no guest class', !/keydetail guest/.test(bag.innerHTML), '�
 // Until 31 August 2026 it did nothing — the handler knew only two tabs out of
 // three, and the key went off into the office from under an open panel. Keys
 // took the last slot on 5 September 2026, so the office stayed on digit 3.
+// Since 13 September 2026 the tab opens with nothing lit: its first button is
+// «check for updates», a trip to git, and a stray Enter must not take it. The
+// first ↓ lands on it — until then reaching it took a lap round the whole tab.
 bag = makeBagOffice(5);
-check('office: number 3 opened a tab', UI.bagKey('3') === true, 'не обработана');
-check('down processed', UI.bagKey('ArrowDown') === true, 'не обработана');
-check('and transfers to the second button', bag.btns[1].has('focus'), 'фокус не там');
+check('office: number 3 opened a tab', UI.bagKey('3') === true, 'not handled');
+check('nothing is lit when the tab opens', bag.btns.every((b) => !b.has('focus')),
+  bag.btns.map((b) => b.has('focus')));
+UI.bagKey('Enter');
+check('and Enter presses nothing before an arrow picked', bag.btns.every((b) => !b.clicked), bag.btns.map((b) => b.clicked));
+check('down processed', UI.bagKey('ArrowDown') === true, 'not handled');
+check('the first down lands on the first button', bag.btns[0].has('focus'), 'focus elsewhere');
 check('exactly one is highlighted', bag.btns.filter((b) => b.has('focus')).length === 1,
   bag.btns.filter((b) => b.has('focus')).length);
+UI.bagKey('ArrowDown');
+check('and the next one moves to the second', bag.btns[1].has('focus'), 'focus elsewhere');
 UI.bagKey('Enter');
 check('Enter presses what you\'re standing on', bag.btns[1].clicked === 1, bag.btns[1].clicked);
 UI.bagKey('ArrowUp');
-check('up returns to first', bag.btns[0].has('focus'), 'не вернулась');
+check('up returns to first', bag.btns[0].has('focus'), 'did not return');
 
 UI.closeBag();
 check('closed inventory arrows do not eat', UI.bagKey('ArrowDown') === false, 'съело');

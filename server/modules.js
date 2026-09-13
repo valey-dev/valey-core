@@ -26,6 +26,10 @@ const off = new Set();
 const inactive = (m) => m.manifest.active === false;
 const live = () => loaded.filter((m) => !m.error && !off.has(m.id) && !inactive(m));
 
+// What the stand's switches turned off, for the office that replaces this one
+// on an update: an update is not a restart, and a switch must survive it.
+export const modulesOff = () => [...off];
+
 export function setModuleOff(id, value) {
   const m = loaded.find((x) => x.id === id);
   if (!m || inactive(m)) return false;

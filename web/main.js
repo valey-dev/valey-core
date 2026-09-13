@@ -572,6 +572,15 @@ function openStream() {
   es.addEventListener('people', (e) => {
     try { seePeople(JSON.parse(e.data)); } catch { /* junk in the frame — we skip it */ }
   });
+  // The office was updated and is handing over to a newer one (server/swap.js).
+  // This page reloads onto it — the new office may bring new page code too —
+  // and says so once it is back, so the blink is not a mystery. Guests too:
+  // their page reloads the same way, and their access comes along.
+  es.addEventListener('update', (e) => {
+    try { sessionStorage.setItem('valeyUpdated', e.data); } catch { /* private mode: no toast, still a reload */ }
+    es.close();
+    setTimeout(() => location.reload(), 300);
+  });
   attachStreams(es);
   es.onmessage = (e) => { streamRetry = 2000; onSnapshot(e); };
   es.onerror = () => {
@@ -656,6 +665,9 @@ const onSnapshot = (e) => {
   // version, and that is visible only on a frame.
   state.version = data.version || state.version;
   state.release = data.release || null;
+  let updated = null;
+  try { updated = JSON.parse(sessionStorage.getItem('valeyUpdated') || 'null'); sessionStorage.removeItem('valeyUpdated'); } catch { /* nothing to say */ }
+  if (updated && updated.to) UI.toast(tr('upd.done', { from: updated.from, to: updated.to }));
   if (wornCode !== dressCode()) dressAll();
   else for (const a of state.agents) if (!state.looks.has(a.id)) state.looks.set(a.id, dressed(a));
 

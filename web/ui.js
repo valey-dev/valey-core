@@ -1912,12 +1912,97 @@ function keysKey(key) {
   return keysRing.key(key, true);
 }
 
+// ------------------------------------------------------------ the office version
+// The first row of the office tab: which version runs, and pulling a newer one
+// from the repository without stopping the office. The owner's alone — a guest
+// cannot update somebody else's office. Checking reaches outside (a git fetch),
+// so nothing here asks on its own: only the buttons do.
+// Frames: WIP section #office-update, node 2169:6969 (states 2169:7029, 2169:7104,
+// 2169:7181, 2170:2564, 2170:2641).
+let upd = null;
+let updPoll = null;
+
+async function loadUpd() {
+  try {
+    const r = await fetch('/api/update', { headers: owned() });
+    upd = r.ok ? await r.json() : null;
+  } catch { upd = null; }
+}
+
+const UPD_REASONS = new Set(['dirty', 'diverged', 'noUpstream', 'notGit', 'fetch', 'newServer', 'noSupervisor']);
+const updRepo = (key) => tr(key === 'modules' ? 'upd.inModules' : 'upd.inCore');
+
+function updRow() {
+  const u = upd || { state: 'idle', running: '' };
+  const ver = `v${esc(u.running || '')}`;
+  let desc = tr((u.repos || []).includes('modules') ? 'upd.from' : 'upd.fromCore');
+  let btn = tr('upd.check'), act = 'check', prim = false, off = false, note = tr('upd.idleNote');
+  if (u.state === 'checking') { desc = tr('upd.checking'); btn = tr('upd.checking'); off = true; }
+  if (u.state === 'available') {
+    const what = [u.feats ? tr('upd.feats', { n: u.feats }) : '', u.fixes ? tr('upd.fixes', { n: u.fixes }) : ''].filter(Boolean).join(', ');
+    desc = tr('upd.available', { v: esc(u.available || '') }) + (what ? ` · ${what}` : '');
+    btn = tr('upd.run'); act = 'run'; prim = true; note = tr('upd.availNote');
+  }
+  if (u.state === 'latest') { desc = tr('upd.latest'); note = tr('upd.latestNote'); }
+  if (u.state === 'updating') {
+    const done = new Set(u.steps || []);
+    const steps = [tr('upd.stepCore') + (done.has('core') ? ' ✓' : '')];
+    if ((u.repos || []).includes('modules')) steps.push(tr('upd.stepModules') + (done.has('modules') ? ' ✓' : ''));
+    steps.push(tr('upd.stepServer') + (done.has('server') ? '…' : ''));
+    desc = `git pull · ${steps.join(' · ')}`;
+    btn = tr('upd.running'); off = true; note = tr('upd.updNote');
+  }
+  if (u.state === 'failed') {
+    desc = tr('upd.failed', { v: esc(u.running || '') });
+    btn = tr('upd.retry'); act = u.available ? 'run' : 'check';
+    const key = UPD_REASONS.has(u.reason) ? u.reason : 'other';
+    note = tr(`upd.why.${key}`, { repo: updRepo(u.repo), detail: esc(u.detail || '') });
+  }
+  return `<p class="dcap">${tr('upd.cap')}</p>
+      <div class="orow"><b>${tr('upd.name')}</b><span>${desc}</span><i>${ver}</i>
+        <button class="obtn${prim ? ' prim' : ''}" data-upd="${act}"${off ? ' disabled' : ''}>${btn}</button></div>
+      <p class="hint">${note}</p>`;
+}
+
+// Only the block is redrawn: the whole tab would take the focus off whatever
+// the hand is on while the steps tick past.
+function paintUpd() {
+  const box = el.bag && el.bag.querySelector('.updblock');
+  if (!box) return;
+  box.innerHTML = updRow();
+  const b = box.querySelector('[data-upd]');
+  if (b) b.onclick = () => updPost(b.dataset.upd);
+  // The button is a new node after every repaint — once a second while an
+  // update runs — and the ring's light has to land on it again, or the hand
+  // loses its place mid-update.
+  if (bagTab === 'office' && !el.bag.hidden) officeRing.paint();
+}
+
+async function updPost(what) {
+  try {
+    const r = await fetch(`/api/update/${what}`, { method: 'POST', headers: owned({ 'content-type': 'application/json' }), body: '{}' });
+    if (r.ok) upd = await r.json();
+  } catch { /* the office is changing hands; the stream will say so */ }
+  paintUpd();
+  watchUpd();
+}
+
+// While something runs the row follows it, once a second, and only while the
+// tab is open: nobody watching means nobody to show the steps to.
+function watchUpd() {
+  clearTimeout(updPoll);
+  const busy = upd && (upd.state === 'checking' || upd.state === 'updating');
+  if (!busy || !el.bag.querySelector('.updblock')) return;
+  updPoll = setTimeout(async () => { await loadUpd(); paintUpd(); watchUpd(); }, 1000);
+}
+
 // The "office" tab. Dress code lives here because it has no object in the
 // office: weather is set at the window, language at the sign, while "put ties
 // on everyone" hangs nowhere.
 const officeHtml = () => {
   const on = officeOn();
   return `<div class="bbody">
+      ${isGuest() ? '' : `<div class="updblock">${updRow()}</div>`}
       <p class="dcap">${tr('bag.dressCode')}</p>
       <div class="oseg">
         <button class="obtn${on ? '' : ' on'}" data-code="casual">${tr('bag.casual')}</button>
@@ -2320,6 +2405,10 @@ function bindOffice() {
     if (act === 'skin') { closeBag(); return renderSkin(); }
     if (act === 'sound') { api.sound(); renderBag(); }
   });
+  if (el.bag.querySelector('.updblock')) {
+    paintUpd();
+    loadUpd().then(() => { paintUpd(); watchUpd(); });
+  }
   paintBagFocus();
 }
 
@@ -2404,7 +2493,10 @@ function bindThings() {
 
 // The "office" tab is a row of buttons, not a slot list or a grid. It has a
 // third keyboard behaviour, which need not be maintained beside the other two.
-const officeRing = focusRing(() => el.bag, '.obtn');
+// Nothing lit on open: the first button is «check for updates», a trip to git,
+// and the first ↓ lands on it — asked by Sergey on 13 September 2026, when
+// reaching it took a lap round the whole tab.
+const officeRing = focusRing(() => el.bag, '.obtn', { startEmpty: true });
 
 function openTab(tab) {
   if (!tabs().includes(tab) || tab === bagTab) return;
@@ -2709,9 +2801,14 @@ function bindResults() {
 // carries the caret to the panel's next field; ↑↓ leave the field the way they
 // leave a button. Asked for by the owner on 13 September 2026, reversing the
 // earlier «Enter first» rule.
+// opts.startEmpty — nothing is lit when the panel opens, and the first arrow
+//   picks the first (or, going up, the last) button. For a panel whose first
+//   button does something that should not happen on a stray Enter: the office
+//   tab's is «check for updates», a trip to git.
 export function focusRing(nodeOf, selector, opts = {}) {
   const stepTo = opts.noWrap ? stopAt : wrapAt;
-  let idx = 0;
+  const start = opts.startEmpty ? -1 : 0;
+  let idx = start;
   let parked = false;   // Escape took the caret out; the ring stays on the field
   let shown = -1;       // the index last painted: moving off it unparks
   // Only what has a box is in the ring. The radio's volume knob sits under a
@@ -2811,6 +2908,7 @@ export function focusRing(nodeOf, selector, opts = {}) {
   const paint = () => {
     const l = list();
     if (!l.length) return;
+    if (idx < 0) { l.forEach((b) => b.classList.remove('focus')); follow(); return; }
     idx = Math.max(0, Math.min(l.length - 1, idx));
     if (idx !== shown) parked = false;
     shown = idx;
@@ -2825,7 +2923,7 @@ export function focusRing(nodeOf, selector, opts = {}) {
   };
   return {
     paint,
-    reset() { idx = 0; shown = -1; parked = false; },
+    reset() { idx = start; shown = -1; parked = false; },
     // Hang the field keys on a panel drawn before the ring ever painted it: a
     // field reached with the mouse must let go on Escape just the same.
     arm: follow,
@@ -2840,6 +2938,12 @@ export function focusRing(nodeOf, selector, opts = {}) {
       const key = raw.toLowerCase();
       const l = list();
       if (!l.length) return false;
+      // Nothing picked yet: an arrow picks, and Enter has nothing to press.
+      if (idx < 0) {
+        const into = { arrowdown: 0, arrowright: 0, arrowup: l.length - 1, arrowleft: l.length - 1 }[key];
+        if (into !== undefined) { idx = into; paint(); return true; }
+        if (key === 'enter' || key === ' ') return true;
+      }
       const cur = l[idx];
 
       if (cur && cur.type === 'range' && (key === 'arrowleft' || key === 'arrowright')) {
