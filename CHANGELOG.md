@@ -4,6 +4,28 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.56.0 — 13 September 2026
+
+### Added
+
+- **office:** the office hires agents — a new session starts at the reception and walks out of a portal at the room's door (6dbc0b3)
+
+### Fixed
+
+- **office:** a hire into a far room is seen — the portal opens beside the owner and the agent walks to its room (def73d9)
+- **tree:** the module tree's lines and borders are the frame's tone, not a step darker (4e5d735)
+- **radio:** the receiver scales its own panel only, and keeps the digit on its stations (ba48cdb)
+- **office:** the reception's arrows reach «нанять», and the hiring panel picks its room with arrows instead of digits that typed into the task (507197d)
+
+### Other
+
+- docs(notes): hiring opens the portal beside you — the note, the README line and the pictures (640ff44)
+- test(styles): a module's stylesheet cannot repaint the office (856dbdf)
+- refactor(style): the core stops carrying the git tree's diff styles (81ba78a)
+- docs(notes): the hiring note says the arrows, not digits, and its pictures are retaken (f1f3188)
+- docs(notes): the note for hiring, with the reception, the panel and the portal (5e27642)
+- docs(readme): + at the reception desk hires, and what a hire runs (4cbb14e)
+- test(hire): a stand for hiring — the first message, refusals, a run that starts, stays and is let go, and one that never starts (7551ccb)
 ## v0.55.0 — 13 September 2026
 
 ### Added
