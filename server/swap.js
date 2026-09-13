@@ -34,16 +34,29 @@ export function fixedAddress() {
 let inflight = 0;
 let openGate = null;
 let gate = null;
+let onOpen = null;
+// Once a swap is asked for, every answer closes its connection. A keep-alive
+// socket left open would carry the next request to this office after it has
+// stopped accepting — and that request would die with it. Found by the stand
+// on its second run: one probe of thirty-eight refused.
+let closing = false;
 if (process.env.VALEY_HANDOFF_WAIT === '1') {
   gate = new Promise((resolve) => { openGate = resolve; });
   // A handoff that never comes must not hold the office forever: after half a
   // minute the new worker serves with what it has.
-  setTimeout(() => openGate && openGate(), 30_000).unref();
+  setTimeout(open, 30_000).unref();
+}
+
+// Let the held requests in, then start whatever waited for the handover.
+function open() {
+  if (openGate) { openGate(); openGate = null; gate = null; }
+  if (onOpen) { const f = onOpen; onOpen = null; f(); }
 }
 
 export const gated = (handler) => async (req, res) => {
   inflight += 1;
   res.on('close', () => { inflight -= 1; });
+  if (closing) res.setHeader('Connection', 'close');
   if (gate) await gate;
   return handler(req, res);
 };
@@ -83,6 +96,7 @@ export async function runUpdate(root, running) {
   if (r.from === r.to && r.to === running) return Object.assign(upd, { state: 'latest', available: null, at: Date.now() });
   upd.available = readVersion(root);
   upd.steps.push('server');
+  closing = true;
   process.send({ valey: 'swap' });
   return upd;
 }
@@ -92,11 +106,15 @@ export async function runUpdate(root, running) {
 // and what to do with what lives in its memory.
 export function listenForSwap(office) {
   if (!isWorker) return;
+  onOpen = office.onOpen || null;
+  // Without a gate there is no handover to wait for.
+  if (!gate && onOpen) open();
   process.on('message', async (m) => {
     if (!m || !m.valey) return;
     if (m.valey === 'drain') await drain(office);
-    if (m.valey === 'handoff') receive(office, m.file);
+    if (m.valey === 'handoff') await receive(office, m.file);
     if (m.valey === 'swap-failed') {
+      closing = false;
       Object.assign(upd, { state: 'failed', reason: 'newServer', repo: null, detail: String(m.detail || '').slice(0, 400), at: Date.now() });
     }
   });
@@ -105,15 +123,15 @@ export function listenForSwap(office) {
   process.on('disconnect', () => process.exit(0));
 }
 
-function receive(office, file) {
+async function receive(office, file) {
   try {
     const state = JSON.parse(fs.readFileSync(file, 'utf8'));
-    office.importState(state);
+    await office.importState(state);
   } catch (e) {
     console.error('[update] the handover could not be read:', e.message);
   }
   try { fs.unlinkSync(file); } catch { /* already gone */ }
-  if (openGate) { openGate(); openGate = null; gate = null; }
+  open();
 }
 
 async function drain(office) {

@@ -333,7 +333,7 @@ function exportState() {
   };
 }
 
-function importState(state) {
+async function importState(state) {
   if (!state || state.v !== 1) return;
   outbox.push(...(state.outbox || []));
   taskSeq = Math.max(taskSeq, Number(state.taskSeq) || 0);
@@ -343,6 +343,12 @@ function importState(state) {
   for (const [id, p] of state.people || []) people.set(id, { ...p, at: now });
   for (const id of state.modulesOff || []) setModuleOff(id, true);
   audienceUntil = now + 20_000;
+  // The snapshot built at start knows nothing of this, and the next tick is
+  // 2.5 s away: the pages reloading onto this office would find the desks
+  // bare. The gate is still shut while this runs, so no page ever sees the
+  // snapshot without what came across. Not observed: nothing happened, the
+  // office only changed hands.
+  return rebuild({ observe: false }).catch((e) => console.error('[update] snapshot after the handover:', e.message));
   // A note that was still being delivered: its run lives on in its own process
   // group, and this office reads how it ended.
   for (const t of outbox) if (t.state === 'sending') adopt(t).catch((e) => { t.state = 'failed'; t.error = e.message; });
@@ -359,8 +365,11 @@ function farewell(to) {
   clients.clear();
 }
 
-async function tick() {
-  try {
+// Build the snapshot and make it `last`. The tick does this every POLL_MS and
+// also runs the modules' observers; an office that has just taken over from an
+// older one does it once more, before letting any request in, so that the
+// first page to arrive finds the notes and guests that came across.
+async function rebuild({ observe = true } = {}) {
     // Observers need the previous snapshot: an event is a difference, not a
     // state. The core does not compute it — it only hands over both sides.
     const prev = last;
@@ -387,8 +396,13 @@ async function tick() {
     // Observers run before the broadcast: a module may add its own to the
     // snapshot, and the client should get it on this tick, not 2.5 seconds
     // later.
-    await moduleObserve(next, prev);
+    if (observe) await moduleObserve(next, prev);
     last = next;
+}
+
+async function tick() {
+  try {
+    await rebuild();
     const full = `data: ${JSON.stringify(last)}\n\n`;
     // A stream is only as invited as the settings say right now.
     const acc = (await getSettings()).access;
@@ -1219,17 +1233,20 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   if (bound === null) return null;
   port = bound;
   exposure = createExposure({ handler, port, host: HOST });
-  if (external) await exposure.open();
-  if (isWorker) process.send({ valey: 'bound', port, host: HOST });
+  // Straight after binding: a message that arrives before anybody listens for
+  // it is lost, and the handover is exactly such a message. An office taking
+  // over starts its ticks only once the handover is in — a tick begun before
+  // it finished after it and put back a snapshot without the notes.
   listenForSwap({
     server, root: UPDATE_ROOT, releaseRuns, retryPermits: retryAll, farewell, exportState, importState,
     closeExtra: () => exposure.close(),
+    onOpen: fixed ? () => { tick(); peopleTick(); } : null,
   });
+  if (external) await exposure.open();
+  if (isWorker) process.send({ valey: 'bound', port, host: HOST });
   if (fixed) {
     // The banner was printed by the office this one replaced; one line is enough.
     console.log(`[update] v${VERSION} is serving http://localhost:${port}`);
-    tick();
-    peopleTick();
     return server;
   }
   const token = await ownerToken();
