@@ -128,6 +128,11 @@ function apiFor(id) {
     // shelf. No new hole: POST /api/settings is the owner's alone, and it was
     // already the only way in.
     saveSettings(patch) { return core.saveSettings(patch); },
+    // The hiring panel with a task already written: { project, task, quote,
+    // from: { kind, title, source }, back, done }. The owner still reads and
+    // edits the task and presses «нанять» themselves; a module cannot start an
+    // agent past them, and a guest's page has no panel to open.
+    hire(opts) { return core.hire && core.hire(opts); },
     // A module's keys are declared, not tested letter by letter in a handler.
     // That way the core knows what is taken and can say so — until 5 September
     // 2026 a fight between two modules over one letter was settled by load

@@ -158,7 +158,82 @@ export function drawReception(ctx, L, t) {
     px(ctx, x + 5, y - 4, 10, 1, '#f0e7d2');
     px(ctx, x + w - 18, y - 7, 12, 7, '#3b4650');     // the monitor
     px(ctx, x + w - 17, y - 6, 10, 5, '#5f8ea8');
+    // «НАЙМ» on the front of the desk: this is where the office hires. On every
+    // floor and for everyone — a guest learns in the panel that it is the
+    // owner's; the plate is the desk's, not the owner's.
+    // [Reception · floor](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2122-2130)
+    px(ctx, x + 3, y + 3, 22, 7, '#ffd166');
+    px(ctx, x + 4, y + 4, 20, 5, '#2a1d15');
+    pxText(ctx, tr('sign.hire'), x + 6, y + 8, '#ffd166', 5);
   }
+}
+
+// ------------------------------------------------------------------ the portal
+// The door a hired agent comes in by. It follows the process, not a timer:
+// open while claude starts, the figure printing itself line by line until the
+// session exists, then closing behind the agent as it walks to its desk. A
+// run that failed to start leaves a red ring and nobody in it.
+// [Portal · storyboard](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2092-810)
+//
+// x, y are the feet of whoever stands in it — the room's doorPoint.
+// phase: { kind: 'open' | 'ready', age } | { kind: 'close' | 'fail', k: 0..1 }
+const RING = { edge: '#9fe0a8', fill: '#3f6a48', spark: '#d6f5d9' };
+const RING_BAD = { edge: '#ff9f8f', fill: '#7a3a2e', spark: '#ffd9c0' };
+
+function ring(ctx, cx, cy, rx, ry, c) {
+  if (rx < 1 || ry < 1) return;
+  for (let dy = -ry; dy <= ry; dy++) {
+    const half = Math.round(rx * Math.sqrt(Math.max(0, 1 - (dy / ry) ** 2)));
+    const cap = Math.abs(dy) === ry;
+    px(ctx, cx - half, cy + dy, half * 2, 1, cap ? c.edge : c.fill);
+    if (!cap) {
+      px(ctx, cx - half - 1, cy + dy, 2, 1, c.edge);
+      px(ctx, cx + half - 1, cy + dy, 2, 1, c.edge);
+    }
+  }
+}
+
+// The stranger inside: no clothes of its own yet, the same for everybody —
+// who it is becomes known when the session does.
+function stranger(ctx, x, y, rows) {
+  const top = y - 24;
+  ctx.save();
+  // only the rows printed so far
+  ctx.beginPath(); ctx.rect(x - 8, top, 16, rows); ctx.clip();
+  px(ctx, x - 4, top, 8, 8, '#c9ad88');                                   // head
+  px(ctx, x - 2, top + 3, 1, 1, '#1f150f'); px(ctx, x + 1, top + 3, 1, 1, '#1f150f');
+  px(ctx, x - 6, top + 8, 12, 1, '#a58a6a'); px(ctx, x - 6, top + 9, 12, 7, '#8fc8ff');   // shirt
+  px(ctx, x - 4, top + 16, 3, 8, '#3a2a20'); px(ctx, x + 1, top + 16, 3, 8, '#3a2a20');   // legs
+  ctx.restore();
+}
+
+export function drawPortal(ctx, x, y, phase, t) {
+  const cy = y - 12;
+  const bad = phase.kind === 'fail';
+  const c = bad ? RING_BAD : RING;
+  let s = 1;
+  if (phase.kind === 'open' || phase.kind === 'ready') s = Math.min(1, 0.35 + phase.age / 700);
+  if (phase.kind === 'close') s = 1 - phase.k;
+  if (bad && phase.k > 0.7) ctx.globalAlpha = Math.max(0, (1 - phase.k) / 0.3);
+  ring(ctx, x, cy, Math.round(9 * s), Math.round(14 * s), c);
+  if (!bad && phase.kind !== 'close') {
+    // sparks drift round the ring while it is open
+    for (let i = 0; i < 3; i++) {
+      const a = t / 500 + i * 2.1;
+      px(ctx, x + Math.cos(a) * 13 * s, cy + Math.sin(a) * 17 * s, 1, 1, c.spark);
+    }
+  }
+  if (phase.kind === 'open' && s >= 1) {
+    // printed a line at a time, and it holds at the shoulders until the
+    // session answers: the rest is not up to the office
+    const rows = Math.min(20, Math.floor((phase.age - 500) / 120));
+    if (rows > 0) {
+      stranger(ctx, x, y, rows);
+      if (Math.floor(t / 200) % 2) px(ctx, x - 7, y - 24 + rows, 14, 1, c.spark);
+    }
+  }
+  if (phase.kind === 'ready') stranger(ctx, x, y, 24);
+  ctx.globalAlpha = 1;
 }
 
 // The projects on the plaque: the forms come from the dictionary, because English

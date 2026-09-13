@@ -12,6 +12,8 @@ import {
   getSettings, patchSettings, updateSettings, publicSettings, ownerToken, warnIfSharedSettingsWorktree,
 } from './settings.js';
 import { deliver, deliveryStatus, forgetCli, isBusy, MODES, adopt, releaseRuns } from './deliver.js';
+import { hire, release as releaseHire, hireList, hiredAt, hireCwd, resumeCommand, pruneHires } from './hire.js';
+import { repoRoot } from './stack.js';
 import { ask as askPermit, answer as answerPermit, permits, forgetGone, retryAll } from './permit.js';
 import { releaseNudge } from './release.js';
 import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset, modulesOff } from './modules.js';
@@ -85,7 +87,7 @@ let taskSeq = 0;
 const SHOWN = [
   'id', 'name', 'gender', 'project', 'seat', 'role', 'roleKey',
   'status', 'act', 'activity', 'mood', 'idleFor', 'startedAt',
-  'limited', 'version', 'stack', 'trinkets',
+  'limited', 'version', 'stack', 'trinkets', 'hired',
 ];
 
 // Who was granted what: guest id -> Set of agent ids. Lives in memory and only
@@ -164,6 +166,9 @@ function project(snapshot, guestId) {
     // and all. The page hides it from anyone who is not the owner as well —
     // in private mode a viewer on the Wi-Fi is not projected at all.
     release: null,
+    // The portal is on the floor for everyone; why a hire failed is the
+    // owner's — the reason can quote a path or the CLI's own words.
+    hires: (snapshot.hires || []).map((h) => ({ id: h.id, project: h.project, state: h.state, sessionId: h.sessionId, source: h.source, spot: h.spot, at: h.at, changedAt: h.changedAt })),
     agents: (snapshot.agents || []).map((a) => {
       if (granted(guestId, a.id)) return a;
       const out = {};
@@ -422,7 +427,13 @@ async function rebuild({ observe = true } = {}) {
     // The owner can put the video nudge away (releaseNudge: false) while videos
     // are not what the work is about; the drafts keep being written at release.
     next.release = settings.releaseNudge === false ? null : await releaseNudge(ROOT);
-    for (const a of next.agents) a.outbox = outbox.filter((t) => t.agentId === a.id).slice(-5);
+    for (const a of next.agents) {
+      a.outbox = outbox.filter((t) => t.agentId === a.id).slice(-5);
+      const hiredWhen = hiredAt(a.id);
+      if (hiredWhen) a.hired = hiredWhen;
+    }
+    pruneHires();
+    next.hires = hireList();
     next.weather = await realWeather();
     next.settings = publicSettings(settings);
     next.delivery = await deliveryStatus();
@@ -1032,6 +1043,30 @@ async function handle(req, res) {
       if (e instanceof BodyError) throw e;
       return send(res, 400, { error: e.message });
     }
+  }
+
+  // Hire an agent: a new session, started by the office in a project's folder.
+  // Owner only — it starts a process on the owner's machine. The page names a
+  // room, never a path: the folder is the one the room's live agents work in.
+  if (url.pathname === '/api/hire' && req.method === 'POST') {
+    if (!(await isOwner(req))) return forbidden(res);
+    const { project: room, task, model, quote, source, spot } = await readJson(req);
+    const cwd = cwdOfProject(room);
+    if (!cwd) return send(res, 400, { error: 'there is no such room on the floor', errorKey: 'hire.errRoom' });
+    const status = await deliveryStatus();
+    if (!status.available) return send(res, 200, { ok: false, error: status.hint, errorKey: status.hintKey });
+    const h = await hire({ project: room, cwd: await repoRoot(cwd) || cwd, task, model, quote, source, spot });
+    return send(res, 200, { ok: h.state !== 'failed', hire: h });
+  }
+  // Let a hired agent go before it is continued in a terminal: two processes
+  // must not write one transcript. The answer carries the command to copy.
+  if (url.pathname === '/api/hire/release' && req.method === 'POST') {
+    if (!(await isOwner(req))) return forbidden(res);
+    const { sessionId } = await readJson(req);
+    const h = hireList().find((x) => x.sessionId === sessionId);
+    if (!h) return send(res, 404, { error: 'this agent was not hired here', errorKey: 'hire.errNotHired' });
+    releaseHire(sessionId);
+    return send(res, 200, { ok: true, command: resumeCommand(hireCwd(sessionId), sessionId) });
   }
 
   // fresh=1 — forget the cached CLI answer and ask again. The cache lives a

@@ -284,9 +284,9 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
    the page and falls below the viewport, as invitations did on 30 August 2026.
    The same list carries [hidden]: without it display:flex overrides the
    attribute and a hidden panel remains visible. */
-#roster,#bag,#sky,#skin,#lift,#notes,#invite,#lang{position:fixed; inset:0; z-index:28; background:rgba(12,8,5,.8); display:flex;
+#roster,#bag,#sky,#skin,#lift,#notes,#invite,#lang,#hire{position:fixed; inset:0; z-index:28; background:rgba(12,8,5,.8); display:flex;
   align-items:center; justify-content:center}
-#roster[hidden],#bag[hidden],#sky[hidden],#skin[hidden],#lift[hidden],#notes[hidden],#invite[hidden],#lang[hidden]{display:none}
+#roster[hidden],#bag[hidden],#sky[hidden],#skin[hidden],#lift[hidden],#notes[hidden],#invite[hidden],#lang[hidden],#hire[hidden]{display:none}
 .rwrap{width:min(680px, calc(92vw / var(--ui, 1))); max-height:84vh; display:flex; flex-direction:column;
   background:var(--wood-dark); border:3px solid var(--frame); box-shadow:0 0 0 3px var(--bg-deep)}
 .rbody{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:10px 14px}
@@ -689,7 +689,10 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 
 /* ---- office colour ---- */
 /* ---- reception ---- */
-.recwrap{width:min(520px,92vw)}
+/* 580, not 520: with «нанять» the header carries five keys, and at 520 the
+   title wrapped and the keys ended in «E…». */
+.recwrap{width:min(580px, calc(92vw / var(--ui, 1)))}
+.recwrap .vhead > span:first-child{flex:none; white-space:nowrap}
 .recbody{padding:14px; display:flex; flex-direction:column; gap:10px}
 .recgreet{margin:0; color:var(--ink); font-size:13px; line-height:1.5}
 .recrow{display:flex; align-items:center; gap:10px; padding:6px 8px;
@@ -704,6 +707,58 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .recgo{flex:none; background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:11px "JetBrains Mono", "Courier New",monospace; padding:3px 8px; cursor:pointer}
 :where(body:not(.bykeys)) .recgo:hover{background:var(--wood-lit); color:var(--warn)}
+/* «нанять» is the desk's new offer, so it is the lit one of the two: the
+   frame gives it the amber edge a primary button has everywhere else. */
+.rechire{flex:none; background:var(--wood-lit); color:var(--warn); border:2px solid var(--warn);
+  font:11px "JetBrains Mono", "Courier New",monospace; padding:3px 8px; cursor:pointer}
+.rechire kbd{color:var(--muted); font-size:10px}
+:where(body:not(.bykeys)) .rechire:hover{background:var(--wood)}
+/* The keys ride in the header, as on the newspaper's: the panel is keyboard
+   first, and the line under it is for what the keys do not say. */
+.rechead{display:flex; align-items:center; gap:12px; min-width:0}
+.reckeys{color:var(--accent); font-size:11px; letter-spacing:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+
+/* ---- hiring ----
+   [Hire panel](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2090-747)
+   560 CSS px, as drawn. At 175% the header and the buttons stay and the body
+   scrolls: [175%](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2090-814) */
+.hirewrap{width:min(560px, calc(92vw / var(--ui, 1)))}
+.hirebody{padding:12px 14px 4px; display:flex; flex-direction:column; gap:8px}
+.hirebody .hlabel{margin:4px 0 0; color:var(--muted); font-size:11px}
+.hirebody textarea{min-height:64px}
+.hirefrom{display:flex; flex-direction:column; gap:4px; padding:8px 10px; border:2px solid var(--frame-dim); background:var(--field)}
+.hirefrom i{font-style:normal; color:var(--muted); font-size:11px}
+.hirefrom b{color:var(--ink); font-size:12px}
+.hirefrom span{color:var(--ink-dim); font-size:11px; line-height:1.5}
+.hchips, .hmodels{display:flex; gap:8px; flex-wrap:wrap}
+.hchip, .hmodel{background:var(--field); color:var(--ink-dim); border:2px solid var(--frame-dim);
+  font:12px "JetBrains Mono", "Courier New",monospace; padding:3px 10px; cursor:pointer}
+.hchip.on{background:var(--on); border-color:var(--accent); color:var(--ink)}
+.hmodels .hmodel{flex:1; max-width:150px}
+.hmodel.on{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
+:where(body:not(.bykeys)) .hchip:hover, :where(body:not(.bykeys)) .hmodel:hover{border-color:var(--frame); color:var(--ink)}
+.hwhere{margin:0; color:var(--ink-dim); font-size:11px}
+.hirebody .hint.warn{color:var(--warn)}
+.hirefoot{flex:none; display:flex; justify-content:flex-end; gap:10px; padding:10px 14px 12px}
+.hirefoot button{background:var(--wood); color:var(--ink-dim); border:2px solid var(--frame-dim);
+  font:12px "JetBrains Mono", "Courier New",monospace; padding:4px 10px; cursor:pointer}
+.hirefoot button.primary{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
+.hirefoot button:disabled{opacity:.45; cursor:not-allowed}
+.hirefoot kbd{color:var(--muted); font-size:10px}
+.hchip:focus-visible, .hmodel:focus-visible, .hirefoot button:focus-visible{outline:2px solid var(--warn); outline-offset:-2px}
+/* A chosen switch and a «нанять» already wear the amber edge, so the focus
+   ring drawn inside it was the same line twice and nothing moved under the
+   arrows. On these it stands outside, a second ring. */
+.hchip.on:focus-visible, .hmodel.on:focus-visible, .hirefoot button.primary:focus-visible,
+.rechire.focus{outline:2px solid var(--warn); outline-offset:2px}
+
+/* The card of an agent the office hired: when, from what, and — once its turn
+   is over — the command that continues it in a terminal. */
+.hiredrow:empty{display:none}
+.hiredline{margin:4px 0 0; color:var(--accent); font-size:11px}
+.hiredrow .sendrow{margin-top:4px}
+.hirecmd{flex:1; min-width:0; font:12px "JetBrains Mono", "Courier New",monospace; color:var(--ink);
+  background:var(--field); border:2px solid var(--frame); padding:3px 8px}
 
 /* ---- lift ---- */
 .liftwrap{width:min(420px,92vw)}
@@ -962,8 +1017,8 @@ body.titling #hud{visibility:hidden}
    scroller would otherwise be squashed to nothing, which is how the radio's
    list of waves disappeared. The self card (.dbody) is a wrapping row whose
    columns need their width, so it gets the scroll and keeps its children. */
-.skybody,.recbody,.liftbody,.invbody,.skinbody,.dbody{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain}
-.skybody > *,.recbody > *,.liftbody > *,.invbody > *,.skinbody > *{flex:none}
+.skybody,.recbody,.liftbody,.invbody,.skinbody,.hirebody,.dbody{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain}
+.skybody > *,.recbody > *,.liftbody > *,.invbody > *,.skinbody > *,.hirebody > *{flex:none}
 .dbody{align-content:flex-start}
 .chatlog{max-height:calc(72vh / var(--ui, 1))}
 .zoomwrap{max-height:calc(70vh / var(--ui, 1))}

@@ -180,6 +180,29 @@ const PLACES = [
       ArrowLeft: 'place.lift.floor', ArrowRight: 'place.lift.floor',
     },
   },
+  {
+    // The reception desk shares the lift's panel node and not its keys: ↑↓
+    // walk the projects, ←→ the buttons of a row, ENTER presses, «+» hires.
+    id: 'reception',
+    title: 'place.reception',
+    registry: true,
+    caps: {
+      Escape: 'place.close', Enter: 'place.press', Space: 'place.press',
+      ArrowUp: 'place.rec.project', ArrowDown: 'place.rec.project',
+      ArrowLeft: 'place.rec.button', ArrowRight: 'place.rec.button',
+      Equal: 'place.rec.hire', NumpadAdd: 'place.rec.hire',
+    },
+  },
+  {
+    // Hiring: the task field holds the letters, so the board is what is left
+    // around it — Tab between fields, ←→ on the room and the model, ENTER hires.
+    id: 'hire',
+    title: 'place.hire',
+    caps: {
+      Escape: 'place.close', Enter: 'place.hire.go', Tab: 'place.hire.field',
+      ArrowLeft: 'place.hire.pick', ArrowRight: 'place.hire.pick',
+    },
+  },
 ];
 
 let places = [];
