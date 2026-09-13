@@ -167,6 +167,48 @@ export const sound = {
     osc.start(now); osc.stop(now + 0.2);
   },
 
+  // a coin landing on the stage: two bright pings
+  coin(vol = 1) {
+    if (!this.ready || !this.on) return;
+    const c = this.ctx, now = c.currentTime;
+    [1760, 2350].forEach((f, i) => {
+      const osc = c.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(f, now + i * 0.07);
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, now + i * 0.07);
+      g.gain.exponentialRampToValueAtTime(0.05 * vol, now + i * 0.07 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.07 + 0.25);
+      osc.connect(g); g.connect(this.master);
+      osc.start(now + i * 0.07); osc.stop(now + i * 0.07 + 0.3);
+    });
+  },
+
+  // tin landing on a stage: a dull square thud with a rattle on top
+  clank(vol = 1) {
+    if (!this.ready || !this.on) return;
+    const c = this.ctx, now = c.currentTime;
+    const osc = c.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.exponentialRampToValueAtTime(60, now + 0.18);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.05 * vol, now + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+    osc.connect(g); g.connect(this.master);
+    osc.start(now); osc.stop(now + 0.25);
+    const len = Math.floor(c.sampleRate * 0.12);
+    const buf = c.createBuffer(1, len, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = c.createBufferSource(); src.buffer = buf;
+    const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2500;
+    const g2 = c.createGain(); g2.gain.value = 0.03 * vol;
+    src.connect(hp); hp.connect(g2); g2.connect(this.master);
+    src.start(now + 0.02);
+  },
+
   // the bottle burping a bubble back
   bubble(vol = 1) {
     if (!this.ready || !this.on) return;

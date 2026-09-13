@@ -59,6 +59,7 @@ const PLACES = [
   // The piranha tank: SPACE throws in a piece of meat. Added on a live demo on
   // 11 September 2026 without the board's frame, on the owner's word.
   { id: 'aquarium', title: 'place.aquarium', registry: true, caps: { Space: 'place.aquarium.space' } },
+  { id: 'pole', title: 'place.pole', registry: true, caps: { Space: 'place.pole.space' } },
 
   // ------------------------------------------------------- panels of the core
   //
