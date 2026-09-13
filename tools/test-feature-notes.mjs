@@ -74,11 +74,20 @@ ok('a misspelled shot field is a failure too',
   /unknown shot field `keyz`/.test(fails(() => parseFragment('---\ntitle: x\nshots:\n  - id: a\n    keyz: b\n---\n\nbody\n', 'x.md'))));
 ok('an ordinary field after a recipe is still an ordinary field',
   parseFragment('---\nshots:\n  - id: a\ntitle: x\n---\n\nbody\n', 'x.md').title === 'x');
+const withEvent = parseFragment('---\ntitle: Touch\nscope: touch\nevent: Stick Moved\n---\n\nbody\n', 't.md');
+ok('a fragment may name the event its feature moves', withEvent.event === 'Stick Moved', withEvent);
+ok('and a fragment without one has an empty event, not a missing field', parseFragment('---\ntitle: x\n---\n\nbody\n', 'x.md').event === '');
 
 // --- the rendered note ---------------------------------------------------
 const section = '## v0.24.0 — 8 September 2026\n\n### Added\n\n- **office:** the arrows stop (abc1234)\n';
 const note = renderNote('v0.24.0', '8 September 2026', [f], section);
 ok('the note opens with the version and the date', note.startsWith('# v0.24.0 — 8 September 2026'), note.slice(0, 60));
+{
+  const withEv = renderNote('v0.24.0', '8 September 2026', [{ ...f, event: 'Stick Moved' }], section);
+  ok('the event rides under the feature\'s heading as a comment the release page does not show',
+    withEv.includes(`## ${f.title}\n\n<!-- event: Stick Moved -->\n`), withEv.slice(0, 200));
+  ok('a feature without an event gets no comment', !note.includes('<!-- event:'));
+}
 ok('the prose is in it', note.includes('Holding the arrow'), note);
 ok('the keys are a list under a heading', /\*\*Keys\*\*\n\n- `→`/.test(note), note);
 ok('the pictures are in the note, named by version, slug and id',
