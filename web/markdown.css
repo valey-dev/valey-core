@@ -33,8 +33,12 @@
   background:#1a120c; color:var(--muted); border:1px solid rgba(138,98,71,.45);
   font:10px "JetBrains Mono", "Courier New",monospace; padding:3px 8px}
 .md .mdblock:hover .mdcopy{background:var(--bg-deep); color:var(--ink); border-color:var(--frame)}
-.md .mdcopy.done{background:var(--bg-deep); color:var(--accent); border-color:var(--accent)}
-.md .mdcopy.fail{background:var(--bg-deep); color:var(--warn); border-color:var(--warn)}
+/* The answer is written under hover as well. The hover rule above carries four
+   classes against the three of `.mdcopy.done`, so until 13 September 2026 the
+   green stayed hidden while the mouse was on the block — that is, from exactly
+   the person who had just clicked — and showed only once it moved away. */
+.md .mdcopy.done, .md .mdblock:hover .mdcopy.done{background:var(--bg-deep); color:var(--accent); border-color:var(--accent)}
+.md .mdcopy.fail, .md .mdblock:hover .mdcopy.fail{background:var(--bg-deep); color:var(--warn); border-color:var(--warn)}
 
 /* A path or a command in backticks is the thing people copy most — 41 of them
    against two links in one real transcript. The button lives beside the
