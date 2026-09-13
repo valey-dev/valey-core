@@ -24,6 +24,21 @@ const cases = [
   ['json: key', 'json', '{"mode":"acceptEdits"}', ['<span class="t-cssprop">"mode"</span>']],
   ['json: literal', 'json', '{"on":true}', ['<span class="t-literal">true</span>']],
 
+  ['yaml: key and value', 'yaml', 'name: rocket', ['<span class="t-cssprop">name</span><span class="t-punct">:</span>']],
+  ['yaml: a key inside a list item', 'yaml', '  - uses: actions/checkout@v4', ['<span class="t-punct">-</span>', '<span class="t-cssprop">uses</span>']],
+  ['yaml: on is a key in a CI file, not a literal', 'yaml', 'on:\n  push:', ['<span class="t-cssprop">on</span>'], ['t-literal']],
+  ['yaml: comment', 'yaml', 'retries: 3 # three', ['<span class="t-comment"># three</span>', '<span class="t-number">3</span>']],
+  ['yaml: a hash inside a quoted string is not a comment', 'yaml', 'title: "a # b"', ['<span class="t-string">"a # b"</span>'], ['t-comment']],
+  ['yaml: a colon in a URL is not a key', 'yaml', 'url: http://a:b/c#frag', ['http://a:b/c#frag'], ['t-cssprop">http', 't-comment']],
+  ['yaml: an apostrophe in a word does not open a string', 'yaml', "name: don't stop", ["don't stop"], ['t-string']],
+  ['yaml: literals and the null tilde', 'yaml', 'a: yes\nb: ~', ['<span class="t-literal">yes</span>', '<span class="t-literal">~</span>']],
+  ['yaml: anchor, alias and tag', 'yaml', 'base: &b\nx: *b\ny: !!str 1', ['<span class="t-atrule">&amp;b</span>', '<span class="t-atrule">*b</span>', '<span class="t-keyword">!!str</span>']],
+  ['yaml: a block after run: | is text, keys and comments included', 'yaml', 'run: |\n  echo key: value # not a key\nnext: 1',
+    ['<span class="t-string">  echo key: value # not a key</span>', '<span class="t-cssprop">next</span>'], ['t-comment']],
+  ['yaml: a folded block ends where the indent does', 'yaml', 'a: >-\n  folded\n\n  more\nb: 2',
+    ['<span class="t-string">  folded</span>', '<span class="t-string">  more</span>', '<span class="t-cssprop">b</span>']],
+  ['yaml: a tag inside a value is escaped', 'yaml', 'x: "<img onerror=x>"', ['&lt;img'], ['<img']],
+
   ['html: tag', 'html', '<div class="a">текст</div>', ['<span class="t-tag">div</span>']],
   ['html: attribute', 'html', '<div class="a"></div>', ['<span class="t-attr">class</span>']],
   ['html: attribute value', 'html', '<div class="a"></div>', ['<span class="t-string">"a"</span>']],
@@ -55,13 +70,14 @@ for (const [name, lang, src, must = [], mustNot = []] of cases) {
 
 // the language from the extension and from the fence label in markdown
 const byExt = [['a/b.js', 'js'], ['style.css', 'css'], ['data.json', 'json'],
+  ['.github/workflows/test.yml', 'yaml'], ['compose.YAML', 'yaml'],
   ['page.html', 'html'], ['page.htm', 'html'], ['photo.png', null]];
 for (const [path, want] of byExt) {
   const got = langOf(path);
   if (got !== want) { failed++; console.log(`FAIL  | langOf(${path}) → ${got}, expected ${want}`); }
   else console.log(`ok    | langOf(${path}) → ${got}`);
 }
-for (const [tag, want] of [['JavaScript', 'js'], ['CSS', 'css'], ['html', 'html'], ['bash', null]]) {
+for (const [tag, want] of [['JavaScript', 'js'], ['CSS', 'css'], ['html', 'html'], ['yaml', 'yaml'], ['YML', 'yaml'], ['bash', null]]) {
   const got = normaliseLang(tag);
   if (got !== want) { failed++; console.log(`FAIL  | normaliseLang(${tag}) → ${got}`); }
   else console.log(`ok    | normaliseLang(${tag}) → ${got}`);
@@ -71,7 +87,8 @@ for (const [tag, want] of [['JavaScript', 'js'], ['CSS', 'css'], ['html', 'html'
 const strip = (html) => html.replace(/<[^>]*>/g, '')
   .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
-for (const [file, lang] of [['../web/main.js', 'js'], ['../web/style.css', 'css'], ['../web/index.html', 'html']]) {
+for (const [file, lang] of [['../web/main.js', 'js'], ['../web/style.css', 'css'], ['../web/index.html', 'html'],
+  ['../.github/workflows/test.yml', 'yaml']]) {
   const src = readFileSync(new URL(file, import.meta.url), 'utf8');
   const t0 = Date.now();
   const out = highlight(src, lang);
