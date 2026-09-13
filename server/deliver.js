@@ -4,6 +4,9 @@
 // redraw itself; the exchange shows up in the history (and in the game).
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 const run = promisify(execFile);
 const TIMEOUT_MS = 10 * 60 * 1000;
@@ -30,6 +33,55 @@ const MISS_TTL = 60_000;
 let acc = { at: 0, value: null };
 const ACC_TTL = 60_000;
 const busy = new Set();
+
+// A run outlives the office that started it. Until 13 September 2026 it could
+// not: it was spawned into the office's own process group, on the office's
+// terminal, so the Ctrl-C that stops `npm start` went to every run in flight,
+// and each of those turns ended in «[Request interrupted by user]» in the same
+// second — eight runs sat in that group that morning, and the restart ritual in
+// the shell history lined up with bursts of four to six interruptions. So a run
+// gets a group of its own (`detached`), and its output goes to files rather
+// than pipes: a pipe dies with the office, and the run's next write to it
+// would kill the turn just as surely.
+//
+// Surviving the office means the next office has to know about it. A run
+// leaves `<agent>.json` here with its pid, and deliver() reads that before
+// starting another: a second `--resume` on top of a live one is two turns in
+// one conversation.
+const RUNS_DIR = process.env.VALEY_DELIVER_DIR || path.join(os.tmpdir(), 'valey-deliver');
+const runFile = (id, ext) => path.join(RUNS_DIR, `${String(id).replace(/[^\w.-]/g, '_')}.${ext}`);
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+
+// The whole group, so the tool shells a run started go with it; the pid alone
+// when the group is already gone.
+function stopRun(pid, signal) {
+  try { process.kill(-pid, signal); } catch { try { process.kill(pid, signal); } catch { /* gone */ } }
+}
+
+// What a previous office left running for this agent. A pid is only taken for
+// ours while its command line still names this conversation: after a reboot or
+// a long pause the number can belong to anything.
+async function priorRun(id) {
+  let rec;
+  try { rec = JSON.parse(fs.readFileSync(runFile(id, 'json'), 'utf8')); } catch { return null; }
+  if (!rec || !Number.isInteger(rec.pid) || !alive(rec.pid)) { forgetRun(id); return null; }
+  let cmd = '';
+  try { cmd = (await run('ps', ['-o', 'command=', '-p', String(rec.pid)], { timeout: 3000 })).stdout; } catch { /* gone meanwhile */ }
+  if (!cmd.includes(`--resume ${id}`)) { forgetRun(id); return null; }
+  return rec;
+}
+
+function forgetRun(id) {
+  for (const ext of ['json', 'out', 'err']) { try { fs.unlinkSync(runFile(id, ext)); } catch { /* not there */ } }
+}
+
+// The tail of what a run printed, as the pipes used to keep it.
+function readTail(file, max) {
+  try {
+    const s = fs.readFileSync(file, 'utf8');
+    return s.length > max ? s.slice(-max) : s;
+  } catch { return ''; }
+}
 
 async function lookup() {
   const found = { ...NO_CLI, checked: true, at: Date.now() };
@@ -124,40 +176,65 @@ export async function deliver(task, agent, mode = 'default', { timeout = TIMEOUT
   if (MODES.has(mode) && mode !== 'default') args.push('--permission-mode', mode);
 
   busy.add(agent.id);
+  // A run the previous office left going. Younger than the timeout it is still
+  // answering, and this message waits its turn; older, it is a hang nobody is
+  // left to stop, and the same rule the timer below applies is applied here.
+  const prior = await priorRun(agent.id);
+  if (prior && Date.now() - (prior.startedAt || 0) < timeout) {
+    busy.delete(agent.id);
+    task.state = 'failed';
+    task.error = 'the previous message is still being answered — it was sent before the office restarted';
+    task.errorKey = 'err.busy';
+    return task;
+  }
+  if (prior) {
+    stopRun(prior.pid, 'SIGTERM');
+    await new Promise((r) => setTimeout(r, grace));
+    if (alive(prior.pid)) stopRun(prior.pid, 'SIGKILL');
+    forgetRun(agent.id);
+  }
+
   task.state = 'sending';
   task.startedAt = Date.now();
 
-  const child = spawn(c.path, args, {
-    cwd: agent.cwd || process.cwd(),
-    env: process.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-
-  let out = '', err = '';
-  child.stdout.on('data', (d) => { out += d; if (out.length > 200_000) out = out.slice(-200_000); });
-  child.stderr.on('data', (d) => { err += d; if (err.length > 20_000) err = err.slice(-20_000); });
+  fs.mkdirSync(RUNS_DIR, { recursive: true });
+  const outFd = fs.openSync(runFile(agent.id, 'out'), 'w');
+  const errFd = fs.openSync(runFile(agent.id, 'err'), 'w');
+  let child;
+  try {
+    child = spawn(c.path, args, {
+      cwd: agent.cwd || process.cwd(),
+      env: process.env,
+      stdio: ['ignore', outFd, errFd],
+      detached: true,
+    });
+  } finally {
+    // the run holds its own copies; the office's are not needed to read files
+    fs.closeSync(outFd); fs.closeSync(errFd);
+  }
+  if (child.pid) fs.writeFileSync(runFile(agent.id, 'json'), JSON.stringify({ pid: child.pid, startedAt: task.startedAt }));
 
   let timedOut = false, kill = null;
   const timer = setTimeout(() => {
     timedOut = true;
-    child.kill('SIGTERM');
-    kill = setTimeout(() => child.kill('SIGKILL'), grace);
+    stopRun(child.pid, 'SIGTERM');
+    kill = setTimeout(() => stopRun(child.pid, 'SIGKILL'), grace);
   }, timeout);
   const stop = () => { clearTimeout(timer); clearTimeout(kill); busy.delete(agent.id); };
-  // 'close' waits for the pipes as well as the process, and whatever the run
-  // started — a tool's shell — inherits them and outlives the kill. A stopped
-  // run has nothing more to say, so its pipes are closed from this side.
-  child.on('exit', () => { if (timedOut) { child.stdout.destroy(); child.stderr.destroy(); } });
 
   return new Promise((resolve) => {
     child.on('error', (e) => {
       stop();
+      forgetRun(agent.id);
       task.state = 'failed'; task.error = e.message; task.finishedAt = Date.now();
       console.error('[deliver]', e.message);
       resolve(task);
     });
     child.on('close', (code) => {
       stop();
+      const out = readTail(runFile(agent.id, 'out'), 200_000);
+      const err = readTail(runFile(agent.id, 'err'), 20_000);
+      forgetRun(agent.id);
       task.finishedAt = Date.now();
       if (timedOut) {
         // a killed run closes with no code, which used to read «exited with code null»
