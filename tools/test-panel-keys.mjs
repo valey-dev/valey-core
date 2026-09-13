@@ -14,29 +14,29 @@ let sky = null;
 let skin = null;
 let langPanel = null;
 
-// The standup: columns of cards. The card is the focus target itself, and the
-// column is what the up-down arrows must stay inside, so the stand-in has to
-// know which cards belong to which column — that is the whole difference from a
-// flat ring, and the only thing worth checking here.
-function makeRoster(cols) {
+// The standup: each project across the whole width, its cards in a grid of
+// `per` columns, projects one under another. The arrows walk by where the cards
+// stand, so the stand-in gives every card a box: that is the whole difference
+// from a flat ring, and the only thing worth checking here.
+function makeRoster(teams, per = 3) {
   const cards = [];
-  const columns = [].concat(cols).map((n, ci) => {
-    const mine = Array.from({ length: n }, (_, i) => {
+  let top = 0;
+  [].concat(teams).forEach((n, ti) => {
+    top += 30;                                  // the project's name
+    for (let i = 0; i < n; i++) {
       const c = node('pcard');
-      c.dataset.id = `t${ci}-${i}`;
-      return c;
-    });
-    cards.push(...mine);
-    const col = node('pcol');
-    col.contains = (x) => mine.includes(x);
-    col.cards = mine;
-    return col;
+      c.dataset.id = `t${ti}-${i}`;
+      const left = (i % per) * 328, y = top + Math.floor(i / per) * 110;
+      c.getBoundingClientRect = () => ({ left, right: left + 316, top: y, bottom: y + 100, width: 316, height: 100 });
+      cards.push(c);
+    }
+    top += Math.ceil(n / per) * 110;
   });
   return {
-    hidden: false, innerHTML: '', cards, cols: columns,
+    hidden: false, innerHTML: '', cards,
     querySelector: (sel) => (sel === '.rbody' ? node('rbody')
       : sel === '.pcard.focus' ? (cards.find((c) => c.has('focus')) || null) : null),
-    querySelectorAll: (sel) => (sel === '.pcard' ? cards : sel === '.pcol' ? columns : []),
+    querySelectorAll: (sel) => (sel === '.pcard' ? cards : []),
   };
 }
 
@@ -236,8 +236,7 @@ const agents = (n, project = 'AI valey') => Array.from({ length: n }, (_, i) => 
   id: 'a' + i, name: 'Агент ' + i, project, status: 'awaiting', seat: i,
   title: 'задача', lastSaid: 'ждёт', idleFor: 60, roleKey: 'code',
 }));
-// Two teams: the standup lays them out in columns, and the arrows mean
-// different things across a column and along one.
+// Two teams: the standup puts each across the whole width, one under the other.
 const twoTeams = (a, b) => [
   ...agents(a, 'team-a'),
   ...agents(b, 'team-b').map((x, i) => ({ ...x, id: 'b' + i })),
@@ -286,32 +285,48 @@ roster = makeRoster([3, 2]);
 UI.renderRoster();
 check('planning meeting: focus is on the first card', at(roster.cards) === 0, at(roster.cards));
 check('down arrow processed', UI.rosterKey('ArrowDown') === true, 'не обработана');
-check('and follows his own command, and not everyone else', at(roster.cards) === 1, at(roster.cards));
-check('the right arrow takes you to the neighboring team', UI.rosterKey('ArrowRight') === true && at(roster.cards) === 4,
-  at(roster.cards));
-check('and holds space in the column rather than falling to the first line',
-  roster.cols[1].cards.indexOf(roster.cards[4]) === 1, at(roster.cards));
-// Down at the bottom of a column stays there. It used to loop back to the top of
-// the same column, and this stand pinned that; the owner asked for the opposite
-// on 7 September 2026, because a long list is read to the end and the last press
-// silently teleporting you to the top is indistinguishable from a redraw. Short
-// panels — the lift, the language, the radio — keep their ring; only a panel
-// that scrolls asks for noWrap.
+// Since 13 September 2026 a project is not a column: down from a full row goes
+// on to the next project's first row, onto the card straight below.
+check('down goes to the next row, into the next project', at(roster.cards) === 3, at(roster.cards));
+check('right is the neighbour in reading order', UI.rosterKey('ArrowRight') === true && at(roster.cards) === 4, at(roster.cards));
+// Down at the bottom stays there. It used to loop back to the top, and this
+// stand pinned that; the owner asked for the opposite on 7 September 2026,
+// because a long list is read to the end and the last press silently
+// teleporting you to the top is indistinguishable from a redraw.
 UI.rosterKey('ArrowDown');
-check('at the bottom of a column it stops instead of looping', at(roster.cards) === 4, at(roster.cards));
-UI.rosterKey('ArrowDown');
-check('and pressing again keeps it there', at(roster.cards) === 4, at(roster.cards));
-
-UI.rosterKey('ArrowLeft');
-check('left carries the place in the column across', at(roster.cards) === 1, at(roster.cards));
+check('at the bottom it stops instead of looping', at(roster.cards) === 4, at(roster.cards));
 UI.rosterKey('ArrowUp');
-check('up walks the column', at(roster.cards) === 0, at(roster.cards));
+check('up goes to the row above, onto the card straight over it', at(roster.cards) === 1, at(roster.cards));
+UI.rosterKey('ArrowLeft');
+check('left is the neighbour in reading order too', at(roster.cards) === 0, at(roster.cards));
 UI.rosterKey('ArrowUp');
 check('and the top is a wall too, not a way round to the bottom', at(roster.cards) === 0, at(roster.cards));
 
 UI.rosterKey('Enter');
 check('ENTER opens the card you are on',
   roster.cards[0].clicked === 1, roster.cards.map((b) => b.clicked).join(','));
+
+// One big project: seven people in three columns, the arrows walk its rows.
+state.agents = twoTeams(7, 2);
+roster = makeRoster([7, 2]);
+UI.closeRoster(); UI.renderRoster();
+UI.rosterKey('ArrowRight'); UI.rosterKey('ArrowRight');
+check('a row of a big project: right walks it', at(roster.cards) === 2, at(roster.cards));
+UI.rosterKey('ArrowDown');
+check('down stays in the project while it has rows', at(roster.cards) === 5, at(roster.cards));
+UI.rosterKey('ArrowDown');
+check('onto a short last row: the nearest card across, not a jump out', at(roster.cards) === 6, at(roster.cards));
+UI.rosterKey('ArrowDown');
+check('then on into the next project', at(roster.cards) === 7, at(roster.cards));
+// Two columns at 175%: the grid decides, and the walk follows it.
+roster = makeRoster([4], 2);
+state.agents = agents(4, 'team-a');
+UI.closeRoster(); UI.renderRoster();
+UI.rosterKey('ArrowDown');
+check('in two columns down moves by two', at(roster.cards) === 2, at(roster.cards));
+state.agents = twoTeams(3, 2);
+roster = makeRoster([3, 2]);
+UI.closeRoster(); UI.renderRoster();
 
 // G is the standup's only key of its own, and it is caught by the physical code:
 // under "ЙЦУКЕН" that key types «п», and the office must not care.

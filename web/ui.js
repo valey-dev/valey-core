@@ -1554,9 +1554,9 @@ export function renderRoster() {
 
   el.roster.innerHTML = `<div class="rwrap pwrap">
     <div class="vhead"><span id="rcount">${headLine(teams.length, S.agents.length, waiting)}</span><button id="rx">✕</button></div>
-    <div class="rbody">${teams.length ? `<div class="pcols">${teams.map((t) => `
-      <div class="pcol"><h4>▣ ${esc(t.project)}<i>${t.list.length}${t.waiting ? ' · ⚑' + t.waiting : ''}</i></h4>
-        ${t.list.map(cardHtml).join('')}</div>`).join('')}</div>`
+    <div class="rbody">${teams.length ? `<div class="pteams">${teams.map((t) => `
+      <section class="pteam"><h4>▣ ${esc(t.project)}<i>${t.list.length}${t.waiting ? ' · ⚑' + t.waiting : ''}</i></h4>
+        <div class="pgrid">${t.list.map(cardHtml).join('')}</div></section>`).join('')}</div>`
     : `<p class="empty">${tr('standup.nobody')}<span>${tr('standup.nobodyWhy')}</span></p>`}</div>
     <p class="pkeys">${tr('standup.keys')}</p>
   </div>`;
@@ -1626,10 +1626,12 @@ function openFromStandup(id) {
   api.openAgent(a.id);
 }
 
-// The ring walks the cards: up and down inside a column, sideways between
-// columns. A card is one thing rather than a row of buttons, so in the ring it
-// is one thing too.
-const rosterRing = focusRing(() => el.roster, '.pcard', { cols: '.pcol', noWrap: true });
+// The ring walks the cards as they stand: up and down a row at a time, across
+// projects, sideways in reading order. Until 13 September 2026 a project was a
+// column and the arrows stayed inside it — and a project of seven was a column
+// of seven with the rest of the width empty. A card is one thing rather than a
+// row of buttons, so in the ring it is one thing too.
+const rosterRing = focusRing(() => el.roster, '.pcard', { grid: true, noWrap: true });
 export function closeRoster() { el.roster.hidden = true; rosterSig = ''; rosterRing.reset(); }
 export function rosterOpen() { return !!(el.roster && !el.roster.hidden); }
 
@@ -2849,6 +2851,8 @@ function bindResults() {
 //   numbers: true          — every item in the ring
 //   numbers: '.rst'        — only these (in radio a digit is a station, not a knob)
 // opts.cols — the mirror of opts.rows for a panel laid out in columns.
+// opts.grid — a wrapping grid: ↑↓ go to the nearest row above or below, onto the
+//   item closest across; ←→ go to the neighbour in reading order.
 //   byData: 'n'            — find data-n="digit" instead of the Nth item: in the
 //                            lift, "3" is floor three even if it is second in the list.
 //
@@ -3026,6 +3030,31 @@ export function focusRing(nodeOf, selector, opts = {}) {
           if (at >= 0) { idx = at; paint(); }
           if (!hit.disabled) hit.click();
           return true;
+        }
+      }
+
+      // A wrapping grid is walked by where its items stand, since the grid, not
+      // the markup, decides how many fit in a row: three at 100%, two at 175%.
+      // The standup has been one since 13 September 2026 — a project across every
+      // column — and the down arrow goes on into the next project's first row
+      // rather than stopping at its own last card. Items with no box to measure
+      // (a stand's stand-in DOM) fall through to the flat walk below.
+      if (opts.grid && cur && (key === 'arrowup' || key === 'arrowdown')) {
+        const box = (n) => (n.getBoundingClientRect ? n.getBoundingClientRect() : null);
+        const c = box(cur);
+        if (c && (c.width || c.height)) {
+          const down = key === 'arrowdown';
+          const beyond = l.map((n, i) => ({ i, r: box(n) }))
+            .filter(({ i, r }) => i !== idx && r && (down ? r.top >= c.bottom - 1 : r.bottom <= c.top + 1));
+          if (!beyond.length) {
+            if (opts.noWrap) { paint(); return true; }
+          } else {
+            const edge = down ? Math.min(...beyond.map((o) => o.r.top)) : Math.max(...beyond.map((o) => o.r.top));
+            const mid = (r) => (r.left + r.right) / 2;
+            const row = beyond.filter((o) => Math.abs(o.r.top - edge) < 2)
+              .sort((a, b) => Math.abs(mid(a.r) - mid(c)) - Math.abs(mid(b.r) - mid(c)));
+            idx = row[0].i; paint(); return true;
+          }
         }
       }
 

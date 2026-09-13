@@ -309,7 +309,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .rbody{scroll-padding:10px 14px}
 .bbody, .dbody{scroll-padding:14px}
 .skybody, .recbody, .liftbody, .invbody, .skinbody{scroll-padding:14px}
-/* ---- standup: team columns, one card per person ----
+/* ---- the standup's frame, worn by the feature board too ----
    It shares .rwrap and .rbody with the round it replaced, but has its own width:
    three 300 px columns ask for 1000. Dividing by scale is mandatory, not merely
    cautious—the third recurrence of vw inside zoom measuring the window and
@@ -323,6 +323,30 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
   margin:2px 0 6px; padding-bottom:4px; border-bottom:1px solid var(--wood-hi);
   color:var(--lilac); font-size:12px; letter-spacing:.08em; font-weight:normal}
 .pcol h4 i{flex:none; font-style:normal; font-size:10px; letter-spacing:0; color:var(--muted)}
+/* The standup since 13 September 2026: a project across every column, its cards
+   one after another in a grid, projects one under another. .pcols and .pcol stay
+   above for the feature board, which wears these clothes on purpose.
+   Owner's words: one project matters at a time, and as many of its people as
+   possible should be in sight at once — a project of seven was a column of seven
+   with the rest of the width empty. The grid decides the columns, the markup
+   does not: 290 px each, so three fit in the 972 of 100% and two in the 724 of
+   175%, with no second layout in code.
+   The name stays pinned while its cards scroll under it. It used to ride away
+   with the first card, and from the middle of a column nobody could say whose
+   people these were. top:-10px with 10px of its own padding lets the pinned
+   name cover the body's padding strip as well: cards slid through it above the
+   name. Frames: WIP «Standup: a project across all columns». */
+.pteam + .pteam{margin-top:4px}
+.pteam h4{position:sticky; top:-10px; z-index:1; display:flex; justify-content:space-between; align-items:baseline; gap:8px;
+  margin:0 0 6px; padding:10px 0 4px; background:var(--wood-dark); border-bottom:1px solid var(--wood-hi);
+  color:var(--lilac); font-size:12px; letter-spacing:.08em; font-weight:normal}
+.pteam:first-child h4{margin-top:-10px}
+.pteam h4 i{flex:none; font-style:normal; font-size:10px; letter-spacing:0; color:var(--muted)}
+.pgrid{display:grid; grid-template-columns:repeat(auto-fill, minmax(290px, 1fr)); gap:8px 12px; align-items:start}
+.pgrid .pcard{margin-bottom:0}
+/* scrollIntoView parks a card on the top edge, and the pinned name sits there:
+   the card arrived at by ↑ would be under it. */
+#roster .rbody{scroll-padding-top:44px}
 /* A card is one object, not a button row: the focus ring moves over the whole
    card, ⏎ opens, and G leads. The inner ⇢ offers the same lead action to a mouse. */
 .pcard{position:relative; display:grid; width:100%; margin-bottom:8px; padding:8px 8px 8px 12px;
