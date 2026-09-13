@@ -77,7 +77,14 @@ const MAPS = new Set(['shots']);
 // state a picture needs that no walk reaches — a request waiting in the pager, a
 // switch the owner flips. The page is the office's audience by then, which is
 // exactly what makes it hold what the script sends.
-const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport', 'touch', 'setup']);
+//
+// `interrupt` names a member of the demo cast by its slot (a, b, c): before the
+// camera, the line the app writes when a turn is cut off is appended to that
+// agent's transcript, and after it the agent is handed a prompt and an answer,
+// so the next shot finds the floor as it was. `setup` cannot do this — it runs
+// in the page, and an agent's state is read off its transcript on the server.
+// Added 13 September 2026 for the «stopped» state, which only an interrupt makes.
+const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport', 'touch', 'setup', 'interrupt']);
 
 // A three-line parser instead of a YAML dependency. The project has none, and a
 // front matter of three keys is not a reason for the first one.
