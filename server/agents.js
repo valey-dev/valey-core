@@ -543,6 +543,28 @@ function emptyState() {
   };
 }
 
+// One tool call, whoever made it. Claude names its tools itself; the Codex
+// parser (server/codex.js) translates its items into the same names, so the
+// act, the role, the grade and the files are counted one way for both.
+function useTool(st, name, input = {}) {
+  const d = describeTool(name, input);
+  const mood = (IMAGE_RE.test(input?.file_path || '') && /Write|Edit/.test(name)) ? 'design' : d.mood;
+  st.acts.push({ mood, ts: st.lastTs || Date.now() });
+  if (st.acts.length > 60) st.acts.splice(0, st.acts.length - 60);
+  // The grade counts the same mood — but before the trim and with no window.
+  if (SKILL_OF[mood]) st.skills[SKILL_OF[mood]]++;
+  st.lastTool = name;
+  st.lastToolInput = input;
+  const fp = input?.file_path;
+  if (fp) {
+    st.files.set(fp, {
+      path: fp, name: base(fp), image: IMAGE_RE.test(fp), ts: st.lastTs,
+      made: /Write|Edit|Artifact/.test(name),
+    });
+    if (st.files.size > 60) st.files.delete(st.files.keys().next().value);
+  }
+}
+
 function applyLine(st, line) {
   if (!line) return;
   let r;
@@ -591,23 +613,7 @@ function applyLine(st, line) {
     else if (r.message.model === '<synthetic>') { /* neither opens nor closes a turn */ }
     else st.ended = r.message.stop_reason === 'end_turn' ? endOf(said) : '';
     for (const b of Array.isArray(content) ? content : []) {
-      if (b?.type !== 'tool_use') continue;
-      const d = describeTool(b.name, b.input);
-      const mood = (IMAGE_RE.test(b.input?.file_path || '') && /Write|Edit/.test(b.name)) ? 'design' : d.mood;
-      st.acts.push({ mood, ts: st.lastTs || Date.now() });
-      if (st.acts.length > 60) st.acts.splice(0, st.acts.length - 60);
-      // The grade counts the same mood — but before the trim and with no window.
-      if (SKILL_OF[mood]) st.skills[SKILL_OF[mood]]++;
-      st.lastTool = b.name;
-      st.lastToolInput = b.input;
-      const fp = b.input?.file_path;
-      if (fp) {
-        st.files.set(fp, {
-          path: fp, name: base(fp), image: IMAGE_RE.test(fp), ts: st.lastTs,
-          made: /Write|Edit|Artifact/.test(b.name),
-        });
-        if (st.files.size > 60) st.files.delete(st.files.keys().next().value);
-      }
+      if (b?.type === 'tool_use') useTool(st, b.name, b.input);
     }
   } else if (r.type === 'user' && r.message && !r.isSidechain) {
     const content = r.message.content;
