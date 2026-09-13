@@ -1974,6 +1974,10 @@ function paintUpd() {
   box.innerHTML = updRow();
   const b = box.querySelector('[data-upd]');
   if (b) b.onclick = () => updPost(b.dataset.upd);
+  // The button is a new node after every repaint — once a second while an
+  // update runs — and the ring's light has to land on it again, or the hand
+  // loses its place mid-update.
+  if (bagTab === 'office' && !el.bag.hidden) officeRing.paint();
 }
 
 async function updPost(what) {
@@ -2475,7 +2479,10 @@ function bindThings() {
 
 // The "office" tab is a row of buttons, not a slot list or a grid. It has a
 // third keyboard behaviour, which need not be maintained beside the other two.
-const officeRing = focusRing(() => el.bag, '.obtn');
+// Nothing lit on open: the first button is «check for updates», a trip to git,
+// and the first ↓ lands on it — asked by Sergey on 13 September 2026, when
+// reaching it took a lap round the whole tab.
+const officeRing = focusRing(() => el.bag, '.obtn', { startEmpty: true });
 
 function openTab(tab) {
   if (!tabs().includes(tab) || tab === bagTab) return;
@@ -2745,9 +2752,14 @@ function bindResults() {
 // opts.cols — the mirror of opts.rows for a panel laid out in columns.
 //   byData: 'n'            — find data-n="digit" instead of the Nth item: in the
 //                            lift, "3" is floor three even if it is second in the list.
+// opts.startEmpty — nothing is lit when the panel opens, and the first arrow
+//   picks the first (or, going up, the last) button. For a panel whose first
+//   button does something that should not happen on a stray Enter: the office
+//   tab's is «check for updates», a trip to git.
 export function focusRing(nodeOf, selector, opts = {}) {
   const stepTo = opts.noWrap ? stopAt : wrapAt;
-  let idx = 0;
+  const start = opts.startEmpty ? -1 : 0;
+  let idx = start;
   // Only what has a box is in the ring. The radio's volume knob sits under a
   // `hidden` row until the full Spotify player connects, and until 11 September
   // 2026 one press of the down arrow went into it: the outline vanished and the
@@ -2790,6 +2802,7 @@ export function focusRing(nodeOf, selector, opts = {}) {
   const paint = () => {
     const l = list();
     if (!l.length) return;
+    if (idx < 0) { l.forEach((b) => b.classList.remove('focus')); follow(); return; }
     idx = Math.max(0, Math.min(l.length - 1, idx));
     l.forEach((b, i) => b.classList.toggle('focus', i === idx));
     l[idx].scrollIntoView({ block: 'nearest' });
@@ -2801,7 +2814,7 @@ export function focusRing(nodeOf, selector, opts = {}) {
   };
   return {
     paint,
-    reset() { idx = 0; },
+    reset() { idx = start; },
     // Focus a particular index: the current floor in the lift, or the first note
     // after leaving search.
     at(i) { idx = i; paint(); },
@@ -2813,6 +2826,12 @@ export function focusRing(nodeOf, selector, opts = {}) {
       const key = raw.toLowerCase();
       const l = list();
       if (!l.length) return false;
+      // Nothing picked yet: an arrow picks, and Enter has nothing to press.
+      if (idx < 0) {
+        const into = { arrowdown: 0, arrowright: 0, arrowup: l.length - 1, arrowleft: l.length - 1 }[key];
+        if (into !== undefined) { idx = into; paint(); return true; }
+        if (key === 'enter' || key === ' ') return true;
+      }
       const cur = l[idx];
 
       if (cur && cur.type === 'range' && (key === 'arrowleft' || key === 'arrowright')) {
