@@ -129,7 +129,9 @@ const DEFAULTS = {
   // invites — the invitations handed out: { code, name, from, at, usedAt,
   // guest }. They live on disk because the link is sent in a messenger and
   // opened later: an invitation that dies with a server restart is useless.
-  access: { mode: 'private', token: '', invites: [] },
+  // devices — owner devices paired with a code: { id, name, hash, pairedAt,
+  // lastSeen }. Only the hash of each token is kept; see server/devices.js.
+  access: { mode: 'private', token: '', invites: [], devices: [] },
   // Which addresses the office answers at all. Off means loopback is listened
   // to, and that is not caution for its own sake: the office serves every
   // session transcript in full, so an open port equals an open correspondence.
@@ -378,6 +380,8 @@ export async function patchSettings(patch) {
       // The invitation list is replaced whole: a revoked one has to disappear,
       // and a key-wise merge cannot delete — the same reason as for names.
       invites: (patch.access || {}).invites || s.access.invites || [],
+      // Replaced whole, like invites: a revoked device has to disappear.
+      devices: (patch.access || {}).devices || s.access.devices || [],
     },
     // The network token survives a patch that omits it for the same reason as
     // the owner token: the page sends the settings whole and has never seen it.
@@ -492,7 +496,7 @@ export function publicSettings(s) {
   // out: a guest's page reads these settings with the same request as the
   // owner's page. Only what is visible anyway goes out — the mode, and how many
   // invitations are still unclaimed.
-  const { token: owner, invites = [], ...access } = s.access || {};
+  const { token: owner, invites = [], devices = [], ...access } = s.access || {};
   // The network token is not shown even to our own: the settings go down the
   // SSE stream into a browser that hosts the radio iframe and the sandbox for
   // foreign HTML. It can only be read from disk — which is what the word

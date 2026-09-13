@@ -15,6 +15,16 @@
 // a silent one.
 let owner = '';
 let guest = '';
+// A paired device's token (server/devices.js). It is read here, from the same
+// storage the feed writes it to: the feed and the office share an origin, so a
+// phone or an Xbox paired from the feed is the owner in the office too, with no
+// second pairing.
+const DEVICE = 'valey-device';
+let device = (() => { try { return localStorage.getItem(DEVICE) || ''; } catch { return ''; } })();
+export function setDevice(token) {
+  device = token || '';
+  try { if (device) localStorage.setItem(DEVICE, device); else localStorage.removeItem(DEVICE); } catch { /* private mode: this tab only */ }
+}
 
 export function setTokens(next = {}) {
   if ('owner' in next) owner = next.owner || '';
@@ -25,6 +35,7 @@ export function owned(extra = {}) {
   const h = { ...extra };
   if (owner) h['x-valey-owner'] = owner;
   if (guest) h['x-valey-guest'] = guest;
+  if (device) h['x-valey-device'] = device;
   return h;
 }
 
@@ -43,5 +54,6 @@ export function passQuery() {
   const q = new URLSearchParams();
   if (owner) q.set('owner', owner);
   if (guest) q.set('guest', guest);
+  if (device) q.set('device', device);
   return q.toString();
 }

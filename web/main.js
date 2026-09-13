@@ -293,6 +293,14 @@ UI.initUI(state, {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({ id, yes }),
   }).then((r) => r.json()).catch((e) => ({ error: e.message })),
+  answerPair: (id, yes) => fetch('/api/pair/answer', {
+    method: 'POST', headers: owned({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ id, yes }),
+  }).then((r) => r.json()).catch((e) => ({ error: e.message })),
+  revokeDevice: (id) => fetch('/api/devices/revoke', {
+    method: 'POST', headers: owned({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ id }),
+  }).then((r) => r.json()).catch((e) => ({ error: e.message })),
   revokeAccess: (guestId, agentId) => fetch('/api/access/revoke', {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({ guestId, agentId }),
@@ -618,6 +626,7 @@ function roomArrived() {
   if (roomWanted && goToRoom(roomWanted)) roomWanted = null;
 }
 
+const pairSeen = new Set();
 const onSnapshot = (e) => {
   const data = JSON.parse(e.data);
   state.agents = data.agents || [];
@@ -627,6 +636,13 @@ const onSnapshot = (e) => {
   // Access rides with the snapshot: for a guest it is his own view, for the owner who is
   // asking and to whom it is open.
   state.access = data.access || null;
+  // A device asking to become the owner says so once, loudly: the request lives
+  // two minutes, and the phone in the owner's hand is waiting on this screen.
+  for (const p of (state.access && state.access.pairings) || []) {
+    if (pairSeen.has(p.id)) continue;
+    pairSeen.add(p.id);
+    UI.toast(tr('pair.toast', { name: p.name, code: p.code }), 'wait');
+  }
   // An open invitation panel is a register, not a snapshot of one moment: a
   // request that arrives while it is open has to show up in it.
   UI.syncInvite();

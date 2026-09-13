@@ -709,6 +709,13 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .invbody input{flex:1; min-width:0; font:inherit; color:var(--ink); background:#1f150f;
   border:1px solid #6b4a2e; padding:4px 8px}
 .invbody .hint.warn{color:var(--warn)}
+/* A pairing request at the top of «Пригласить»: frame «Panel · Pairing request»
+   (WIP #devices). The rows are the settings rows, the warning is the office's
+   quote line, the buttons the card's bottom row — nothing drawn anew. */
+.pairreq{display:flex; flex-direction:column; gap:6px; padding-bottom:10px; border-bottom:1px solid var(--wood-hi); margin-bottom:4px}
+.pairreq .say{margin:0}
+.pairreq .paircode{color:var(--ink); letter-spacing:.1em}
+.pairreq .prow{display:flex; gap:8px; margin-top:4px}
 .liftbtn{display:flex; align-items:baseline; gap:10px; text-align:left;
   background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:12px "JetBrains Mono", "Courier New",monospace; padding:6px 10px; cursor:pointer}
