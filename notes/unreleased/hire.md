@@ -3,8 +3,8 @@ title: The office hires agents — a new session starts at the reception and wal
 scope: office
 keys:
   - "`SPACE` at the reception desk — ask, and hire"
-  - "`+` in the reception panel — hire into the project under the arrows"
-  - "`1`–`9` in the hiring panel — pick the room; `Enter` hires, `Esc` closes"
+  - "`↑` `↓` in the reception panel — the project, `←` `→` — «проводить» or «нанять», `+` — hire into the project under the arrows"
+  - "`Tab` in the hiring panel — the room, the task, the model; `←` `→` on the room and the model — choose; `Enter` hires, `Esc` closes"
 shots:
   - id: reception
     setup: "setTimeout(() => { const g = window.__game; const r = g.layout.lift.reception.find((x) => x.rooms.includes('rocket-shop')); g.player.x = r.spot.x; g.player.y = r.spot.y; }, 2500)"
@@ -19,7 +19,7 @@ shots:
 
 Until now an agent came into the office only from a terminal or the desktop app. A task that turned up in the office — a letter, a card on the board, a note — could not be handed to anyone without leaving for another window.
 
-Now the reception desk hires. Its panel has «нанять» next to every project on the floor, and `+` hires into the one under the arrows. The hiring panel asks for the room, the task and the model — Opus by default, Sonnet one press away — and says what it will not do: the permission mode is the ordinary one, so anything risky the agent asks on the pager like everyone else, and a hire cannot be taken back once pressed. At the door of the room a portal opens and the agent prints itself line by line while `claude` starts; the portal follows the process, not a timer, and a run that fails to start leaves a red ring saying so instead of a person.
+Now the reception desk hires. Its panel has «нанять» next to every project on the floor: the arrows reach it like any button, and `+` hires into the project under them straight away. The hiring panel opens with the caret in the task, the room already chosen at the desk; the room and the model — Opus by default, Sonnet one arrow away — are switches a `Tab` away. It says what it will not do: the permission mode is the ordinary one, so anything risky the agent asks on the pager like everyone else, and a hire cannot be taken back once pressed. At the door of the room a portal opens and the agent prints itself line by line while `claude` starts; the portal follows the process, not a timer, and a run that fails to start leaves a red ring saying so instead of a person.
 
 The new agent is an ordinary Claude Code session: its transcript is on your disk, it takes a name and a desk, and its card says «нанят из офиса» and when. Once it has answered, the card copies `claude --resume <id>` with the folder in front of it; the office lets the agent go first, so it leaves the floor and two processes never write one transcript. While it works there is no such button, for the same reason. The office is not the agent's lifeline either: stop or restart the office mid-task and the agent finishes what it was doing and goes.
 
