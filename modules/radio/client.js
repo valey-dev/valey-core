@@ -13,7 +13,11 @@ import { t as tr } from '../../web/i18n.js';
 import { toast, renderHud, focusRing, openKeyCard, closeBag } from '../../web/ui.js';
 import { sound } from '../../web/sound.js';
 import { MARGIN } from '../../web/layout.js';
-import { radio, toUri, stationName } from './radio.js';
+import { radio, stationName, kindOf, parseWave, mixedContent, stream, PICKS } from './radio.js';
+
+// The receiver's genre row: the words are ours, each sent as one tag the catalogue
+// is known to carry (GENRES in server.js, which refuses any other).
+const GENRES = ['jazz', 'ambient', 'lofi', 'techno', 'classical', 'news'];
 import { auth, player } from './spotify.js';
 
 const $ = (s) => document.querySelector(s);
@@ -38,7 +42,10 @@ let S = null;
 let api = null;
 let prop = null;
 
-const nowPlaying = () => (radio.sdk && player.track ? player.track.name : stationName(radio.station()) || '');
+const nowPlaying = () => {
+  if (radio.isStream()) return (radio.onAir && radio.onAir.title) || stationName(radio.station()) || '';
+  return radio.sdk && player.track ? player.track.name : stationName(radio.station()) || '';
+};
 
 const DICT = {
   ru: {
@@ -68,9 +75,55 @@ const DICT = {
     'radio.pause': '❚❚ пауза',
     'radio.volume': 'громкость',
     'radio.ownWave': 'своя волна',
-    'radio.uriHint': 'ссылка из Spotify: плейлист, альбом или трек',
+    'radio.uriHint': 'ссылка Spotify или адрес потока: .mp3, .aac, Icecast',
     'radio.waking': 'Плеер ещё просыпается…',
-    'radio.notSpotify': 'Не похоже на ссылку Spotify',
+    'radio.notWave': 'Это не ссылка Spotify и не адрес потока',
+    'radio.picks': 'из подборки:',
+    'radio.uriHintSearch': 'ссылка Spotify, адрес потока или название: jazz, Маяк',
+    'radio.genres': 'жанры:',
+    'radio.genre.jazz': 'джаз',
+    'radio.genre.ambient': 'эмбиент',
+    'radio.genre.lofi': 'лоуфай',
+    'radio.genre.techno': 'техно',
+    'radio.genre.classical': 'классика',
+    'radio.genre.news': 'новости',
+    'radio.searching': 'ищу в каталоге…',
+    'radio.found': 'нашлось {n} · каталог radio-browser.info',
+    'radio.foundNone': 'по «{q}» ничего — попробуй жанр или название станции',
+    'radio.catalogSilent': 'каталог не отвечает — вставь адрес потока сам',
+    'radio.inList': 'уже в списке',
+    'radio.httpOnly': 'http-поток не играет на https-странице офиса',
+    'radio.noteSearch': 'Enter или клик ловит волну и сразу включает, ↑↓ — по найденному, Esc — назад к подборке. ✓ — уже в списке. HLS и станции, молчавшие на последней проверке каталога, сюда не попадают.',
+    'radio.noteNone': 'Каталог ищет по имени станции и по её тегам — жанр находится одним нажатием. Esc — назад к подборке.',
+    'radio.srcStream': 'ПОТОК',
+    'radio.srcSpotify': 'SPOTIFY',
+    'radio.lcdOn': '● В ЭФИРЕ',
+    'radio.lcdTuning': '… ЛОВЛЮ',
+    'radio.lcdOff': '○ ВЫКЛЮЧЕНО',
+    'radio.lcdSilent': '✕ МОЛЧИТ',
+    'radio.onFor': 'в эфире {n} мин',
+    'radio.onJust': 'только что в эфире',
+    'radio.waitSound': 'жду звук — до 10 секунд',
+    'radio.advice': 'проверь ссылку или убери волну',
+    'radio.why.timeout': 'адрес не ответил за 10 секунд',
+    'radio.why.hls': 'это HLS (.m3u8) — браузер его не играет, нужен адрес .mp3 или .aac',
+    'radio.why.mixed': 'http-поток не играет на https-странице офиса',
+    'radio.why.gone': 'станция закрыла поток ({code})',
+    'radio.why.status': 'станция ответила ошибкой {code}',
+    'radio.why.notAudio': 'по адресу не поток: {type}',
+    'radio.why.unreachable': 'адрес не найден или не отвечает',
+    'radio.why.format': 'браузер не играет этот формат',
+    'radio.why.silent': 'станция оборвала поток',
+    'radio.why.gesture': 'браузер ждёт нажатия — включи ещё раз',
+    'radio.why.notUrl': 'это не адрес потока',
+    'radio.checking': 'проверяю адрес…',
+    'radio.isStream': '✓ это поток: отвечает · {info}',
+    'radio.notChecked': 'адрес не проверен: проверку делает хозяин офиса',
+    'radio.nameIt': 'как назвать волну',
+    'radio.catch': 'поймать волну',
+    'radio.cancel': 'отмена',
+    'radio.noteStream': 'Поток играет прямо в этой вкладке: без аккаунта, громкость ручкой, в коридоре затихает. Пока радио играет, офис звучит тише.',
+    'radio.noteAdding': 'У адреса потока нет имени — назови волну сам. Enter ловит, Esc — отмена. Не отвечает или не поток — строка скажет почему, волна не добавится.',
     'radio.caught': 'Волна поймана',
     'radio.silence': 'тишина',
     'radio.waiting': 'жду трек…',
@@ -143,9 +196,55 @@ const DICT = {
     'radio.pause': '❚❚ pause',
     'radio.volume': 'volume',
     'radio.ownWave': 'own station',
-    'radio.uriHint': 'a Spotify link: playlist, album or track',
+    'radio.uriHint': 'a Spotify link or a stream address: .mp3, .aac, Icecast',
     'radio.waking': 'The player is still waking up…',
-    'radio.notSpotify': 'That does not look like a Spotify link',
+    'radio.notWave': 'Neither a Spotify link nor a stream address',
+    'radio.picks': 'from the picks:',
+    'radio.uriHintSearch': 'a Spotify link, a stream address or a name: jazz, NTS',
+    'radio.genres': 'genres:',
+    'radio.genre.jazz': 'jazz',
+    'radio.genre.ambient': 'ambient',
+    'radio.genre.lofi': 'lo-fi',
+    'radio.genre.techno': 'techno',
+    'radio.genre.classical': 'classical',
+    'radio.genre.news': 'news',
+    'radio.searching': 'searching the catalogue…',
+    'radio.found': '{n} found · radio-browser.info catalogue',
+    'radio.foundNone': 'nothing for “{q}” — try a genre or a station’s name',
+    'radio.catalogSilent': 'the catalogue is not answering — paste a stream address yourself',
+    'radio.inList': 'already in the list',
+    'radio.httpOnly': 'an http stream will not play on the office’s https page',
+    'radio.noteSearch': 'Enter or a click tunes in and starts playing, ↑↓ walk the results, Esc goes back to the picks. ✓ — already in the list. HLS and stations silent at the catalogue’s last check never show up here.',
+    'radio.noteNone': 'The catalogue searches station names and their tags — a genre is one press away. Esc goes back to the picks.',
+    'radio.srcStream': 'STREAM',
+    'radio.srcSpotify': 'SPOTIFY',
+    'radio.lcdOn': '● ON AIR',
+    'radio.lcdTuning': '… TUNING',
+    'radio.lcdOff': '○ OFF',
+    'radio.lcdSilent': '✕ SILENT',
+    'radio.onFor': 'on air {n} min',
+    'radio.onJust': 'just on air',
+    'radio.waitSound': 'waiting for sound — up to 10 seconds',
+    'radio.advice': 'check the link or remove the station',
+    'radio.why.timeout': 'the address did not answer in 10 seconds',
+    'radio.why.hls': 'this is HLS (.m3u8) — browsers do not play it, an .mp3 or .aac address is needed',
+    'radio.why.mixed': 'an http stream will not play on the office’s https page',
+    'radio.why.gone': 'the station closed the stream ({code})',
+    'radio.why.status': 'the station answered with error {code}',
+    'radio.why.notAudio': 'not a stream at this address: {type}',
+    'radio.why.unreachable': 'the address was not found or does not answer',
+    'radio.why.format': 'the browser does not play this format',
+    'radio.why.silent': 'the station cut the stream off',
+    'radio.why.gesture': 'the browser wants a press — switch it on again',
+    'radio.why.notUrl': 'this is not a stream address',
+    'radio.checking': 'checking the address…',
+    'radio.isStream': '✓ a stream: answering · {info}',
+    'radio.notChecked': 'not checked: the office owner’s server does the checking',
+    'radio.nameIt': 'name the station',
+    'radio.catch': 'tune in',
+    'radio.cancel': 'cancel',
+    'radio.noteStream': 'The stream plays right in this tab: no account, volume on the knob, fading down the corridor. While the radio plays, the office sounds quieter.',
+    'radio.noteAdding': 'A stream address carries no name — name the station yourself. Enter tunes in, Esc cancels. If it does not answer or is not a stream, the line says why and the station is not added.',
     'radio.caught': 'Station tuned in',
     'radio.silence': 'silence',
     'radio.waiting': 'waiting for a track…',
@@ -221,7 +320,10 @@ function openRadio() {
 // should be.
 // numbers: '.rst' — a digit chooses a wave rather than a knob. It arrived from main
 // together with the shared support for digits in the focus ring.
-const RING = '.radioknobs button, .rst, .rdel, #radiovol, #radiouri, .radioauth button';
+// The stream rows joined it on 12 September 2026: the name of a new wave, its two
+// buttons and the picks — all of them reachable without the mouse, like the rest.
+// Search added its results and genres on 13 September 2026, in the same markup order.
+const RING = '.radioknobs button, #radiovol, .rst, .rdel, #radiouri, .rfound, #radiowave, #radiocatch, #radiocancel, .rpick, .rgenre, .radioauth button';
 const radioRing = focusRing(() => el.radio, RING, { numbers: '.rst' });
 
 // Put the ring on a given wave, by its number in the list. Used after a wave is
@@ -240,6 +342,8 @@ function closeRadio() { if (el.radio) el.radio.classList.remove('open'); radioRi
 // and says so — the second press plays. The word is needed because with the panel closed
 // the only other sign of life is the note in the corner of the HUD.
 function playPause() {
+  // A stream needs no player to wake: our own <audio> is there from the first press.
+  if (radio.isStream()) { radio.toggle(); return; }
   if (!radio.sdk && !radio.controller) {
     buildRadio();
     radio.attach($('#radioslot'));
@@ -277,6 +381,11 @@ function buildRadio() {
           </div>
         </div>
         <div class="radioglass"><div id="radioslot"></div></div>
+        <div id="radiolcd" class="lcd radiolcd" hidden>
+          <div class="l1"><span id="lcdstate"></span><span class="pn" id="lcdbr"></span></div>
+          <div class="l2" id="lcdtitle"></div>
+          <div class="l3" id="lcdmeta"></div>
+        </div>
         <div class="radioknobs">
           <button id="radioprev" title="${tr('radio.prevWave')}">◀</button>
           <button id="radiotoggle" class="big">${tr('radio.play')}</button>
@@ -284,12 +393,25 @@ function buildRadio() {
         </div>
         <label id="radiovolrow" class="radiovol" hidden>${tr('radio.volume')}
           <input id="radiovol" type="range" min="0" max="100" step="1">
+          <span id="radiovolpct"></span>
         </label>
       </div>
       <ul id="radiolist" class="radiolist"></ul>
       <label class="radioadd">${tr('radio.ownWave')}
         <input id="radiouri" placeholder="${tr('radio.uriHint')}">
       </label>
+      <p id="radiofind" class="radiocheck" hidden></p>
+      <ul id="radiofound" class="radiofound" hidden></ul>
+      <div id="radiocheck" class="radiocheck" hidden></div>
+      <label id="radionamerow" class="radioadd" hidden>${tr('radio.nameIt')}
+        <input id="radiowave" maxlength="40">
+      </label>
+      <div id="radioaddbtns" class="radioaddbtns" hidden>
+        <button id="radiocatch" class="primary">${tr('radio.catch')}</button>
+        <button id="radiocancel">${tr('radio.cancel')}</button>
+      </div>
+      <div id="radiopicks" class="radiopicks"></div>
+      <div id="radiogenres" class="radiopicks" hidden></div>
       <div id="radioauth" class="radioauth"></div>
       <p id="radiohint" class="hint"></p>
     </div></div>`;
@@ -298,7 +420,11 @@ function buildRadio() {
   $('#radiotoggle').onclick = () => playPause();
   $('#radioprev').onclick = () => radio.tune(radio.current - 1);
   $('#radionext').onclick = () => radio.tune(radio.current + 1);
-  $('#radiovol').oninput = (e) => player.setVolume(Number(e.target.value) / 100);
+  $('#radiovol').oninput = (e) => {
+    const v = Number(e.target.value) / 100;
+    if (radio.isStream()) stream.setVolume(v); else player.setVolume(v);
+    $('#radiovolpct').textContent = e.target.value + '%';
+  };
   // The field holds the real focus of the browser while it is being typed into, and
   // web/main.js hands nothing from an INPUT to the office: neither the arrows nor
   // Escape. So the field has to let go itself, or the panel becomes a room without a
@@ -307,18 +433,259 @@ function buildRadio() {
   //
   // Enter lets go and puts the ring on the wave just caught; Escape lets go and leaves
   // the ring where it stood, so the next Escape closes the panel, as it does everywhere.
+  //
+  // A stream address does not go straight into the list: the server checks it first,
+  // and it asks for a name, which an address does not carry. Frame 2046:631.
   $('#radiouri').onkeydown = (e) => {
-    if (e.key === 'Escape') { e.preventDefault(); e.target.blur(); radioRing.paint(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); cancelAdding(); cancelFinding(); e.target.blur(); radioRing.paint(); return; }
     if (e.key !== 'Enter') return;
-    const uri = toUri(e.target.value);
-    if (!uri) return toast(tr('radio.notSpotify'));
-    radio.add(e.target.value.trim().slice(0, 40).replace(/^https?:\/\/[^/]+\//, '') || tr('radio.ownWave'), uri);
-    e.target.value = '';
-    e.target.blur();
+    const w = parseWave(e.target.value);
+    // A guest's server does not search for them: words are then simply not a wave.
+    if (!w || (w.kind === 'search' && !isOwner())) return toast(tr('radio.notWave'));
+    if (w.kind === 'search') { findStations({ q: w.q }); return; }
+    cancelFinding();
+    if (w.kind === 'spotify') {
+      radio.add(e.target.value.trim().slice(0, 40).replace(/^https?:\/\/[^/]+\//, '') || tr('radio.ownWave'), w.uri);
+      e.target.value = '';
+      e.target.blur();
+      ringToWave(radio.current);
+      toast(tr('radio.caught'));
+      return;
+    }
+    checkWave(w.uri);
+  };
+  $('#radiowave').onkeydown = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); cancelAdding(); e.target.blur(); radioRing.on($('#radiouri')); return; }
+    if (e.key === 'Enter') { e.preventDefault(); catchWave(); }
+  };
+  $('#radiocatch').onclick = () => catchWave();
+  $('#radiocancel').onclick = () => { cancelAdding(); radioRing.on($('#radiouri')); };
+  radio.onChange = paintRadio;
+}
+
+// ------------------------------------------------------- a stream being added
+// One address at a time, from the Enter in «своя волна» to «поймать волну» or «отмена».
+// state: checking → ok | guest | bad. Only ok and guest may be caught: a stream the
+// server called not a stream is not added, and the line says why. A guest's receiver
+// is not checked at all — the server checks for its owner only — so it is named and
+// caught on trust, and the display will say soon enough if it is silent.
+let adding = null;
+
+// ------------------------------------------------------------------- the search
+// A word or a genre, sent to the catalogue through the office's server. state:
+// loading → done | none | silent. Frames 2119:5771 (genres), 2119:5952 (results),
+// 2119:6160 (nothing found).
+let finding = null;
+const isOwner = () => !S || S.owner !== false;
+
+async function findStations({ q = '', tag = '' }) {
+  adding = null;   // not cancelAdding(): that empties the field, and the field holds the words
+  const mine = { q, tag, state: 'loading', stations: [] };
+  finding = mine;
+  paintRadio();
+  let out;
+  try {
+    const r = await fetch('/api/radio/search?' + new URLSearchParams(tag ? { tag } : { q }));
+    out = r.status === 403 ? { guest: true } : await r.json();
+  } catch { out = { stations: [], error: 'silent' }; }
+  if (finding !== mine) return;   // another search, or Esc, meanwhile
+  if (out.guest) { finding = null; paintRadio(); toast(tr('radio.notWave')); return; }
+  mine.stations = out.stations || [];
+  mine.state = out.error ? 'silent' : mine.stations.length ? 'done' : 'none';
+  paintRadio();
+  // The hand goes to what was found: ↑↓ walk it, Enter catches. The field lets go of
+  // the browser's focus, or the arrows would only move its caret.
+  if (mine.state === 'done') {
+    const first = el.radio.querySelector('.rfound');
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    if (first) radioRing.on(first);
+  }
+}
+
+function catchFound(i) {
+  if (!finding || !finding.stations[i]) return;
+  const st = finding.stations[i];
+  const have = radio.stations.findIndex((x) => x.uri === st.uri);
+  if (have < 0 && mixedContent(st.uri)) return toast(tr('radio.httpOnly'));
+  finding = null;
+  $('#radiouri').value = '';
+  if (have >= 0) radio.tune(have);   // ✓ — already a wave: tuned to, not added twice
+  else {
+    radio.add(st.name, st.uri);
+    // The catalogue asks to be told when one of its stations is played: that is how it
+    // ranks them. One request, with the station's id and nothing else.
+    if (st.uuid) fetch('/api/radio/click?uuid=' + encodeURIComponent(st.uuid)).catch(() => {});
+  }
+  ringToWave(radio.current);
+  toast(tr('radio.caught'));
+}
+
+function cancelFinding() {
+  if (!finding) return;
+  finding = null;
+  paintRadio();
+}
+
+function paintFinding() {
+  const line = $('#radiofind');
+  const list = $('#radiofound');
+  line.hidden = !finding;
+  list.hidden = !finding || finding.state !== 'done';
+  if (finding) {
+    line.className = 'radiocheck' + (finding.state === 'silent' ? ' bad' : '');
+    const label = finding.tag ? tr('radio.genre.' + finding.tag) : finding.q;
+    line.textContent = finding.state === 'loading' ? tr('radio.searching')
+      : finding.state === 'done' ? tr('radio.found', { n: finding.stations.length })
+        : finding.state === 'silent' ? tr('radio.catalogSilent')
+          : tr('radio.foundNone', { q: label });
+  }
+  const have = new Set(radio.stations.map((x) => x.uri));
+  list.innerHTML = finding && finding.state === 'done' ? finding.stations.map((st, i) => {
+    const added = have.has(st.uri);
+    const http = !added && mixedContent(st.uri);
+    const meta = http ? 'http' : [st.country, [st.codec, st.bitrate || ''].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
+    const cls = added ? ' added' : http ? ' nohttp' : '';
+    const title = added ? tr('radio.inList') : http ? tr('radio.httpOnly') : '';
+    return `<li><button class="rfound${cls}" data-i="${i}"${title ? ` title="${esc(title)}"` : ''}>`
+      + `<i>${added ? '✓' : http ? '·' : '+'}</i><span>${esc(st.name)}</span><em>${esc(meta)}</em></button></li>`;
+  }).join('') : '';
+  list.querySelectorAll('.rfound').forEach((b) => b.onclick = () => catchFound(Number(b.dataset.i)));
+
+  // Genres are the owner's, like the search they start, and they stand aside while an
+  // address is being named or results are on show; a search that found nothing keeps
+  // them — they are the way out of it.
+  const genres = $('#radiogenres');
+  genres.hidden = !isOwner() || !!adding || (finding && (finding.state === 'loading' || finding.state === 'done'));
+  if (!genres.hidden) {
+    genres.innerHTML = `<span class="rpicklbl">${tr('radio.genres')}</span>`
+      + GENRES.map((g) => `<button class="rpick rgenre" data-tag="${g}">${tr('radio.genre.' + g)}</button>`).join('');
+    genres.querySelectorAll('.rgenre').forEach((b) => b.onclick = () => findStations({ tag: b.dataset.tag }));
+  }
+  const uri = $('#radiouri');
+  if (uri) uri.placeholder = isOwner() ? tr('radio.uriHintSearch') : tr('radio.uriHint');
+}
+
+const hostOf = (uri) => { try { return new URL(uri).hostname.replace(/^www\./, ''); } catch { return ''; } };
+// What a station calls itself is often a sentence: «Groove Salad: a nicely chilled
+// plate of ambient beats…». The name of a wave is the part before the first colon,
+// dash or bracket.
+const shortName = (n) => String(n || '').split(/:| \| | - | — /)[0].replace(/\s*[([].*$/, '').trim().slice(0, 32);
+
+function whyText(reason, extra = {}) {
+  return tr('radio.why.' + reason, { code: extra.status || '', type: extra.type || '' });
+}
+
+async function checkWave(uri) {
+  const mine = { uri, state: 'checking', out: null, name: '' };
+  adding = mine;
+  if (mixedContent(uri)) { mine.state = 'bad'; mine.out = { reason: 'mixed' }; paintRadio(); return; }
+  paintRadio();
+  let out;
+  try {
+    const r = await fetch('/api/radio/probe?url=' + encodeURIComponent(uri));
+    out = r.status === 403 ? { guest: true } : await r.json();
+  } catch { out = { ok: false, reason: 'unreachable' }; }
+  if (adding !== mine) return;   // cancelled, or another address typed meanwhile
+  mine.out = out;
+  if (out.guest) mine.state = 'guest';
+  else if (out.ok) { mine.state = 'ok'; mine.uri = out.uri || uri; }
+  else mine.state = 'bad';
+  mine.name = shortName(out.name) || hostOf(mine.uri);
+  paintRadio();
+  if (mine.state === 'ok' || mine.state === 'guest') {
+    const name = $('#radiowave');
+    name.value = mine.name;
+    name.focus();
+    name.select();
+  }
+}
+
+function catchWave() {
+  if (!adding || (adding.state !== 'ok' && adding.state !== 'guest')) return;
+  const name = $('#radiowave').value.trim() || adding.name || hostOf(adding.uri);
+  const uri = adding.uri;
+  adding = null;
+  $('#radiouri').value = '';
+  $('#radiowave').value = '';
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  radio.add(name.slice(0, 40), uri);
+  ringToWave(radio.current);
+  toast(tr('radio.caught'));
+}
+
+function cancelAdding() {
+  if (!adding) return;
+  adding = null;
+  $('#radiouri').value = '';
+  $('#radiowave').value = '';
+  paintRadio();
+}
+
+function paintAdding() {
+  const check = $('#radiocheck');
+  const open = !!adding;
+  const named = open && (adding.state === 'ok' || adding.state === 'guest');
+  check.hidden = !open;
+  $('#radionamerow').hidden = !named;
+  $('#radioaddbtns').hidden = !named;
+  if (open) {
+    const out = adding.out || {};
+    check.className = 'radiocheck ' + adding.state;
+    check.textContent = adding.state === 'checking' ? tr('radio.checking')
+      : adding.state === 'guest' ? tr('radio.notChecked')
+        : adding.state === 'ok'
+          ? tr('radio.isStream', { info: [out.format, out.bitrate ? out.bitrate + ' kbps' : ''].filter(Boolean).join(' · ') })
+          : '✕ ' + whyText(out.reason || 'unreachable', out);
+  }
+  // The picks stand aside while an address is being named: two ways in at once is one too many.
+  const have = new Set(radio.stations.map((x) => x.uri));
+  const left = PICKS.filter((p) => !have.has(p.uri));
+  const picks = $('#radiopicks');
+  picks.hidden = open || !!finding || !left.length;
+  picks.innerHTML = left.length ? `<span class="rpicklbl">${tr('radio.picks')}</span>`
+    + left.map((p) => `<button class="rpick" data-uri="${esc(p.uri)}">${esc(p.name)}</button>`).join('') : '';
+  picks.querySelectorAll('.rpick').forEach((b) => b.onclick = () => {
+    const p = PICKS.find((x) => x.uri === b.dataset.uri);
+    if (!p) return;
+    radio.add(p.name, p.uri);
     ringToWave(radio.current);
     toast(tr('radio.caught'));
-  };
-  radio.onChange = paintRadio;
+  });
+}
+
+// The display of a stream. It stands where the Spotify glass stands and says the one
+// thing the glass cannot: whether the station is on the air, what it plays, and — when
+// it is silent — why and what to do. Frames 2045:565 (on air) and 2046:4010 (silent).
+function paintLcd(st) {
+  const a = radio.onAir || {};
+  const lcd = $('#radiolcd');
+  const au = stream.audio;
+  const tuning = !radio.playing && !radio.streamError && au && au.getAttribute('src') && !au.paused;
+  let l1, l2, l3, br = '';
+  if (radio.streamError) {
+    l1 = tr('radio.lcdSilent');
+    l2 = whyText(radio.streamError, { status: radio.streamStatus });
+    l3 = tr('radio.advice');
+  } else if (radio.playing) {
+    const min = radio.streamSince ? Math.floor((Date.now() - radio.streamSince) / 60000) : 0;
+    l1 = tr('radio.lcdOn');
+    br = a.bitrate ? String(a.bitrate) : '';
+    l2 = a.title || stationName(st);
+    l3 = [stationName(st), a.format, min ? tr('radio.onFor', { n: min }) : tr('radio.onJust')].filter(Boolean).join(' · ');
+  } else if (tuning) {
+    l1 = tr('radio.lcdTuning');
+    l2 = stationName(st);
+    l3 = tr('radio.waitSound');
+  } else {
+    l1 = tr('radio.lcdOff');
+    l2 = stationName(st);
+    l3 = hostOf(st.uri);
+  }
+  lcd.classList.toggle('bad', !!radio.streamError);
+  $('#lcdstate').textContent = l1;
+  $('#lcdbr').textContent = br;
+  $('#lcdtitle').textContent = l2;
+  $('#lcdmeta').textContent = l3;
 }
 
 // What stands in the footer of the panel now that the connection has moved out.
@@ -460,7 +827,10 @@ function paintCover() {
 function paintRadio() {
   if (!radioBuilt) return;
   const st = radio.station();
-  const live = radio.sdk;
+  const streamOn = kindOf(st) === 'stream' && !!st;
+  // The full player's face belongs to Spotify waves only: on a stream it would show a
+  // Spotify track that is not playing.
+  const live = radio.sdk && !streamOn;
   const track = player.track;
 
   $('#radioname').textContent = live && track
@@ -474,7 +844,9 @@ function paintRadio() {
   $('#radionext').onclick = () => (live ? player.next() : radio.tune(radio.current + 1));
 
   // the full player has a face of its own: the built-in one with its previews is not needed here
-  el.radio.querySelector('.radioglass').hidden = live;
+  el.radio.querySelector('.radioglass').hidden = live || streamOn;
+  $('#radiolcd').hidden = !streamOn;
+  if (streamOn) paintLcd(st);
   const face = $('#radioface');
   face.hidden = !live;
   if (live) {
@@ -483,24 +855,36 @@ function paintRadio() {
     $('#facealbum').textContent = track && track.album ? track.album.name : '';
     paintCover();
   }
-  $('#radiovolrow').hidden = !live;
-  if (live) $('#radiovol').value = Math.round(player.volume * 100);
+  $('#radiovolrow').hidden = !live && !streamOn;
+  if (live || streamOn) {
+    const v = Math.round((streamOn ? stream.volume : player.volume) * 100);
+    $('#radiovol').value = v;
+    $('#radiovolpct').textContent = v + '%';
+  }
 
   $('#radiolist').innerHTML = radio.stations.map((s, i) => `<li class="${i === radio.current ? 'now' : ''}">
     <button class="rst" data-i="${i}">${i === radio.current ? '●' : '○'} ${esc(stationName(s))}${i < 9 ? ` <kbd>${i + 1}</kbd>` : ''}</button>
+    <span class="rsrc">${tr(kindOf(s) === 'stream' ? 'radio.srcStream' : 'radio.srcSpotify')}</span>
     ${radio.stations.length > 1 ? `<button class="rdel" data-del="${i}" title="${tr('radio.remove')}">✕</button>` : ''}</li>`).join('');
   el.radio.querySelectorAll('.rst').forEach((b) => b.onclick = () => radio.tune(Number(b.dataset.i)));
   el.radio.querySelectorAll('.rdel').forEach((b) => b.onclick = () => radio.remove(Number(b.dataset.del)));
+  paintAdding();
+  paintFinding();
   repaintRadioFocus();
 
-  $('#radioauth').innerHTML = authBlock();
+  // The line about previews is Spotify's: a stream has nothing to preview, and while an
+  // address is being named the line under the buttons is the naming's.
+  $('#radioauth').innerHTML = streamOn || adding || finding ? '' : authBlock();
   const tune = $('#radiotune');
   if (tune) tune.onclick = () => { closeRadio(); openKeyCard('spotify'); };
 
   // A track length of thirty seconds is a sure sign that the built-in player is giving out
   // a preview rather than music: otherwise the break-off looks like a broken radio.
   const preview = !live && radio.duration > 0 && radio.duration <= 35_000;
-  $('#radiohint').textContent = player.error || radio.error
+  $('#radiohint').textContent = adding ? tr('radio.noteAdding')
+    : finding ? tr(finding.state === 'none' || finding.state === 'silent' ? 'radio.noteNone' : 'radio.noteSearch')
+    : streamOn ? tr('radio.noteStream')
+    : player.error || radio.error
     || (live
       ? tr('radio.noteOwn')
       : radio.drm === 'none'
@@ -655,7 +1039,19 @@ export function register(a) {
     return true;
   });
   api.on('keys', () => spotCard());
-  api.on('esc', () => (radioOpen() ? (closeRadio(), true) : false));
+  // Esc steps back one thing at a time: out of a search or an address being named to
+  // the picks first, and only then out of the panel.
+  api.on('esc', () => {
+    if (!radioOpen()) return false;
+    if (finding || adding) {
+      cancelAdding(); cancelFinding();
+      $('#radiouri').value = '';
+      radioRing.on($('#radiouri'));
+      return true;
+    }
+    closeRadio();
+    return true;
+  });
   // An open panel holds the screen: while it is visible the office does not count as free.
   // The core used to know that by the line UI.radioOpen() in busy() — the core does not know
   // a module's ids, so it asks.
@@ -701,8 +1097,12 @@ function relabelRadio() {
       lead('.radiowrap .vhead', tr('radio.title'));
       lead('.radioadd', tr('radio.ownWave'));
       lead('#radiovolrow', tr('radio.volume'));
+      lead('#radionamerow', tr('radio.nameIt'));
+      const say = (sel, text) => { const n = el.radio.querySelector(sel); if (n) n.textContent = text; };
+      say('#radiocatch', tr('radio.catch'));
+      say('#radiocancel', tr('radio.cancel'));
       const uri = el.radio.querySelector('#radiouri');
-      if (uri) uri.placeholder = tr('radio.uriHint');
+      if (uri) uri.placeholder = isOwner() ? tr('radio.uriHintSearch') : tr('radio.uriHint');
       paintRadio();
 }
 

@@ -1,6 +1,7 @@
 ---
 title: A feature note can name the event the feature is meant to move
 scope: tools
+nopicture: a field in a release note's source, kept as an HTML comment — nothing on any screen changes
 ---
 
 A release note says what a feature is, but not how anyone would know whether it is used — that lived nowhere, so it was never checked.

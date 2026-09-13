@@ -81,7 +81,8 @@
    unrelated selectors. The outline is shared across the office, but whoever
    draws the buttons owns their selector list. */
 .radioknobs button.focus, .rst.focus, .rdel.focus,
-#radiovol.focus, #radiouri.focus, .radioauth button.focus{
+#radiovol.focus, #radiouri.focus, .radioauth button.focus,
+#radiowave.focus, .radioaddbtns button.focus, .rpick.focus{
   outline:2px solid var(--warn); outline-offset:-2px}
 #dialog, #toasts, .vwrap, .rwrap, .radiowrap{zoom:var(--ui, 1)}
 
@@ -99,3 +100,57 @@
   font:11px "JetBrains Mono", "Courier New", monospace; padding:3px 8px; cursor:pointer;
   white-space:nowrap; flex:none}
 :where(body:not(.bykeys)) .radiotune button:hover{background:var(--wood-lit); color:var(--warn)}
+
+/* A stream wears the pager's display instead of Spotify's glass: the same LCD
+   tokens, so the office has one kind of screen that talks. Frames 2045:565 (on
+   air) and 2046:4010 (silent). The silent state is the only red on it — the
+   reason is what the person came to read. */
+.radiolcd[hidden]{display:none}
+.radiolcd .l2{color:var(--lcd-ink)}
+.radiolcd.bad .l1{color:var(--bad)}
+.radiolcd.bad .l2{white-space:normal}
+#radiovolpct{min-width:34px; text-align:right; color:var(--ink-dim)}
+/* Where a wave's sound comes from, said in the list: a stream and a Spotify
+   playlist behave differently — one needs no account, the other plays previews
+   without one — and the row is where that is looked for. */
+.radiolist .rsrc{font-size:9px; letter-spacing:.08em; color:var(--muted); flex:none}
+.radiocheck{font-size:11px; color:var(--ink-dim); margin-top:-4px}
+.radiocheck[hidden]{display:none}
+.radiocheck.ok{color:var(--accent)}
+.radiocheck.bad{color:var(--bad)}
+#radionamerow[hidden]{display:none}
+.radioaddbtns{display:flex; gap:6px}
+.radioaddbtns[hidden]{display:none}
+.radioaddbtns button, .radiopicks .rpick{background:var(--wood); color:var(--ink-dim); border:2px solid var(--frame);
+  font:12px "JetBrains Mono", "Courier New", monospace; padding:3px 10px; cursor:pointer}
+.radioaddbtns button.primary{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
+:where(body:not(.bykeys)) .radioaddbtns button:hover,
+:where(body:not(.bykeys)) .radiopicks .rpick:hover{background:var(--wood-lit); color:var(--warn)}
+.radiopicks{display:flex; flex-wrap:wrap; align-items:center; gap:6px}
+.radiopicks[hidden]{display:none}
+.radiopicks .rpicklbl{font-size:11px; color:var(--ink-dim)}
+.radiopicks .rpick{background:none; font-size:11px; padding:2px 8px}
+.radioauth:empty{display:none}
+
+/* Stations found in the catalogue, under the field. The rows are the wave rows'
+   cousins — the same type and height — with + to catch and the country, codec and
+   bitrate on the right. Frame 2119:5952; the row is the Station result component. */
+.radiofound{list-style:none; margin:0; padding:0}
+.radiofound[hidden]{display:none}
+.radiofound .rfound{display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+  background:none; border:2px solid transparent; color:var(--ink-dim); cursor:pointer;
+  font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 6px}
+.radiofound .rfound i{font-style:normal; color:var(--muted-dim); width:10px; flex:none}
+.radiofound .rfound span{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.radiofound .rfound em{font-style:normal; font-size:10px; color:var(--muted-dim); flex:none}
+.radiofound .rfound.added i{color:var(--accent)}
+.radiofound .rfound.nohttp{cursor:default; opacity:.6}
+:where(body:not(.bykeys)) .radiofound .rfound:not(.nohttp):hover,
+.radiofound .rfound.focus{background:var(--wood-lit); color:var(--ink); border-color:var(--warn); outline:none}
+.rgenre.focus{outline:2px solid var(--warn); outline-offset:-2px}
+/* The status line is a paragraph for its text, not for its margins: the browser's
+   own em below it pushed the results a line away from the words that found them. */
+#radiofind{margin:0}
+.radiofound .rfound.focus i, .radiofound .rfound.focus em,
+:where(body:not(.bykeys)) .radiofound .rfound:not(.nohttp):hover i,
+:where(body:not(.bykeys)) .radiofound .rfound:not(.nohttp):hover em{color:var(--ink-dim)}

@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { snapshot, fileOwners, conversation, PACK_IDS, namePool, nameSample, effectivePack, previewPack } from './agents.js';
 import { realWeather, forgetWeather, geocode } from './weather.js';
 import {
-  getSettings, patchSettings, publicSettings, ownerToken, warnIfSharedSettingsWorktree,
+  getSettings, patchSettings, updateSettings, publicSettings, ownerToken, warnIfSharedSettingsWorktree,
 } from './settings.js';
 import { deliver, deliveryStatus, forgetCli, isBusy, MODES } from './deliver.js';
 import { ask as askPermit, answer as answerPermit, permits, forgetGone } from './permit.js';
@@ -535,7 +535,11 @@ async function handle(req, res) {
     });
     // The stream remembers who is listening: there is one snapshot, and it is
     // seen differently.
-    const guest = await guestOf(req);
+    // The page sends both passes it holds (web/owned.js, passQuery), so the
+    // owner wins here as he does on every other route: an owner who once
+    // tried his own invitation link in this browser still gets his office,
+    // not a guest's projection of it.
+    const guest = (await isOwner(req)) ? null : await guestOf(req);
     const who = guest ? guest.guest : null;
     res.valeyGuest = who;
     // Who is on the other end of this stream, by the same id `/api/here` uses.
@@ -659,7 +663,6 @@ async function handle(req, res) {
   if (url.pathname === '/api/invite' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
     const b = await readJson(req);
-    const s = await getSettings();
     const code = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
     const invite = {
       // the id lets the panel revoke an invitation without knowing the code:
@@ -675,9 +678,9 @@ async function handle(req, res) {
     // from it too: somebody invited through a tunnel would come out as the
     // owner. Inviting without opening up is not possible, so this is not a
     // separate switch but a consequence.
-    await patchSettings({
+    await updateSettings((s) => ({
       access: { ...s.access, mode: 'shared', invites: [...(s.access.invites || []), invite] },
-    });
+    }));
     const host = req.headers.host || `localhost:${PORT}`;
     // The owner token comes back together with the link — not a relaxation but
     // the condition for an invitation working at all. Going shared kills the
@@ -697,14 +700,19 @@ async function handle(req, res) {
   if (url.pathname === '/api/invite/revoke' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
     const b = await readJson(req);
-    const s = await getSettings();
-    const left = (s.access.invites || []).filter((i) => i.id !== b.id);
-    await patchSettings({ access: { ...s.access, invites: left } });
+    let gone = [];
+    let left = [];
+    await updateSettings((s) => {
+      const invites = s.access.invites || [];
+      gone = invites.filter((i) => i.id === b.id);
+      left = invites.filter((i) => i.id !== b.id);
+      return { access: { ...s.access, invites: left } };
+    });
     // The token dies with the invitation, and so does everything that held it.
     // Until 12 September 2026 only the next request was refused: a stream
     // opened on the token kept receiving the projection — with the agent the
     // guest had been granted — after the invitation was gone.
-    for (const i of (s.access.invites || [])) if (i.id === b.id && i.guest) dropGuest(i.guest);
+    for (const i of gone) if (i.guest) dropGuest(i.guest);
     return send(res, 200, { ok: true, invites: left.map(safeInvite) });
   }
 
@@ -719,17 +727,44 @@ async function handle(req, res) {
   // Entry by code. One use: it worked, it is spent, and the same link does not
   // let anyone in twice. In exchange a guest token is issued, so a page reload
   // does not put the person back outside the door.
+  //
+  // The code is spent when the guest presses Enter at the door, not when the page
+  // opens: `peek` checks it and names the inviter without spending it. Until
+  // 13 September 2026 the first thing to run the page spent it — on
+  // 5 September a link forwarded in Telegram was burnt by the messenger's
+  // built-in browser, and the guest's laptop was told the invitation was not valid.
+  //
+  // A spent code still opens the door for the browser it was spent in: the
+  // request carries the pass that code gave out. That grants nothing new —
+  // whoever holds the pass is already in — and it keeps the link working for
+  // the person it was sent to. Any other browser is told the code is used.
   if (url.pathname === '/api/enter' && req.method === 'POST') {
     const b = await readJson(req);
-    const s = await getSettings();
-    const invites = s.access.invites || [];
-    const invite = invites.find((i) => i.code === String(b.code || ''));
-    if (!invite) return send(res, 403, { error: 'this invitation does not exist', errorKey: 'err.codeUnknown' });
-    if (invite.usedAt) return send(res, 403, { error: 'this code has already been used', errorKey: 'err.codeUsed' });
-    invite.usedAt = Date.now();
-    invite.guest = crypto.randomUUID();
-    await patchSettings({ access: { ...s.access, invites } });
-    return send(res, 200, { ok: true, guest: invite.guest, from: invite.from });
+    const code = String(b.code || '');
+    const peek = b.peek === true;
+    const presented = String(req.headers['x-valey-guest'] || '');
+    // Decided against the file as it is now, and again if another office wrote
+    // it meanwhile (see updateSettings): a pass that is handed out has to be
+    // the one on disk.
+    let answer = null;
+    await updateSettings((s) => {
+      const invites = s.access.invites || [];
+      const invite = invites.find((i) => i.code === code);
+      if (!invite) { answer = [403, { error: 'this invitation does not exist', errorKey: 'err.codeUnknown' }]; return null; }
+      if (invite.usedAt) {
+        answer = presented && presented === invite.guest
+          ? [200, { ok: true, guest: invite.guest, from: invite.from }]
+          : [403, { error: 'this code has already been used', errorKey: 'err.codeUsed' }];
+        return null;
+      }
+      if (peek) { answer = [200, { ok: true, peek: true, from: invite.from }]; return null; }
+      const guest = crypto.randomUUID();
+      answer = [200, { ok: true, guest, from: invite.from }];
+      return {
+        access: { ...s.access, invites: invites.map((i) => (i === invite ? { ...i, usedAt: Date.now(), guest } : i)) },
+      };
+    });
+    return send(res, ...answer);
   }
 
   // A person says they are here and where exactly. Only this goes out: the

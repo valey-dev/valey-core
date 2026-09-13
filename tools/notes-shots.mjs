@@ -132,6 +132,7 @@ for (const f of wanted) {
     if (sh.keys) args.push('--keys', sh.keys);
     if (sh.viewport) args.push('--viewport', sh.viewport);
     if (sh.touch) args.push('--touch');
+    if (sh.setup) args.push('--setup', sh.setup);
     const r = spawnSync(process.execPath, [shotTool, ...args], { cwd: ROOT, stdio: 'inherit' });
     if (r.status !== 0) {
       if (!keep) await office.stop();

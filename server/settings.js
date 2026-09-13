@@ -287,6 +287,31 @@ export async function patchSettings(patch) {
   return cache;
 }
 
+// A change worked out from the settings as they are on disk, and worked out
+// again if another office wrote the file in between. `change` gets the
+// settings and returns a patch, or nothing when there is nothing to write; it
+// may run more than once, so it must not touch what it is given.
+//
+// patchSettings alone cannot retry: its patch was computed from the stale copy,
+// and saving it again would put back whatever the other office had just
+// changed. Every office on this machine shares one file, and each saves names
+// and seats on its own tick, so a save racing a foreign one is ordinary. Until
+// 13 September 2026 the door did exactly that: the refusal lost the guest's
+// pass after /api/enter had already chosen it, the stream answered 403, and
+// the guest stood in an empty office for good — the code was already gone
+// from the address, so a reload did not help either.
+export async function updateSettings(change, tries = 3) {
+  for (let attempt = 1; ; attempt += 1) {
+    const patch = await change(await getSettings());
+    if (!patch) return getSettings();
+    try {
+      return await patchSettings(patch);
+    } catch (e) {
+      if (!e.stale || attempt >= tries) throw e;
+    }
+  }
+}
+
 // Writes go through a temp file and a rename, and one at a time. The office
 // tick and the request handlers save settings independently of each other; two
 // writes into one file directly interleaved bytes, and the broken JSON that
@@ -295,19 +320,23 @@ export async function patchSettings(patch) {
 // new one. The queue writes the cache as it stood when it was called — whoever
 // called last is what ends up on disk.
 let writing = Promise.resolve();
+// The refusal is marked so updateSettings can tell it from a full disk: this
+// one is cured by reading the file again, that one is not.
+const staleWrite = () => Object.assign(
+  new Error(`Settings were not saved because ${FILE} changed after this process read it. Reload and try again.`),
+  { stale: true },
+);
 function persist() {
   const text = JSON.stringify(cache, null, 2);
   const generation = writeGeneration;
   writing = writing.catch(() => {}).then(async () => {
-    if (generation !== writeGeneration) {
-      throw new Error(`Settings were not saved because ${FILE} changed after this process read it. Reload and try again.`);
-    }
+    if (generation !== writeGeneration) throw staleWrite();
     const expected = diskRevision;
     const changed = async () => (await revisionOf(FILE)) !== expected;
     const refuseStaleWrite = () => {
       cache = null;
       writeGeneration += 1;
-      throw new Error(`Settings were not saved because ${FILE} changed after this process read it. Reload and try again.`);
+      throw staleWrite();
     };
     if (await changed()) refuseStaleWrite();
     // The folder is made 0700 when it is made here; one that already exists is
