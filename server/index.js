@@ -1125,7 +1125,8 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   let boot = await getSettings();
   const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
   if (external && !(boot.network || {}).token) {
-    boot = await patchSettings({ network: { external: true, token: newToken() } });
+    // updateSettings: an office started beside this one may save a token first.
+    boot = await updateSettings((now) => ((now.network || {}).token ? null : { network: { external: true, token: newToken() } }));
     console.log('A network token was created and saved to the office settings');
   }
   const HOST = host || (external ? '0.0.0.0' : '127.0.0.1');
