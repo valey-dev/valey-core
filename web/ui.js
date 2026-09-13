@@ -81,6 +81,7 @@ const WEATHER_ICON = { clear: '☀', clouds: '☁', rain: '☂', storm: '⚡', s
 export function renderHud() {
   const waiting = S.agents.filter((a) => a.status === 'awaiting').length;
   const working = S.agents.filter((a) => a.status === 'working').length;
+  const stopped = S.agents.filter((a) => a.status === 'stopped').length;
   const d = new Date();
   const room = S.currentRoom ? `<span class="chip room">▣ ${esc(S.currentRoom.title)}</span>` : `<span class="chip room">${tr('hud.corridor')}</span>`;
   const w = S.weather || { kind: 'clear' };
@@ -96,6 +97,13 @@ export function renderHud() {
       // The counter says what it counts and opens the round, where those very
       // agents are listed.
       ? `<button id="waitChip" class="chip wait" title="${tr('hud.waitTitle')}">! ${waiting}</button>`
+      : ''}${stopped
+      // Its own count rather than a share of «! N»: the stopped ask for nothing,
+      // but a restart of the app cuts every agent off at once, and without a
+      // number here that is found only by walking the floor. Not a button —
+      // the way on is «continue» in the session's chat, which is the person's.
+      // Design: [HUD · stopped chip](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2126-3686)
+      ? `<span class="chip stop" title="${tr('hud.stopTitle')}">‖ ${stopped}</span>`
       : ''}
     <span class="chip">👥 ${S.agents.length}</span>
     <span class="chip zoom${z.tight ? ' wait' : ''}" title="${tr('hud.zoomTitle')}${
@@ -133,7 +141,8 @@ const said = (o, field = 'error') => {
   return key ? tr(key) : (o[field] || '');
 };
 
-const statusWord = (a) => tr('status.' + (a.status === 'awaiting' ? 'awaiting' : a.status === 'idle' ? 'idle' : 'working'));
+const STATUS_WORDS = ['awaiting', 'stopped', 'idle'];
+const statusWord = (a) => tr('status.' + (STATUS_WORDS.includes(a.status) ? a.status : 'working'));
 export const ago = (sec) => sec == null || !Number.isFinite(sec) ? ''
   : sec < 90 ? tr('ago.now')
   : sec < 5400 ? tr('ago.min', { n: Math.round(sec / 60) })
@@ -249,7 +258,10 @@ export function renderDialog() {
   // denied" does not rebuild the body and a person clicks a dead button.
   // The request is part of the key too: it disappears after any answer, ours or
   // another tab's, and the card must rebuild instead of leaving dead buttons.
-  const key = a.id + '|' + S.page + '|' + accessOf(a.id) + '|' + ((permitOf(a.id) || {}).id || '') + '|' + (denying ? 'deny' : '');
+  // So is being stopped: the talk page shows a notice instead of the reply, and
+  // an agent cut off while its card was open must not keep typing its last words.
+  const key = a.id + '|' + S.page + '|' + accessOf(a.id) + '|' + ((permitOf(a.id) || {}).id || '') + '|' + (denying ? 'deny' : '')
+    + '|' + (a.status === 'stopped' ? 'stop' : '');
   if (key === dialogKey && el.dialog.firstChild) return patchDialog(a);
   dialogKey = key;
   buildDialog(a);
@@ -334,6 +346,16 @@ function buildDialog(a) {
         <p class="hint">${tr(st === 'refused' ? 'acc.refused' : st === 'pending' ? 'acc.waiting' : 'acc.closed')}</p>
         ${btn}
         <p class="hint dim">${tr('acc.note')}</p>`;
+    }
+    // Cut off mid-step: the notice stands where the reply would, as the limit's
+    // does, because the last thing said was not an answer to anything. The hint
+    // names the one way on — «continue» in the session's own chat — and that
+    // sending there stays the person's word.
+    // Design: [Dialog · stopped](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2122-6434)
+    else if (a.status === 'stopped') {
+      body = `<p class="q">${tr('dlg.whatUp')}</p>
+        <p class="say stopline">‖ ${tr('dlg.stopped')}</p>
+        <p class="hint">${tr('dlg.stoppedHint')}</p>`;
     }
     // The subscription limit is a notice on the door, not the agent's words: it did not reply.
     else if (a.limited) {
@@ -1356,8 +1378,12 @@ export function viewerKey(raw, big = false) {
 // out of the question — the task is what this is opened for, and the lie would
 // sit exactly where the eye goes.
 
-const CARD_STATE = (a) => (a.status === 'awaiting' ? 'wait' : a.status === 'working' ? 'work' : 'idle');
-const CARD_ORDER = { wait: 0, work: 1, idle: 2 };
+// A stopped agent ranks right after the waiting ones: it will not go on until
+// somebody says so, which makes it the second thing a person looks for.
+// Design: [Person card · four states](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2122-6385)
+const CARD_STATE = (a) => (a.status === 'awaiting' ? 'wait' : a.status === 'stopped' ? 'stop'
+  : a.status === 'working' ? 'work' : 'idle');
+const CARD_ORDER = { wait: 0, stop: 1, work: 2, idle: 3 };
 
 /**
  * The teams in the order their rooms stand on the floor. The order is held by
@@ -1409,7 +1435,7 @@ export function standupCard(a) {
     cold: !t || (a.status !== 'working' && (a.idleFor || 0) > COLD_TASK),
     status: t ? (t.status || '') : '',
     need: t ? (t.need || '') : '',
-    now: a.status === 'working' ? actText(a) : '',
+    now: a.status === 'working' || a.status === 'stopped' ? actText(a) : '',
   };
 }
 
@@ -1417,8 +1443,8 @@ const cardToken = (a) => {
   const when = ago(a.idleFor);
   const s = CARD_STATE(a);
   if (s === 'work') return '● ' + tr('status.working');
-  return (s === 'wait' ? '⚑ ' : '○ ') + tr('status.' + (s === 'wait' ? 'awaiting' : 'idle'))
-    + (when ? ' · ' + when : '');
+  const [mark, word] = s === 'wait' ? ['⚑ ', 'awaiting'] : s === 'stop' ? ['‖ ', 'stopped'] : ['○ ', 'idle'];
+  return mark + tr('status.' + word) + (when ? ' · ' + when : '');
 };
 const cardFoot = (c) => (c.now ? '▸ ' + c.now : c.status ? tr('task.status', { s: c.status }) : '');
 const headLine = (teams, people, waiting) => [
@@ -1449,7 +1475,7 @@ const cardHtml = (a) => {
     <span class="pmeta">${esc(roleText(a))}${a.branch ? ' · ' + esc(a.branch) : ''}</span>
     <span class="ptask${c.cold ? ' cold' : ''}">${esc(c.task || tr('standup.untitled'))}${
       c.reported ? '' : ` <i>· ${tr('standup.noReport')}</i>`}</span>
-    <span class="pfoot${c.now ? ' now' : ''}">${esc(foot)}</span>
+    <span class="pfoot${c.now && c.state === 'work' ? ' now' : ''}">${esc(foot)}</span>
     ${c.need ? `<span class="pneed">⚑ ${tr('task.need', { s: esc(c.need) })}</span>` : ''}
     <button class="plead" data-go="${esc(a.id)}" title="${tr('standup.lead')}">⇢</button>
   </div>`;
@@ -3103,6 +3129,44 @@ function openHtml() {
     </li>`).join('')}</ul>`;
 }
 
+// Owner devices. A device asking to become the owner comes first in the panel:
+// it is the one thing here with a clock on it — two minutes — and a phone in the
+// owner's hand is waiting for the answer. Everything needed to decide precedes
+// the buttons, the code most of all: it is the same four digits the device
+// shows, and it is what tells this request from somebody else's.
+// Frames: WIP «Owner devices» (#devices), «Panel · Pairing request».
+function pairingHtml() {
+  const list = ((S.access || {}).pairings) || [];
+  return list.map((p) => `<div class="pairreq">
+      <p class="say">${tr('pair.lead', { name: esc(p.name) })}</p>
+      <div class="orow"><b>${tr('pair.device')}</b><span>${esc(p.name)}</span></div>
+      <div class="orow"><b>${tr('pair.from')}</b><span>${tr('pair.fromLan', { ip: esc(p.ip) })}</span></div>
+      <div class="orow"><b>${tr('pair.code')}</b><span>${tr('pair.codeSub')}</span><i class="paircode">${esc(p.code.split('').join(' '))}</i></div>
+      <div class="orow"><b>${tr('pair.howLong')}</b><span>${tr('pair.howLongSub')}</span></div>
+      <p class="act">${tr('pair.warn')}</p>
+      <div class="prow">
+        <button class="primary" data-pairyes="${esc(p.id)}">${tr('pair.yes')}</button>
+        <button data-pairno="${esc(p.id)}">${tr('pair.no')}</button>
+      </div>
+      <p class="hint dim">${tr('pair.foot')}</p>
+    </div>`).join('');
+}
+
+// The devices that may command this office. This machine heads the list and has
+// no button: it is the owner by being here, and there is nothing to revoke.
+function devicesHtml() {
+  const list = ((S.access || {}).devices) || [];
+  return `<p class="hint">${tr('pair.devices')}</p>
+    <ul class="notes">
+      <li><b>${tr('pair.thisMachine')}</b><span>${tr('pair.always')}</span></li>
+      ${list.map((d) => `<li>
+        <b>${esc(d.name)}</b>
+        <span>${d.lapsed ? tr('pair.lapsed') : tr('pair.since', { at: when(d.pairedAt), seen: when(d.lastSeen) })}</span>
+        <button data-unpair="${esc(d.id)}">${tr('pair.revoke')}</button>
+      </li>`).join('')}
+    </ul>`;
+}
+
 export function inviteOpen() { return el.invite && !el.invite.hidden; }
 export function closeInvite() { if (el.invite) el.invite.hidden = true; }
 
@@ -3120,6 +3184,8 @@ const accessSig = () => {
   return JSON.stringify([
     (a.requests || []).map((r) => [r.id, r.state, r.who, r.agentId]),
     (a.open || []).map((o) => [o.guestId, o.agentId]),
+    (a.pairings || []).map((p) => p.id),
+    (a.devices || []).map((d) => [d.id, d.lastSeen]),
   ]);
 };
 let inviteSig = '';
@@ -3153,6 +3219,7 @@ async function renderInvite() {
   el.invite.innerHTML = `<div class="rwrap invwrap">
     <div class="vhead">${tr('inv.title')}<button id="invx">✕</button></div>
     <div class="invbody">
+      ${pairingHtml()}
       <p class="say">${tr('inv.lead')}</p>
       <div class="sendrow">
         <input id="invWho" placeholder="${tr('inv.who')}" maxlength="24">
@@ -3172,7 +3239,9 @@ async function renderInvite() {
           <span>${i.used ? tr('inv.entered', { at: when(i.usedAt) }) : tr('inv.pending', { at: when(i.at) })}</span>
           <button data-douse="${esc(i.id)}">${i.used ? tr('inv.evict') : tr('inv.douse')}</button>
         </li>`).join('')}</ul>` : `<p class="hint dim">${tr('inv.none')}</p>`}
+      ${devicesHtml()}
       <p class="hint dim">${tr('inv.note')}</p>
+      <p class="hint dim">${tr('pair.note')}</p>
     </div></div>`;
 
   $('#invx').onclick = closeInvite;
@@ -3180,6 +3249,15 @@ async function renderInvite() {
   // waiting for the 2.5-second snapshot. Otherwise the clicked button would look
   // untouched during that entire interval.
   const took = async (r) => { if (r && r.access) S.access = r.access; inviteSig = accessSig(); await renderInvite(); };
+  el.invite.querySelectorAll('[data-pairyes]').forEach((b) => {
+    b.onclick = async () => took(await api.answerPair(b.dataset.pairyes, true));
+  });
+  el.invite.querySelectorAll('[data-pairno]').forEach((b) => {
+    b.onclick = async () => took(await api.answerPair(b.dataset.pairno, false));
+  });
+  el.invite.querySelectorAll('[data-unpair]').forEach((b) => {
+    b.onclick = async () => took(await api.revokeDevice(b.dataset.unpair));
+  });
   el.invite.querySelectorAll('[data-yes]').forEach((b) => {
     b.onclick = async () => took(await api.answerAccess(b.dataset.yes, true));
   });

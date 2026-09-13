@@ -16,7 +16,8 @@ import { ask as askPermit, answer as answerPermit, permits, forgetGone } from '.
 import { releaseNudge } from './release.js';
 import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset } from './modules.js';
 import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
-import { MIME, fileType, fileHeaders } from './files.js';
+import { isLan, deviceOf, shownDevice, deviceName, Pairings, SEEN_EVERY } from './devices.js';
+import { MIME, MAX_VIEW, fileType, fileHeaders } from './files.js';
 import { listenFree } from './port.js';
 import { createExposure, lanAddresses } from './expose.js';
 
@@ -116,7 +117,11 @@ function accessForGuest(guestId) {
 // What the owner sees: who is asking and who already has access. The guest's
 // name comes from presence — it is there anyway, and there is no point asking
 // for it twice.
-function accessForOwner() {
+// Pairing requests from devices in our own network: in memory, two minutes
+// each. See server/devices.js.
+const pairings = new Pairings();
+
+function accessForOwner(s) {
   const nameOf = (id) => (people.get(id) || {}).name || '';
   const open = [];
   for (const [guestId, set] of grants) {
@@ -127,6 +132,11 @@ function accessForOwner() {
       .filter((a) => a.state === 'pending')
       .map((a) => ({ ...a, who: nameOf(a.guestId) })),
     open,
+    // Owner devices: the list in the Invite panel and the requests waiting for a
+    // yes. The settings are passed in by callers that already read them; the
+    // hashes never leave this function.
+    devices: ((s && s.access && s.access.devices) || []).map((d) => shownDevice(d)),
+    pairings: pairings.pending(),
   };
 }
 
@@ -174,7 +184,10 @@ const safeInvite = (i) => ({
   id: i.id, name: i.name, from: i.from, at: i.at, usedAt: i.usedAt, used: !!i.usedAt,
 });
 
-async function isOwner(req) {
+// `devices: false` asks the narrower question «is this the owner's own machine
+// or token», which is what answering a pairing request needs: a paired device
+// must not let in the next one.
+async function isOwner(req, { devices = true } = {}) {
   const s = await getSettings();
   // A header for ordinary requests, a query parameter for the stream.
   // EventSource cannot set headers, and without this the owner in shared mode
@@ -188,6 +201,10 @@ async function isOwner(req) {
   const given = req.headers['x-valey-owner']
     || new URL(req.url, 'http://localhost').searchParams.get('owner');
   if (s.access.token && given && given === s.access.token) return true;
+  // A paired device is the owner in shared mode too: the yes was given for the
+  // device, not for a mode. It counts only from our own network — through a
+  // tunnel the token alone would be the key to the terminal.
+  if (devices && (await deviceFrom(req, s))) return true;
   if (s.access.mode === 'shared') return false;
   // Arrived through a middleman — so not "from this machine", whatever address
   // the socket shows. A tunnel (cloudflared, ngrok, any reverse proxy) connects
@@ -199,6 +216,21 @@ async function isOwner(req) {
   // it: the right order is shared first, tunnel second.
   if (proxied(req)) return false;
   return isLocal(req);
+}
+
+// The paired device behind a request, or null. Seen from time to time: the
+// list says when each device was last here, and a device unused for 30 days
+// lapses (server/devices.js).
+async function deviceFrom(req, s) {
+  const token = req.headers['x-valey-device']
+    || new URL(req.url, 'http://localhost').searchParams.get('device');
+  if (!token || !isLan(req)) return null;
+  const d = deviceOf(s.access.devices, token);
+  if (d && Date.now() - (d.lastSeen || 0) > SEEN_EVERY) {
+    const devices = (s.access.devices || []).map((x) => (x.id === d.id ? { ...x, lastSeen: Date.now() } : x));
+    await patchSettings({ access: { ...s.access, devices } });
+  }
+  return d;
 }
 
 // A guest is whoever came in by an invitation and holds the token issued to
@@ -326,7 +358,7 @@ async function tick() {
     next.settings = publicSettings(settings);
     next.delivery = await deliveryStatus();
     next.people = livePeople();
-    next.access = accessForOwner();
+    next.access = accessForOwner(settings);
     // A question asked by a session the office no longer has is released: there
     // is nobody to answer it, and waiting nine minutes holds someone's terminal.
     forgetGone(next.agents.map((a) => a.id));
@@ -440,7 +472,9 @@ function crossSite(req) {
 // at all. /api/stand is open alongside them: the stand sign has to be shown
 // before entry, or an empty screen leaves it unclear whose office this is and
 // what is being checked on it.
-const OPEN = new Set(['/api/enter', '/api/whoami', '/api/stand']);
+// /api/pair too: a phone in a shared office is nobody until the owner says yes,
+// and asking for that yes is the one thing it must be able to do.
+const OPEN = new Set(['/api/enter', '/api/whoami', '/api/stand', '/api/pair']);
 
 /**
  * The request handler, separate from the start-up.
@@ -643,7 +677,53 @@ async function handle(req, res) {
     } else {
       ask.state = 'refused';
     }
-    return send(res, 200, { ok: true, access: accessForOwner() });
+    return send(res, 200, { ok: true, access: accessForOwner(await getSettings()) });
+  }
+
+  // ------------------------------------------------------------ owner devices
+  // A device asks to become the owner. Only from our own network, and never
+  // from something that already is one — this machine has nothing to ask.
+  if (url.pathname === '/api/pair' && req.method === 'POST') {
+    if (!isLan(req)) return send(res, 403, { error: 'pairing is asked from the same network only', errorKey: 'err.pairLan' });
+    // The office raised for release pictures (tools/lib/office.mjs,
+    // PICTURE_ENV) is one machine with no second device, and its page is the
+    // owner; a pairing request is the one screen of this feature it could not
+    // show. There, and only there, this machine may ask, with an invented
+    // address for the card. The switch is an environment variable of the
+    // process — nothing that arrives over the network can set it.
+    const picture = process.env.VALEY_PICTURE === '1';
+    if (!picture && (await isOwner(req))) return send(res, 409, { error: 'this device is the owner already', errorKey: 'err.pairOwner' });
+    const b = await readJson(req);
+    const name = String(b.name || '').replace(/[^\p{L}\p{N} ·.\-]/gu, '').slice(0, 40) || deviceName(req.headers['user-agent']);
+    const ip = picture && b.ip ? String(b.ip).slice(0, 40) : ((req.socket && req.socket.remoteAddress) || '').replace(/^::ffff:/, '');
+    const p = pairings.ask({ ip, name });
+    return send(res, 200, { id: p.id, code: p.code, name: p.name, ttl: 120 });
+  }
+  // The device waits for the answer here, and collects its token once.
+  if (url.pathname === '/api/pair' && req.method === 'GET') {
+    if (!isLan(req)) return send(res, 403, { error: 'pairing is asked from the same network only', errorKey: 'err.pairLan' });
+    return send(res, 200, pairings.collect(String(url.searchParams.get('id') || '')));
+  }
+  // The yes or the no. This machine or the owner token only: a paired device
+  // may do everything the owner does except let in the next device.
+  if (url.pathname === '/api/pair/answer' && req.method === 'POST') {
+    if (!(await isOwner(req, { devices: false }))) return forbidden(res);
+    const b = await readJson(req);
+    const rec = pairings.answer(String(b.id || ''), !!b.yes);
+    if (rec) {
+      const s = await getSettings();
+      await patchSettings({ access: { ...s.access, devices: [...(s.access.devices || []), rec] } });
+    }
+    return send(res, 200, { ok: true, access: accessForOwner(await getSettings()) });
+  }
+  // One button, as with a guest: taking a device back must not cost more than
+  // letting it in.
+  if (url.pathname === '/api/devices/revoke' && req.method === 'POST') {
+    if (!(await isOwner(req, { devices: false }))) return forbidden(res);
+    const b = await readJson(req);
+    const s = await getSettings();
+    await patchSettings({ access: { ...s.access, devices: (s.access.devices || []).filter((d) => d.id !== String(b.id || '')) } });
+    return send(res, 200, { ok: true, access: accessForOwner(await getSettings()) });
   }
 
   // Close what was opened. One button, no confirmation: revoking must not take
@@ -652,7 +732,7 @@ async function handle(req, res) {
     if (!(await isOwner(req))) return forbidden(res);
     const b = await readJson(req);
     grants.get(String(b.guestId || ''))?.delete(String(b.agentId || ''));
-    return send(res, 200, { ok: true, access: accessForOwner() });
+    return send(res, 200, { ok: true, access: accessForOwner(await getSettings()) });
   }
 
   // The owner invites a guest. The code is longer than on the frame: the
@@ -811,7 +891,7 @@ async function handle(req, res) {
     return send(res, 200, {
       ...seen,
       people: livePeople(),
-      access: guest ? accessForGuest(guest.guest) : accessForOwner(),
+      access: guest ? accessForGuest(guest.guest) : accessForOwner(await getSettings()),
       // For the same reason as presence and access: a permission request lives
       // seconds and arrives between ticks. A tab opened a moment ago has to see
       // the one hanging right now, not emptiness until the first tick.
@@ -993,7 +1073,7 @@ async function handle(req, res) {
     }
     try {
       const st = await fsp.stat(p);
-      if (st.size > 8 * 1024 * 1024) return send(res, 413, { error: 'too big' });
+      if (st.size > MAX_VIEW) return send(res, 413, { error: 'too big' });
       // Show but do not run: html and svg go out as an attachment, see files.js.
       return send(res, 200, await fsp.readFile(p), fileType(p), fileHeaders(p));
     } catch {
@@ -1125,7 +1205,8 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   let boot = await getSettings();
   const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
   if (external && !(boot.network || {}).token) {
-    boot = await patchSettings({ network: { external: true, token: newToken() } });
+    // updateSettings: an office started beside this one may save a token first.
+    boot = await updateSettings((now) => ((now.network || {}).token ? null : { network: { external: true, token: newToken() } }));
     console.log('A network token was created and saved to the office settings');
   }
   const HOST = host || (external ? '0.0.0.0' : '127.0.0.1');
@@ -1166,6 +1247,10 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   // and you stay the owner in this browser even after the office becomes shared.
   // Looking it up in the settings file later is an extra step at a bad moment.
   console.log(`  owner: http://localhost:${port}/#owner=${token}`);
+  // Every device that may command this office, every start: a phone paired a
+  // month ago is exactly what gets forgotten.
+  const owners = (s.access.devices || []).map((d) => shownDevice(d)).filter((d) => !d.lapsed);
+  if (owners.length) console.log(`  owner devices: ${owners.map((d) => d.name).join(', ')} — revoke under Invite (I)`);
   if (s.access.mode === 'private') {
     console.log('  mode: private — everything from this machine is treated as the owner.');
     console.log('  Switch to shared before exposing the office to the network.');

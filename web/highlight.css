@@ -3,14 +3,14 @@
 .single pre.code{white-space:pre; overflow-x:auto; font-size:12px; line-height:1.5;
   color:var(--ink-dim); margin:0; tab-size:2}
 
-.t-comment{color:var(--muted-dim)}
+.t-comment{color:var(--muted)}
 .t-string{color:#d9a441}
 .t-number{color:#c39bff}
 .t-keyword{color:#8fc8ff}
 .t-literal{color:#ff9f8f}
 .t-fn{color:var(--accent)}
 .t-prop{color:#bcd8a8}
-.t-punct{color:#7a6450}
+.t-punct{color:var(--muted)}
 
 .t-cssprop{color:var(--accent)}
 .t-selector{color:var(--warn)}
@@ -31,14 +31,10 @@
 .htmlframe{width:100%; height:min(720px, calc(68vh / var(--ui, 1))); border:2px solid var(--frame);
   background:#fff; display:block}
 .framebar{display:flex; align-items:center; gap:10px; padding:6px 2px 0;
-  font-size:10px; color:var(--muted-dim)}
+  font-size:10px; color:var(--muted)}
 .framebar button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:10px "JetBrains Mono", "Courier New", monospace; padding:2px 8px; cursor:pointer}
 .framebar button:hover{background:var(--wood-lit); color:var(--warn)}
-
-/* inside markdown fences the base text is dimmer, so keep the tokens readable */
-.md pre.mdcode code .t-comment{color:#7d6852}
-.md pre.mdcode code .t-punct{color:#8a7358}
 
 /* Scale in the HUD gets its own colour so it is not confused with sound or radio. */
 .chip.zoom{color:#c39bff}

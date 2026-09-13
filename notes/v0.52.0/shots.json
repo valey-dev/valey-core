@@ -1,0 +1,21 @@
+{
+  "tag": "v0.52.0",
+  "shots": [
+    {
+      "file": "stopped-state-stopped-state.png",
+      "slug": "stopped-state",
+      "id": "stopped-state",
+      "url": "#room=standup",
+      "keys": "Enter,wait:2500,Tab,wait:900",
+      "interrupt": "c"
+    },
+    {
+      "file": "stopped-state-stopped-dialog.png",
+      "slug": "stopped-state",
+      "id": "stopped-dialog",
+      "url": "#room=standup",
+      "keys": "Enter,wait:2500,Tab,wait:900,Enter,wait:900",
+      "interrupt": "c"
+    }
+  ]
+}
