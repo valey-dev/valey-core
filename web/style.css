@@ -416,7 +416,6 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 :where(body:not(.bykeys)) .btab:hover{background:var(--wood); color:var(--ink)}
 .btab.on{background:var(--wood); color:var(--warn); border:2px solid var(--accent); padding:2px 9px}
 .btab kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted)}
-.rst kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted)}
 .btab.on kbd{color:var(--ink-dim)}
 .bhint{margin-left:auto; font-size:11px; color:var(--muted)}
 
