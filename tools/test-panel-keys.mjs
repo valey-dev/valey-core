@@ -45,7 +45,7 @@ function makeRoster(cols) {
 function makeBagSelf(slots) {
   const rows = [];
   const name = node('namerow');
-  const input = node('', { tagName: 'INPUT' });
+  const input = tracked(node('', { tagName: 'INPUT' }));
   name.querySelector = (sel) => (sel === 'input' ? input : null);
   name.input = input;
   rows.push(name);
@@ -130,6 +130,38 @@ function makeRing(items) {
     hidden: false, innerHTML: '', btns,
     querySelector: () => null,
     querySelectorAll: () => btns,
+  };
+}
+
+// Where the caret is. A field in a ring takes it on arrival and gives it up on
+// Escape, and «was focus() called» cannot tell those apart — so these nodes
+// keep document.activeElement the way a browser does.
+function tracked(n) {
+  n.focus = function () { this.focused += 1; document.activeElement = this; };
+  n.blur = function () { this.blurred = (this.blurred || 0) + 1; if (document.activeElement === this) document.activeElement = null; };
+  return n;
+}
+
+// A ring panel that can be typed into: it records the listeners the ring hangs
+// on it, and press() delivers a key to a field the way the browser does —
+// capture first, then bubble. `taken` stands for the field's own handler having
+// already claimed the key (the newsstand's Tab).
+function makeFieldRing(items) {
+  const btns = items.map((it) => tracked(node('', it)));
+  const handlers = [];
+  return {
+    hidden: false, innerHTML: '', btns, dataset: {},
+    querySelector: () => null,
+    querySelectorAll: () => btns,
+    addEventListener: (type, fn, capture) => handlers.push({ type, fn, capture: !!capture }),
+    press(target, key, { shiftKey = false, taken = false } = {}) {
+      const e = { key, shiftKey, target, defaultPrevented: false,
+        preventDefault() { this.defaultPrevented = true; }, stopPropagation() {} };
+      for (const h of handlers) if (h.type === 'keydown' && h.capture) h.fn(e);
+      if (taken) e.preventDefault();
+      for (const h of handlers) if (h.type === 'keydown' && !h.capture) h.fn(e);
+      return e;
+    },
   };
 }
 
@@ -235,6 +267,9 @@ UI.initUI(state, {
   names: async () => JSON.parse(JSON.stringify(PACKS)),
   saveSettings: async (patch) => { savedPatch = patch; return {}; },
   setLang: () => {},
+  // What main.js does with an arrow a field hands back: the office's own walk.
+  // Only the world window's ring has fields in this stand.
+  pressKey: (key) => UI.skyKey(key),
 });
 
 let failed = 0;
@@ -353,10 +388,18 @@ UI.bagKey('ArrowUp'); UI.bagKey('ArrowUp'); UI.bagKey('ArrowUp'); UI.bagKey('Arr
 check('and the name line is the other wall', focusRow() === 0, focusRow());
 UI.bagKey('ArrowDown');
 
-// the name is an input: Enter has to give it the focus, or it cannot be typed from the keyboard
+// The name is the wardrobe's one field. Moving onto it puts the caret in — no
+// Enter first, or the next letter falls through to the office — and moving off
+// takes it out, so the slots' arrows are not typed into the name.
 UI.bagKey('ArrowUp');
+check('moving onto the name puts the caret in it', document.activeElement === rows[0].input, document.activeElement && document.activeElement.tagName);
+UI.bagKey('ArrowDown');
+check('moving off it takes the caret out', document.activeElement !== rows[0].input, 'осталась');
+UI.bagKey('ArrowUp');
+rows[0].input.blur();                        // the caret taken out, as Escape does there
 UI.bagKey('Enter');
-check('Enter on the name gives the field focus', rows[0].input.focused === 1, rows[0].input.focused);
+check('Enter on the parked name gives the caret back', document.activeElement === rows[0].input, document.activeElement && document.activeElement.tagName);
+rows[0].input.blur();
 
 // The tabs: a digit switches, and the arrows mean something else afterwards.
 bag = makeBagThings([3, 2]);
@@ -431,27 +474,63 @@ check('the owner has no guest class', !/keydetail guest/.test(bag.innerHTML), '�
 // Until 31 August 2026 it did nothing — the handler knew only two tabs out of
 // three, and the key went off into the office from under an open panel. Keys
 // took the last slot on 5 September 2026, so the office stayed on digit 3.
+// Since 13 September 2026 the tab opens with nothing lit: its first button is
+// «check for updates», a trip to git, and a stray Enter must not take it. The
+// first ↓ lands on it — until then reaching it took a lap round the whole tab.
 bag = makeBagOffice(5);
-check('office: number 3 opened a tab', UI.bagKey('3') === true, 'не обработана');
-check('down processed', UI.bagKey('ArrowDown') === true, 'не обработана');
-check('and transfers to the second button', bag.btns[1].has('focus'), 'фокус не там');
+check('office: number 3 opened a tab', UI.bagKey('3') === true, 'not handled');
+check('nothing is lit when the tab opens', bag.btns.every((b) => !b.has('focus')),
+  bag.btns.map((b) => b.has('focus')));
+UI.bagKey('Enter');
+check('and Enter presses nothing before an arrow picked', bag.btns.every((b) => !b.clicked), bag.btns.map((b) => b.clicked));
+check('down processed', UI.bagKey('ArrowDown') === true, 'not handled');
+check('the first down lands on the first button', bag.btns[0].has('focus'), 'focus elsewhere');
 check('exactly one is highlighted', bag.btns.filter((b) => b.has('focus')).length === 1,
   bag.btns.filter((b) => b.has('focus')).length);
+UI.bagKey('ArrowDown');
+check('and the next one moves to the second', bag.btns[1].has('focus'), 'focus elsewhere');
 UI.bagKey('Enter');
 check('Enter presses what you\'re standing on', bag.btns[1].clicked === 1, bag.btns[1].clicked);
 UI.bagKey('ArrowUp');
-check('up returns to first', bag.btns[0].has('focus'), 'не вернулась');
+check('up returns to first', bag.btns[0].has('focus'), 'did not return');
 
 UI.closeBag();
 check('closed inventory arrows do not eat', UI.bagKey('ArrowDown') === false, 'съело');
 
 // ------------------------------------------- the window on the world and the office colour (the ring)
-sky = makeRing([{ id: 'skytoggle' }, { id: 'skyq', tagName: 'INPUT' }, { id: 'skygeo' }]);
+// A field in a ring holds the caret: arriving puts it in, Escape takes it out
+// and leaves the ring on the field, Tab walks the fields, ↑↓ leave through the
+// office (api.pressKey). Two fields here so Tab has somewhere to go.
+document.activeElement = null;
+sky = makeFieldRing([{ id: 'skytoggle' }, { id: 'skyq', tagName: 'INPUT' }, { id: 'skyq2', tagName: 'INPUT' }, { id: 'skygeo' }]);
+const [skyToggle, skyQ, skyQ2, skyGeo] = sky.btns;
+const caret = () => (document.activeElement ? document.activeElement.id : null);
 check('window to the world: arrow processed', UI.skyKey('ArrowDown') === true, 'нет');
+check('arriving on the city field puts the caret in it, no Enter needed', caret() === 'skyq', caret());
+check('and doesn’t press it like a button', skyQ.clicked === 0, skyQ.clicked);
+let esc = sky.press(skyQ, 'Escape');
+check('Escape in the field takes the caret out', caret() === null, caret());
+check('and keeps the ring on the field', skyQ.has('focus'), 'кольцо ушло');
+check('and is not left for the office to close the panel with', esc.defaultPrevented, 'не забрано');
 UI.skyKey('Enter');
-check('Entering the city field gives it real focus', sky.btns[1].focused === 1, sky.btns[1].focused);
-check('and doesn’t press it like a button', sky.btns[1].clicked === 0, sky.btns[1].clicked);
+check('Enter on the parked field gives the caret back', caret() === 'skyq', caret());
+sky.press(skyQ, 'Tab');
+check('Tab carries the caret to the next field', caret() === 'skyq2' && skyQ2.has('focus'), caret());
+sky.press(skyQ2, 'Tab');
+check('and round from the last field to the first', caret() === 'skyq', caret());
+sky.press(skyQ, 'Tab', { shiftKey: true });
+check('Shift+Tab goes back', caret() === 'skyq2', caret());
+sky.press(skyQ2, 'Tab', { taken: true });
+check('a Tab the field\'s owner already took stays theirs', caret() === 'skyq2', caret());
+sky.press(skyQ2, 'ArrowDown');
+check('↓ in the field leaves it along the ring', skyGeo.has('focus') && caret() === null, caret());
+UI.skyKey('ArrowUp');
+check('↑ onto a field puts the caret back in', caret() === 'skyq2', caret());
+sky.press(skyQ2, 'ArrowUp');
+check('↑ from a field onto the next field carries the caret', caret() === 'skyq' && skyQ.has('focus'), caret());
+check('a button in the ring never takes the caret', skyToggle.focused === 0 && skyGeo.focused === 0, `${skyToggle.focused}/${skyGeo.focused}`);
 UI.closeSky();
+document.activeElement = null;
 check('closed window to the world arrows do not eat', UI.skyKey('ArrowDown') === false, 'съело');
 
 // the hue slider: the sideways arrows turn it rather than lead the focus away

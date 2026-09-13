@@ -190,13 +190,14 @@ check('turns back to the left and doesn’t go below zero right away', Number(vo
 UI.radioKey('ArrowDown');
 check('It still takes the volume down', ctl[at(ctl)] !== vol, 'застряли');
 
-// your own wave is an input field: Enter has to give it real focus rather than "press"
-// it, or typing into it from the keyboard is still impossible
+// your own wave is an input field: arriving on it puts the caret in — no Enter
+// first, or the next letter falls through to the office — and it is never
+// "pressed" like a button (focusRing in web/ui.js, since 13 September 2026)
 const uri = ctl.find((b) => b.id === 'radiouri');
 while (ctl[at(ctl)] !== uri) UI.radioKey('ArrowDown');
+check('arriving on its wave puts the caret in the field', uri.focused >= 1, uri.focused);
 UI.radioKey('Enter');
-check('Enter on its wave gives focus to the field', uri.focused === 1, uri.focused);
-check('and doesn’t press it like a button', uri.clicked === 0, uri.clicked);
+check('and Enter doesn’t press it like a button', uri.clicked === 0, uri.clicked);
 
 // a closed panel does not take the keys
 UI.closeRadio();

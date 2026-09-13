@@ -52,7 +52,9 @@ export function initUI(state, callbacks) {
 function selfClosing(box, close) {
   if (!box) return;
   box.onkeydown = (e) => {
-    if (e.key !== 'Escape') return;
+    // An Escape typed into a field of the panel's ring takes the caret out and
+    // no more (focusRing marks it on the way down); the next one closes.
+    if (e.key !== 'Escape' || e.fromRingField) return;
     e.preventDefault(); e.stopPropagation(); close();
   };
 }
@@ -1902,17 +1904,13 @@ function bindKeys() {
   // of a field has to be the field's own. Escape hands the ring back rather than
   // shutting the shelf: el.bag is selfClosing, and without this an Escape typed
   // into a half-filled Client ID threw the whole inventory away. A second Escape,
-  // with the ring back on, still closes it — the two steps are the point.
-  //
-  // A listener rather than onkeydown: a module binds its own handler to the same
-  // field, and assigning would wipe it.
-  detail.querySelectorAll('input').forEach((f) => f.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    e.preventDefault();
-    e.stopPropagation();
-    f.blur();
-    paintBagFocus();
-  }));
+  // with the ring back on, still closes it — the two steps are the point. The
+  // ring does it now, for every panel (focusRing); armed here because a field
+  // can be reached with the mouse before any arrow has painted the ring.
+  keysRing.arm();
+  // A field entered by the mouse puts the hand inside the card: ↑↓ from it then
+  // walk the card's rows instead of stepping in again from the top.
+  detail.addEventListener('focusin', () => { keysIn = true; });
   paintBagFocus();
 }
 
@@ -1973,12 +1971,97 @@ function keysKey(key) {
   return keysRing.key(key, true);
 }
 
+// ------------------------------------------------------------ the office version
+// The first row of the office tab: which version runs, and pulling a newer one
+// from the repository without stopping the office. The owner's alone — a guest
+// cannot update somebody else's office. Checking reaches outside (a git fetch),
+// so nothing here asks on its own: only the buttons do.
+// Frames: WIP section #office-update, node 2169:6969 (states 2169:7029, 2169:7104,
+// 2169:7181, 2170:2564, 2170:2641).
+let upd = null;
+let updPoll = null;
+
+async function loadUpd() {
+  try {
+    const r = await fetch('/api/update', { headers: owned() });
+    upd = r.ok ? await r.json() : null;
+  } catch { upd = null; }
+}
+
+const UPD_REASONS = new Set(['dirty', 'diverged', 'noUpstream', 'notGit', 'fetch', 'newServer', 'noSupervisor']);
+const updRepo = (key) => tr(key === 'modules' ? 'upd.inModules' : 'upd.inCore');
+
+function updRow() {
+  const u = upd || { state: 'idle', running: '' };
+  const ver = `v${esc(u.running || '')}`;
+  let desc = tr((u.repos || []).includes('modules') ? 'upd.from' : 'upd.fromCore');
+  let btn = tr('upd.check'), act = 'check', prim = false, off = false, note = tr('upd.idleNote');
+  if (u.state === 'checking') { desc = tr('upd.checking'); btn = tr('upd.checking'); off = true; }
+  if (u.state === 'available') {
+    const what = [u.feats ? tr('upd.feats', { n: u.feats }) : '', u.fixes ? tr('upd.fixes', { n: u.fixes }) : ''].filter(Boolean).join(', ');
+    desc = tr('upd.available', { v: esc(u.available || '') }) + (what ? ` · ${what}` : '');
+    btn = tr('upd.run'); act = 'run'; prim = true; note = tr('upd.availNote');
+  }
+  if (u.state === 'latest') { desc = tr('upd.latest'); note = tr('upd.latestNote'); }
+  if (u.state === 'updating') {
+    const done = new Set(u.steps || []);
+    const steps = [tr('upd.stepCore') + (done.has('core') ? ' ✓' : '')];
+    if ((u.repos || []).includes('modules')) steps.push(tr('upd.stepModules') + (done.has('modules') ? ' ✓' : ''));
+    steps.push(tr('upd.stepServer') + (done.has('server') ? '…' : ''));
+    desc = `git pull · ${steps.join(' · ')}`;
+    btn = tr('upd.running'); off = true; note = tr('upd.updNote');
+  }
+  if (u.state === 'failed') {
+    desc = tr('upd.failed', { v: esc(u.running || '') });
+    btn = tr('upd.retry'); act = u.available ? 'run' : 'check';
+    const key = UPD_REASONS.has(u.reason) ? u.reason : 'other';
+    note = tr(`upd.why.${key}`, { repo: updRepo(u.repo), detail: esc(u.detail || '') });
+  }
+  return `<p class="dcap">${tr('upd.cap')}</p>
+      <div class="orow"><b>${tr('upd.name')}</b><span>${desc}</span><i>${ver}</i>
+        <button class="obtn${prim ? ' prim' : ''}" data-upd="${act}"${off ? ' disabled' : ''}>${btn}</button></div>
+      <p class="hint">${note}</p>`;
+}
+
+// Only the block is redrawn: the whole tab would take the focus off whatever
+// the hand is on while the steps tick past.
+function paintUpd() {
+  const box = el.bag && el.bag.querySelector('.updblock');
+  if (!box) return;
+  box.innerHTML = updRow();
+  const b = box.querySelector('[data-upd]');
+  if (b) b.onclick = () => updPost(b.dataset.upd);
+  // The button is a new node after every repaint — once a second while an
+  // update runs — and the ring's light has to land on it again, or the hand
+  // loses its place mid-update.
+  if (bagTab === 'office' && !el.bag.hidden) officeRing.paint();
+}
+
+async function updPost(what) {
+  try {
+    const r = await fetch(`/api/update/${what}`, { method: 'POST', headers: owned({ 'content-type': 'application/json' }), body: '{}' });
+    if (r.ok) upd = await r.json();
+  } catch { /* the office is changing hands; the stream will say so */ }
+  paintUpd();
+  watchUpd();
+}
+
+// While something runs the row follows it, once a second, and only while the
+// tab is open: nobody watching means nobody to show the steps to.
+function watchUpd() {
+  clearTimeout(updPoll);
+  const busy = upd && (upd.state === 'checking' || upd.state === 'updating');
+  if (!busy || !el.bag.querySelector('.updblock')) return;
+  updPoll = setTimeout(async () => { await loadUpd(); paintUpd(); watchUpd(); }, 1000);
+}
+
 // The "office" tab. Dress code lives here because it has no object in the
 // office: weather is set at the window, language at the sign, while "put ties
 // on everyone" hangs nowhere.
 const officeHtml = () => {
   const on = officeOn();
   return `<div class="bbody">
+      ${isGuest() ? '' : `<div class="updblock">${updRow()}</div>`}
       <p class="dcap">${tr('bag.dressCode')}</p>
       <div class="oseg">
         <button class="obtn${on ? '' : ' on'}" data-code="casual">${tr('bag.casual')}</button>
@@ -2381,6 +2464,10 @@ function bindOffice() {
     if (act === 'skin') { closeBag(); return renderSkin(); }
     if (act === 'sound') { api.sound(); renderBag(); }
   });
+  if (el.bag.querySelector('.updblock')) {
+    paintUpd();
+    loadUpd().then(() => { paintUpd(); watchUpd(); });
+  }
   paintBagFocus();
 }
 
@@ -2413,6 +2500,22 @@ function bindSelf() {
   // An empty field is an empty name, not the word «ТЫ» stored as one: that
   // string used to travel outward and label a stranger YOU.
   $('#myname').oninput = (e) => { S.me.name = e.target.value.toUpperCase().slice(0, 14); api.saveMe(); };
+  // The name is the wardrobe's one field, and it keys the way a field in any
+  // ring does (focusRing): Escape parks, ↑↓ leave through the office, Tab has
+  // nowhere else to go and stays.
+  $('#myname').onkeydown = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      nameParked = true; e.target.blur(); paintBagFocus();
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault(); e.stopPropagation();
+      nameParked = true; e.target.blur();
+      if (api.pressKey) api.pressKey(e.key);
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+    }
+  };
+  $('#myname').onfocus = () => { nameParked = false; };
   paintBagFocus();
   const rowFields = () => [...colorFields(), ...BODY, bottomCut];
   el.bag.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => {
@@ -2449,17 +2552,20 @@ function bindThings() {
 
 // The "office" tab is a row of buttons, not a slot list or a grid. It has a
 // third keyboard behaviour, which need not be maintained beside the other two.
-const officeRing = focusRing(() => el.bag, '.obtn');
+// Nothing lit on open: the first button is «check for updates», a trip to git,
+// and the first ↓ lands on it — asked by Sergey on 13 September 2026, when
+// reaching it took a lap round the whole tab.
+const officeRing = focusRing(() => el.bag, '.obtn', { startEmpty: true });
 
 function openTab(tab) {
   if (!tabs().includes(tab) || tab === bagTab) return;
-  bagTab = tab; bagIdx = 0; cellIdx = 0;
+  bagTab = tab; bagIdx = 0; cellIdx = 0; nameParked = true;
   keysOut();
   officeRing.reset();
   renderBag();
 }
 
-export function closeBag() { el.bag.hidden = true; bagIdx = 0; cellIdx = 0; officeRing.reset(); keysOut(); }
+export function closeBag() { el.bag.hidden = true; bagIdx = 0; cellIdx = 0; nameParked = true; officeRing.reset(); keysOut(); }
 
 // Open the shelf on one particular key. The thing that uses a key is the natural
 // place to ask for it — the receiver knows the office has no Spotify long before
@@ -2482,6 +2588,11 @@ export function openKeyCard(id) {
 // represent both interactions, so there are two.
 let bagIdx = 0;
 let cellIdx = 0;
+// The wardrobe opens with the ring on the name row, and a caret there on
+// opening would take the very letter that opened it: C would type «c» instead of
+// closing, and the digits would land in the name instead of picking a tab. So
+// the caret comes in when the hand moves onto the row, not when the panel opens.
+let nameParked = true;
 const bagRows = () => [...el.bag.querySelectorAll('.namerow, .drow')];
 const bagCats = () => [...el.bag.querySelectorAll('.bcat')];
 const catCells = (cat) => (cat ? [...cat.querySelectorAll('.bcell')] : []);
@@ -2510,6 +2621,17 @@ function paintBagFocus() {
   bagIdx = Math.max(0, Math.min(list.length - 1, bagIdx));
   list.forEach((r, i) => r.classList.toggle('focus', i === bagIdx));
   list[bagIdx].scrollIntoView({ block: 'nearest' });
+  // The caret follows the ring on and off the name, as in any other ring.
+  const input = list[bagIdx].querySelector('input');
+  const name = list.map((r) => r.querySelector('input')).find(Boolean);
+  const active = typeof document !== 'undefined' ? document.activeElement : null;
+  if (input && !nameParked && active !== input) {
+    input.focus({ preventScroll: true });
+    const n = String(input.value || '').length;
+    try { input.setSelectionRange(n, n); } catch { /* a type without a caret */ }
+  } else if (!input && name && active === name) {
+    name.blur();
+  }
 }
 
 // Leave Escape alone: closeAll() in main.js handles it.
@@ -2547,6 +2669,13 @@ export function bagKey(raw) {
 // this point — and a const would still be in its dead zone there.
 function stopAt(pos, by, len) { return Math.max(0, Math.min(len - 1, pos + by)); }
 function wrapAt(pos, by, len) { return (pos + by + len) % len; }
+// What takes typing: a text-like input or a textarea. A range, a checkbox or a
+// button in the ring is walked and pressed like any other control.
+function isField(n) {
+  if (!n) return false;
+  if (n.tagName === 'TEXTAREA') return true;
+  return n.tagName === 'INPUT' && !/^(range|checkbox|radio|button|submit|color|file)$/.test(n.type || '');
+}
 
 function selfKey(key) {
   const list = bagRows();
@@ -2554,7 +2683,10 @@ function selfKey(key) {
 
   const step = { arrowup: -1, arrowdown: 1 }[key];
   if (step !== undefined) {
+    const was = bagIdx;
     bagIdx = stopAt(bagIdx, step, list.length);
+    // Moving onto the name brings the caret; bumping the top edge does not.
+    if (bagIdx !== was) nameParked = false;
     paintBagFocus();
     return true;
   }
@@ -2568,10 +2700,10 @@ function selfKey(key) {
                                  // arrow should not escape into the office.
   }
   if (key === 'enter' || key === ' ') {
-    // The name is an input: Enter gives it real focus, then the browser types.
-    // On a slot, Enter does the same thing as ▶.
+    // The name is an input: Enter puts the caret back in a parked field. On a
+    // slot, Enter does the same thing as ▶.
     const input = row && row.querySelector('input');
-    if (input) { input.focus(); return true; }
+    if (input) { nameParked = false; paintBagFocus(); return true; }
     const next = row && row.querySelector('[data-d="1"]');
     if (next) next.click();
     return true;
@@ -2719,9 +2851,25 @@ function bindResults() {
 // opts.cols — the mirror of opts.rows for a panel laid out in columns.
 //   byData: 'n'            — find data-n="digit" instead of the Nth item: in the
 //                            lift, "3" is floor three even if it is second in the list.
+//
+// A text field in the ring holds the caret. Arriving on it puts the caret in —
+// the hand came to type, and making it press Enter first let the next letter
+// fall through to the office, where C shut the inventory around a half-typed
+// Client ID. Escape takes the caret out and leaves the ring standing on the
+// field, «parked», so the next Escape closes the panel as everywhere else. Tab
+// carries the caret to the panel's next field; ↑↓ leave the field the way they
+// leave a button. Asked for by the owner on 13 September 2026, reversing the
+// earlier «Enter first» rule.
+// opts.startEmpty — nothing is lit when the panel opens, and the first arrow
+//   picks the first (or, going up, the last) button. For a panel whose first
+//   button does something that should not happen on a stray Enter: the office
+//   tab's is «check for updates», a trip to git.
 export function focusRing(nodeOf, selector, opts = {}) {
   const stepTo = opts.noWrap ? stopAt : wrapAt;
-  let idx = 0;
+  const start = opts.startEmpty ? -1 : 0;
+  let idx = start;
+  let parked = false;   // Escape took the caret out; the ring stays on the field
+  let shown = -1;       // the index last painted: moving off it unparks
   // Only what has a box is in the ring. The radio's volume knob sits under a
   // `hidden` row until the full Spotify player connects, and until 11 September
   // 2026 one press of the down arrow went into it: the outline vanished and the
@@ -2755,19 +2903,78 @@ export function focusRing(nodeOf, selector, opts = {}) {
     node.addEventListener('focusin', (e) => {
       const l = list();
       const at = l.indexOf(e.target);
-      if (at < 0 || at === idx) return;
-      idx = at;
+      if (at < 0) return;
+      if (isField(e.target)) parked = false;
+      if (at === idx) return;
+      idx = at; shown = at;
       l.forEach((b, i) => b.classList.toggle('focus', i === at));
     });
+    // The field's keys. main.js hands nothing from an INPUT to the office, so a
+    // field that did not let go by itself was a room without a door.
+    //
+    // Escape is marked parked in the capture phase, before the field's own
+    // handler runs: the radio's and the newsstand's repaint the ring from there,
+    // and a repaint that did not know yet would put the caret straight back. The
+    // event is marked too, for selfClosing(): its Escape sits on this same panel,
+    // was hung on it first, and would shut the panel before the bubble below.
+    node.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !isField(e.target) || !list().includes(e.target)) return;
+      parked = true;
+      e.fromRingField = true;
+    }, true);
+    node.addEventListener('keydown', (e) => {
+      const f = e.target;
+      // A key the field's owner already took is theirs: the newsstand's Tab
+      // walks its channels, and that is not this ring's to overrule.
+      if (e.defaultPrevented || !isField(f)) return;
+      const l = list();
+      const at = l.indexOf(f);
+      if (at < 0) return;
+      if (e.key === 'Escape') {
+        e.preventDefault(); e.stopPropagation();
+        idx = at; f.blur(); paint();
+      } else if (e.key === 'Tab') {
+        e.preventDefault(); e.stopPropagation();
+        const fields = l.filter(isField);
+        const next = fields[(fields.indexOf(f) + (e.shiftKey ? -1 : 1) + fields.length) % fields.length];
+        idx = l.indexOf(next); parked = false; paint();
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        // Handed to the office as if pressed outside the field, so the panel's
+        // own walk decides where it goes — the key card's «up from the first row
+        // leaves the card» included. Parked first: if nothing moves, the caret
+        // must not come back into the field it has just left.
+        e.preventDefault(); e.stopPropagation();
+        idx = at; parked = true; f.blur();
+        if (api && api.pressKey) api.pressKey(e.key);
+      }
+    });
+  };
+  // Where the caret goes after a paint: into the field the ring stands on, or
+  // out of a field the ring has left.
+  const settle = (cur, l) => {
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    if (isField(cur)) {
+      if (parked || active === cur) return;
+      cur.focus({ preventScroll: true });
+      // At the end of what is already typed: the hand came to add, not to retype.
+      const n = String(cur.value || '').length;
+      try { cur.setSelectionRange(n, n); } catch { /* a type without a caret */ }
+    } else if (isField(active) && l.includes(active)) {
+      active.blur();
+    }
   };
 
   const paint = () => {
     const l = list();
     if (!l.length) return;
+    if (idx < 0) { l.forEach((b) => b.classList.remove('focus')); follow(); return; }
     idx = Math.max(0, Math.min(l.length - 1, idx));
+    if (idx !== shown) parked = false;
+    shown = idx;
     l.forEach((b, i) => b.classList.toggle('focus', i === idx));
     l[idx].scrollIntoView({ block: 'nearest' });
     follow();
+    settle(l[idx], l);
     // Some panels need more than a highlighted button. The language panel has a
     // "what happens if pressed" line below, which must follow focus, not a click.
     // Otherwise the cost would be shown only after it had already been paid.
@@ -2775,7 +2982,10 @@ export function focusRing(nodeOf, selector, opts = {}) {
   };
   return {
     paint,
-    reset() { idx = 0; },
+    reset() { idx = start; shown = -1; parked = false; },
+    // Hang the field keys on a panel drawn before the ring ever painted it: a
+    // field reached with the mouse must let go on Escape just the same.
+    arm: follow,
     // Focus a particular index: the current floor in the lift, or the first note
     // after leaving search.
     at(i) { idx = i; paint(); },
@@ -2787,6 +2997,12 @@ export function focusRing(nodeOf, selector, opts = {}) {
       const key = raw.toLowerCase();
       const l = list();
       if (!l.length) return false;
+      // Nothing picked yet: an arrow picks, and Enter has nothing to press.
+      if (idx < 0) {
+        const into = { arrowdown: 0, arrowright: 0, arrowup: l.length - 1, arrowleft: l.length - 1 }[key];
+        if (into !== undefined) { idx = into; paint(); return true; }
+        if (key === 'enter' || key === ' ') return true;
+      }
       const cur = l[idx];
 
       if (cur && cur.type === 'range' && (key === 'arrowleft' || key === 'arrowright')) {
@@ -2868,9 +3084,8 @@ export function focusRing(nodeOf, selector, opts = {}) {
       if (step !== undefined) { idx = stepTo(idx, step, l.length); paint(); return true; }
       if (key === 'enter' || key === ' ') {
         if (!cur || cur.disabled) return true;
-        // Give an input real focus, then let the browser type.
-        if (cur.tagName === 'INPUT' && cur.type !== 'range') cur.focus();
-        else cur.click();
+        // A parked field takes the caret back; anything else is pressed.
+        if (isField(cur)) { parked = false; settle(cur, l); } else cur.click();
         return true;
       }
       return false;
