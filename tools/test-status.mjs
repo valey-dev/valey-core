@@ -208,6 +208,11 @@ ok('a question asked alongside another tool still waits on the person', statusOf
   // An automatic one happens mid-turn and the model goes on: still working.
   const mid = feed(user(0, 'run the tests'), assistant(min(1), 'tool_use', bash), user(min(1), result),
     line({ type: 'system', subtype: 'compact_boundary', timestamp: at(min(2)), compactMetadata: { trigger: 'auto' } }), summary(min(2)));
+  // The case from 13 September 2026: the turn stalled after a tool result and
+  // the owner ran /compact; the app then waits for a word.
+  const stalled = feed(user(0, 'rebuild the frames'), assistant(min(1), 'tool_use', bash), user(min(1), result),
+    boundary(min(11)), summary(min(11)), cmd(min(11)));
+  ok('a manual compaction over an open turn ends it: the agent waits, not works', statusOf(stalled, T0 + min(12)) === 'stopped', statusOf(stalled, T0 + min(12)));
   ok('an automatic compaction mid-turn keeps the turn open', statusOf(mid, T0 + min(3)) === 'working', statusOf(mid, T0 + min(3)));
 }
 

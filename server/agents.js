@@ -571,6 +571,16 @@ function applyLine(st, line) {
   if (r.type === 'custom-title' && r.customTitle) st.title = r.customTitle;
   if (r.type === 'ai-title' && r.aiTitle) st.aiTitle = r.aiTitle;
   if (r.type === 'last-prompt' && r.lastPrompt) st.lastUserPrompt = String(r.lastPrompt).slice(0, 400);
+  // A manual compaction cuts a turn that was still open. The app runs /compact
+  // and then waits at the prompt: it does not pick the interrupted work back
+  // up. On 13 September 2026 a session stalled after a tool result, the owner
+  // ran /compact ten minutes later, and the office — whose last word from that
+  // session was the tool result — kept the agent «working» for the hour it
+  // gives a pending tool, while the agent was in fact waiting for a word. So a
+  // manual compaction over an open turn is the same as an interruption. An
+  // automatic one happens inside the model's turn and the model goes on.
+  if (r.type === 'system' && r.subtype === 'compact_boundary'
+    && r.compactMetadata && r.compactMetadata.trigger === 'manual' && !st.ended) st.ended = 'stopped';
 
   if (r.type === 'assistant' && r.message) {
     born(st, r.timestamp);
