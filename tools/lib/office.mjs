@@ -68,7 +68,10 @@ export async function fakeClaudeDir(dir, {
       content: [{ type: 'text', text: said }] } },
   ];
   await fsp.writeFile(path.join(project, `${sessionId}.jsonl`), lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
-  return { dir: claude, sessionId, cwd, said, asked, file };
+  // The transcript's own path rides along: a picture that needs the agent in a
+  // state no prompt reaches — cut off mid-step — gets there by a line appended to
+  // it, the way the app itself would write one.
+  return { dir: claude, sessionId, cwd, said, asked, file, transcript: path.join(project, `${sessionId}.jsonl`) };
 }
 
 /**

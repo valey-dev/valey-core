@@ -2,7 +2,7 @@ import { lookOf, drawPerson, drawCat, normalizeLook, isSelfLabel, dressOf, dress
 import { potState, water as waterPot, tally, CAN_FULL } from './garden.js';
 import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, pickRoom, WALL } from './layout.js';
 import { loadModules, collect, first, attachStreams } from './modules.js';
-import { owned, setTokens } from './owned.js';
+import { owned, passQuery, setTokens } from './owned.js';
 import { initStand } from './stand.js';
 import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, pxText, kickerBusy } from './office.js';
 import { drawCamera, buildCameras } from './cctv.js';
@@ -151,12 +151,21 @@ setTokens({ owner: OWNER, guest: GUEST });
 
 // The door. A code is exchanged for a token exactly once; after that the token lives,
 // and a reload of the page does not put the person back out on the street.
-async function knock() {
+//
+// Twice over, though, and only the second one spends it. On arrival the page
+// only peeks: is the code good, and who sent it — enough for the «тебя позвал»
+// card. The code is spent by «Войти» (enterByCode below). A messenger's built-in
+// browser that opens the link on the way to the guest's laptop no longer burns it.
+// The guest pass this browser may already hold goes along either way: a code it
+// has spent itself still lets it in (see /api/enter).
+let codeWaiting = false;
+async function knock({ peek = false } = {}) {
   if (!CODE) return null;
   const r = await fetch('/api/enter', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ code: CODE }),
+    method: 'POST', headers: owned({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ code: CODE, peek }),
   }).then((x) => x.json()).catch((e) => ({ error: e.message }));
+  codeWaiting = !!(r && r.peek);
   if (r && r.guest) {
     GUEST = r.guest;
     setTokens({ guest: GUEST });
@@ -303,7 +312,7 @@ UI.initUI(state, {
 // 2026 a guest coming through a tunnel got an office with no modules at all —
 // no voice, no microphone, an empty floor — while the owner on the same machine
 // saw everything, because he needed no code and won the race by accident.
-const admission = knock().then((entered) => {
+const admission = knock({ peek: true }).then((entered) => {
   if (entered && entered.errorKey) state.entry = { refused: entered.errorKey };
   else if (entered && entered.ok) state.entry = { from: entered.from || '' };
   return fetch('/api/whoami', { headers: owned() }).then((r) => r.json());
@@ -491,9 +500,8 @@ addEventListener('pagehide', () => {
   try {
     // sendBeacon cannot set headers, so the pass travels in the query string —
     // the same road the stream takes, and for the same reason.
-    const pass = OWNER ? '?owner=' + encodeURIComponent(OWNER)
-      : GUEST ? '?guest=' + encodeURIComponent(GUEST) : '';
-    navigator.sendBeacon('/api/gone' + pass, new Blob([JSON.stringify({ id: MY_ID })], { type: 'application/json' }));
+    const pass = passQuery();
+    navigator.sendBeacon('/api/gone' + (pass ? '?' + pass : ''), new Blob([JSON.stringify({ id: MY_ID })], { type: 'application/json' }));
   } catch { /* not delivered — the TTL will remove him in eight seconds */ }
 });
 
@@ -539,8 +547,7 @@ let es = null;
 let streamRetry = 2000;
 function openStream() {
   if (es) es.close();
-  const pass = OWNER ? 'owner=' + encodeURIComponent(OWNER)
-    : GUEST ? 'guest=' + encodeURIComponent(GUEST) : '';
+  const pass = passQuery();
   // The stream says whose it is. Presence goes to everybody and never needed a
   // name; an event addressed to one person does — that is how the meeting room's
   // hub sends an offer to one browser and not to the floor.
@@ -1092,7 +1099,10 @@ function nearest() {
 
   const cur0 = state.currentRoom;
   if (cur0 && cur0.micro) {
-    const d = Math.hypot(cur0.micro.x - p.x, cur0.micro.y + 8 - p.y);
+    // Approached from above: it stands against the bottom wall, and the spot
+    // below it — where this used to point — is the wall. From above, the coffee
+    // machine's spot to the right would otherwise be the nearer one.
+    const d = Math.hypot(cur0.micro.x - p.x, cur0.micro.y - 28 - p.y);
     if (d < bestD) { bestD = d; best = { kind: 'micro', room: cur0 }; }
   }
 
@@ -2224,28 +2234,66 @@ function switchLang(next = lang() === 'ru' ? 'en' : 'ru') {
   sound.chime();
 }
 
+// «Войти» on a page that came by an invitation. The code is spent here, and only
+// then does the door open. The page booted as nobody — the stream and
+// /api/modules both refused it — so what the boot did without a pass is done
+// again with one. Waiting for the boot first matters twice: a quick hand can
+// press before the peek has answered, and modules that did come up at boot (a
+// browser still holding a pass from an earlier invitation) must not be
+// registered a second time.
+let bootDone;
+const booted = new Promise((done) => { bootDone = done; });
+let spending = null;
+function enterByCode(roomKey) {
+  if (spending) return;
+  spending = (async () => {
+    await admission;
+    await booted;
+    if (codeWaiting) {
+      const refusedAtBoot = state.needsCode;
+      const r = await knock();
+      if (!r || !r.guest) {
+        state.entry = { refused: (r && r.errorKey) || 'err.internal' };
+        renderTitle();
+        return;
+      }
+      state.needsCode = false;
+      openStream();
+      if (refusedAtBoot) {
+        await loadModules({ saveSettings });
+        if (es) attachStreams(es);
+        renderStatic();
+        if (state.layout) { state.sig = null; replan(); }
+      }
+    }
+    walkIn(roomKey);
+  })().finally(() => { spending = null; });
+}
+
+// roomKey — enter a room straight away. The second source is #room= in the address: it
+// was described by this comment as a debug entrance and was read by nobody. On a stand
+// there is no checking the service rooms without it: the control room cannot be walked to,
+// and it is not in the TAB list.
+function walkIn(roomKey) {
+  const fromHash = (location.hash.match(/^#room=(.+)$/) || [])[1];
+  const key = roomKey || (fromHash && decodeURIComponent(fromHash));
+  // We search among all the rooms, not only the project ones: the service ones — the
+  // control room, the meeting room — cannot be opened otherwise at all, and there is
+  // nothing to check in them.
+  roomWanted = key && !goToRoom(key) ? key : null;
+  closeTitle();
+  document.body.classList.remove('titling');
+  // The entrance is drawn in a fixed 400×225 and the office is not: the canvas has to
+  // be recounted the moment the door closes behind us, or the office keeps the
+  // entrance's size and sits in bars.
+  refit();
+  UI.renderHud();
+  sound.init();
+  sound.door(0.8);
+}
+
 initTitle(state, {
-  // roomKey — enter a room straight away. The second source is #room= in the address: it
-  // was described by this comment as a debug entrance and was read by nobody. On a stand
-  // there is no checking the service rooms without it: the control room cannot be walked to,
-  // and it is not in the TAB list.
-  enter(roomKey) {
-    const fromHash = (location.hash.match(/^#room=(.+)$/) || [])[1];
-    const key = roomKey || (fromHash && decodeURIComponent(fromHash));
-    // We search among all the rooms, not only the project ones: the service ones — the
-    // control room, the meeting room — cannot be opened otherwise at all, and there is
-    // nothing to check in them.
-    roomWanted = key && !goToRoom(key) ? key : null;
-    closeTitle();
-    document.body.classList.remove('titling');
-    // The entrance is drawn in a fixed 400×225 and the office is not: the canvas has to
-    // be recounted the moment the door closes behind us, or the office keeps the
-    // entrance's size and sits in bars.
-    refit();
-    UI.renderHud();
-    sound.init();
-    sound.door(0.8);
-  },
+  enter: (roomKey) => (CODE ? enterByCode(roomKey) : walkIn(roomKey)),
   bag: () => UI.renderBag('self'),
   sky: () => UI.renderSky(),
   // The same panel the corridor figure opens: the hint over the entrance figure
@@ -2298,3 +2346,6 @@ await initStand();
 if (state.layout) { state.sig = null; replan(); roomArrived(); }
 
 rafId = requestAnimationFrame(loop);
+// A guest with an unspent code may already have pressed «Войти»; that press has
+// been waiting for exactly this point (enterByCode).
+bootDone();

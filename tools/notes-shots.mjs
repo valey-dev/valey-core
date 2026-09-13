@@ -94,7 +94,33 @@ const CAST = [
 
 const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-notes-shots-'));
 let claudeDir = null;
-for (const who of CAST) claudeDir = (await fakeClaudeDir(tmp, who)).dir;
+const cast = new Map();
+for (const who of CAST) { const made = await fakeClaudeDir(tmp, who); cast.set(who.slot, made); claudeDir = made.dir; }
+
+// A line into a cast member's transcript, stamped now — the office follows the
+// file and picks it up on its next tick.
+const append = (who, o) => fsp.appendFile(who.transcript, JSON.stringify({ timestamp: new Date().toISOString(), ...o }) + '\n');
+const statusOf = async (id) => ((await (await fetch(office.base + '/api/state')).json()).agents || []).find((a) => a.id === id)?.status;
+
+// `interrupt: <slot>` — see SHOT_FIELDS in notes.mjs. On a --before run the old
+// office may not know the state it is being shown, so it is waited for only on
+// this one: there the frame is the «before» half and shows whatever the old
+// office made of the same transcript.
+async function interrupt(slot) {
+  const who = cast.get(slot);
+  if (!who) die(`interrupt: there is no cast member ${slot}; the cast is ${[...cast.keys()].join(', ')}`);
+  await append(who, { type: 'user', message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user]' }] } });
+  for (let i = 0; i < 40; i++) {
+    if (before || (await statusOf(who.sessionId)) === 'stopped') return who;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  if (before) return who;
+  die(`interrupt: ${slot} never read as stopped — the office did not pick the line up`);
+}
+async function resume(who) {
+  await append(who, { type: 'user', message: { role: 'user', content: 'continue' } });
+  await append(who, { type: 'assistant', message: { role: 'assistant', model: 'claude-fable-5', stop_reason: 'end_turn', content: [{ type: 'text', text: who.said }] } });
+}
 
 // The old office is a detached worktree of the tag — its own server, its own
 // web/. It goes outside the checkout: a worktree under it gets walked by every
@@ -133,7 +159,9 @@ for (const f of wanted) {
     if (sh.viewport) args.push('--viewport', sh.viewport);
     if (sh.touch) args.push('--touch');
     if (sh.setup) args.push('--setup', sh.setup);
+    const cut = sh.interrupt ? await interrupt(sh.interrupt) : null;
     const r = spawnSync(process.execPath, [shotTool, ...args], { cwd: ROOT, stdio: 'inherit' });
+    if (cut) await resume(cut);
     if (r.status !== 0) {
       if (!keep) await office.stop();
       die(`${f.slug}/${sh.id} was not taken`);

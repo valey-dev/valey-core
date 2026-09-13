@@ -1,0 +1,12 @@
+{
+  "tag": "v0.50.0",
+  "shots": [
+    {
+      "file": "radio-search-results.png",
+      "slug": "radio-search",
+      "id": "results",
+      "setup": "(()=>{const found={stations:[{uuid:'',name:'101 SMOOTH JAZZ',country:'US',codec:'mp3',bitrate:192,uri:'https://stream0.example/live'},{uuid:'',name:'Adroit Jazz Underground',country:'US',codec:'mp3',bitrate:320,uri:'https://stream1.example/live'},{uuid:'',name:'Jazz 24',country:'US',codec:'aac',bitrate:256,uri:'https://stream2.example/live'},{uuid:'',name:'Jazz Radio Blues',country:'FR',codec:'mp3',bitrate:128,uri:'https://stream3.example/live'},{uuid:'',name:'Adroit Jazz Underground HD Opus',country:'US',codec:'ogg',bitrate:192,uri:'https://stream4.example/live'},{uuid:'',name:'Jazz Radio',country:'FR',codec:'mp3',bitrate:192,uri:'https://stream5.example/live'},{uuid:'',name:'Bossa Jazz Brasil',country:'BR',codec:'aac+',bitrate:64,uri:'https://stream6.example/live'},{uuid:'',name:'Jazz Radio',country:'FR',codec:'mp3',bitrate:128,uri:'https://stream7.example/live'}]};const f0=window.fetch;window.fetch=(u,o)=>String(u).startsWith('/api/radio/search')?Promise.resolve(new Response(JSON.stringify(found),{headers:{'content-type':'application/json'}})):f0(u,o);setTimeout(()=>{const u=document.querySelector('#radiouri');if(!u)return;u.value='jazz';u.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter'}));},4200);})()",
+      "keys": "Enter,wait:2500,r,wait:3000"
+    }
+  ]
+}

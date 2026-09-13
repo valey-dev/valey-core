@@ -71,6 +71,14 @@ ok('the person waiting goes upstairs, the rest keep their seats',
   UI.standupTeams(mixed, [])[0].list.map((a) => a.id));
 ok('and the team has its own counter of those waiting', UI.standupTeams(mixed, [])[0].waiting === 1);
 
+// A stopped agent will not go on until somebody says so: second after the
+// waiting ones, and not counted among them.
+const withStopped = [...mixed, agent({ id: 'stops', project: 'p', seat: 4, status: 'stopped' })];
+ok('the stopped come right after those waiting',
+  UI.standupTeams(withStopped, [])[0].list.map((a) => a.id).join(',') === 'waits,stops,works,idles',
+  UI.standupTeams(withStopped, [])[0].list.map((a) => a.id));
+ok('…and are not counted as waiting', UI.standupTeams(withStopped, [])[0].waiting === 1);
+
 // ------------------------------------------------------------- the card
 
 const reported = UI.standupCard(agent({
@@ -112,7 +120,10 @@ ok('⚑ raised only when there is a need for a report',
 ok('card status - waiting, working, gone',
   UI.standupCard(agent({ id: 'w', status: 'awaiting' })).state === 'wait'
   && UI.standupCard(agent({ id: 'w', status: 'working' })).state === 'work'
-  && UI.standupCard(agent({ id: 'w', status: 'idle' })).state === 'idle');
+  && UI.standupCard(agent({ id: 'w', status: 'idle' })).state === 'idle'
+  && UI.standupCard(agent({ id: 'w', status: 'stopped' })).state === 'stop');
+const cutOff = { ...agent({ id: 'w', status: 'stopped' }), act: { key: 'stoppedAt', arg: 'web/ui.js' } };
+ok('a stopped card says where it stopped', UI.standupCard(cutOff).now.includes('web/ui.js'), UI.standupCard(cutOff).now);
 
 console.log(bad ? `\nFAILED: ${bad}` : '\nall matched');
 process.exit(bad ? 1 : 0);
