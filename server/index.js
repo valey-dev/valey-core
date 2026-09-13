@@ -685,10 +685,17 @@ async function handle(req, res) {
   // from something that already is one — this machine has nothing to ask.
   if (url.pathname === '/api/pair' && req.method === 'POST') {
     if (!isLan(req)) return send(res, 403, { error: 'pairing is asked from the same network only', errorKey: 'err.pairLan' });
-    if (await isOwner(req)) return send(res, 409, { error: 'this device is the owner already', errorKey: 'err.pairOwner' });
+    // The office raised for release pictures (tools/lib/office.mjs,
+    // PICTURE_ENV) is one machine with no second device, and its page is the
+    // owner; a pairing request is the one screen of this feature it could not
+    // show. There, and only there, this machine may ask, with an invented
+    // address for the card. The switch is an environment variable of the
+    // process — nothing that arrives over the network can set it.
+    const picture = process.env.VALEY_PICTURE === '1';
+    if (!picture && (await isOwner(req))) return send(res, 409, { error: 'this device is the owner already', errorKey: 'err.pairOwner' });
     const b = await readJson(req);
     const name = String(b.name || '').replace(/[^\p{L}\p{N} ·.\-]/gu, '').slice(0, 40) || deviceName(req.headers['user-agent']);
-    const ip = ((req.socket && req.socket.remoteAddress) || '').replace(/^::ffff:/, '');
+    const ip = picture && b.ip ? String(b.ip).slice(0, 40) : ((req.socket && req.socket.remoteAddress) || '').replace(/^::ffff:/, '');
     const p = pairings.ask({ ip, name });
     return send(res, 200, { id: p.id, code: p.code, name: p.name, ttl: 120 });
   }

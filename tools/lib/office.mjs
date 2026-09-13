@@ -25,7 +25,9 @@ export const ROOT = path.dirname(path.dirname(path.dirname(fileURLToPath(import.
 //                shot» with a path on the owner's disk reached the public
 //                v0.40.0 note on 12 September 2026.
 // tools/test-picture-office.mjs raises an office with it and checks both.
-export const PICTURE_ENV = Object.freeze({ VALEY_STAND: '', VALEY_NUDGE: 'off' });
+// VALEY_PICTURE lets the picture office show what needs a second device —
+// a pairing request (server/index.js, /api/pair).
+export const PICTURE_ENV = Object.freeze({ VALEY_STAND: '', VALEY_NUDGE: 'off', VALEY_PICTURE: '1' });
 
 // The port is asked of the system rather than assigned: a fixed number is two
 // worktrees colliding, which the stand reports as its own failure.
