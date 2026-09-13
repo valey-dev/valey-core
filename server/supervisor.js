@@ -18,6 +18,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+// A worker inherits this process's environment, and the first one must not be
+// told it is taking over: a shell started by an office before v0.55.1 carries
+// the handover's instructions (the list is SWAP_ENV in server/swap.js, copied
+// rather than imported to keep this file small), and the first worker would
+// have gone for the old office's port and waited for its handover.
+for (const k of ['VALEY_WORKER', 'VALEY_PORT_FIXED', 'VALEY_HOST_FIXED', 'VALEY_HANDOFF_WAIT']) delete process.env[k];
 // silent: the workers' output is passed through by hand, so the last lines of a
 // worker that failed to start can be told to the office that asked for it.
 // VALEY_WORKER_EXEC is for the stand alone: a worker of its own that can be told
