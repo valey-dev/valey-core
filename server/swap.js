@@ -20,14 +20,25 @@ import os from 'node:os';
 import path from 'node:path';
 import { checkUpdate, pullUpdate } from './update.js';
 
-export const isWorker = cluster.isWorker && process.env.VALEY_WORKER === '1';
+// What the supervisor tells a worker, read once and taken out of the
+// environment. Everything the office starts inherits process.env — a delivered
+// `claude --resume`, and whatever that agent runs in turn — and until v0.55.1
+// these went along. On 13 September 2026 an agent resumed by an updated office
+// ran the stands, and every `node server/index.js` it started took itself for
+// the next worker: it went for port 5177 and would have waited for a handover
+// nobody was going to send. Only a worker of the supervisor may act on them.
+export const SWAP_ENV = ['VALEY_WORKER', 'VALEY_PORT_FIXED', 'VALEY_HOST_FIXED', 'VALEY_HANDOFF_WAIT'];
+const told = Object.fromEntries(SWAP_ENV.map((k) => [k, process.env[k]]));
+for (const k of SWAP_ENV) delete process.env[k];
+
+export const isWorker = cluster.isWorker && told.VALEY_WORKER === '1';
 
 // Where the previous worker listened. The next one takes exactly that address:
 // asked to find a free port it would walk the same road again and could land
 // elsewhere, and «office already running» would stop it at its own port.
 export function fixedAddress() {
-  const port = Number(process.env.VALEY_PORT_FIXED);
-  return port ? { port, host: process.env.VALEY_HOST_FIXED || '127.0.0.1' } : null;
+  const port = isWorker ? Number(told.VALEY_PORT_FIXED) : 0;
+  return port ? { port, host: told.VALEY_HOST_FIXED || '127.0.0.1' } : null;
 }
 
 // ------------------------------------------------------------------- the gate
@@ -40,7 +51,7 @@ let onOpen = null;
 // stopped accepting — and that request would die with it. Found by the stand
 // on its second run: one probe of thirty-eight refused.
 let closing = false;
-if (process.env.VALEY_HANDOFF_WAIT === '1') {
+if (isWorker && told.VALEY_HANDOFF_WAIT === '1') {
   gate = new Promise((resolve) => { openGate = resolve; });
   // A handoff that never comes must not hold the office forever: after half a
   // minute the new worker serves with what it has.
