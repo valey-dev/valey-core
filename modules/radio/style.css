@@ -49,7 +49,7 @@
   font:12px "JetBrains Mono", "Courier New",monospace; padding:4px 6px; cursor:pointer}
 .radiolist li.now .rst{color:var(--accent)}
 :where(body:not(.bykeys)) .radiolist .rst:hover{background:var(--wood); color:var(--ink)}
-.radiolist .rdel{background:none; border:none; color:var(--muted-dim); cursor:pointer; padding:0 6px}
+.radiolist .rdel{background:none; border:none; color:var(--muted); cursor:pointer; padding:0 6px}
 :where(body:not(.bykeys)) .radiolist .rdel:hover{color:#ff9f8f}
 .radioadd{display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--ink-dim)}
 .radioadd input{background:var(--field); color:var(--ink); border:2px solid var(--frame);
@@ -140,9 +140,9 @@
 .radiofound .rfound{display:flex; align-items:center; gap:8px; width:100%; text-align:left;
   background:none; border:2px solid transparent; color:var(--ink-dim); cursor:pointer;
   font:12px "JetBrains Mono", "Courier New", monospace; padding:4px 6px}
-.radiofound .rfound i{font-style:normal; color:var(--muted-dim); width:10px; flex:none}
+.radiofound .rfound i{font-style:normal; color:var(--muted); width:10px; flex:none}
 .radiofound .rfound span{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.radiofound .rfound em{font-style:normal; font-size:10px; color:var(--muted-dim); flex:none}
+.radiofound .rfound em{font-style:normal; font-size:10px; color:var(--muted); flex:none}
 .radiofound .rfound.added i{color:var(--accent)}
 .radiofound .rfound.nohttp{cursor:default; opacity:.6}
 :where(body:not(.bykeys)) .radiofound .rfound:not(.nohttp):hover,
