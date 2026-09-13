@@ -82,6 +82,8 @@ const PAPER = '#f1e2bc', INK = '#2b1d14', LINE = '#5a4632', DIM = '#b9a480';
 const ROOM = '#efe0b8', SERVICE = '#e3d3ab', GREEN = '#dfe6c2', HALL = '#e8d8b0', LANE = '#ecdcb4';
 const WALL_C = '#cbb58a', GLASS = '#bfd8dc', DESK = '#c9a97a', SHAFT = '#e2cf9f', CABIN = '#7d6448';
 const WORK = '#6cc27a', WAIT = '#f0b429', IDLE = '#8c7660', ME = '#3fa9f5', CAT = '#e08a3c', GUEST = '#7c6ab0';
+// A stopped agent — cut off mid-step — is the office's --off, as on its bubble and card.
+const STOP = '#c2795f';
 // The squeeze: a quarter while the building fits; above that, as much as fits into the panel.
 const SCALE = 0.25, MAP_W = 380, MAP_H = 340;
 
@@ -124,7 +126,7 @@ export function planOpen() { return !!el && !el.hidden; }
 export function planFocus() { return cells[focus] ? cells[focus].room.key : null; }
 
 // ------------------------------------------------------------------ the data
-const statusColor = (a) => (!a ? DIM : a.status === 'awaiting' ? WAIT : a.status === 'idle' ? IDLE : WORK);
+const statusColor = (a) => (!a ? DIM : a.status === 'awaiting' ? WAIT : a.status === 'stopped' ? STOP : a.status === 'idle' ? IDLE : WORK);
 const inRect = (p, r) => p && p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h;
 
 function floorOf(L, room) {

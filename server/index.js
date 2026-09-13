@@ -17,7 +17,7 @@ import { releaseNudge } from './release.js';
 import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset } from './modules.js';
 import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
 import { isLan, deviceOf, shownDevice, deviceName, Pairings, SEEN_EVERY } from './devices.js';
-import { MIME, fileType, fileHeaders } from './files.js';
+import { MIME, MAX_VIEW, fileType, fileHeaders } from './files.js';
 import { listenFree } from './port.js';
 import { createExposure, lanAddresses } from './expose.js';
 
@@ -807,9 +807,22 @@ async function handle(req, res) {
   // Entry by code. One use: it worked, it is spent, and the same link does not
   // let anyone in twice. In exchange a guest token is issued, so a page reload
   // does not put the person back outside the door.
+  //
+  // The code is spent when the guest presses Enter at the door, not when the page
+  // opens: `peek` checks it and names the inviter without spending it. Until
+  // 13 September 2026 the first thing to run the page spent it — on
+  // 5 September a link forwarded in Telegram was burnt by the messenger's
+  // built-in browser, and the guest's laptop was told the invitation was not valid.
+  //
+  // A spent code still opens the door for the browser it was spent in: the
+  // request carries the pass that code gave out. That grants nothing new —
+  // whoever holds the pass is already in — and it keeps the link working for
+  // the person it was sent to. Any other browser is told the code is used.
   if (url.pathname === '/api/enter' && req.method === 'POST') {
     const b = await readJson(req);
     const code = String(b.code || '');
+    const peek = b.peek === true;
+    const presented = String(req.headers['x-valey-guest'] || '');
     // Decided against the file as it is now, and again if another office wrote
     // it meanwhile (see updateSettings): a pass that is handed out has to be
     // the one on disk.
@@ -818,7 +831,13 @@ async function handle(req, res) {
       const invites = s.access.invites || [];
       const invite = invites.find((i) => i.code === code);
       if (!invite) { answer = [403, { error: 'this invitation does not exist', errorKey: 'err.codeUnknown' }]; return null; }
-      if (invite.usedAt) { answer = [403, { error: 'this code has already been used', errorKey: 'err.codeUsed' }]; return null; }
+      if (invite.usedAt) {
+        answer = presented && presented === invite.guest
+          ? [200, { ok: true, guest: invite.guest, from: invite.from }]
+          : [403, { error: 'this code has already been used', errorKey: 'err.codeUsed' }];
+        return null;
+      }
+      if (peek) { answer = [200, { ok: true, peek: true, from: invite.from }]; return null; }
       const guest = crypto.randomUUID();
       answer = [200, { ok: true, guest, from: invite.from }];
       return {
@@ -1054,7 +1073,7 @@ async function handle(req, res) {
     }
     try {
       const st = await fsp.stat(p);
-      if (st.size > 8 * 1024 * 1024) return send(res, 413, { error: 'too big' });
+      if (st.size > MAX_VIEW) return send(res, 413, { error: 'too big' });
       // Show but do not run: html and svg go out as an attachment, see files.js.
       return send(res, 200, await fsp.readFile(p), fileType(p), fileHeaders(p));
     } catch {
@@ -1186,7 +1205,8 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   let boot = await getSettings();
   const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
   if (external && !(boot.network || {}).token) {
-    boot = await patchSettings({ network: { external: true, token: newToken() } });
+    // updateSettings: an office started beside this one may save a token first.
+    boot = await updateSettings((now) => ((now.network || {}).token ? null : { network: { external: true, token: newToken() } }));
     console.log('A network token was created and saved to the office settings');
   }
   const HOST = host || (external ? '0.0.0.0' : '127.0.0.1');

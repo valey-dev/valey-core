@@ -19,7 +19,8 @@ ok('a Spotify link stays Spotify',
   parseWave('https://open.spotify.com/playlist/37i9dQZF1DWWQRwui0ExPn?si=x').kind === 'spotify');
 ok('an http(s) address is a stream',
   parseWave(' https://ice6.somafm.com/groovesalad-128-mp3 ').uri === 'https://ice6.somafm.com/groovesalad-128-mp3');
-ok('words are neither', parseWave('lofi beats') === null);
+ok('words are a search', parseWave('  lofi   beats ').kind === 'search' && parseWave('lofi beats').q === 'lofi beats');
+ok('one letter is nothing', parseWave('a') === null);
 ok('another scheme is neither', parseWave('ftp://x/y.mp3') === null);
 ok('a Spotify station is Spotify', kindOf({ uri: 'spotify:playlist:1' }) === 'spotify');
 ok('an address in the list is a stream', kindOf({ uri: 'https://x/y' }) === 'stream');

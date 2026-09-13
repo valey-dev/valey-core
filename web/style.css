@@ -23,7 +23,7 @@ canvas{image-rendering:pixelated; display:block; border:3px solid var(--frame);
 .chip{display:inline-block; white-space:nowrap}
 #hud b{color:var(--warn); letter-spacing:.14em}
 .chip{margin-left:10px; color:var(--ink-dim)}
-.chip.work{color:var(--accent)} .chip.wait{color:var(--warn)}
+.chip.work{color:var(--accent)} .chip.wait{color:var(--warn)} .chip.stop{color:var(--off)}
 /* The pager badge is a button among spans, so it has to give back everything a
    browser gives a button and keep only the pointer: the HUD is one line of text
    and a raised control in it would read as a foreign object. */
@@ -110,7 +110,7 @@ kbd{color:var(--muted); font-size:10px}
 .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; padding:14px; overflow:auto}
 .grid figure{margin:0; cursor:pointer; background:var(--field); border:2px solid var(--wood); padding:6px}
 :where(body:not(.bykeys)) .grid figure:hover{border-color:var(--warn)}
-.thumb{height:96px; display:flex; align-items:center; justify-content:center; background:var(--bg-deep); color:var(--muted-dim); font-size:28px; overflow:hidden}
+.thumb{height:96px; display:flex; align-items:center; justify-content:center; background:var(--bg-deep); color:var(--muted); font-size:28px; overflow:hidden}
 .thumb img{max-width:100%; max-height:100%; image-rendering:auto}
 figcaption{font-size:11px; margin-top:6px; color:var(--ink); word-break:break-all}
 figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2px}
@@ -132,7 +132,7 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .single{overflow:auto; padding:14px}
 .single .full{max-width:100%; display:block; margin:0 auto}
 .single pre{white-space:pre-wrap; font-size:12px; color:var(--ink-dim); margin:0}
-.vpath{padding:6px 12px; font-size:10px; color:var(--muted-dim); border-top:2px solid var(--wood); word-break:break-all}
+.vpath{padding:6px 12px; font-size:10px; color:var(--muted); border-top:2px solid var(--wood); word-break:break-all}
 .empty{padding:30px; color:var(--muted); text-align:center}
 
 /* ---- permission card ---- */
@@ -274,7 +274,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .toast.wait{border-left-color:var(--warn)} .toast.news{border-left-color:var(--lilac)}
 .toast.out{opacity:0; transition:opacity .6s}
 @keyframes slide{from{transform:translateX(-14px);opacity:0}to{transform:none;opacity:1}}
-.chip.room{color:var(--lilac)} .chip.dim{color:var(--muted-dim)}
+.chip.room{color:var(--lilac)} .chip.dim{color:var(--muted)}
 .notes{list-style:none;margin:6px 0 0;padding:0;font-size:11px;color:var(--muted)}
 .notes li{padding:1px 0}
 
@@ -322,7 +322,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .pcol h4{display:flex; justify-content:space-between; align-items:baseline; gap:8px;
   margin:2px 0 6px; padding-bottom:4px; border-bottom:1px solid var(--wood-hi);
   color:var(--lilac); font-size:12px; letter-spacing:.08em; font-weight:normal}
-.pcol h4 i{flex:none; font-style:normal; font-size:10px; letter-spacing:0; color:var(--muted-dim)}
+.pcol h4 i{flex:none; font-style:normal; font-size:10px; letter-spacing:0; color:var(--muted)}
 /* A card is one object, not a button row: the focus ring moves over the whole
    card, ⏎ opens, and G leads. The inner ⇢ offers the same lead action to a mouse. */
 .pcard{position:relative; display:grid; width:100%; margin-bottom:8px; padding:8px 8px 8px 12px;
@@ -334,19 +334,21 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
   font:12px "JetBrains Mono", "Courier New",monospace}
 .pcard.work{border-left-color:var(--accent)}
 .pcard.wait{border-left-color:var(--warn)}
+.pcard.stop{border-left-color:var(--off)}
 :where(body:not(.bykeys)) .pcard:hover{border-color:var(--frame-dim)}
 .pface{grid-area:face; align-self:start; image-rendering:pixelated}
 .pname{grid-area:name; color:var(--warn); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .ptok{grid-area:tok; font-size:10px; color:var(--muted); white-space:nowrap}
 .pcard.work .ptok{color:var(--accent)}
 .pcard.wait .ptok{color:var(--warn)}
-.pmeta{grid-area:meta; font-size:10px; color:var(--muted-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.pcard.stop .ptok{color:var(--off)}
+.pmeta{grid-area:meta; font-size:10px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 /* A task gets two lines: one cuts a sentence mid-thought, while three turns the
    column into prose. A cold task or substitute text dims in full. */
 .ptask{grid-area:task; margin-top:4px; color:var(--ink); line-height:1.35;
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
 .ptask.cold{color:var(--muted)}
-.ptask i{font-style:normal; font-size:10px; color:var(--muted-dim)}
+.ptask i{font-style:normal; font-size:10px; color:var(--muted)}
 .pfoot{grid-area:foot; font-size:10px; color:var(--ink-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .pfoot.now{color:var(--accent); opacity:.8}
 /* "Need you" comes from a report and can span four lines. On a live floor on
@@ -356,9 +358,9 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .pneed{grid-area:need; margin-top:2px; font-size:10px; color:var(--warn); line-height:1.35;
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
 .plead{grid-area:lead; align-self:center; background:none; border:none; padding:0 2px; cursor:pointer;
-  color:var(--muted-dim); font:12px "JetBrains Mono", "Courier New",monospace}
+  color:var(--muted); font:12px "JetBrains Mono", "Courier New",monospace}
 :where(body:not(.bykeys)) .plead:hover{color:var(--warn)}
-.pkeys{flex:0 0 auto; margin:0; padding:6px 14px 8px; font-size:11px; color:var(--muted-dim)}
+.pkeys{flex:0 0 auto; margin:0; padding:6px 14px 8px; font-size:11px; color:var(--muted)}
 /* Width is divided by the office scale, like the four panels above: vw inside
    zoom is measured against the window and then multiplied by the scale, so an
    undivided 94vw hands 175% a panel the width of the whole window. Written down
@@ -413,10 +415,10 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
   font:12px "JetBrains Mono", "Courier New",monospace}
 :where(body:not(.bykeys)) .btab:hover{background:var(--wood); color:var(--ink)}
 .btab.on{background:var(--wood); color:var(--warn); border:2px solid var(--accent); padding:2px 9px}
-.btab kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted-dim)}
-.rst kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted-dim)}
+.btab kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted)}
+.rst kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted)}
 .btab.on kbd{color:var(--ink-dim)}
-.bhint{margin-left:auto; font-size:11px; color:var(--muted-dim)}
+.bhint{margin-left:auto; font-size:11px; color:var(--muted)}
 
 /* Things form a grid rather than a list: an item should be seen, not described. */
 .bbody{padding:14px; display:flex; flex-direction:column; gap:12px}
@@ -429,7 +431,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 :where(body:not(.bykeys)) .bcell:hover{filter:brightness(1.15)}
 .bcell.on{background:var(--wood-hi); border-color:var(--accent)}
 .bcell.focus{border-color:var(--warn)}
-.dcap .dim{color:var(--muted-dim)}
+.dcap .dim{color:var(--muted)}
 
 /* The "office" tab: dress-code switch and routes to the other settings. */
 .oseg{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
@@ -450,7 +452,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .tcol:nth-child(2){grid-column:3} .tcol:nth-child(3){grid-column:5}
 .tcol b{display:block; font:bold 10px "JetBrains Mono", "Courier New",monospace; letter-spacing:.08em; color:var(--muted)}
 .tcol.own b{color:var(--accent)}
-.tcol span{font-size:9px; color:var(--muted-dim)}
+.tcol span{font-size:9px; color:var(--muted)}
 .tree{position:relative; grid-auto-rows:28px; row-gap:6px}
 .tedges{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
 .tedges path{fill:none; stroke:var(--frame-dim); stroke-width:2}
@@ -483,7 +485,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .thead2 b{font:bold 10px "JetBrains Mono", monospace; letter-spacing:.08em; color:var(--muted);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .vsw{display:flex; align-items:center; gap:6px; margin-left:auto; font-size:11px; color:var(--muted)}
-.vsw kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted-dim)}
+.vsw kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted)}
 .vbtn{background:var(--field); color:var(--ink-dim); border:1px solid var(--frame-dim);
   padding:2px 8px; cursor:pointer; font:11px "JetBrains Mono", "Courier New",monospace}
 :where(body:not(.bykeys)) .vbtn:hover{background:var(--wood); color:var(--ink)}
@@ -498,7 +500,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .tdir.on b{color:var(--ink)}
 .tdir span{font-size:10px}
 .tdir.free span{color:var(--accent)}
-.tdir em{font-style:normal; font-size:9px; color:var(--muted-dim)}
+.tdir em{font-style:normal; font-size:9px; color:var(--muted)}
 .tbar{display:block; height:4px; background:var(--bg); border:1px solid var(--frame-dim)}
 .tbar u{display:block; height:100%; background:var(--accent)}
 .wbody{display:flex; gap:12px; align-items:flex-start}
@@ -518,10 +520,10 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .wkey .tnode{flex:0 1 auto}
 .wsubs{display:flex; flex-direction:column; gap:2px; padding-top:2px}
 .wsub{font-style:normal; font-size:9px; color:var(--muted); white-space:nowrap}
-.wgate{display:flex; align-items:center; gap:8px; padding:2px 0; color:var(--muted-dim);
+.wgate{display:flex; align-items:center; gap:8px; padding:2px 0; color:var(--muted);
   border-top:1px dashed var(--frame-dim); font-size:9px; position:relative; z-index:1}
 .wgate b{font-size:9px; letter-spacing:.1em; color:var(--warn)}
-.wempty{margin:0; padding:6px 0; font-size:10px; color:var(--muted-dim); text-align:center}
+.wempty{margin:0; padding:6px 0; font-size:10px; color:var(--muted); text-align:center}
 .wroom{margin:0; font:bold 9px "JetBrains Mono", monospace; letter-spacing:.1em; color:var(--accent)}
 .wbody .lcard{width:255px; flex:none}
 /* Set from ui.js against the panel's own width — a media query inside zoom
@@ -587,7 +589,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .modepick select{background:var(--field); color:var(--ink); border:2px solid var(--frame);
   font:11px "JetBrains Mono", "Courier New",monospace; padding:2px 4px; margin-left:4px}
 .notes li{display:flex; gap:6px; align-items:baseline; flex-wrap:wrap}
-.ntail{color:var(--muted-dim); font-size:10px}
+.ntail{color:var(--muted); font-size:10px}
 .ntail.ok{color:var(--accent)} .ntail.bad{color:var(--bad-dim)}
 
 .chatname{display:block; color:var(--info); font-size:11px; margin-top:2px}
@@ -637,7 +639,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .grid figure.sel figcaption{color:var(--warn)}
 .grid figure.sel .thumb{background:var(--field)}
 
-.hint.dim{color:var(--muted-dim); font-size:10px; border-top:1px solid var(--wood-hi); padding-top:4px; margin-top:6px}
+.hint.dim{color:var(--muted); font-size:10px; border-top:1px solid var(--wood-hi); padding-top:4px; margin-top:6px}
 
 /* ---- reading a whole conversation ---- */
 .linky{background:none; border:none; color:var(--info); font:11px "JetBrains Mono", "Courier New",monospace;
@@ -650,7 +652,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .mwho{color:var(--warn); font-size:11px; letter-spacing:.06em; margin-bottom:4px;
   display:flex; justify-content:space-between; gap:10px}
 .msg.user .mwho{color:var(--info)}
-.mwho span{color:var(--muted-dim)}
+.mwho span{color:var(--muted)}
 /* markdown.css uses max-width:72ch as a readable document measure, correctly.
    In a transcript the same class wraps a message body, making the time header
    span the block while text below stopped at two thirds: about 560 px of text
@@ -673,6 +675,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .facetext #facealbum{color:var(--muted)}
 
 .limitline{color:var(--warn)}
+.stopline{color:var(--off)}
 
 /* ---- office colour ---- */
 /* ---- reception ---- */
@@ -683,10 +686,10 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
   background:var(--field); border:2px solid var(--wood)}
 .reccol{flex:1; min-width:0}
 .reccol b{display:block; color:var(--lilac); font-size:12px; font-weight:normal}
-.reccol i{display:block; color:var(--muted-dim); font-size:10px; font-style:normal;
+.reccol i{display:block; color:var(--muted); font-size:10px; font-style:normal;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .reccnt{flex:none; color:var(--ink-dim); font-size:11px}
-.recwait{flex:none; color:var(--muted-dim); font-size:11px}
+.recwait{flex:none; color:var(--muted); font-size:11px}
 .recwait.on{color:var(--warn)}
 .recgo{flex:none; background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:11px "JetBrains Mono", "Courier New",monospace; padding:3px 8px; cursor:pointer}
@@ -702,8 +705,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
    them with var() changes colour, not merely its name: theme.js derives brown
    from HSL and misses the oak fallback by one (rgb(31,22,15) versus
    rgb(31,21,15)), diverging entirely in every other hue. Unfreezing the field
-   is a fix recorded in BACKLOG.md, not part of the token migration. .tally's
-   #8c7660 behaves the same way. */
+   is a fix recorded in BACKLOG.md, not part of the token migration. */
 .invbody input{flex:1; min-width:0; font:inherit; color:var(--ink); background:#1f150f;
   border:1px solid #6b4a2e; padding:4px 8px}
 .invbody .hint.warn{color:var(--warn)}
@@ -758,9 +760,10 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
   font:12px "JetBrains Mono", "Courier New",monospace; padding:4px 10px; cursor:pointer; align-self:flex-start}
 :where(body:not(.bykeys)) .skinbody button.thin:hover{background:var(--wood-lit); color:var(--warn)}
 
-/* The same frozen duplicate as .invbody input: #8c7660 is --muted, and var()
-   would shift this colour with office hue. */
-.tally{margin:2px 0 8px; font-size:11px; color:#8c7660}
+/* Frozen at the old --muted until 13 September 2026, and at 3.81:1 on the
+   panel it failed the same contrast the token was raised for. Following the
+   office hue is what the one tone for service text asks of it. */
+.tally{margin:2px 0 8px; font-size:11px; color:var(--muted)}
 
 /* Messages fetched with R show where reading had reached. */
 .msg.fresh{border-left-color:var(--warn); background:rgba(255,209,102,.05)}
@@ -777,7 +780,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
   font:12px "JetBrains Mono", "Courier New",monospace; padding:0 2px}
 :where(body:not(.bykeys)) .nhead button:hover{color:var(--warn)}
 .nhead .ndel.arm{color:var(--bad-dim)}
-.nanchor{display:block; font-style:normal; font-size:10px; color:var(--muted-dim); margin-top:2px}
+.nanchor{display:block; font-style:normal; font-size:10px; color:var(--muted); margin-top:2px}
 .nbody{color:var(--ink-dim); font-size:13px; line-height:1.55; white-space:pre-wrap; margin-top:3px}
 
 /* The message currently receiving a note. */
@@ -794,7 +797,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .orphans{border:2px solid var(--frame-dim); background:rgba(31,21,15,.6);
   padding:8px 10px 2px; margin:0 0 14px}
 .ohead{display:flex; align-items:center; gap:10px; font-size:11px; color:var(--ink-dim); margin-bottom:6px}
-.ohead i{font-style:normal; font-size:10px; color:var(--muted-dim); margin-left:auto}
+.ohead i{font-style:normal; font-size:10px; color:var(--muted); margin-left:auto}
 .orphans .note{margin-bottom:8px}
 
 .ncount{float:right; color:var(--warn)}
@@ -816,7 +819,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .tbtn{display:flex; align-items:center; gap:10px; background:var(--wood); color:var(--ink);
   border:3px solid var(--frame); font:15px "JetBrains Mono", "Courier New",monospace; padding:9px 12px; cursor:pointer;
   text-align:left}
-.tbtn kbd{margin-left:auto; color:var(--muted); font-size:11px}
+.tbtn kbd{margin-left:auto; color:var(--ink-dim); font-size:11px}
 :where(body:not(.bykeys)) .tbtn:hover{background:var(--wood-lit); color:var(--warn)}
 .tbtn.main{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
 .tbtn.focus{outline:2px solid var(--ink); outline-offset:2px}
@@ -864,9 +867,9 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
   background:var(--field); border:2px solid var(--frame); color:var(--ink);
   font:inherit; font-size:15px}
 .tcard input:focus{outline:none; border-color:var(--warn)}
-.tcard input::placeholder{color:var(--muted-dim)}
+.tcard input::placeholder{color:var(--muted)}
 .tcard .small{font-size:11px}
-.tmeta{position:absolute; bottom:3%; color:var(--muted-dim); font-size:11px}
+.tmeta{position:absolute; bottom:3%; color:var(--muted); font-size:11px}
 
 /* Narrow-screen entrance: a column instead of a canvas of scattered objects.
    These percentages were calculated for a wide window. On a phone the cards
@@ -976,15 +979,15 @@ body.titling #hud{visibility:hidden}
   border-bottom:1px solid var(--wood-hi)}
 .nline{display:flex; align-items:baseline; gap:10px}
 .ntext{flex:1; color:var(--ink); font-size:13px; line-height:1.5}
-.nline i{font-style:normal; font-size:10px; color:var(--muted-dim); flex:none}
+.nline i{font-style:normal; font-size:10px; color:var(--muted); flex:none}
 .nmeta{display:flex; align-items:center; gap:8px; margin-top:3px}
 .nmeta span{flex:1; font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis}
 .ngo{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:10px "JetBrains Mono", "Courier New",monospace; padding:2px 8px; cursor:pointer; flex:none}
 :where(body:not(.bykeys)) .ngo:hover{background:var(--wood-lit); color:var(--warn)}
 /* A closed conversation has nothing to open, so it gets no button. */
-.ndead{flex:none; font-size:10px; color:var(--muted-dim); border:2px solid var(--wood-hi); padding:2px 8px}
-.nmeta .ndel{background:none; border:none; color:var(--muted-dim); cursor:pointer;
+.ndead{flex:none; font-size:10px; color:var(--muted); border:2px solid var(--wood-hi); padding:2px 8px}
+.nmeta .ndel{background:none; border:none; color:var(--muted); cursor:pointer;
   font:11px "JetBrains Mono", "Courier New",monospace; flex:none}
 :where(body:not(.bykeys)) .nmeta .ndel:hover{color:var(--bad-dim)}
 .nmeta .ndel.arm{color:var(--bad-dim)}
@@ -1082,8 +1085,8 @@ body.stand-folded #standtab{display:block}
 .dl.add{background:rgba(159,224,168,.10)}
 .dl.del{background:rgba(255,159,143,.10)}
 .dl.hunk{background:var(--field); color:var(--muted); font-size:10px; line-height:20px; padding-left:10px}
-.dn{flex:0 0 34px; text-align:right; padding-right:6px; color:var(--muted-dim); font-size:9px}
-.dp{flex:0 0 16px; text-align:center; color:var(--muted-dim)}
+.dn{flex:0 0 34px; text-align:right; padding-right:6px; color:var(--muted); font-size:9px}
+.dp{flex:0 0 16px; text-align:center; color:var(--muted)}
 .dl.add .dp{color:var(--accent)} .dl.del .dp{color:var(--bad)}
 
 /* ---- office language and agent names ---- */
@@ -1203,7 +1206,7 @@ body.stand-folded #standtab{display:block}
 .kcap.gap{background:none; border-bottom-color:transparent}
 .kface{display:block; font-size:calc(var(--cap) * 0.21); line-height:1; color:var(--ink)}
 .kcap.free .kface{color:var(--muted)}
-.kcap.free .kwhat{color:var(--muted-dim)}
+.kcap.free .kwhat{color:var(--muted)}
 /* A key that exists but not in this context dims completely, including group
    strip and the Russian letter in its corner. The fact, not just the label, is
    disabled: in an agent conversation C is not "wardrobe, but pale"; it does
@@ -1211,7 +1214,7 @@ body.stand-folded #standtab{display:block}
 .kcap.off{opacity:.22}
 .keyslegend s.off{opacity:.22}
 .ktwin{position:absolute; top:calc(var(--cap) * 0.077); right:calc(var(--cap) * 0.096);
-  font-style:normal; font-size:calc(var(--cap) * 0.173); color:var(--muted-dim)}
+  font-style:normal; font-size:calc(var(--cap) * 0.173); color:var(--muted)}
 /* A cap label is clipped to two lines and appears in full in title. A narrow
    52 px key holds ten characters and can never contain "talk, drink, sit"; the
    map locates actions, while exact wording lives in the hover hint. */

@@ -222,8 +222,14 @@ try {
   // the run failed with a bare «WebSocket is not defined».
   if (typeof WebSocket === 'undefined') throw new Error(`no global WebSocket in Node ${process.versions.node}; shot.mjs needs Node 22`);
 
+  // The tab opens blank and is sent to the address once, after the setup
+  // below. It used to open on the address and then reload to apply that
+  // setup, so the page loaded twice — and the first load had already done
+  // what a page does once: taken #code= out of the address and spent it.
+  // The reload came back with no code, and every frame of an invitation
+  // showed the empty doorway («nobody yet») instead of its card.
   const target = await (await fetch(
-    `http://127.0.0.1:${PORT_CDP}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' },
+    `http://127.0.0.1:${PORT_CDP}/json/new?about:blank`, { method: 'PUT' },
   )).json();
 
   ws = new WebSocket(target.webSocketDebuggerUrl);
@@ -259,7 +265,9 @@ try {
       width: w, height: h, deviceScaleFactor: 1, mobile: false,
     });
   }
-  await send('Page.reload', { ignoreCache: true });
+  // The cache is already off, so the one navigation gets fresh files — what
+  // the reload was here for.
+  await send('Page.navigate', { url });
   await wait(settle);
   if (setupJs) {
     const r = await send('Runtime.evaluate', { expression: setupJs, awaitPromise: true, returnByValue: true });

@@ -38,8 +38,6 @@ const ALLOWED = [
     why: 'застывший двойник --field: var() здесь не переименование, а смена цвета' },
   { sel: '.invbody input', hex: '#6b4a2e',
     why: 'застывший двойник --wood-lit, там же и по той же причине' },
-  { sel: '.tally', hex: '#8c7660',
-    why: 'застывший двойник --muted; починка сдвинет цвет — пункт в BACKLOG.md' },
 ];
 
 // Variables that come from outside this file, so a var() on them is not a typo:
