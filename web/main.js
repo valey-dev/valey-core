@@ -222,6 +222,10 @@ UI.initUI(state, {
   // than in the pager's callbacks because it is the HUD that calls it, and the two
   // objects are different `api`.
   recallPager: () => { if (recall()) { state.pagerWaiting = waitingCount(); UI.renderHud(); } },
+  // A field in a panel's ring hands ↑↓ back to the office once it has let go of
+  // the caret (focusRing in ui.js): the same door the gamepad uses, so the panel's
+  // own walk decides where the arrow lands.
+  pressKey: (key) => onKey({ key, shiftKey: false, target: { tagName: 'FIELD' }, preventDefault() {} }),
   // The waiting counter opens the round: those agents are exactly what it lists.
   openRound: () => toggle('roster', UI.renderRoster, UI.closeRoster),
   close: closeAll,

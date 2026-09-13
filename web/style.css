@@ -985,8 +985,11 @@ body.titling #hud{visibility:hidden}
 .ngo{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:10px "JetBrains Mono", "Courier New",monospace; padding:2px 8px; cursor:pointer; flex:none}
 :where(body:not(.bykeys)) .ngo:hover{background:var(--wood-lit); color:var(--warn)}
-/* A closed conversation has nothing to open, so it gets no button. */
-.ndead{flex:none; font-size:10px; color:var(--muted); border:2px solid var(--wood-hi); padding:2px 8px}
+/* A closed conversation has nothing to open, so it gets no button. The badge is
+   a span inside .nmeta, so it needs .nmeta's weight to beat `.nmeta span` above:
+   as a bare .ndead it lost, took flex:1 and half the row, and the quote beside
+   it was cut to «…». */
+.nmeta .ndead{flex:none; font-size:10px; color:var(--muted); border:2px solid var(--wood-hi); padding:2px 8px}
 .nmeta .ndel{background:none; border:none; color:var(--muted); cursor:pointer;
   font:11px "JetBrains Mono", "Courier New",monospace; flex:none}
 :where(body:not(.bykeys)) .nmeta .ndel:hover{color:var(--bad-dim)}
