@@ -6,7 +6,7 @@
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { hire, release, hireList, hiredAt, hireCwd, resumeCommand, firstMessage, pruneHires, _resetHires } from '../server/hire.js';
+import { hire, release, hireList, hiredAt, hireCwd, resumeCommand, firstMessage, pruneHires, spotOf, _resetHires } from '../server/hire.js';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -52,6 +52,12 @@ ok('and is marked as data written by someone else', /written by someone else: tr
 ok('a quotation cannot close its own fence', (quoted.match(/>>>/g) || []).length === 1 && quoted.endsWith('\n>>>'), quoted);
 ok('the task is capped', JSON.parse(firstMessage('x'.repeat(9000))).message.content[0].text.length === 4000);
 
+// --- the portal's spot: two numbers on the floor, nothing else --------------
+ok('a spot is two rounded numbers', JSON.stringify(spotOf({ x: 120.6, y: '48' })) === '{"x":121,"y":48}', spotOf({ x: 120.6, y: '48' }));
+ok('and carries nothing else it was sent', Object.keys(spotOf({ x: 1, y: 2, path: '/etc' })).join() === 'x,y');
+ok('a spot that is not numbers is no spot', spotOf({ x: 'left', y: 2 }) === null && spotOf('10,20') === null && spotOf(null) === null);
+ok('and a huge one is held to the floor', spotOf({ x: 1e12, y: -5 }).x === 100000 && spotOf({ x: 1e12, y: -5 }).y === 0);
+
 // --- refusals before any process -------------------------------------------
 _resetHires();
 let spawned = 0;
@@ -63,7 +69,8 @@ ok('and none of them started a process', spawned === 0, spawned);
 
 // --- a hire that starts ----------------------------------------------------
 _resetHires();
-const h = await hire({ project: 'pixel-office', cwd: dir, task: 'check the prices', model: 'sonnet' }, { cli: cliAt(good) });
+const h = await hire({ project: 'pixel-office', cwd: dir, task: 'check the prices', model: 'sonnet', spot: { x: 210, y: 96 } }, { cli: cliAt(good) });
+ok('the floor is told where the portal stands', JSON.stringify(h.spot) === '{"x":210,"y":96}', h.spot);
 ok('a hire starts in «starting», before the session exists', h.state === 'starting' && !h.sessionId, h);
 ok('the session id arrives and the hire is working or done', await until(() => hireList()[0].sessionId === 'sess-1'), hireList());
 ok('the result marks it done, and the process stays', await until(() => hireList()[0].state === 'done'), hireList());

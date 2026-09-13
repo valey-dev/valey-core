@@ -231,7 +231,7 @@ UI.initUI(state, {
   },
   hire: (body) => fetch('/api/hire', {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, spot: portalSpot() }),
   }).then((r) => r.json()).catch((e) => ({ error: e.message })),
   releaseHire: (sessionId) => fetch('/api/hire/release', {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
@@ -668,8 +668,11 @@ const onSnapshot = (e) => {
   // An agent the office has just hired comes out of the portal at the door
   // rather than appearing at a desk. Not on the first snapshot: whoever was
   // hired before the page opened is already sitting.
-  syncActors(state.actors, state.agents, state.layout, (a) => state.spawned && a.hired
-    && state.hires.some((h) => h.sessionId === a.id) && (data.now || Date.now()) - a.hired < 3 * 60_000);
+  syncActors(state.actors, state.agents, state.layout, (a, room) => {
+    if (!state.spawned || !a.hired || (data.now || Date.now()) - a.hired > 3 * 60_000) return null;
+    const h = state.hires.find((x) => x.sessionId === a.id);
+    return h ? portalAt(h, room) : null;
+  });
 
   if (!state.spawned && state.layout.projectRooms.length) {
     const q = new URLSearchParams(location.hash.slice(1));
@@ -1854,6 +1857,24 @@ function label(x, y, text, color = '#f6e3c0') {
 // animation from its own first frame rather than from the server's.
 const portalSeen = new Map();
 
+// Where the portal opens: a couple of steps beside the owner who pressed
+// «нанять», on floor that can be walked — the new agent is seen arriving and
+// walks off to its room from there. Sergey, 13 September 2026: at the room's
+// door, as first drawn, a hire into a far room happened out of sight.
+function portalSpot() {
+  const L = state.layout, p = state.player;
+  if (!L || !p) return null;
+  for (const [dx, dy] of [[26, 0], [-26, 0], [0, 22], [0, -22]]) {
+    const x = Math.round(p.x + dx), y = Math.round(p.y + dy);
+    if (!blocked(L, x, y)) return { x, y };
+  }
+  return { x: Math.round(p.x), y: Math.round(p.y) };
+}
+
+// The spot a hire's portal stands on; a hire without one — sent by a page
+// from before the spot — opens at its room's door, as it used to.
+const portalAt = (h, room) => h.spot || (room && room.doorPoint) || null;
+
 function draw(t) {
   const L = state.layout;
   ctx.fillStyle = '#1b120c'; ctx.fillRect(0, 0, VW, VH);
@@ -1969,8 +1990,8 @@ function draw(t) {
   // seated it yet, closing behind an agent that has just walked out of it.
   for (const id of [...portalSeen.keys()]) if (!(state.hires || []).some((h) => h.id === id)) portalSeen.delete(id);
   for (const h of state.hires || []) {
-    const r = L.projectRooms.find((x) => x.key === h.project);
-    if (!r || !r.doorPoint) continue;
+    const d = portalAt(h, L.projectRooms.find((x) => x.key === h.project));
+    if (!d) continue;
     if (!portalSeen.has(h.id)) portalSeen.set(h.id, { t0: t });
     const seen = portalSeen.get(h.id);
     const act = h.sessionId ? state.actors.get(h.sessionId) : null;
@@ -1991,12 +2012,11 @@ function draw(t) {
       if (t - seen.ready < 30000) phase = { kind: 'ready', age: t - seen.t0 };
     }
     if (!phase) continue;
-    const d = r.doorPoint;
     draws.push({ y: d.y - 0.5, fn: () => drawPortal(ctx, d.x, d.y, phase, t) });
     const cap = phase.kind === 'fail' ? ['portal.failed', '#ff9f8f'] : phase.kind === 'open' ? ['portal.typing', '#ffd166'] : null;
-    // Under the ring, not over it as on the storyboard: the door is sixteen
-    // pixels below the room's plate, and a caption above sat on the name.
-    if (cap) draws.push({ y: 1e9, fn: () => label(d.x, d.y + 10, tr(cap[0]), cap[1]) });
+    // Above the ring and a line higher than the name over the owner beside it:
+    // under the ring, at the desk, it sat on the reception's own hint.
+    if (cap) draws.push({ y: 1e9, fn: () => label(d.x, d.y - 44, tr(cap[0]), cap[1]) });
   }
 
   if (state.drink && state.drink.kind === 'water') {

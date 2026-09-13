@@ -53,9 +53,21 @@ let seq = 0;
 // What the floor and the page may know about a hire. No task text: it is the
 // owner's, and the snapshot also goes to guests.
 const view = (h) => ({
-  id: h.id, project: h.project, state: h.state, sessionId: h.sessionId, source: h.source,
+  id: h.id, project: h.project, state: h.state, sessionId: h.sessionId, source: h.source, spot: h.spot,
   at: h.at, changedAt: h.changedAt, error: h.error, errorKey: h.errorKey,
 });
+
+// Where on the floor the portal opens: next to the owner who pressed «нанять»,
+// so the new agent is seen arriving rather than appearing in a far room. Two
+// numbers in floor pixels and nothing else; anything else is no spot, and the
+// page falls back to the room's door.
+export function spotOf(s) {
+  if (!s || typeof s !== 'object') return null;
+  const x = Number(s.x), y = Number(s.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const clamp = (v) => Math.max(0, Math.min(100_000, Math.round(v)));
+  return { x: clamp(x), y: clamp(y) };
+}
 
 // Where the task came from, as a word the page translates («задача из
 // письма»). A word, not a title: the letter's subject is the owner's.
@@ -125,11 +137,12 @@ function tail(h) {
 const readErr = (h) => { try { return fs.readFileSync(h.err, 'utf8').slice(-20_000); } catch { return ''; } };
 
 // `spawn` and `cli` are for the stand: the real ones start a real agent.
-export async function hire({ project, cwd, task, model = 'opus', quote = null, source = null }, { spawn = nodeSpawn, cli = findCli } = {}) {
+export async function hire({ project, cwd, task, model = 'opus', quote = null, source = null, spot = null }, { spawn = nodeSpawn, cli = findCli } = {}) {
   const text = String(task || '').trim();
   const h = {
     id: ++seq, project, cwd, model, at: Date.now(), changedAt: Date.now(), state: 'starting',
     source: SOURCE_RE.test(source || '') ? source : null,
+    spot: spotOf(spot),
     sessionId: null, error: null, errorKey: null, child: null, out: null, err: null, offset: 0, buf: '',
   };
   hires.set(h.id, h);

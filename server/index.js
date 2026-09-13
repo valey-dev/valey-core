@@ -157,7 +157,7 @@ function project(snapshot, guestId) {
     release: null,
     // The portal is on the floor for everyone; why a hire failed is the
     // owner's — the reason can quote a path or the CLI's own words.
-    hires: (snapshot.hires || []).map((h) => ({ id: h.id, project: h.project, state: h.state, sessionId: h.sessionId, source: h.source, at: h.at, changedAt: h.changedAt })),
+    hires: (snapshot.hires || []).map((h) => ({ id: h.id, project: h.project, state: h.state, sessionId: h.sessionId, source: h.source, spot: h.spot, at: h.at, changedAt: h.changedAt })),
     agents: (snapshot.agents || []).map((a) => {
       if (granted(guestId, a.id)) return a;
       const out = {};
@@ -976,12 +976,12 @@ async function handle(req, res) {
   // room, never a path: the folder is the one the room's live agents work in.
   if (url.pathname === '/api/hire' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
-    const { project: room, task, model, quote, source } = await readJson(req);
+    const { project: room, task, model, quote, source, spot } = await readJson(req);
     const cwd = cwdOfProject(room);
     if (!cwd) return send(res, 400, { error: 'there is no such room on the floor', errorKey: 'hire.errRoom' });
     const status = await deliveryStatus();
     if (!status.available) return send(res, 200, { ok: false, error: status.hint, errorKey: status.hintKey });
-    const h = await hire({ project: room, cwd: await repoRoot(cwd) || cwd, task, model, quote, source });
+    const h = await hire({ project: room, cwd: await repoRoot(cwd) || cwd, task, model, quote, source, spot });
     return send(res, 200, { ok: h.state !== 'failed', hire: h });
   }
   // Let a hired agent go before it is continued in a terminal: two processes
