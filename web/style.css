@@ -679,7 +679,10 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 
 /* ---- office colour ---- */
 /* ---- reception ---- */
-.recwrap{width:min(520px,92vw)}
+/* 580, not 520: with «нанять» the header carries five keys, and at 520 the
+   title wrapped and the keys ended in «E…». */
+.recwrap{width:min(580px, calc(92vw / var(--ui, 1)))}
+.recwrap .vhead > span:first-child{flex:none; white-space:nowrap}
 .recbody{padding:14px; display:flex; flex-direction:column; gap:10px}
 .recgreet{margin:0; color:var(--ink); font-size:13px; line-height:1.5}
 .recrow{display:flex; align-items:center; gap:10px; padding:6px 8px;
@@ -698,7 +701,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
    frame gives it the amber edge a primary button has everywhere else. */
 .rechire{flex:none; background:var(--wood-lit); color:var(--warn); border:2px solid var(--warn);
   font:11px "JetBrains Mono", "Courier New",monospace; padding:3px 8px; cursor:pointer}
-.rechire kbd, .hchip kbd{color:var(--muted); font-size:10px}
+.rechire kbd{color:var(--muted); font-size:10px}
 :where(body:not(.bykeys)) .rechire:hover{background:var(--wood)}
 /* The keys ride in the header, as on the newspaper's: the panel is keyboard
    first, and the line under it is for what the keys do not say. */
@@ -732,7 +735,12 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .hirefoot button.primary{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
 .hirefoot button:disabled{opacity:.45; cursor:not-allowed}
 .hirefoot kbd{color:var(--muted); font-size:10px}
-.hchip:focus-visible, .hmodel:focus-visible, .hirefoot button:focus-visible, .rechire.focus{outline:2px solid var(--warn); outline-offset:-2px}
+.hchip:focus-visible, .hmodel:focus-visible, .hirefoot button:focus-visible{outline:2px solid var(--warn); outline-offset:-2px}
+/* A chosen switch and a «нанять» already wear the amber edge, so the focus
+   ring drawn inside it was the same line twice and nothing moved under the
+   arrows. On these it stands outside, a second ring. */
+.hchip.on:focus-visible, .hmodel.on:focus-visible, .hirefoot button.primary:focus-visible,
+.rechire.focus{outline:2px solid var(--warn); outline-offset:2px}
 
 /* The card of an agent the office hired: when, from what, and — once its turn
    is over — the command that continues it in a terminal. */

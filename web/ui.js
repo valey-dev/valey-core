@@ -44,6 +44,7 @@ export function initUI(state, callbacks) {
   selfClosing(el.bag, closeBag);
   selfClosing(el.skin, closeSkin);
   selfClosing(el.hire, closeHire);
+  if (el.hire && el.hire.addEventListener) el.hire.addEventListener('keydown', hirePanelKey);
 }
 
 // The handler is hung on the panel itself rather than on the field: the innards
@@ -3264,7 +3265,9 @@ export function openLift(lift, floorNow, pick) {
 // merely inconvenient—without a mouse.
 //
 // Escape is left to closeAll() in main.js.
-const liftRing = focusRing(() => el.lift, '.liftbtn, .recgo', { numbers: '.liftbtn', byData: 'n' });
+// At the desk the ring is rows: ↑↓ walk the projects and keep the column,
+// ←→ walk the row — «проводить», «нанять». The lift has no rows and walks flat.
+const liftRing = focusRing(() => el.lift, '.liftbtn, .recgo, .rechire', { numbers: '.liftbtn', byData: 'n', rows: '.recrow' });
 export function closeLift() { el.lift.hidden = true; liftRing.reset(); }
 export function liftKey(raw) { return liftRing.key(raw, el.lift && !el.lift.hidden); }
 
@@ -3322,14 +3325,14 @@ export function openReception(desk, guide) {
   liftRing.at(0);
 }
 
-// «+» at the desk hires into the room the arrows stand on. The arrows walk
-// «проводить» only — ⇅ is «which project», and a second button in the ring
-// would turn the down arrow into «the same project, the other button».
+// «+» at the desk hires into the room the arrows stand on, whichever of its
+// two buttons they are on — the shortcut for → Enter.
 export function receptionHire(raw) {
   if (!el.lift || el.lift.hidden || !el.lift.querySelector('.recwrap')) return false;
   if (raw !== '+' && raw !== '=') return false;
-  const cur = el.lift.querySelector('.recgo.focus') || el.lift.querySelector('.recgo');
-  const b = cur && cur.closest('.recrow').querySelector('.rechire');
+  const cur = el.lift.querySelector('.recgo.focus, .rechire.focus') || el.lift.querySelector('.recgo');
+  const row = cur && cur.closest('.recrow');
+  const b = row && row.querySelector('.rechire');
   // a guest's «+» is swallowed rather than handed to the zoom under the panel
   if (b) b.click();
   return true;
@@ -3399,14 +3402,14 @@ function renderHire() {
       ${f ? `<div class="hirefrom"><i>${esc(f.kind || '')}</i><b>${esc(f.title || '')}</b>
         <span>${tr('hire.quoteNote')}</span></div>` : ''}
       <p class="hlabel">${tr('hire.room')}</p>
-      <div class="hchips">${rooms.map((k, i) => `<button class="hchip${k === hire.project ? ' on' : ''}" data-room="${esc(k)}">${esc(k)}${
-        i < 9 ? ` <kbd>${i + 1}</kbd>` : ''}</button>`).join('')}</div>
+      <div class="hchips" role="radiogroup">${rooms.map((k) => `<button class="hchip${k === hire.project ? ' on' : ''}" data-room="${esc(k)}"
+        role="radio" aria-checked="${k === hire.project}" tabindex="${k === hire.project ? 0 : -1}">${esc(k)}</button>`).join('')}</div>
       <p class="hwhere">${esc(hireWhere(hire.project))}</p>
       <p class="hlabel">${tr('hire.task')}</p>
       <textarea id="hireTask" rows="3" maxlength="4000" placeholder="${tr('hire.taskHint')}">${esc(hire.task)}</textarea>
       <p class="hlabel">${tr('hire.model')}</p>
-      <div class="hmodels">${['sonnet', 'opus'].map((m) => `<button class="hmodel${m === hire.model ? ' on' : ''}" data-model="${m}">${
-        m === 'opus' ? 'Opus' : 'Sonnet'}</button>`).join('')}</div>
+      <div class="hmodels" role="radiogroup">${['sonnet', 'opus'].map((m) => `<button class="hmodel${m === hire.model ? ' on' : ''}" data-model="${m}"
+        role="radio" aria-checked="${m === hire.model}" tabindex="${m === hire.model ? 0 : -1}">${m === 'opus' ? 'Opus' : 'Sonnet'}</button>`).join('')}</div>
       <p class="hint">${tr('hire.rules')}</p>
       ${blocked ? `<p class="hint warn">${esc(said(d, 'hint') || tr('hire.noCli'))}</p>` : ''}
       ${hire.error ? `<p class="hint warn">${esc(hire.error)}</p>` : ''}
@@ -3426,8 +3429,9 @@ function renderHire() {
   $('#hirex').onclick = () => closeHire();
   $('#hireNo').onclick = () => closeHire();
   $('#hireGo').onclick = submitHire;
-  el.hire.querySelectorAll('[data-room]').forEach((b) => b.onclick = () => { hire.project = b.dataset.room; hire.error = ''; renderHire(); });
-  el.hire.querySelectorAll('[data-model]').forEach((b) => b.onclick = () => { hire.model = b.dataset.model; renderHire(); });
+  const pick = (group) => { const on = el.hire.querySelector(group + '.on'); if (on) on.focus(); };
+  el.hire.querySelectorAll('[data-room]').forEach((b) => b.onclick = () => { hire.project = b.dataset.room; hire.error = ''; renderHire(); pick('.hchip'); });
+  el.hire.querySelectorAll('[data-model]').forEach((b) => b.onclick = () => { hire.model = b.dataset.model; renderHire(); pick('.hmodel'); });
 }
 
 async function submitHire() {
@@ -3450,16 +3454,33 @@ async function submitHire() {
   if (done) done(r.hire);
 }
 
-// Digits pick the room while the focus is not in the task; everything else in
-// the office waits — the panel is in front of it.
+// The rooms and the models are two switches, each one stop for Tab: on them
+// ← → move the choice, and Enter hires rather than pressing the chip that is
+// already chosen. The focus opens in the task — the room was picked at the
+// desk — so Shift+Tab is the way back to it. Digits were here first, and they
+// could not work: with the caret in the task they typed into it (Sergey,
+// 13 September 2026).
+function hirePanelKey(e) {
+  const b = e.target;
+  if (!hire || !b || !b.classList) return;
+  const group = b.classList.contains('hchip') ? '.hchip' : b.classList.contains('hmodel') ? '.hmodel' : null;
+  if (!group) return;
+  if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); submitHire(); return; }
+  const step = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[e.key];
+  if (!step) return;
+  e.preventDefault(); e.stopPropagation();
+  const all = [...el.hire.querySelectorAll(group)];
+  const next = all[(all.indexOf(b) + step + all.length) % all.length];
+  if (group === '.hchip') { hire.project = next.dataset.room; hire.error = ''; } else hire.model = next.dataset.model;
+  renderHire();
+  const on = el.hire.querySelector(group + '.on');
+  if (on) on.focus();
+}
+
+// Whatever reaches the office past the panel's own fields waits: the panel is
+// in front of it.
 export function hireKey(raw) {
   if (!hireOpen()) return false;
-  const n = Number(raw);
-  if (Number.isInteger(n) && n >= 1 && n <= 9) {
-    const b = el.hire.querySelectorAll('[data-room]')[n - 1];
-    if (b) b.click();
-    return true;
-  }
   if (raw === 'Enter') { submitHire(); return true; }
   return raw !== 'Tab' && raw !== 'Escape';
 }

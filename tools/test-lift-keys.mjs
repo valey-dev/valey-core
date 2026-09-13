@@ -5,22 +5,37 @@
 
 import { node, proxy, installDom } from './lib/dom.mjs';
 
-// The panel holds either floors or desk rows — el.lift is the same node.
-function makeLift(kind = 'floors', n = 3) {
+// The panel holds either floors or desk rows — el.lift is the same node. A
+// desk row has two buttons, «проводить» and «нанять» (`hires`: the owner's).
+function makeLift(kind = 'floors', n = 3, hires = false) {
   const cls = kind === 'floors' ? 'liftbtn' : 'recgo';
   const btns = Array.from({ length: n }, (_, i) => {
     const b = node(cls);
     b.dataset.n = String(i + 1);      // the floors are numbered, and a digit looks up by number
     return b;
   });
+  const hireBtns = kind === 'rec' && hires ? btns.map(() => node('rechire')) : [];
+  const rows = kind === 'rec' ? btns.map((go, i) => {
+    const row = { contains: (b) => b === go || b === hireBtns[i], querySelector: (sel) => (sel === '.rechire' ? hireBtns[i] || null : null) };
+    go.closest = () => row;
+    if (hireBtns[i]) hireBtns[i].closest = () => row;
+    return row;
+  }) : [];
+  // the ring's order is the page's: a row's «проводить», then its «нанять»
+  const ring = kind === 'rec' ? btns.flatMap((b, i) => (hireBtns[i] ? [b, hireBtns[i]] : [b])) : btns;
   return {
     hidden: false,
     innerHTML: '',
-    btns,
-    querySelector: () => null,
+    btns, hireBtns,
+    querySelector: (sel) => (
+      sel === '.recwrap' ? (kind === 'rec' ? {} : null)
+      : sel === '.recgo.focus, .rechire.focus' ? ring.find((b) => b.has('focus')) || null
+      : sel === '.recgo' ? btns[0] || null
+      : null),
     querySelectorAll: (sel) => (
-      sel === '.liftbtn, .recgo' ? btns
+      sel === '.liftbtn, .recgo, .rechire' ? ring
       : sel === '.liftbtn' ? (kind === 'floors' ? btns : [])
+      : sel === '.recrow' ? rows
       : sel === '[data-n]' && kind === 'floors' ? btns
       : sel === '[data-go]' && kind === 'rec' ? btns
       : []),
@@ -109,7 +124,25 @@ check('and walks along the lines', focusAt() === 1, focusAt());
 UI.liftKey(' ');
 check('SPACEBAR presses a line', lift.btns[1].clicked === 1, lift.btns[1].clicked);
 
-// --- 7. a floor with no rows: the panel must not get stuck ---
+// --- 7. the owner's desk: two buttons a row, the arrows keep the column ---
+// Sergey, 13 September 2026: → on a project did not reach «нанять».
+lift = makeLift('rec', 2, true);
+UI.openReception({ n: 1, rooms: ['AI valey', 'figma'] }, () => {});
+const hireAt = () => lift.hireBtns.findIndex((b) => b.has('focus'));
+check('the focus opens on the first take-me button', focusAt() === 0 && hireAt() === -1, [focusAt(), hireAt()]);
+UI.liftKey('ArrowRight');
+check('→ reaches the same row\'s hire button', hireAt() === 0, [focusAt(), hireAt()]);
+UI.liftKey('ArrowDown');
+check('↓ goes to the next project and keeps the column', hireAt() === 1, [focusAt(), hireAt()]);
+UI.liftKey('ArrowLeft');
+check('← comes back to that row\'s take-me button', focusAt() === 1, [focusAt(), hireAt()]);
+UI.liftKey('Enter');
+check('Enter presses what the arrows stand on', lift.btns[1].clicked === 1 && lift.hireBtns.every((b) => !b.clicked), lift.btns[1].clicked);
+check('+ hires into the row under the arrows', UI.receptionHire('+') === true && lift.hireBtns[1].clicked === 1 && !lift.hireBtns[0].clicked, lift.hireBtns.map((b) => b.clicked));
+check('= is the same key without Shift', UI.receptionHire('=') === true && lift.hireBtns[1].clicked === 2, lift.hireBtns[1].clicked);
+check('other keys are not the desk\'s to take', UI.receptionHire('a') === false);
+
+// --- 8. a floor with no rows: the panel must not get stuck ---
 // on an empty floor the desk draws a greeting and not a single button
 lift = makeLift('rec', 0);
 UI.openReception({ n: 9, rooms: [] }, () => {});
