@@ -11,6 +11,8 @@
 // into their own receiver, and only while they check or play one. Nothing about the
 // office goes to the station beyond what any player sends.
 import { covers } from './covers.js';
+import dns from 'node:dns/promises';
+import { readFileSync } from 'node:fs';
 
 export const defaults = () => ({
   // the Spotify application set up by the user: the client id only
@@ -196,12 +198,125 @@ export async function nowPlaying(url) {
   return out;
 }
 
-// The two stream routes belong to the owner. A guest's receiver plays streams just the
-// same — <audio> needs no server — but it does not get to send this server to arbitrary
-// addresses: the check and the title are the owner's, the sound is everyone's.
+// ------------------------------------------------------------- the catalogue
+// Finding a station by its name or genre instead of hunting for its stream address.
+// radio-browser.info is an open, community-run catalogue: no key, no account. Its
+// rules are three and all are kept here — find the servers through DNS rather than
+// hard-coding one, send a User-Agent that says who is asking, and report a click when
+// a found station is actually played, which is how the catalogue ranks popularity.
+// Frames: WIP «Радио: поиск станций» (2119:5501).
+//
+// What goes out: the word typed (or a genre's tag), from this server, only on Enter or
+// a press on a genre — never as the person types. The office's name and address stay.
+const CATALOG_SRV = '_api._tcp.radio-browser.info';
+const CATALOG_FALLBACK = 'all.api.radio-browser.info';
+const FOUND = 8;
+const version = (() => {
+  try { return JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version; } catch { return '0'; }
+})();
+const AGENT = `valey-office/${version} (+https://valey.dev)`;
+
+// The catalogue's servers, looked up once an hour. The stand replaces hosts and fetch.
+export const catalog = {
+  hosts: null, at: 0,
+  async host() {
+    if (!this.hosts || Date.now() - this.at > 3600_000) {
+      try {
+        const srv = await dns.resolveSrv(CATALOG_SRV);
+        this.hosts = srv.map((r) => r.name).filter(Boolean);
+      } catch { this.hosts = []; }
+      if (!this.hosts.length) this.hosts = [CATALOG_FALLBACK];
+      this.at = Date.now();
+    }
+    return this.hosts[Math.floor(Math.random() * this.hosts.length)];
+  },
+  async get(path) {
+    const r = await fetch(`https://${await this.host()}${path}`, {
+      signal: AbortSignal.timeout(STREAM_WAIT), headers: { 'User-Agent': AGENT },
+    });
+    if (!r.ok) throw new Error(`catalogue ${r.status}`);
+    return r.json();
+  },
+};
+
+// One station as the receiver needs it. HLS and stations the catalogue did not find
+// on the air at its last check are dropped here: a row that cannot be caught is noise.
+export function toFound(s) {
+  if (!s || Number(s.hls) === 1 || Number(s.lastcheckok) !== 1) return null;
+  const uri = String(s.url_resolved || s.url || '').trim();
+  if (!/^https?:\/\//i.test(uri) || /\.m3u8(\?|#|$)/i.test(uri)) return null;
+  const name = String(s.name || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  if (!name) return null;
+  return {
+    uuid: String(s.stationuuid || ''),
+    name,
+    country: String(s.countrycode || '').toUpperCase().slice(0, 2),
+    codec: String(s.codec || '').toLowerCase().slice(0, 8),
+    bitrate: Number(s.bitrate) || 0,
+    uri,
+  };
+}
+
+// The catalogue's tags are a mess — pop, music, méxico, estación — so the receiver's
+// genre row is its own and short, and each word is sent as one tag known to be there.
+export const GENRES = ['jazz', 'ambient', 'lofi', 'techno', 'classical', 'news'];
+
+const query = (params) => '/json/stations/search?' + new URLSearchParams({
+  hidebroken: 'true', order: 'clickcount', reverse: 'true', limit: '30', ...params,
+});
+
+// A word is looked for in names first and topped up from tags, as the frame promises:
+// «NTS» is a name, «jazz» is both. A genre is a tag and nothing else.
+const found = new Map();
+export async function search({ q = '', tag = '' } = {}) {
+  const key = tag ? 'tag:' + tag : 'q:' + q.toLowerCase();
+  const hit = found.get(key);
+  if (hit && Date.now() - hit.at < 300_000) return hit.out;
+  const lists = tag
+    ? [await catalog.get(query({ tag }))]
+    : [await catalog.get(query({ name: q }))];
+  if (!tag && lists[0].filter((x) => toFound(x)).length < FOUND) lists.push(await catalog.get(query({ tag: q.toLowerCase() })));
+  const seen = new Set();
+  const out = [];
+  for (const s of lists.flat()) {
+    const f = toFound(s);
+    if (!f || seen.has(f.uuid || f.uri)) continue;
+    seen.add(f.uuid || f.uri);
+    out.push(f);
+    if (out.length >= FOUND) break;
+  }
+  if (found.size > 64) found.clear();
+  found.set(key, { at: Date.now(), out });
+  return out;
+}
+
+async function catalogRoute(url, res, reply) {
+  if (url.pathname === '/api/radio/click') {
+    // The catalogue's own request: count a play. Fire and forget — nobody waits on it.
+    const uuid = url.searchParams.get('uuid') || '';
+    if (!/^[0-9a-f-]{36}$/i.test(uuid)) return reply(res, 400, { error: 'not a station' });
+    catalog.get('/json/url/' + uuid).catch(() => {});
+    return reply(res, 200, { ok: true });
+  }
+  const q = (url.searchParams.get('q') || '').trim().slice(0, 60);
+  const tag = url.searchParams.get('tag') || '';
+  if (tag && !GENRES.includes(tag)) return reply(res, 400, { error: 'unknown genre' });
+  if (!tag && q.length < 2) return reply(res, 400, { error: 'too short' });
+  try {
+    return reply(res, 200, { stations: await search({ q, tag }) });
+  } catch (e) {
+    return reply(res, 200, { stations: [], error: e && (e.name === 'TimeoutError' || e.name === 'AbortError') ? 'timeout' : 'silent' });
+  }
+}
+
+// The stream routes belong to the owner — the check, the title and the catalogue. A
+// guest's receiver plays streams just the same — <audio> needs no server — but it does
+// not get to send this server to arbitrary addresses or words: those are the owner's,
+// the sound is everyone's.
 async function streamRoute(url, res, reply, ctx) {
   const owner = ctx && ctx.isOwner ? await ctx.isOwner() : false;
   if (!owner) return reply(res, 403, { error: 'owner only' });
+  if (url.pathname === '/api/radio/search' || url.pathname === '/api/radio/click') return catalogRoute(url, res, reply);
   const target = url.searchParams.get('url') || '';
   if (url.pathname === '/api/radio/probe') return reply(res, 200, await probe(target));
   let u;
@@ -214,7 +329,7 @@ async function streamRoute(url, res, reply, ctx) {
 // page: the address of the picture is taken from Spotify's oEmbed and accepted only from
 // its own CDN.
 export async function route(url, req, res, send, ctx) {
-  if (url.pathname === '/api/radio/probe' || url.pathname === '/api/radio/now') {
+  if (/^\/api\/radio\/(probe|now|search|click)$/.test(url.pathname)) {
     return streamRoute(url, res, (...a) => { send(...a); return true; }, ctx);
   }
   if (url.pathname !== '/api/cover') return false;

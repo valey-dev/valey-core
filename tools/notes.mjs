@@ -61,12 +61,19 @@ const VER = /^v(\d+)\.(\d+)\.(\d+)$/;
 // The fields a fragment may carry. An unknown one is an error rather than a
 // field quietly ignored: a misspelled `keys:` is invisible in the rendered note,
 // and the whole point of the front matter is that it is machine-readable.
+//
 // `nopicture` is the other half of `shots`: a feature owes a picture unless it
 // says why it has none, in words that stay with the note. Until 13 September
 // 2026 nothing asked for either — the template came with a shot, deleting it was
 // the short way, and 13 of the 17 feature notes since v0.32.0 went out as bare
 // text, six of them for things that are plainly on the screen.
-const FIELDS = new Set(['title', 'scope', 'keys', 'shots', 'nopicture']);
+//
+// `event` names the product event a feature is meant to move — "Stick Moved" —
+// so the Mixpanel panel can show, under a release mark, whether the feature is
+// used. The fragment is the one place a feature is described while it is fresh,
+// and it stays in the history with the version, so the event goes here rather
+// than into a setting nobody would keep up to date.
+const FIELDS = new Set(['title', 'scope', 'keys', 'shots', 'nopicture', 'event']);
 const LISTS = new Set(['keys', 'shots']);
 // `shots` is a list of recipes rather than of strings: an id to name the file by,
 // and how to get the office to the right place. The recipe, not the picture, is
@@ -131,7 +138,7 @@ export function parseFragment(text, name) {
     seen.add(sh.id);
   }
   if (front.nopicture && shots.length) fail('`nopicture` and `shots` both: a note either has a picture or says why not');
-  return { title: front.title, scope: front.scope || '', keys: front.keys || [], shots, nopicture: front.nopicture || '', body };
+  return { title: front.title, scope: front.scope || '', event: front.event || '', keys: front.keys || [], shots, nopicture: front.nopicture || '', body };
 }
 
 function shotField(shot, key, value, fail) {
@@ -163,6 +170,11 @@ export function renderNote(tag, date, fragments, section) {
   const out = [`# ${tag} — ${date}`, ''];
   for (const f of fragments) {
     out.push(`## ${f.title}`, '');
+    // The event rides in the assembled note as a comment: invisible on the
+    // release page, readable at the tag by whoever needs it — the metrics
+    // module reads it with `git show <tag>:notes/<tag>.md`. Without this line
+    // the field would die with the fragment the release deletes.
+    if (f.event) out.push(`<!-- event: ${f.event} -->`, '');
     if (f.scope) out.push(`*${f.scope}*`, '');
     out.push(f.body, '');
     // The reason stays in the file and off the page: a reader of the release has

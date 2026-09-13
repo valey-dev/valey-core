@@ -1099,7 +1099,10 @@ function nearest() {
 
   const cur0 = state.currentRoom;
   if (cur0 && cur0.micro) {
-    const d = Math.hypot(cur0.micro.x - p.x, cur0.micro.y + 8 - p.y);
+    // Approached from above: it stands against the bottom wall, and the spot
+    // below it — where this used to point — is the wall. From above, the coffee
+    // machine's spot to the right would otherwise be the nearer one.
+    const d = Math.hypot(cur0.micro.x - p.x, cur0.micro.y - 28 - p.y);
     if (d < bestD) { bestD = d; best = { kind: 'micro', room: cur0 }; }
   }
 

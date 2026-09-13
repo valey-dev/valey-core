@@ -463,16 +463,21 @@ function pixelate(bmp, side) {
   return c;
 }
 
-// What a pasted line is: a Spotify link, the address of a stream, or neither. A stream
-// is any http(s) address — what it actually carries is for the server's check to say.
+// What a typed line is: a Spotify link, the address of a stream, or words to look
+// for in the station catalogue. A stream is any http(s) address — what it actually
+// carries is for the server's check to say. Anything else of two letters or more is a
+// search; a line that looks like a link but is not one (ftp://, a bare scheme) is
+// nothing, because searching the catalogue for it would only find noise.
 export function parseWave(raw) {
   const spotify = toUri(raw);
   if (spotify) return { kind: 'spotify', uri: spotify };
   const s = (raw || '').trim();
-  let u;
-  try { u = new URL(s); } catch { return null; }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
-  return { kind: 'stream', uri: u.href };
+  let u = null;
+  try { u = new URL(s); } catch { /* not an address — maybe words */ }
+  if (u && (u.protocol === 'http:' || u.protocol === 'https:')) return { kind: 'stream', uri: u.href };
+  if (u || /^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return null;
+  const q = s.replace(/\s+/g, ' ').slice(0, 60);
+  return q.length >= 2 ? { kind: 'search', q } : null;
 }
 
 // A link from "share" in Spotify -> the uri the built-in player understands.
