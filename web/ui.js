@@ -1473,7 +1473,7 @@ const cardHtml = (a) => {
     <span class="pmeta">${esc(roleText(a))}${a.branch ? ' · ' + esc(a.branch) : ''}</span>
     <span class="ptask${c.cold ? ' cold' : ''}">${esc(c.task || tr('standup.untitled'))}${
       c.reported ? '' : ` <i>· ${tr('standup.noReport')}</i>`}</span>
-    <span class="pfoot${c.now ? ' now' : ''}">${esc(foot)}</span>
+    <span class="pfoot${c.now && c.state === 'work' ? ' now' : ''}">${esc(foot)}</span>
     ${c.need ? `<span class="pneed">⚑ ${tr('task.need', { s: esc(c.need) })}</span>` : ''}
     <button class="plead" data-go="${esc(a.id)}" title="${tr('standup.lead')}">⇢</button>
   </div>`;
