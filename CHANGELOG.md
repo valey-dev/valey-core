@@ -4,6 +4,19 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.54.0 — 13 September 2026
+
+### Added
+
+- **board:** YAML files and yaml blocks in markdown are highlighted (e7fa628)
+
+### Fixed
+
+- **board:** comments and punctuation in code read on the board and in markdown blocks (38b2dd1)
+
+### Other
+
+- docs(notes): the note for YAML on the board and readable comments in code (5001c08)
 ## v0.53.1 — 13 September 2026
 
 ### Fixed
