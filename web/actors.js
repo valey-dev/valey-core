@@ -110,7 +110,10 @@ function kickerFree(L, actors) {
 // the actors are placed. Found on 5 September 2026 during a two-machine test.
 const artifactsOf = (a) => (a.artifacts || []).length;
 
-export function syncActors(actors, agents, L) {
+// `arriving` says whether a new agent was just hired from the office: such a
+// one steps out of the portal at the room's door and walks to the desk,
+// rather than appearing at it (web/office.js, drawPortal).
+export function syncActors(actors, agents, L, arriving = () => false) {
   const live = new Set();
   for (const a of agents) {
     const spot = L.byAgent.get(a.id);
@@ -124,6 +127,12 @@ export function syncActors(actors, agents, L) {
         dir: 0, frame: 0, artifacts: artifactsOf(a), showcase: 0, nextIdea: performance.now() + rnd(8000, 60000),
       };
       actors.set(a.id, act);
+      const door = spot.room.doorPoint;
+      if (door && arriving(a)) {
+        act.x = door.x; act.y = door.y;
+        act.path = pathTo(spot.room, act, spot.desk); act.state = 'walk';
+        act.portalAt = performance.now();
+      }
     } else if (act.room.key === spot.room.key && act.seat.i === spot.desk.i) {
       // The same desk in the same room — the plan has simply been rebuilt. A
       // comparison by reference counted this as a move and sent the person walking

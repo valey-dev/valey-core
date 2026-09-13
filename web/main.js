@@ -4,7 +4,7 @@ import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, pic
 import { loadModules, collect, first, attachStreams } from './modules.js';
 import { owned, passQuery, setTokens } from './owned.js';
 import { initStand } from './stand.js';
-import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, pxText, kickerBusy } from './office.js';
+import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, drawPortal, pxText, kickerBusy } from './office.js';
 import { drawCamera, buildCameras } from './cctv.js';
 import { syncActors, tickActors } from './actors.js';
 import * as UI from './ui.js';
@@ -229,6 +229,14 @@ UI.initUI(state, {
     localStorage.setItem('valey-me', JSON.stringify(state.me));
     myWorn = dressMe(state.me, dressCode());
   },
+  hire: (body) => fetch('/api/hire', {
+    method: 'POST', headers: owned({ 'content-type': 'application/json' }),
+    body: JSON.stringify(body),
+  }).then((r) => r.json()).catch((e) => ({ error: e.message })),
+  releaseHire: (sessionId) => fetch('/api/hire/release', {
+    method: 'POST', headers: owned({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ sessionId }),
+  }).then((r) => r.json()).catch((e) => ({ error: e.message })),
   sendTask: (agentId, text, deliver = false, mode = null, resend = null) => fetch('/api/task', {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({ agentId, text, deliver, mode, resend }),
@@ -655,8 +663,13 @@ const onSnapshot = (e) => {
   if (wornCode !== dressCode()) dressAll();
   else for (const a of state.agents) if (!state.looks.has(a.id)) state.looks.set(a.id, dressed(a));
 
+  state.hires = data.hires || [];
   replan();
-  syncActors(state.actors, state.agents, state.layout);
+  // An agent the office has just hired comes out of the portal at the door
+  // rather than appearing at a desk. Not on the first snapshot: whoever was
+  // hired before the page opened is already sitting.
+  syncActors(state.actors, state.agents, state.layout, (a) => state.spawned && a.hired
+    && state.hires.some((h) => h.sessionId === a.id) && (data.now || Date.now()) - a.hired < 3 * 60_000);
 
   if (!state.spawned && state.layout.projectRooms.length) {
     const q = new URLSearchParams(location.hash.slice(1));
@@ -760,7 +773,10 @@ function onKey(e) {
   if (UI.viewerKey(e.key, e.shiftKey)) { e.preventDefault(); return; }
   // The lift panel and the reception desk are the same: while they are open the arrows
   // walk the floors rather than the office.
+  // «+» at the reception hires; without this line it went on to the zoom.
+  if (UI.receptionHire(e.key)) { e.preventDefault(); return; }
   if (UI.liftKey(e.key)) { e.preventDefault(); return; }
+  if (UI.hireKey(e.key)) { e.preventDefault(); return; }
   // The standup is handed the whole event: its "lead me" is caught by the
   // physical key code, not by a letter that is a different letter under
   // another layout.
@@ -1549,6 +1565,7 @@ function closeAll() {
   // office, while Escape fell past it into closing the dialog and looked broken. It could
   // only be closed by the cross — that one has a handler of its own.
   if (UI.inviteOpen()) return UI.closeInvite();
+  if (UI.hireOpen()) return UI.closeHire();
   if (first('esc')) return;
   // Standing up is "back" too: sitting is a state Escape has to lead out of, or it is
   // the only thing in the office that does nothing.
@@ -1574,7 +1591,7 @@ function panelsOpen() {
     || keysOpen()
     || sheetOpen()
     || collect('busy').some(Boolean)
-    || ['viewer', 'roster', 'bag', 'sky', 'lift', 'invite', 'lang'].some((id) => !document.getElementById(id).hidden);
+    || ['viewer', 'roster', 'bag', 'sky', 'lift', 'invite', 'lang', 'hire'].some((id) => !document.getElementById(id).hidden);
 }
 
 // Where the office is standing, for the keys panel to draw the right board.
@@ -1592,7 +1609,9 @@ function currentPlace() {
   // open file has its own keys, and ESC out of it goes back to the wall.
   const viewer = UI.viewerOpen();
   if (viewer) return { single: 'viewer', transcript: 'transcript', gallery: 'gallery' }[viewer];
+  if (UI.receptionOpen()) return 'reception';
   if (UI.liftOpen() || state.lift.phase !== 'idle') return 'lift';
+  if (UI.hireOpen()) return 'hire';
   if (UI.rosterOpen()) return 'standup';
   // One panel, two places: on «поговорить» the cursor is in the field, so the
   // letters type instead of opening anything. That is the state this whole
@@ -1830,6 +1849,11 @@ function label(x, y, text, color = '#f6e3c0') {
   pxText(ctx, text, x - w / 2, y, color);
 }
 
+// Hire id -> when this page first saw its portal, and when it failed or got
+// its session: the portal's own clock, so a page opened mid-hire starts the
+// animation from its own first frame rather than from the server's.
+const portalSeen = new Map();
+
 function draw(t) {
   const L = state.layout;
   ctx.fillStyle = '#1b120c'; ctx.fillRect(0, 0, VW, VH);
@@ -1937,6 +1961,42 @@ function draw(t) {
         label(act.x, act.y + 40, tr('hint.talk'), '#9fe0a8');
       } });
     }
+  }
+
+  // Portals at the doors of the rooms the office is hiring into (office.js).
+  // The phase is read from the hire and from the agent: open while claude
+  // starts, the figure whole once the session exists but the floor has not
+  // seated it yet, closing behind an agent that has just walked out of it.
+  for (const id of [...portalSeen.keys()]) if (!(state.hires || []).some((h) => h.id === id)) portalSeen.delete(id);
+  for (const h of state.hires || []) {
+    const r = L.projectRooms.find((x) => x.key === h.project);
+    if (!r || !r.doorPoint) continue;
+    if (!portalSeen.has(h.id)) portalSeen.set(h.id, { t0: t });
+    const seen = portalSeen.get(h.id);
+    const act = h.sessionId ? state.actors.get(h.sessionId) : null;
+    let phase = null;
+    if (h.state === 'failed') {
+      seen.fail = seen.fail || t;
+      const k = (t - seen.fail) / 8000;
+      if (k < 1) phase = { kind: 'fail', k };
+    } else if (act) {
+      const k = act.portalAt ? (t - act.portalAt) / 700 : 1;
+      if (k < 1) phase = { kind: 'close', k };
+    } else if (h.state === 'starting') {
+      phase = { kind: 'open', age: t - seen.t0 };
+    } else if (h.state === 'working' || h.state === 'done') {
+      // a session the floor never seats (it went to another room) must not
+      // hold a portal open for good
+      seen.ready = seen.ready || t;
+      if (t - seen.ready < 30000) phase = { kind: 'ready', age: t - seen.t0 };
+    }
+    if (!phase) continue;
+    const d = r.doorPoint;
+    draws.push({ y: d.y - 0.5, fn: () => drawPortal(ctx, d.x, d.y, phase, t) });
+    const cap = phase.kind === 'fail' ? ['portal.failed', '#ff9f8f'] : phase.kind === 'open' ? ['portal.typing', '#ffd166'] : null;
+    // Under the ring, not over it as on the storyboard: the door is sixteen
+    // pixels below the room's plate, and a caption above sat on the name.
+    if (cap) draws.push({ y: 1e9, fn: () => label(d.x, d.y + 10, tr(cap[0]), cap[1]) });
   }
 
   if (state.drink && state.drink.kind === 'water') {
@@ -2074,7 +2134,7 @@ function draw(t) {
 
   if (near && near.kind === 'reception') {
     const r = near.desk;
-    draws.push({ y: 1e9, fn: () => label(r.x + r.w / 2, r.y + 26, tr('hint.reception'), '#9fe0a8') });
+    draws.push({ y: 1e9, fn: () => label(r.x + r.w / 2, r.y + 26, tr(state.owner === false ? 'hint.reception' : 'hint.receptionOwner'), '#9fe0a8') });
   }
 
   if (near && near.kind === 'lift' && state.lift.phase === 'idle') {
@@ -2276,7 +2336,7 @@ function enterByCode(roomKey) {
       state.needsCode = false;
       openStream();
       if (refusedAtBoot) {
-        await loadModules({ saveSettings });
+        await loadModules({ saveSettings, hire: UI.openHire });
         if (es) attachStreams(es);
         renderStatic();
         if (state.layout) { state.sig = null; replan(); }
@@ -2338,7 +2398,7 @@ renderTitle();
 // this changes nothing; for a guest it is the difference between an office and
 // an empty room.
 await admission;
-await loadModules({ saveSettings });
+await loadModules({ saveSettings, hire: UI.openHire });
 // The modules arrive later than the first stream, so their listeners are hung on
 // the open one now. Without this their events would be silently lost until the
 // network happened to blink and the stream was reopened.

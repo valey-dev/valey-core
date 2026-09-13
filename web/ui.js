@@ -28,6 +28,7 @@ export function initUI(state, callbacks) {
   el.invite = $('#invite');
   el.notes = $('#notes');
   el.lang = $('#lang');
+  el.hire = $('#hire');
   // One handler for the whole viewer panel, set at the entrance: the markup
   // inside it is repainted constantly, and the handler outlives that.
   bindCopyButtons();
@@ -42,6 +43,7 @@ export function initUI(state, callbacks) {
   selfClosing(el.invite, closeInvite);
   selfClosing(el.bag, closeBag);
   selfClosing(el.skin, closeSkin);
+  selfClosing(el.hire, closeHire);
 }
 
 // The handler is hung on the panel itself rather than on the field: the innards
@@ -273,6 +275,8 @@ function patchDialog(a) {
   // than being patched piece by piece: between "you are needed" and its absence
   // what changes is the set of rows, not the text.
   set('.taskrow', taskRow(a));
+  const hr = el.dialog.querySelector('.hiredrow');
+  if (hr && hr.innerHTML !== hiredRow(a)) { hr.innerHTML = hiredRow(a); bindHired(a); }
 
   if (S.page === 'talk') {
     const said = clean(a.lastSaid) || tr('dlg.silent');
@@ -311,6 +315,57 @@ function patchDialog(a) {
   }
   // Paint the highlight again: an update may have replaced the node and its class.
   paintDialogFocus();
+}
+
+// An agent the office hired says so on its card, and once its turn is over the
+// card offers to continue it in a terminal. Not while it works: the terminal
+// would be a second process writing the same transcript. Continuing lets the
+// office's process go first, so the agent leaves the floor as the command is
+// copied.
+// Frames: [Card · hired, working](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2092-2031)
+// [Card · hired, finished](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2092-2046)
+const hireOf = (id) => (S.hires || []).find((h) => h.sessionId === id) || null;
+// The command as the server gave it, kept after the release: without a
+// clipboard it is copied by hand from the field, and the next repaint must not
+// take the field away.
+const resumed = new Map();
+
+function hiredRow(a) {
+  if (!a.hired) return '';
+  const h = hireOf(a.id);
+  const line = [tr('hire.hiredAt', { at: when(a.hired), a: a.gender === 'f' ? 'а' : '' }), h && h.source ? tr('hire.src.' + h.source) : '']
+    .filter(Boolean).join(' · ');
+  let rest = '';
+  const cmd = resumed.get(a.id);
+  if (!isGuest() && h && h.state === 'working') rest = `<p class="hint dim">${tr('hire.busyNote')}</p>`;
+  else if (!isGuest() && h && (h.state === 'done' || cmd)) {
+    rest = `<div class="sendrow"><input class="hirecmd" readonly value="${esc(cmd || 'claude --resume ' + a.id)}">
+        <button class="hirecopy" ${cmd ? 'disabled' : ''}>${tr(cmd ? 'hire.copiedBtn' : 'hire.copy')}</button></div>
+      <p class="hint dim">${tr(cmd ? 'hire.leftNote' : 'hire.copyNote')}</p>`;
+  }
+  return `<p class="hiredline">${esc(line)}</p>${rest}`;
+}
+
+function bindHired(a) {
+  const b = el.dialog.querySelector('.hirecopy');
+  if (!b) return;
+  b.onclick = async () => {
+    b.disabled = true;
+    const r = await api.releaseHire(a.id);
+    if (!r || !r.command) { toast(said(r) || tr('hire.errUnknown')); b.disabled = false; return; }
+    resumed.set(a.id, r.command);
+    const hr = el.dialog.querySelector('.hiredrow');
+    if (hr) hr.innerHTML = hiredRow(a);
+    const box = el.dialog.querySelector('.hirecmd');
+    try {
+      await navigator.clipboard.writeText(r.command);
+      toast(tr('hire.copied', { name: a.name, a: a.gender === 'f' ? 'ла' : 'ёл' }));
+    } catch {
+      // Over plain http on the network there is no clipboard: the command stays
+      // selected in the field for Cmd+C.
+      if (box) { box.focus(); box.select(); }
+    }
+  };
 }
 
 // The permission request this agent is waiting on. A guest has no such list—the
@@ -457,6 +512,7 @@ function buildDialog(a) {
       <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${esc(roleText(a))}</span>
         <span class="meta">${metaLine(a)}</span><div class="taskrow">${taskRow(a)}</div></div>
       <div class="act">${actLine(a)}</div>
+      <div class="hiredrow">${hiredRow(a)}</div>
       <div class="body">${body}</div>
       <div class="acts">
         <button data-p="talk" class="${S.page === 'talk' ? 'on' : ''}">${tr('tab.talk')} <kbd>1</kbd></button>
@@ -485,6 +541,7 @@ function buildDialog(a) {
   });
   bindFiles();
   bindPermit(a);
+  bindHired(a);
 
   const say = $('#say');
   if (say) say.onclick = () => finishTypewriter();
@@ -1253,6 +1310,7 @@ export function viewerOpen() {
   return gallery.mode === 'single' ? 'single' : 'gallery';
 }
 export function liftOpen() { return !!(el.lift && !el.lift.hidden); }
+export function receptionOpen() { return liftOpen() && !!el.lift.querySelector('.recwrap'); }
 // The tab the card is reading. In «поговорить» the cursor sits in the field, and
 // that is a different place from the card itself: there the letters type.
 export function cardPage() { return S.page; }
@@ -3231,9 +3289,15 @@ export function openReception(desk, guide) {
           ? tr('rec.waiting', { n: total, word: tr(pluralKey('rec.wait', total)) })
           : tr('rec.nobodyWaits') });
 
+  // Hiring is the owner's: it starts a process on the owner's machine. A guest
+  // sees the same desk without the button, and the line under it says why.
+  // Frames: [Reception · owner](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2122-5869)
+  // [Reception · guest](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2122-5906)
+  const hires = !isGuest();
   el.lift.hidden = false;
   el.lift.innerHTML = `<div class="rwrap recwrap">
-    <div class="vhead">${tr('rec.title', { n: desk.n })}<button id="recx">✕</button></div>
+    <div class="vhead"><span>${tr('rec.title', { n: desk.n })}</span>
+      <span class="rechead"><span class="reckeys">${tr(hires ? 'rec.keysOwner' : 'rec.keys')}</span><button id="recx">✕</button></span></div>
     <div class="recbody">
       <p class="recgreet">${esc(greet)}</p>
       ${rows.map((r) => `<div class="recrow">
@@ -3242,15 +3306,162 @@ export function openReception(desk, guide) {
         <span class="reccnt">${tr('rec.agents', { n: r.n, word: tr(pluralKey('rec.agent', r.n)) })}</span>
         <span class="recwait${r.waiting ? ' on' : ''}">! ${r.waiting}</span>
         ${r.lead ? `<button class="recgo" data-go="${r.lead.id}">${tr('rec.lead')}</button>` : ''}
+        ${hires ? `<button class="rechire" data-hire="${esc(r.title)}">${tr('rec.hire')} <kbd>+</kbd></button>` : ''}
       </div>`).join('')}
-      <p class="hint">${tr('rec.hint')}</p>
+      <p class="hint">${tr(hires ? 'rec.hintOwner' : 'rec.hintGuest')}</p>
     </div></div>`;
   $('#recx').onclick = closeLift;
   el.lift.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => {
     closeLift();
     guide(b.dataset.go);
   });
+  el.lift.querySelectorAll('[data-hire]').forEach((b) => b.onclick = () => {
+    closeLift();
+    openHire({ project: b.dataset.hire });
+  });
   liftRing.at(0);
+}
+
+// «+» at the desk hires into the room the arrows stand on. The arrows walk
+// «проводить» only — ⇅ is «which project», and a second button in the ring
+// would turn the down arrow into «the same project, the other button».
+export function receptionHire(raw) {
+  if (!el.lift || el.lift.hidden || !el.lift.querySelector('.recwrap')) return false;
+  if (raw !== '+' && raw !== '=') return false;
+  const cur = el.lift.querySelector('.recgo.focus') || el.lift.querySelector('.recgo');
+  const b = cur && cur.closest('.recrow').querySelector('.rechire');
+  // a guest's «+» is swallowed rather than handed to the zoom under the panel
+  if (b) b.click();
+  return true;
+}
+
+// ------------------------------------------------------------------- hiring
+// A new Claude Code session, started by the office in a project's folder. The
+// panel names a room, never a path; the server finds the folder itself.
+// Frames: [Hire panel](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2090-747)
+// [Hire panel · from a letter](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2090-789)
+// [Hire panel · 175%](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2090-814)
+//
+// A module opens it with a task already written — the mail does, from a
+// letter — and hands the letter over as `quote`: it goes to the agent as a
+// quotation marked as somebody else's text, and the owner sees and edits the
+// task before anything starts.
+let hire = null;   // { project, task, model, quote, from, back, done, busy, error } while open
+
+const hireRooms = () => ((S.layout && S.layout.projectRooms) || [])
+  .map((r) => r.key).filter((k) => S.agents.some((a) => a.project === k));
+
+// Where the agent will sit, said the way the room is known: the folder of the
+// agent who works in the project root, and how many desks are taken.
+function hireWhere(project) {
+  const here = S.agents.filter((a) => a.project === project);
+  const root = here.find((a) => a.cwd && a.cwd.split('/').pop() === project);
+  const dir = root ? root.cwd.replace(/^\/(?:Users|home)\/[^/]+/, '~') : '';
+  const seats = tr('hire.seats', { n: here.length, word: tr(pluralKey('rec.agent', here.length)) });
+  return [dir, seats].filter(Boolean).join(' · ');
+}
+
+export function openHire(opts = {}) {
+  if (isGuest()) return;
+  const rooms = hireRooms();
+  const project = rooms.includes(opts.project) ? opts.project : rooms[0];
+  if (!project) { toast(tr('hire.noRooms')); return; }
+  hire = {
+    project, task: opts.task || '', model: 'opus', quote: opts.quote || null,
+    from: opts.from || null, back: opts.back || null, done: opts.done || null, busy: false, error: '',
+  };
+  el.hire.hidden = false;
+  renderHire();
+  setTimeout(() => { const ta = $('#hireTask'); if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } }, 30);
+}
+
+export function hireOpen() { return !!(el.hire && !el.hire.hidden); }
+
+// Esc from a panel a module opened goes back to that module — to the letter.
+export function closeHire(goBack = true) {
+  if (!el.hire || el.hire.hidden) return;
+  const back = hire && hire.back;
+  el.hire.hidden = true;
+  hire = null;
+  if (goBack && back) back();
+}
+
+function renderHire() {
+  if (!hire) return;
+  const rooms = hireRooms();
+  const d = S.delivery || {};
+  const blocked = d.checked !== false && d.available === false;
+  const f = hire.from;
+  el.hire.innerHTML = `<div class="rwrap hirewrap">
+    <div class="vhead"><span>${tr('hire.title')}</span>
+      <span class="rechead"><span class="reckeys">${tr(hire.back ? 'hire.keysBack' : 'hire.keys')}</span><button id="hirex">✕</button></span></div>
+    <div class="hirebody">
+      ${f ? `<div class="hirefrom"><i>${esc(f.kind || '')}</i><b>${esc(f.title || '')}</b>
+        <span>${tr('hire.quoteNote')}</span></div>` : ''}
+      <p class="hlabel">${tr('hire.room')}</p>
+      <div class="hchips">${rooms.map((k, i) => `<button class="hchip${k === hire.project ? ' on' : ''}" data-room="${esc(k)}">${esc(k)}${
+        i < 9 ? ` <kbd>${i + 1}</kbd>` : ''}</button>`).join('')}</div>
+      <p class="hwhere">${esc(hireWhere(hire.project))}</p>
+      <p class="hlabel">${tr('hire.task')}</p>
+      <textarea id="hireTask" rows="3" maxlength="4000" placeholder="${tr('hire.taskHint')}">${esc(hire.task)}</textarea>
+      <p class="hlabel">${tr('hire.model')}</p>
+      <div class="hmodels">${['sonnet', 'opus'].map((m) => `<button class="hmodel${m === hire.model ? ' on' : ''}" data-model="${m}">${
+        m === 'opus' ? 'Opus' : 'Sonnet'}</button>`).join('')}</div>
+      <p class="hint">${tr('hire.rules')}</p>
+      ${blocked ? `<p class="hint warn">${esc(said(d, 'hint') || tr('hire.noCli'))}</p>` : ''}
+      ${hire.error ? `<p class="hint warn">${esc(hire.error)}</p>` : ''}
+    </div>
+    <div class="hirefoot">
+      <button id="hireNo">${tr('hire.cancel')} <kbd>Esc</kbd></button>
+      <button id="hireGo" class="primary" ${blocked || hire.busy ? 'disabled' : ''}>${tr(hire.busy ? 'hire.going' : 'hire.go')} <kbd>Enter</kbd></button>
+    </div></div>`;
+
+  const ta = $('#hireTask');
+  ta.oninput = () => { hire.task = ta.value; };
+  ta.onkeydown = (e) => {
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    e.preventDefault();
+    submitHire();
+  };
+  $('#hirex').onclick = () => closeHire();
+  $('#hireNo').onclick = () => closeHire();
+  $('#hireGo').onclick = submitHire;
+  el.hire.querySelectorAll('[data-room]').forEach((b) => b.onclick = () => { hire.project = b.dataset.room; hire.error = ''; renderHire(); });
+  el.hire.querySelectorAll('[data-model]').forEach((b) => b.onclick = () => { hire.model = b.dataset.model; renderHire(); });
+}
+
+async function submitHire() {
+  if (!hire || hire.busy) return;
+  const task = hire.task.trim();
+  if (!task) { hire.error = tr('hire.errEmpty'); renderHire(); $('#hireTask')?.focus(); return; }
+  hire.busy = true; hire.error = '';
+  renderHire();
+  const r = await api.hire({ project: hire.project, task, model: hire.model, quote: hire.quote, source: hire.from ? hire.from.source : null });
+  if (!hire) return;
+  hire.busy = false;
+  if (!r || !r.ok) {
+    hire.error = said(r && r.hire ? r.hire : r) || tr('hire.errUnknown');
+    renderHire();
+    return;
+  }
+  const { project, done } = hire;
+  closeHire(false);
+  toast(tr('hire.opened', { room: project }));
+  if (done) done(r.hire);
+}
+
+// Digits pick the room while the focus is not in the task; everything else in
+// the office waits — the panel is in front of it.
+export function hireKey(raw) {
+  if (!hireOpen()) return false;
+  const n = Number(raw);
+  if (Number.isInteger(n) && n >= 1 && n <= 9) {
+    const b = el.hire.querySelectorAll('[data-room]')[n - 1];
+    if (b) b.click();
+    return true;
+  }
+  if (raw === 'Enter') { submitHire(); return true; }
+  return raw !== 'Tab' && raw !== 'Escape';
 }
 
 // English has two forms and Russian has three. Both use the same keys, while the
