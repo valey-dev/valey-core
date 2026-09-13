@@ -445,6 +445,13 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 
 /* The "tree" tab: three tier columns on one grid, with SVG edges drawn from the
    buttons' real geometry. A dim node names a tier; it does not say "buy."
+
+   Lines and borders are --frame, as on the Prod frame «Панель · Инвентарь ·
+   Дерево» (checked 13 September 2026: every node border and the dashed ghost
+   #8a6247). The code had drifted to --frame-dim, a step darker, and a tier
+   read as faded rather than named. The text tone stays --muted: the frame
+   says --ink-dim there, and the one-tone decision for service text
+   (muted-contrast, the same day) is the later word.
  */
 .tbody{gap:10px}
 .tcols,.tree{display:grid; grid-template-columns:1fr 36px 1fr 36px 1fr}
@@ -454,7 +461,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .tcol span{font-size:9px; color:var(--muted)}
 .tree{position:relative; grid-auto-rows:28px; row-gap:6px}
 .tedges{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
-.tedges path{fill:none; stroke:var(--frame-dim); stroke-width:2}
+.tedges path{fill:none; stroke:var(--frame); stroke-width:2}
 .tedges path.lit{stroke:var(--accent)}
 .tnode{position:relative; display:flex; align-items:center; gap:6px; padding:0 6px; height:28px; min-width:0;
   background:var(--bg-deep); border:1px solid var(--frame); color:var(--ink); cursor:pointer; text-align:left;
@@ -462,9 +469,9 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .tnode span{flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis}
 .tnode em{font-style:normal; font-size:9px; color:var(--warn)}
 .tnode.floor em, .tnode.room em{color:var(--muted)}
-.tnode.office, .tnode.floor, .tnode.room{border-color:var(--frame-dim); color:var(--muted)}
+.tnode.office, .tnode.floor, .tnode.room{border-color:var(--frame); color:var(--muted)}
 .tnode.office .tico, .tnode.floor .tico, .tnode.room .tico{opacity:.4}
-.tnode.ghost{background:none; border:1px dashed var(--frame-dim); color:var(--muted)}
+.tnode.ghost{background:none; border:1px dashed var(--frame); color:var(--muted)}
 :where(body:not(.bykeys)) .tnode:hover{background:var(--wood)}
 .tnode.on{background:var(--wood); border:2px solid var(--accent); padding:0 5px; color:var(--ink); font-weight:bold}
 .tico{width:16px; height:16px; flex:none;
