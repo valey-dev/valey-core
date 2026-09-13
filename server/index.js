@@ -20,6 +20,7 @@ import { MIME, MAX_VIEW, fileType, fileHeaders } from './files.js';
 import { listenFree } from './port.js';
 import { createExposure, lanAddresses } from './expose.js';
 import { isWorker, fixedAddress, gated, listenForSwap, upd, runCheck, runUpdate } from './swap.js';
+import { repos as updateRepos } from './update.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const WEB = path.join(ROOT, 'web');
@@ -962,19 +963,22 @@ async function handle(req, res) {
   // The version row in the office tab. The owner's alone: a guest cannot update
   // somebody else's office. Checking and updating both reach outside — a git
   // fetch — so they happen only on these requests, never on a timer.
+  // Which repositories «update» moves — the row says «core and Modules» only
+  // when there is a Modules checkout to move.
+  const updView = async () => ({ ...upd, running: VERSION, repos: (await updateRepos(UPDATE_ROOT)).map((r) => r.key) });
   if (url.pathname === '/api/update' && req.method === 'GET') {
     if (!(await isOwner(req))) return forbidden(res);
-    return send(res, 200, { ...upd, running: VERSION });
+    return send(res, 200, await updView());
   }
   if (url.pathname === '/api/update/check' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
     runCheck(UPDATE_ROOT, VERSION).catch((e) => Object.assign(upd, { state: 'failed', reason: 'error', detail: e.message }));
-    return send(res, 200, { ...upd, running: VERSION });
+    return send(res, 200, await updView());
   }
   if (url.pathname === '/api/update/run' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
     runUpdate(UPDATE_ROOT, VERSION).catch((e) => Object.assign(upd, { state: 'failed', reason: 'error', detail: e.message }));
-    return send(res, 200, { ...upd, running: VERSION });
+    return send(res, 200, await updView());
   }
 
   if (url.pathname === '/api/permit' && req.method === 'POST') {

@@ -439,6 +439,10 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
   padding:4px 12px; cursor:pointer; font:12px "JetBrains Mono", "Courier New",monospace}
 :where(body:not(.bykeys)) .obtn:hover{background:var(--wood); color:var(--ink)}
 .obtn.on{background:var(--wood); color:var(--warn); border:2px solid var(--accent); padding:3px 11px}
+/* The one action a row is there for — «update» in the version row — reads as the
+   primary button of the permission card does. */
+.obtn.prim{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
+.obtn[disabled]{opacity:.5; cursor:default}
 .orow{display:flex; align-items:center; gap:10px; background:var(--field); padding:6px 8px}
 .orow b{font-weight:normal; color:var(--ink)}
 .orow span{flex:1; font-size:11px; color:var(--muted)}
