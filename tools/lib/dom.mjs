@@ -104,6 +104,10 @@ export const proxy = (get) => ({
   set scrollTop(v) { get().scrollTop = v; },
   querySelector: (s) => get().querySelector(s),
   querySelectorAll: (s) => get().querySelectorAll(s),
+  // A ring hangs its field keys on the panel (focusRing in ui.js) — only on a
+  // panel that has a dataset to mark it with, which a plain stand-in does not.
+  get dataset() { const n = get(); return n ? n.dataset : undefined; },
+  addEventListener: (...a) => { const n = get(); if (n && n.addEventListener) n.addEventListener(...a); },
 });
 
 // A localStorage that really remembers: the stands for the notes and the look
