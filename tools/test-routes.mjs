@@ -116,6 +116,15 @@ try {
   const vanished = await req('/api/file?path=' + encodeURIComponent(gone));
   ok('missing file - 404', vanished.status === 404, vanished.status);
 
+  // ------------------------------------------------------ a Codex thread
+  // Delivery is `claude --resume <id>`: with a Codex thread id it would start a
+  // Claude session nobody asked for. Refused before the CLI is even looked for.
+  setSnapshot({ agents: [{ id: 'cx1', name: 'Марина', project: 'tide-charts', provider: 'codex', files: [], artifacts: [] }] });
+  const OWN = { 'content-type': 'application/json', 'x-valey-owner': OWNER };
+  const toCodex = await req('/api/task', { method: 'POST', headers: OWN, body: JSON.stringify({ agentId: 'cx1', text: 'hi', deliver: true }) });
+  ok('a task is not delivered into a Codex thread',
+    toCodex.status === 200 && toCodex.j.task.state === 'failed' && toCodex.j.task.errorKey === 'err.codexNoChat', toCodex.j);
+
   // ------------------------------------------------------- the network gate
   // Through a middleman means from outside. A closed office answers 404: a
   // scanner has no business learning that anyone lives here.

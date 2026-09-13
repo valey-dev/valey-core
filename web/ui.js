@@ -328,7 +328,23 @@ function accessOf(id) {
   return 'closed';
 }
 
+// Delivery into a live chat is `claude --resume`; a Codex thread has no door
+// the office can knock on. Its «Task» is dimmed rather than removed — frame
+// WIP «Codex sessions in the office», v3: a dimmed button says it exists.
+const canTask = (a) => a.provider !== 'codex';
+
+// Which source the agent came from, after the role: ✶ Claude, ◇ Codex. The
+// role's own frame without its colour — roles are coloured, and a provider
+// must not read as one. Brand names, so not translated. ✶ rather than ✳: the
+// second is not in the office's font.
+const PROVIDER_MARK = { claude: '✶', codex: '◇' };
+const providerBadge = (a) => (PROVIDER_MARK[a.provider]
+  ? `<span class="role prov">${PROVIDER_MARK[a.provider]} ${a.provider === 'codex' ? 'Codex' : 'Claude'}</span>`
+  : '');
+
 function buildDialog(a) {
+  // the page is remembered between agents; a Codex card never opens on Task
+  if (S.page === 'task' && !canTask(a)) S.page = 'talk';
   let body = '';
   if (S.page === 'talk') {
     // There is no reply to show a guest: the server never sent it. Instead of an
@@ -454,14 +470,14 @@ function buildDialog(a) {
   el.dialog.innerHTML = `
     <div class="portrait"><canvas width="48" height="48" id="pf"></canvas></div>
     <div class="content">
-      <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${esc(roleText(a))}</span>
+      <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${esc(roleText(a))}</span>${providerBadge(a)}
         <span class="meta">${metaLine(a)}</span><div class="taskrow">${taskRow(a)}</div></div>
       <div class="act">${actLine(a)}</div>
       <div class="body">${body}</div>
       <div class="acts">
         <button data-p="talk" class="${S.page === 'talk' ? 'on' : ''}">${tr('tab.talk')} <kbd>1</kbd></button>
         <button data-p="work" class="${S.page === 'work' ? 'on' : ''}">${tr('tab.work')} <kbd>2</kbd></button>
-        <button data-p="task" class="${S.page === 'task' ? 'on' : ''}" ${permitOf(a.id) ? 'disabled' : ''}>${tr('tab.task')} <kbd>3</kbd></button>
+        <button data-p="task" class="${S.page === 'task' ? 'on' : ''}" ${permitOf(a.id) || !canTask(a) ? 'disabled' : ''}>${tr('tab.task')} <kbd>3</kbd></button>
         <button data-p="close">${tr('tab.close')} <kbd>Esc</kbd></button>
       </div>
     </div>`;

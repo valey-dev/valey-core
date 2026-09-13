@@ -10,6 +10,7 @@ import { getSettings, patchSettings } from './settings.js';
 import { projectInfo, repoRoot, repoRootCached } from './stack.js';
 import { present } from './files.js';
 import { trinketTier } from '../web/trinkets.js';
+import { liveCodexSessions, applyCodexLine } from './codex.js';
 
 // Where the office reads sessions from. The variable is for the stands: until
 // 4 September 2026 the directory was pinned to the home one, and transcript
@@ -225,13 +226,13 @@ async function readRange(file, start, length) {
   }
 }
 
-async function follow(sessionId, file, apply, fresh, deep) {
+async function follow(sessionId, file, apply, fresh, deep, firstRead = FIRST_READ_BYTES) {
   let c = cache.get(sessionId);
   let size = 0;
   try { size = (await fsp.stat(file)).size; } catch { return c?.st; }
 
   if (!c || c.file !== file || size < c.offset) {
-    const start = Math.max(0, size - FIRST_READ_BYTES);
+    const start = Math.max(0, size - firstRead);
     const text = await readRange(file, start, size - start);
     const lines = text.split('\n');
     if (start > 0) lines.shift();
@@ -986,8 +987,15 @@ export function statusOf(t, now = Date.now()) {
   return idleFor < STEP_MS ? 'working' : 'idle';
 }
 
+// A Codex rollout is read whole rather than by its last megabyte: it has no
+// deep pass of its own, and its files run to a few megabytes here. The cap is
+// for the thread that has been fed screenshots.
+const CODEX_FIRST_READ = 16 * 1024 * 1024;
+
 export async function snapshot() {
-  const sessions = await liveSessions();
+  // Codex threads sit at the same desks as Claude sessions: one list, one
+  // registry of names and seats. The provider travels with the agent.
+  const sessions = [...await liveSessions(), ...await liveCodexSessions()];
   // Warm the roots cache before the seats are computed: projectOf is
   // synchronous while git is asynchronous, and without the warm-up the first
   // snapshot would seat everyone by directory.
@@ -999,8 +1007,11 @@ export async function snapshot() {
   const agents = [];
 
   for (const s of sessions) {
-    const file = await transcriptFor(s.sessionId, s.cwd);
-    const t = (file ? await follow(s.sessionId, file, applyLine, emptyState, deepSkills) : null) || emptyState();
+    const codex = s.provider === 'codex';
+    const file = codex ? s.file : await transcriptFor(s.sessionId, s.cwd);
+    const t = (file ? await (codex
+      ? follow(s.sessionId, file, applyCodexLine, emptyState, null, CODEX_FIRST_READ)
+      : follow(s.sessionId, file, applyLine, emptyState, deepSkills)) : null) || emptyState();
     // Only what can still be opened: see present() in files.js.
     const files = await present([...t.files.values()].sort((a, b) => b.ts - a.ts), 16);
     const artifacts = files.filter((f) => f.made || f.image);
@@ -1016,7 +1027,12 @@ export async function snapshot() {
 
     agents.push({
       id: s.sessionId,
-      pid: s.pid,
+      // Codex threads have no process of their own: the pid that holds their
+      // lock is the whole app, and nothing should ever be sent to it per agent.
+      pid: codex ? null : s.pid,
+      // 'claude' | 'codex': the badge on the floor and in the card, and what
+      // the office can do for the agent — delivery is Claude's alone.
+      provider: codex ? 'codex' : 'claude',
       handle: s.name || s.sessionId.slice(0, 8),
       name: names[s.sessionId] || s.sessionId.slice(0, 6),
       // gender travels with the snapshot: on the page the name is one line,
@@ -1030,7 +1046,7 @@ export async function snapshot() {
       repo: !!repo.git,
       branch: t.branch,
       model: t.model,
-      title: t.title || t.aiTitle || '',
+      title: t.title || t.aiTitle || s.title || '',
       role: roleInfo.role,
       roleKey: roleInfo.short,
       status,
@@ -1093,4 +1109,6 @@ export {
   fs, inferRole, describeTool, ROLES, ROLE_WINDOW_MS, ROLE_STALE_MS,
   // exported for the stand alone: it runs the parser on real transcript lines
   applyLine, emptyState, SKILL_OF, SKILL_BRANCHES, follow, deepSkills,
+  // shared with the Codex parser, server/codex.js
+  useTool, remember, born, gap, endOf,
 };

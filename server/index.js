@@ -944,6 +944,10 @@ async function handle(req, res) {
 
       const agent = last.agents.find((a) => a.id === agentId);
       if (!agent) { task.state = 'failed'; task.error = 'the agent is no longer in the office'; task.errorKey = 'err.agentGone'; return send(res, 200, { ok: true, task }); }
+      // Delivery is `claude --resume <id>`: given a Codex thread id it would
+      // start a Claude session nobody asked for. The card dims the button; this
+      // is for whoever calls the route without it.
+      if (agent.provider === 'codex') { task.state = 'failed'; task.error = 'a Codex thread cannot be sent a task from the office'; task.errorKey = 'err.codexNoChat'; return send(res, 200, { ok: true, task }); }
       const status = await deliveryStatus();
       if (!status.available) { task.state = 'failed'; task.error = status.hint; task.errorKey = status.hintKey; return send(res, 200, { ok: true, task, delivery: status }); }
       if (isBusy(agentId)) { task.state = 'failed'; task.error = 'another message is already being sent to this agent'; task.errorKey = 'err.busy'; return send(res, 200, { ok: true, task }); }
