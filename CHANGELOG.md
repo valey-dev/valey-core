@@ -4,6 +4,16 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.53.0 — 13 September 2026
+
+### Added
+
+- **office:** a phone or an Xbox in your network becomes the owner after your yes in Invite (ed28d71)
+
+### Other
+
+- docs(notes): the note for owner devices, with the pairing request on the picture (d45f966)
+- chore(office): the server pairs owner devices by a four-digit code, answered only from this machine (4103f55)
 ## v0.52.4 — 13 September 2026
 
 ### Fixed
