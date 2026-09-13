@@ -10,7 +10,7 @@
 .t-literal{color:#ff9f8f}
 .t-fn{color:var(--accent)}
 .t-prop{color:#bcd8a8}
-.t-punct{color:#7a6450}
+.t-punct{color:var(--muted)}
 
 .t-cssprop{color:var(--accent)}
 .t-selector{color:var(--warn)}
@@ -35,10 +35,6 @@
 .framebar button{background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:10px "JetBrains Mono", "Courier New", monospace; padding:2px 8px; cursor:pointer}
 .framebar button:hover{background:var(--wood-lit); color:var(--warn)}
-
-/* inside markdown fences the base text is dimmer, so keep the tokens readable */
-.md pre.mdcode code .t-comment{color:#7d6852}
-.md pre.mdcode code .t-punct{color:#8a7358}
 
 /* Scale in the HUD gets its own colour so it is not confused with sound or radio. */
 .chip.zoom{color:#c39bff}

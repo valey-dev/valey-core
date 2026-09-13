@@ -81,5 +81,39 @@ for (const [file, lang] of [['../web/main.js', 'js'], ['../web/style.css', 'css'
   console.log(`${same ? 'ok   ' : 'FAILED'} | ${file}: ${src.length} chars → ${ms} ms, text ${same ? 'intact' : 'damaged'}`);
 }
 
+// Every token colour reads on both grounds code is shown on: the viewer panel
+// (--wood-dark) and a fence in rendered markdown (#1a120c). On 13 September
+// 2026 punctuation was #7a6450 — 2.93:1 on the panel — and inside fences the
+// comments and punctuation had darker copies of their own, 3.50 and 4.12:1,
+// written for a base text that is no longer dimmer there.
+const hex2rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const lum = (rgb) => {
+  const [r, g, b] = rgb.map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrast = (a, b) => {
+  const x = lum(hex2rgb(a)), y = lum(hex2rgb(b));
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+};
+const tokens = readFileSync(new URL('../web/tokens.css', import.meta.url), 'utf8');
+const vars = Object.fromEntries([...tokens.matchAll(/(--[\w-]+):(#[0-9a-f]{6})/gi)].map((m) => [m[1], m[2]]));
+const sheet = readFileSync(new URL('../web/highlight.css', import.meta.url), 'utf8');
+const grounds = { 'the viewer': vars['--wood-dark'], 'a markdown fence': '#1a120c' };
+const colours = [...sheet.matchAll(/\.t-([\w-]+)\{color:(#[0-9a-f]{6}|var\((--[\w-]+)\))\}/gi)]
+  .map((m) => [m[1], m[3] ? vars[m[3]] : m[2]]);
+let dim = 0;
+for (const [cls, hex] of colours) {
+  for (const [where, bg] of Object.entries(grounds)) {
+    const c = contrast(hex, bg);
+    if (c < 4.5) { dim++; console.log(`FAIL  | .t-${cls} ${hex} on ${where} is ${c.toFixed(2)}:1`); }
+  }
+}
+if (colours.length < 10) { dim++; console.log(`FAIL  | only ${colours.length} token colours read from highlight.css`); }
+if (!/\.md pre\.mdcode\{background:#1a120c/.test(readFileSync(new URL('../web/markdown.css', import.meta.url), 'utf8'))) {
+  dim++; console.log('FAIL  | the markdown fence is no longer #1a120c — move the ground above with it');
+}
+failed += dim;
+if (!dim) console.log(`ok    | ${colours.length} token colours read at 4.5:1 on the viewer and in fences`);
+
 console.log(failed ? `\nfailed: ${failed}` : '\nall good');
 process.exit(failed ? 1 : 0);
