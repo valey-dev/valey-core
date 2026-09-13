@@ -24,6 +24,8 @@ Then open <http://localhost:5177>.
 
 Run it twice and the second one says where the first is and exits: two offices on one port would be two offices, not one. If something that is not Valey holds 5177, the office takes the next free port and says so — with the reminder that Claude Code sends its questions to 5177, so a hook set up later needs the port freed or `network.port` in the settings changed.
 
+To update a running office from its repository, press **update** in the office tab of the inventory (C), or run `npm run update` in another terminal: the core and the Modules are pulled and the office is swapped for the new version without stopping — guests, notes and questions it holds for agents come along, and open pages reload onto it. It never checks on its own: a `git fetch` happens only when you ask. An office installed from an archive is updated by running the install command again.
+
 The server binds `127.0.0.1`, so the office answers this machine and nothing
 else. 
 

@@ -35,6 +35,12 @@ const POLL_MS = 2500;
 // the interface: the sign on the title screen shows it, and in a release video
 // it has to match the tag.
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
+// The version «update» compares against: the checkout it pulls, read when this
+// office started. The same as VERSION in a real office. A stand runs one tree
+// and updates another, and read from the running tree it stayed «behind» after
+// every swap — each press of «update» swapped again, for nothing.
+const UPDATE_VERSION = UPDATE_ROOT === ROOT ? VERSION
+  : JSON.parse(fs.readFileSync(path.join(UPDATE_ROOT, 'package.json'), 'utf8')).version;
 
 let last = { now: 0, agents: [], version: VERSION };
 // The switch that opens the running office to the network (expose.js). Set by
@@ -359,7 +365,7 @@ async function importState(state) {
 // Every page is told the office was updated, and to reload onto the new one.
 // Guests too: their page blinks as well, and they keep their access.
 function farewell(to) {
-  const payload = `event: update\ndata: ${JSON.stringify({ from: VERSION, to })}\n\n`;
+  const payload = `event: update\ndata: ${JSON.stringify({ from: UPDATE_VERSION, to })}\n\n`;
   for (const res of [...clients]) {
     try { res.write(payload); res.end(); } catch { /* already gone */ }
   }
@@ -965,19 +971,19 @@ async function handle(req, res) {
   // fetch — so they happen only on these requests, never on a timer.
   // Which repositories «update» moves — the row says «core and Modules» only
   // when there is a Modules checkout to move.
-  const updView = async () => ({ ...upd, running: VERSION, repos: (await updateRepos(UPDATE_ROOT)).map((r) => r.key) });
+  const updView = async () => ({ ...upd, running: UPDATE_VERSION, repos: (await updateRepos(UPDATE_ROOT)).map((r) => r.key) });
   if (url.pathname === '/api/update' && req.method === 'GET') {
     if (!(await isOwner(req))) return forbidden(res);
     return send(res, 200, await updView());
   }
   if (url.pathname === '/api/update/check' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
-    runCheck(UPDATE_ROOT, VERSION).catch((e) => Object.assign(upd, { state: 'failed', reason: 'error', detail: e.message }));
+    runCheck(UPDATE_ROOT, UPDATE_VERSION).catch((e) => Object.assign(upd, { state: 'failed', reason: 'error', detail: e.message }));
     return send(res, 200, await updView());
   }
   if (url.pathname === '/api/update/run' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
-    runUpdate(UPDATE_ROOT, VERSION).catch((e) => Object.assign(upd, { state: 'failed', reason: 'error', detail: e.message }));
+    runUpdate(UPDATE_ROOT, UPDATE_VERSION).catch((e) => Object.assign(upd, { state: 'failed', reason: 'error', detail: e.message }));
     return send(res, 200, await updView());
   }
 
