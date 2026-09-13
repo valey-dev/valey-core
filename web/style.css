@@ -1082,21 +1082,10 @@ body.titling #hud{visibility:hidden}
 :where(body:not(.bykeys)) #standtab:hover{background:var(--warn); color:var(--bg-deep)}
 body.stand-folded #stand{display:none}
 body.stand-folded #standtab{display:block}
-/* ---- diff ---- */
-.gitbody.diff .gfiles{flex:0 0 240px; overflow:auto; padding:6px 0}
-.gfile{display:flex; gap:8px; padding:4px 10px; font-size:11px; color:var(--ink-dim); cursor:pointer}
-.gfile span{flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left}
-:where(body:not(.bykeys)) .gfile:hover{background:var(--wood-hi)}
-.gfile.sel{background:var(--wood); color:var(--ink); box-shadow:inset 2px 0 0 var(--accent)}
-.gcode{flex:1 1 auto; overflow:auto; border-left:2px solid var(--wood-hi); padding:4px 0 12px}
-.dl{display:flex; align-items:baseline; gap:0; font-size:11px; line-height:16px; white-space:pre}
-.dl code{padding-right:14px}
-.dl.add{background:rgba(159,224,168,.10)}
-.dl.del{background:rgba(255,159,143,.10)}
-.dl.hunk{background:var(--field); color:var(--muted); font-size:10px; line-height:20px; padding-left:10px}
-.dn{flex:0 0 34px; text-align:right; padding-right:6px; color:var(--muted); font-size:9px}
-.dp{flex:0 0 16px; text-align:center; color:var(--muted)}
-.dl.add .dp{color:var(--accent)} .dl.del .dp{color:var(--bad)}
+/* ---- diff ----
+   Lives in the gittree module since 13 September 2026 (gittree/style.css, under
+   .gitwrap). It stayed here when the panel became a module on 3 September: no
+   core markup uses these classes, and the free build shipped them for nothing. */
 
 /* ---- office language and agent names ---- */
 .langwrap{width:min(480px,92vw)}
