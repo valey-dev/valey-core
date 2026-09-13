@@ -11,19 +11,23 @@ import { realWeather, forgetWeather, geocode } from './weather.js';
 import {
   getSettings, patchSettings, updateSettings, publicSettings, ownerToken, warnIfSharedSettingsWorktree,
 } from './settings.js';
-import { deliver, deliveryStatus, forgetCli, isBusy, MODES } from './deliver.js';
-import { ask as askPermit, answer as answerPermit, permits, forgetGone } from './permit.js';
+import { deliver, deliveryStatus, forgetCli, isBusy, MODES, adopt, releaseRuns } from './deliver.js';
+import { ask as askPermit, answer as answerPermit, permits, forgetGone, retryAll } from './permit.js';
 import { releaseNudge } from './release.js';
-import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset } from './modules.js';
+import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset, modulesOff } from './modules.js';
 import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
 import { MIME, MAX_VIEW, fileType, fileHeaders } from './files.js';
 import { listenFree } from './port.js';
 import { createExposure, lanAddresses } from './expose.js';
+import { isWorker, fixedAddress, gated, listenForSwap, upd, runCheck, runUpdate } from './swap.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const WEB = path.join(ROOT, 'web');
 const MODS = path.join(ROOT, 'modules');
 const PORT = Number(process.env.PORT || 5177);
+// Which checkout «update» pulls. The office's own, except in the stand, which
+// updates a repository of its own rather than the branch it runs from.
+const UPDATE_ROOT = process.env.VALEY_UPDATE_ROOT || ROOT;
 const POLL_MS = 2500;
 
 // The office version comes from its own package.json rather than a string in
@@ -282,7 +286,11 @@ function peopleTick() {
 
 // Whether there is anybody worth asking. A guest does not count: the pager does
 // not reach him, and holding a question for him means holding it for nobody.
-const audience = () => [...clients].some((res) => !res.valeyGuest);
+// Right after an update the owner's pages are still reloading onto this office,
+// and a question the previous one sent back arrives before they do. For a short
+// while after the handover it is held as if they were already here.
+let audienceUntil = 0;
+const audience = () => [...clients].some((res) => !res.valeyGuest) || Date.now() < audienceUntil;
 
 // One event to one person's open streams. Presence broadcasts to everybody and
 // needs nothing like this; a module that introduces two browsers to each other
@@ -304,6 +312,51 @@ function broadcastPermits() {
   last.permits = permits();
   const payload = `event: permits\ndata: ${JSON.stringify(last.permits)}\n\n`;
   for (const res of clients) if (!res.valeyGuest) res.write(payload);
+}
+
+// ------------------------------------------------------------- the handover
+// What moves to the office that replaces this one on an update (server/swap.js).
+// Everything that lives only in memory and that a person would miss: the notes
+// on the desks, what guests asked for and were granted, who is standing where,
+// the stand's module switches. A restart forgets all of it on purpose; an
+// update is not a restart.
+function exportState() {
+  return {
+    v: 1,
+    from: VERSION,
+    outbox,
+    taskSeq,
+    grants: [...grants].map(([guest, set]) => [guest, [...set]]),
+    asks: [...asks],
+    people: [...people],
+    modulesOff: modulesOff(),
+  };
+}
+
+function importState(state) {
+  if (!state || state.v !== 1) return;
+  outbox.push(...(state.outbox || []));
+  taskSeq = Math.max(taskSeq, Number(state.taskSeq) || 0);
+  for (const [guest, list] of state.grants || []) grants.set(guest, new Set(list));
+  for (const [k, a] of state.asks || []) asks.set(k, a);
+  const now = Date.now();
+  for (const [id, p] of state.people || []) people.set(id, { ...p, at: now });
+  for (const id of state.modulesOff || []) setModuleOff(id, true);
+  audienceUntil = now + 20_000;
+  // A note that was still being delivered: its run lives on in its own process
+  // group, and this office reads how it ended.
+  for (const t of outbox) if (t.state === 'sending') adopt(t).catch((e) => { t.state = 'failed'; t.error = e.message; });
+  console.log(`[update] took over from v${state.from}: ${outbox.length} notes, ${grants.size} guests with access`);
+}
+
+// Every page is told the office was updated, and to reload onto the new one.
+// Guests too: their page blinks as well, and they keep their access.
+function farewell(to) {
+  const payload = `event: update\ndata: ${JSON.stringify({ from: VERSION, to })}\n\n`;
+  for (const res of [...clients]) {
+    try { res.write(payload); res.end(); } catch { /* already gone */ }
+  }
+  clients.clear();
 }
 
 async function tick() {
@@ -892,13 +945,31 @@ async function handle(req, res) {
   // dialog in the terminal. Only the owner can answer, so only he is let in to
   // ask: somebody else's request here is a way to draw a fake command in the
   // office and collect a real "allow" for it.
+  // The version row in the office tab. The owner's alone: a guest cannot update
+  // somebody else's office. Checking and updating both reach outside — a git
+  // fetch — so they happen only on these requests, never on a timer.
+  if (url.pathname === '/api/update' && req.method === 'GET') {
+    if (!(await isOwner(req))) return forbidden(res);
+    return send(res, 200, { ...upd, running: VERSION });
+  }
+  if (url.pathname === '/api/update/check' && req.method === 'POST') {
+    if (!(await isOwner(req))) return forbidden(res);
+    runCheck(UPDATE_ROOT, VERSION).catch((e) => Object.assign(upd, { state: 'failed', reason: 'error', detail: e.message }));
+    return send(res, 200, { ...upd, running: VERSION });
+  }
+  if (url.pathname === '/api/update/run' && req.method === 'POST') {
+    if (!(await isOwner(req))) return forbidden(res);
+    runUpdate(UPDATE_ROOT, VERSION).catch((e) => Object.assign(upd, { state: 'failed', reason: 'error', detail: e.message }));
+    return send(res, 200, { ...upd, running: VERSION });
+  }
+
   if (url.pathname === '/api/permit' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
     // tool_input for Write is a whole file, and 64 KB is not enough for it. A
     // limit is still needed: the body is read into memory, and there can be many
     // requests.
     const body = await readJson(req, SHOT_MAX);
-    const { held, verdict, entry } = askPermit(body, { audience: audience() });
+    const { held, verdict, entry } = askPermit(body, { audience: audience(), canRetry: req.headers['x-valey-hook'] === '2' });
     // Nobody is here — the office steps aside immediately. An empty answer
     // returns the hook to its normal path, and the person sees the native dialog
     // without waiting a second.
@@ -1129,19 +1200,38 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
     boot = await updateSettings((now) => ((now.network || {}).token ? null : { network: { external: true, token: newToken() } }));
     console.log('A network token was created and saved to the office settings');
   }
-  const HOST = host || (external ? '0.0.0.0' : '127.0.0.1');
-  const handler = createHandler();
+  // After an update the new office takes exactly the address the old one had.
+  const fixed = fixedAddress();
+  const HOST = fixed ? fixed.host : (host || (external ? '0.0.0.0' : '127.0.0.1'));
+  const handler = gated(createHandler());
   const server = http.createServer(handler);
 
   // A taken port is asked who it is before anything is concluded. Another
   // office there means this one has nothing to do; something else means the
   // next port up, said out loud — the canonical-port line below then explains
   // what that costs.
-  const bound = await listenFree(server, port, HOST, { log: console.log, own: VERSION });
+  const bound = fixed
+    ? await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(fixed.port, fixed.host, () => { server.off('error', reject); resolve(fixed.port); });
+    })
+    : await listenFree(server, port, HOST, { log: console.log, own: VERSION });
   if (bound === null) return null;
   port = bound;
   exposure = createExposure({ handler, port, host: HOST });
   if (external) await exposure.open();
+  if (isWorker) process.send({ valey: 'bound', port, host: HOST });
+  listenForSwap({
+    server, root: UPDATE_ROOT, releaseRuns, retryPermits: retryAll, farewell, exportState, importState,
+    closeExtra: () => exposure.close(),
+  });
+  if (fixed) {
+    // The banner was printed by the office this one replaced; one line is enough.
+    console.log(`[update] v${VERSION} is serving http://localhost:${port}`);
+    tick();
+    peopleTick();
+    return server;
+  }
   const token = await ownerToken();
   const s = await getSettings();
   console.log(`Valey office at http://localhost:${port}`);

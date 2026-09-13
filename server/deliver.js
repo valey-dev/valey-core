@@ -212,7 +212,7 @@ export async function deliver(task, agent, mode = 'default', { timeout = TIMEOUT
     // the run holds its own copies; the office's are not needed to read files
     fs.closeSync(outFd); fs.closeSync(errFd);
   }
-  if (child.pid) fs.writeFileSync(runFile(agent.id, 'json'), JSON.stringify({ pid: child.pid, startedAt: task.startedAt }));
+  if (child.pid) fs.writeFileSync(runFile(agent.id, 'json'), JSON.stringify({ pid: child.pid, startedAt: task.startedAt, mode }));
 
   let timedOut = false, kill = null;
   const timer = setTimeout(() => {
@@ -232,34 +232,83 @@ export async function deliver(task, agent, mode = 'default', { timeout = TIMEOUT
     });
     child.on('close', (code) => {
       stop();
+      // Handed to the next office: its files are the next office's to read.
+      if (released) { resolve(task); return; }
       const out = readTail(runFile(agent.id, 'out'), 200_000);
       const err = readTail(runFile(agent.id, 'err'), 20_000);
       forgetRun(agent.id);
-      task.finishedAt = Date.now();
-      if (timedOut) {
-        // a killed run closes with no code, which used to read «exited with code null»
-        task.state = 'failed';
-        task.error = `claude did not finish in ${Math.round(timeout / 60000)} minutes and was stopped`;
-        task.errorKey = 'err.timedOut';
-      } else if (code === 0) {
-        task.state = 'delivered';
-        task.reply = out.trim().slice(0, 2000);
-        task.mode = mode;
-        if (mode !== 'bypassPermissions' && BLOCKED_RE.test(task.reply)) {
-          task.blocked = true;
-          console.log('[deliver] blocked on permissions; mode was:', mode);
-        }
-      } else {
-        const raw = (err.trim() || out.trim() || `claude exited with code ${code}`);
-        const notAuthed = /not logged in|please run \/login/i.test(raw);
-        task.errorKey = notAuthed ? 'err.notAuthed' : null;
-        task.error = notAuthed
-          ? 'CLI is not authorized: open a terminal, start claude, and run /login (or claude setup-token)'
-          : raw.slice(0, 500);
-        task.state = 'failed';
-      }
+      settle(task, { code, out, err, timedOut, timeout, mode });
       console.log(`[deliver] ${agent.name || agent.id}: ${task.state}`);
       resolve(task);
     });
   });
+}
+
+// How a finished run reads, for a run of this office and for one adopted from
+// the office before it alike.
+function settle(task, { code, out, err, timedOut, timeout, mode }) {
+  task.finishedAt = Date.now();
+  if (timedOut) {
+    // a killed run closes with no code, which used to read «exited with code null»
+    task.state = 'failed';
+    task.error = `claude did not finish in ${Math.round(timeout / 60000)} minutes and was stopped`;
+    task.errorKey = 'err.timedOut';
+  } else if (code === 0) {
+    task.state = 'delivered';
+    task.reply = out.trim().slice(0, 2000);
+    task.mode = mode;
+    if (mode !== 'bypassPermissions' && BLOCKED_RE.test(task.reply)) {
+      task.blocked = true;
+      console.log('[deliver] blocked on permissions; mode was:', mode);
+    }
+  } else {
+    const raw = (err.trim() || out.trim() || `claude exited with code ${code}`);
+    const notAuthed = /not logged in|please run \/login/i.test(raw);
+    task.errorKey = notAuthed ? 'err.notAuthed' : null;
+    task.error = notAuthed
+      ? 'CLI is not authorized: open a terminal, start claude, and run /login (or claude setup-token)'
+      : raw.slice(0, 500);
+    task.state = 'failed';
+  }
+}
+
+// The office is being replaced by a newer one. Runs still going are not its
+// to finish: their files stay on disk for the next office, which adopts them.
+let released = false;
+export function releaseRuns() { released = true; }
+
+// A run the previous office started and handed over mid-flight. Not a child of
+// this process, so there is no exit code to read: a reply on stdout is what a
+// finished `claude -p` leaves, and no reply means it failed — with stderr as
+// the reason, as for a run of our own.
+export async function adopt(task, { poll = 1000, timeout = TIMEOUT_MS, grace = GRACE_MS } = {}) {
+  const id = task.agentId;
+  const rec = await priorRun(id);
+  if (!rec) {
+    // Nothing on disk: the run ended before the previous office let go, and
+    // its answer went with that office. Say so rather than stay «sending».
+    task.state = 'failed';
+    task.error = 'the reply was not kept while the office was updating';
+    task.finishedAt = Date.now();
+    return task;
+  }
+  busy.add(id);
+  let timedOut = false;
+  while (alive(rec.pid)) {
+    if (Date.now() - (rec.startedAt || 0) > timeout) {
+      timedOut = true;
+      stopRun(rec.pid, 'SIGTERM');
+      await new Promise((r) => setTimeout(r, grace));
+      if (alive(rec.pid)) stopRun(rec.pid, 'SIGKILL');
+      break;
+    }
+    await new Promise((r) => setTimeout(r, poll));
+  }
+  const out = readTail(runFile(id, 'out'), 200_000);
+  const err = readTail(runFile(id, 'err'), 20_000);
+  forgetRun(id);
+  busy.delete(id);
+  settle(task, { code: out.trim() ? 0 : 1, out, err, timedOut, timeout, mode: rec.mode || 'default' });
+  console.log(`[deliver] adopted ${id.slice(0, 8)}: ${task.state}`);
+  return task;
 }
