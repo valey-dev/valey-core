@@ -104,6 +104,18 @@ ok('with a name and a desk like anyone else', a && a.name && Number.isInteger(a.
 ok('its title and branch', a && a.title === 'Timezone on the chart' && a.branch === 'fix/timezone-drift', a && { title: a.title, branch: a.branch });
 ok('and its conversation opens', conversation(LIVE).some((m) => m.role === 'user' && m.text === 'The chart is an hour off'));
 
+// --- a task into the thread ---------------------------------------------------
+// Through `codex queue`; the CLI here is the stand's own and fails the way the
+// real one does for a thread it cannot find (probed 13 September 2026).
+const { queueToThread } = await import('../server/codex.js');
+const failing = path.join(dir, 'codex-failing');
+await fsp.writeFile(failing, `#!${process.execPath}\nprocess.stderr.write('Error: failed to queue session message: thread/queue/add failed: no rollout found for thread id x\\n'); process.exit(1);\n`, { mode: 0o755 });
+process.env.CODEX_BIN = failing;
+const refused = await queueToThread({ text: 'hi' }, { id: 'x', name: 'x' });
+ok('a refused queue is a failed task, not a delivered one', refused.state === 'failed' && !refused.queued, refused);
+ok('with Codex\'s own words, without its «Error:»', /^failed to queue session message/.test(refused.error || ''), refused.error);
+delete process.env.CODEX_BIN;
+
 // --- the public pictures ------------------------------------------------------
 // A separate process: the directory is decided when the module loads.
 const probe = `import('${new URL('../server/codex.js', import.meta.url).href}').then(async (m) => console.log(JSON.stringify(await m.liveCodexSessions())))`;

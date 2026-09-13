@@ -75,7 +75,7 @@ npm comes with Node, so there is nothing else to fetch. If `node -v` works and `
 ## What it shows
 
 * **Who is in** — from `~/.claude/sessions/*.json`: pid, working directory, session name. Alive is checked with `process.kill(pid, 0)`.
-* **Codex too** — Codex Desktop and CLI threads sit at the same desks, marked ◇ where Claude sessions are marked ✶. A thread is in while a Codex process holds its lock in `~/.codex/thread-writer-locks`; its state is read from the rollout file in `~/.codex/sessions`. A task cannot be sent into a Codex thread from the office — that button is Claude's alone.
+* **Codex too** — Codex Desktop and CLI threads sit at the same desks, marked ◇ where Claude sessions are marked ✶. A thread is in while a Codex process holds its lock in `~/.codex/thread-writer-locks`; its state is read from the rollout file in `~/.codex/sessions`. A task goes into a Codex thread through Codex's own queue, `codex queue`, and the thread takes it in when its current turn is over; the permission modes on that page are Claude's alone.
 * **What they are doing** — the transcript is read incrementally: the last tool call, the last thing said, whether the turn ended and they are waiting on you, which files they touched, which git branch they are on.
 * **Their role** — from the tools they reach for. Edits code, so: developer. Opens design files: designer. Searches the web: researcher, etc. 
 * **Their face and name** — a deterministic hash of the session id, so the same session is the same person every time you look.

@@ -174,6 +174,61 @@ export async function liveCodexSessions() {
   return out;
 }
 
+// --------------------------------------------------------------- delivery
+// A task goes into a Codex thread through `codex queue --thread <id>
+// --message <text>`. It is not a second writer: the CLI starts a throwaway
+// app-server that checks the thread exists and puts the message into Codex's
+// shared queue (~/.codex/queue_1.sqlite, queued_items), and whoever holds the
+// thread — the Desktop app here — takes it in when the turn in progress ends.
+// So it returns at once, and the reply lands in the rollout like any other:
+// the office sees it there, there is nothing to wait for on this side.
+// Probed on 13 September 2026 with a thread that does not exist: 0.25 s, «no
+// rollout found for thread id», no daemon left running. `codex exec resume`
+// was not used: it would be a second process writing the thread the app
+// holds.
+const run = (file, args, opts) => new Promise((resolve) => {
+  execFile(file, args, opts, (err, stdout, stderr) => resolve({ err, stdout: String(stdout || ''), stderr: String(stderr || '') }));
+});
+
+let codexBin = { at: 0, path: null };
+// Found once; a miss is asked again after a minute, as for claude.
+export async function codexCli() {
+  if (process.env.CODEX_BIN) return process.env.CODEX_BIN;
+  if (codexBin.path || Date.now() - codexBin.at < 60_000) return codexBin.path;
+  const { err, stdout } = await run('/bin/sh', ['-lc', 'command -v codex'], { timeout: 5000 });
+  codexBin = { at: Date.now(), path: (!err && stdout.trim().split('\n')[0]) || null };
+  return codexBin.path;
+}
+
+export async function codexDelivery() {
+  const p = await codexCli();
+  return { available: !!p, path: p };
+}
+
+// task is mutated in place, like deliver() does for Claude
+export async function queueToThread(task, agent) {
+  const bin = await codexCli();
+  if (!bin) {
+    task.state = 'failed'; task.error = 'the codex CLI was not found in PATH'; task.errorKey = 'err.codexNoCli';
+    return task;
+  }
+  task.state = 'sending';
+  task.startedAt = Date.now();
+  const { err, stderr, stdout } = await run(bin, ['queue', '--thread', agent.id, '--message', task.text], { timeout: 30_000 });
+  task.finishedAt = Date.now();
+  task.provider = 'codex';
+  if (err) {
+    task.state = 'failed';
+    task.error = (stderr.trim() || stdout.trim() || err.message).replace(/^Error:\s*/, '').slice(0, 500);
+  } else {
+    // delivered into the thread's queue; the answer comes back through the rollout
+    task.state = 'delivered';
+    task.queued = true;
+  }
+  console.log(`[deliver] codex ${agent.name || agent.id}: ${task.state}`);
+  return task;
+}
+
 // ----------------------------------------------------------------- the lines
 
 const textOf = (content) => (Array.isArray(content) ? content : [])
