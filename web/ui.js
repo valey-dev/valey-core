@@ -49,7 +49,9 @@ export function initUI(state, callbacks) {
 function selfClosing(box, close) {
   if (!box) return;
   box.onkeydown = (e) => {
-    if (e.key !== 'Escape') return;
+    // An Escape typed into a field of the panel's ring takes the caret out and
+    // no more (focusRing marks it on the way down); the next one closes.
+    if (e.key !== 'Escape' || e.fromRingField) return;
     e.preventDefault(); e.stopPropagation(); close();
   };
 }
@@ -1843,17 +1845,13 @@ function bindKeys() {
   // of a field has to be the field's own. Escape hands the ring back rather than
   // shutting the shelf: el.bag is selfClosing, and without this an Escape typed
   // into a half-filled Client ID threw the whole inventory away. A second Escape,
-  // with the ring back on, still closes it — the two steps are the point.
-  //
-  // A listener rather than onkeydown: a module binds its own handler to the same
-  // field, and assigning would wipe it.
-  detail.querySelectorAll('input').forEach((f) => f.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    e.preventDefault();
-    e.stopPropagation();
-    f.blur();
-    paintBagFocus();
-  }));
+  // with the ring back on, still closes it — the two steps are the point. The
+  // ring does it now, for every panel (focusRing); armed here because a field
+  // can be reached with the mouse before any arrow has painted the ring.
+  keysRing.arm();
+  // A field entered by the mouse puts the hand inside the card: ↑↓ from it then
+  // walk the card's rows instead of stepping in again from the top.
+  detail.addEventListener('focusin', () => { keysIn = true; });
   paintBagFocus();
 }
 
@@ -2443,6 +2441,22 @@ function bindSelf() {
   // An empty field is an empty name, not the word «ТЫ» stored as one: that
   // string used to travel outward and label a stranger YOU.
   $('#myname').oninput = (e) => { S.me.name = e.target.value.toUpperCase().slice(0, 14); api.saveMe(); };
+  // The name is the wardrobe's one field, and it keys the way a field in any
+  // ring does (focusRing): Escape parks, ↑↓ leave through the office, Tab has
+  // nowhere else to go and stays.
+  $('#myname').onkeydown = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      nameParked = true; e.target.blur(); paintBagFocus();
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault(); e.stopPropagation();
+      nameParked = true; e.target.blur();
+      if (api.pressKey) api.pressKey(e.key);
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+    }
+  };
+  $('#myname').onfocus = () => { nameParked = false; };
   paintBagFocus();
   const rowFields = () => [...colorFields(), ...BODY, bottomCut];
   el.bag.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => {
@@ -2486,13 +2500,13 @@ const officeRing = focusRing(() => el.bag, '.obtn', { startEmpty: true });
 
 function openTab(tab) {
   if (!tabs().includes(tab) || tab === bagTab) return;
-  bagTab = tab; bagIdx = 0; cellIdx = 0;
+  bagTab = tab; bagIdx = 0; cellIdx = 0; nameParked = true;
   keysOut();
   officeRing.reset();
   renderBag();
 }
 
-export function closeBag() { el.bag.hidden = true; bagIdx = 0; cellIdx = 0; officeRing.reset(); keysOut(); }
+export function closeBag() { el.bag.hidden = true; bagIdx = 0; cellIdx = 0; nameParked = true; officeRing.reset(); keysOut(); }
 
 // Open the shelf on one particular key. The thing that uses a key is the natural
 // place to ask for it — the receiver knows the office has no Spotify long before
@@ -2515,6 +2529,11 @@ export function openKeyCard(id) {
 // represent both interactions, so there are two.
 let bagIdx = 0;
 let cellIdx = 0;
+// The wardrobe opens with the ring on the name row, and a caret there on
+// opening would take the very letter that opened it: C would type «c» instead of
+// closing, and the digits would land in the name instead of picking a tab. So
+// the caret comes in when the hand moves onto the row, not when the panel opens.
+let nameParked = true;
 const bagRows = () => [...el.bag.querySelectorAll('.namerow, .drow')];
 const bagCats = () => [...el.bag.querySelectorAll('.bcat')];
 const catCells = (cat) => (cat ? [...cat.querySelectorAll('.bcell')] : []);
@@ -2543,6 +2562,17 @@ function paintBagFocus() {
   bagIdx = Math.max(0, Math.min(list.length - 1, bagIdx));
   list.forEach((r, i) => r.classList.toggle('focus', i === bagIdx));
   list[bagIdx].scrollIntoView({ block: 'nearest' });
+  // The caret follows the ring on and off the name, as in any other ring.
+  const input = list[bagIdx].querySelector('input');
+  const name = list.map((r) => r.querySelector('input')).find(Boolean);
+  const active = typeof document !== 'undefined' ? document.activeElement : null;
+  if (input && !nameParked && active !== input) {
+    input.focus({ preventScroll: true });
+    const n = String(input.value || '').length;
+    try { input.setSelectionRange(n, n); } catch { /* a type without a caret */ }
+  } else if (!input && name && active === name) {
+    name.blur();
+  }
 }
 
 // Leave Escape alone: closeAll() in main.js handles it.
@@ -2580,6 +2610,13 @@ export function bagKey(raw) {
 // this point — and a const would still be in its dead zone there.
 function stopAt(pos, by, len) { return Math.max(0, Math.min(len - 1, pos + by)); }
 function wrapAt(pos, by, len) { return (pos + by + len) % len; }
+// What takes typing: a text-like input or a textarea. A range, a checkbox or a
+// button in the ring is walked and pressed like any other control.
+function isField(n) {
+  if (!n) return false;
+  if (n.tagName === 'TEXTAREA') return true;
+  return n.tagName === 'INPUT' && !/^(range|checkbox|radio|button|submit|color|file)$/.test(n.type || '');
+}
 
 function selfKey(key) {
   const list = bagRows();
@@ -2587,7 +2624,10 @@ function selfKey(key) {
 
   const step = { arrowup: -1, arrowdown: 1 }[key];
   if (step !== undefined) {
+    const was = bagIdx;
     bagIdx = stopAt(bagIdx, step, list.length);
+    // Moving onto the name brings the caret; bumping the top edge does not.
+    if (bagIdx !== was) nameParked = false;
     paintBagFocus();
     return true;
   }
@@ -2601,10 +2641,10 @@ function selfKey(key) {
                                  // arrow should not escape into the office.
   }
   if (key === 'enter' || key === ' ') {
-    // The name is an input: Enter gives it real focus, then the browser types.
-    // On a slot, Enter does the same thing as ▶.
+    // The name is an input: Enter puts the caret back in a parked field. On a
+    // slot, Enter does the same thing as ▶.
     const input = row && row.querySelector('input');
-    if (input) { input.focus(); return true; }
+    if (input) { nameParked = false; paintBagFocus(); return true; }
     const next = row && row.querySelector('[data-d="1"]');
     if (next) next.click();
     return true;
@@ -2752,6 +2792,15 @@ function bindResults() {
 // opts.cols — the mirror of opts.rows for a panel laid out in columns.
 //   byData: 'n'            — find data-n="digit" instead of the Nth item: in the
 //                            lift, "3" is floor three even if it is second in the list.
+//
+// A text field in the ring holds the caret. Arriving on it puts the caret in —
+// the hand came to type, and making it press Enter first let the next letter
+// fall through to the office, where C shut the inventory around a half-typed
+// Client ID. Escape takes the caret out and leaves the ring standing on the
+// field, «parked», so the next Escape closes the panel as everywhere else. Tab
+// carries the caret to the panel's next field; ↑↓ leave the field the way they
+// leave a button. Asked for by the owner on 13 September 2026, reversing the
+// earlier «Enter first» rule.
 // opts.startEmpty — nothing is lit when the panel opens, and the first arrow
 //   picks the first (or, going up, the last) button. For a panel whose first
 //   button does something that should not happen on a stray Enter: the office
@@ -2760,6 +2809,8 @@ export function focusRing(nodeOf, selector, opts = {}) {
   const stepTo = opts.noWrap ? stopAt : wrapAt;
   const start = opts.startEmpty ? -1 : 0;
   let idx = start;
+  let parked = false;   // Escape took the caret out; the ring stays on the field
+  let shown = -1;       // the index last painted: moving off it unparks
   // Only what has a box is in the ring. The radio's volume knob sits under a
   // `hidden` row until the full Spotify player connects, and until 11 September
   // 2026 one press of the down arrow went into it: the outline vanished and the
@@ -2793,10 +2844,65 @@ export function focusRing(nodeOf, selector, opts = {}) {
     node.addEventListener('focusin', (e) => {
       const l = list();
       const at = l.indexOf(e.target);
-      if (at < 0 || at === idx) return;
-      idx = at;
+      if (at < 0) return;
+      if (isField(e.target)) parked = false;
+      if (at === idx) return;
+      idx = at; shown = at;
       l.forEach((b, i) => b.classList.toggle('focus', i === at));
     });
+    // The field's keys. main.js hands nothing from an INPUT to the office, so a
+    // field that did not let go by itself was a room without a door.
+    //
+    // Escape is marked parked in the capture phase, before the field's own
+    // handler runs: the radio's and the newsstand's repaint the ring from there,
+    // and a repaint that did not know yet would put the caret straight back. The
+    // event is marked too, for selfClosing(): its Escape sits on this same panel,
+    // was hung on it first, and would shut the panel before the bubble below.
+    node.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !isField(e.target) || !list().includes(e.target)) return;
+      parked = true;
+      e.fromRingField = true;
+    }, true);
+    node.addEventListener('keydown', (e) => {
+      const f = e.target;
+      // A key the field's owner already took is theirs: the newsstand's Tab
+      // walks its channels, and that is not this ring's to overrule.
+      if (e.defaultPrevented || !isField(f)) return;
+      const l = list();
+      const at = l.indexOf(f);
+      if (at < 0) return;
+      if (e.key === 'Escape') {
+        e.preventDefault(); e.stopPropagation();
+        idx = at; f.blur(); paint();
+      } else if (e.key === 'Tab') {
+        e.preventDefault(); e.stopPropagation();
+        const fields = l.filter(isField);
+        const next = fields[(fields.indexOf(f) + (e.shiftKey ? -1 : 1) + fields.length) % fields.length];
+        idx = l.indexOf(next); parked = false; paint();
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        // Handed to the office as if pressed outside the field, so the panel's
+        // own walk decides where it goes — the key card's «up from the first row
+        // leaves the card» included. Parked first: if nothing moves, the caret
+        // must not come back into the field it has just left.
+        e.preventDefault(); e.stopPropagation();
+        idx = at; parked = true; f.blur();
+        if (api && api.pressKey) api.pressKey(e.key);
+      }
+    });
+  };
+  // Where the caret goes after a paint: into the field the ring stands on, or
+  // out of a field the ring has left.
+  const settle = (cur, l) => {
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    if (isField(cur)) {
+      if (parked || active === cur) return;
+      cur.focus({ preventScroll: true });
+      // At the end of what is already typed: the hand came to add, not to retype.
+      const n = String(cur.value || '').length;
+      try { cur.setSelectionRange(n, n); } catch { /* a type without a caret */ }
+    } else if (isField(active) && l.includes(active)) {
+      active.blur();
+    }
   };
 
   const paint = () => {
@@ -2804,9 +2910,12 @@ export function focusRing(nodeOf, selector, opts = {}) {
     if (!l.length) return;
     if (idx < 0) { l.forEach((b) => b.classList.remove('focus')); follow(); return; }
     idx = Math.max(0, Math.min(l.length - 1, idx));
+    if (idx !== shown) parked = false;
+    shown = idx;
     l.forEach((b, i) => b.classList.toggle('focus', i === idx));
     l[idx].scrollIntoView({ block: 'nearest' });
     follow();
+    settle(l[idx], l);
     // Some panels need more than a highlighted button. The language panel has a
     // "what happens if pressed" line below, which must follow focus, not a click.
     // Otherwise the cost would be shown only after it had already been paid.
@@ -2814,7 +2923,10 @@ export function focusRing(nodeOf, selector, opts = {}) {
   };
   return {
     paint,
-    reset() { idx = start; },
+    reset() { idx = start; shown = -1; parked = false; },
+    // Hang the field keys on a panel drawn before the ring ever painted it: a
+    // field reached with the mouse must let go on Escape just the same.
+    arm: follow,
     // Focus a particular index: the current floor in the lift, or the first note
     // after leaving search.
     at(i) { idx = i; paint(); },
@@ -2913,9 +3025,8 @@ export function focusRing(nodeOf, selector, opts = {}) {
       if (step !== undefined) { idx = stepTo(idx, step, l.length); paint(); return true; }
       if (key === 'enter' || key === ' ') {
         if (!cur || cur.disabled) return true;
-        // Give an input real focus, then let the browser type.
-        if (cur.tagName === 'INPUT' && cur.type !== 'range') cur.focus();
-        else cur.click();
+        // A parked field takes the caret back; anything else is pressed.
+        if (isField(cur)) { parked = false; settle(cur, l); } else cur.click();
         return true;
       }
       return false;
@@ -3122,6 +3233,44 @@ function openHtml() {
     </li>`).join('')}</ul>`;
 }
 
+// Owner devices. A device asking to become the owner comes first in the panel:
+// it is the one thing here with a clock on it — two minutes — and a phone in the
+// owner's hand is waiting for the answer. Everything needed to decide precedes
+// the buttons, the code most of all: it is the same four digits the device
+// shows, and it is what tells this request from somebody else's.
+// Frames: WIP «Owner devices» (#devices), «Panel · Pairing request».
+function pairingHtml() {
+  const list = ((S.access || {}).pairings) || [];
+  return list.map((p) => `<div class="pairreq">
+      <p class="say">${tr('pair.lead', { name: esc(p.name) })}</p>
+      <div class="orow"><b>${tr('pair.device')}</b><span>${esc(p.name)}</span></div>
+      <div class="orow"><b>${tr('pair.from')}</b><span>${tr('pair.fromLan', { ip: esc(p.ip) })}</span></div>
+      <div class="orow"><b>${tr('pair.code')}</b><span>${tr('pair.codeSub')}</span><i class="paircode">${esc(p.code.split('').join(' '))}</i></div>
+      <div class="orow"><b>${tr('pair.howLong')}</b><span>${tr('pair.howLongSub')}</span></div>
+      <p class="act">${tr('pair.warn')}</p>
+      <div class="prow">
+        <button class="primary" data-pairyes="${esc(p.id)}">${tr('pair.yes')}</button>
+        <button data-pairno="${esc(p.id)}">${tr('pair.no')}</button>
+      </div>
+      <p class="hint dim">${tr('pair.foot')}</p>
+    </div>`).join('');
+}
+
+// The devices that may command this office. This machine heads the list and has
+// no button: it is the owner by being here, and there is nothing to revoke.
+function devicesHtml() {
+  const list = ((S.access || {}).devices) || [];
+  return `<p class="hint">${tr('pair.devices')}</p>
+    <ul class="notes">
+      <li><b>${tr('pair.thisMachine')}</b><span>${tr('pair.always')}</span></li>
+      ${list.map((d) => `<li>
+        <b>${esc(d.name)}</b>
+        <span>${d.lapsed ? tr('pair.lapsed') : tr('pair.since', { at: when(d.pairedAt), seen: when(d.lastSeen) })}</span>
+        <button data-unpair="${esc(d.id)}">${tr('pair.revoke')}</button>
+      </li>`).join('')}
+    </ul>`;
+}
+
 export function inviteOpen() { return el.invite && !el.invite.hidden; }
 export function closeInvite() { if (el.invite) el.invite.hidden = true; }
 
@@ -3139,6 +3288,8 @@ const accessSig = () => {
   return JSON.stringify([
     (a.requests || []).map((r) => [r.id, r.state, r.who, r.agentId]),
     (a.open || []).map((o) => [o.guestId, o.agentId]),
+    (a.pairings || []).map((p) => p.id),
+    (a.devices || []).map((d) => [d.id, d.lastSeen]),
   ]);
 };
 let inviteSig = '';
@@ -3172,6 +3323,7 @@ async function renderInvite() {
   el.invite.innerHTML = `<div class="rwrap invwrap">
     <div class="vhead">${tr('inv.title')}<button id="invx">✕</button></div>
     <div class="invbody">
+      ${pairingHtml()}
       <p class="say">${tr('inv.lead')}</p>
       <div class="sendrow">
         <input id="invWho" placeholder="${tr('inv.who')}" maxlength="24">
@@ -3191,7 +3343,9 @@ async function renderInvite() {
           <span>${i.used ? tr('inv.entered', { at: when(i.usedAt) }) : tr('inv.pending', { at: when(i.at) })}</span>
           <button data-douse="${esc(i.id)}">${i.used ? tr('inv.evict') : tr('inv.douse')}</button>
         </li>`).join('')}</ul>` : `<p class="hint dim">${tr('inv.none')}</p>`}
+      ${devicesHtml()}
       <p class="hint dim">${tr('inv.note')}</p>
+      <p class="hint dim">${tr('pair.note')}</p>
     </div></div>`;
 
   $('#invx').onclick = closeInvite;
@@ -3199,6 +3353,15 @@ async function renderInvite() {
   // waiting for the 2.5-second snapshot. Otherwise the clicked button would look
   // untouched during that entire interval.
   const took = async (r) => { if (r && r.access) S.access = r.access; inviteSig = accessSig(); await renderInvite(); };
+  el.invite.querySelectorAll('[data-pairyes]').forEach((b) => {
+    b.onclick = async () => took(await api.answerPair(b.dataset.pairyes, true));
+  });
+  el.invite.querySelectorAll('[data-pairno]').forEach((b) => {
+    b.onclick = async () => took(await api.answerPair(b.dataset.pairno, false));
+  });
+  el.invite.querySelectorAll('[data-unpair]').forEach((b) => {
+    b.onclick = async () => took(await api.revokeDevice(b.dataset.unpair));
+  });
   el.invite.querySelectorAll('[data-yes]').forEach((b) => {
     b.onclick = async () => took(await api.answerAccess(b.dataset.yes, true));
   });

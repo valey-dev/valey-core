@@ -511,6 +511,15 @@ const TOOL_USE_ID_RE = /<tool-use-id>([^<\s\\]+)<\/tool-use-id>/g;
 // known about it.
 const endOf = (said) => (!said ? 'bare' : said.need ? 'asked' : 'settled');
 
+// Tools that put the agent on hold until the person answers: a question with
+// options, a plan waiting for approval. The turn is not over — no end_turn is
+// written — but nothing moves until somebody replies, and the transcript stays
+// silent the whole time. Read as an ordinary step, that silence counted as work
+// for up to an hour (STEP_MS below): until 13 September 2026 an agent asking
+// «Какой цвет?» sat «working» at its desk while it waited for the answer. The
+// answer comes back as the tool's result, which reopens the turn like any other.
+const ASKING = new Set(['AskUserQuestion', 'ExitPlanMode']);
+
 const RECENT_MAX = 16;
 const MSG_MAX = 12000;
 
@@ -600,6 +609,7 @@ function applyLine(st, line) {
       if (SKILL_OF[mood]) st.skills[SKILL_OF[mood]]++;
       st.lastTool = b.name;
       st.lastToolInput = b.input;
+      if (ASKING.has(b.name)) st.ended = 'asked';
       const fp = b.input?.file_path;
       if (fp) {
         st.files.set(fp, {

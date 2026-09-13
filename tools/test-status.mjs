@@ -171,5 +171,26 @@ ok('«No response requested.» on a resume changes nothing: still at rest', stat
 
 ok('no lines: asleep', statusOf(emptyState(), T0) === 'idle', statusOf(emptyState(), T0));
 
+// ------------------------------------ a question or a plan waits for the person
+// The turn stays open and the transcript silent until somebody answers; read as
+// an ordinary step, that was an hour of «working».
+
+const ask = [{ type: 'tool_use', id: 'q1', name: 'AskUserQuestion', input: { questions: [{ question: 'Какой цвет?' }] } }];
+const answer = [{ type: 'tool_result', tool_use_id: 'q1', content: 'Синий' }];
+const asking = feed(user(0, 'x'), assistant(min(1), 'tool_use', ask));
+ok('a question just asked: awaiting', statusOf(asking, T0 + min(1) + 1000) === 'awaiting', statusOf(asking, T0 + min(1) + 1000));
+ok('a question ten minutes unanswered: still awaiting, not working', statusOf(asking, T0 + min(11)) === 'awaiting', statusOf(asking, T0 + min(11)));
+ok('nor asleep after the hour', statusOf(asking, T0 + min(90)) === 'awaiting', statusOf(asking, T0 + min(90)));
+const answered = feed(user(0, 'x'), assistant(min(1), 'tool_use', ask), user(min(3), answer));
+ok('answered: back to work', statusOf(answered, T0 + min(4)) === 'working', statusOf(answered, T0 + min(4)));
+
+const plan = [{ type: 'tool_use', id: 'p1', name: 'ExitPlanMode', input: { plan: '1. do it' } }];
+const planning = feed(user(0, 'x'), assistant(min(1), 'tool_use', plan));
+ok('a plan waiting for approval: awaiting', statusOf(planning, T0 + min(6)) === 'awaiting', statusOf(planning, T0 + min(6)));
+
+const both = [...bash.map((b) => ({ ...b, id: 't9' })), ...ask];
+const mixed = feed(user(0, 'x'), assistant(min(1), 'tool_use', both));
+ok('a question asked alongside another tool still waits on the person', statusOf(mixed, T0 + min(5)) === 'awaiting', statusOf(mixed, T0 + min(5)));
+
 console.log(bad ? `\n${bad} failed` : '\nall passed');
 process.exit(bad ? 1 : 0);

@@ -22,7 +22,7 @@
 .md pre.mdcode{background:#1a120c; border:2px solid var(--frame); border-left:4px solid var(--accent);
   padding:8px 10px; overflow-x:auto; margin:10px 0}
 .md pre.mdcode code{background:none; border:none; color:var(--ink-dim); padding:0; font-size:12px}
-.md pre.mdcode[data-lang]::before{content:attr(data-lang); display:block; color:#6d5a48;
+.md pre.mdcode[data-lang]::before{content:attr(data-lang); display:block; color:var(--muted);
   font-size:10px; margin-bottom:4px; letter-spacing:.1em}
 
 /* Copy button. At rest it matches the language caption so a code block does not
@@ -30,11 +30,15 @@
    C copies the top block on screen. */
 .md .mdblock{position:relative}
 .md .mdcopy{position:absolute; top:8px; right:8px; cursor:pointer;
-  background:#1a120c; color:#6d5a48; border:1px solid rgba(138,98,71,.45);
+  background:#1a120c; color:var(--muted); border:1px solid rgba(138,98,71,.45);
   font:10px "JetBrains Mono", "Courier New",monospace; padding:3px 8px}
 .md .mdblock:hover .mdcopy{background:var(--bg-deep); color:var(--ink); border-color:var(--frame)}
-.md .mdcopy.done{background:var(--bg-deep); color:var(--accent); border-color:var(--accent)}
-.md .mdcopy.fail{background:var(--bg-deep); color:var(--warn); border-color:var(--warn)}
+/* The answer is written under hover as well. The hover rule above carries four
+   classes against the three of `.mdcopy.done`, so until 13 September 2026 the
+   green stayed hidden while the mouse was on the block — that is, from exactly
+   the person who had just clicked — and showed only once it moved away. */
+.md .mdcopy.done, .md .mdblock:hover .mdcopy.done{background:var(--bg-deep); color:var(--accent); border-color:var(--accent)}
+.md .mdcopy.fail, .md .mdblock:hover .mdcopy.fail{background:var(--bg-deep); color:var(--warn); border-color:var(--warn)}
 
 /* A path or a command in backticks is the thing people copy most — 41 of them
    against two links in one real transcript. The button lives beside the
@@ -93,4 +97,4 @@
 .md th{background:#3a2a1e; color:var(--warn); font-weight:normal}
 .md tr:nth-child(even) td{background:rgba(74,51,37,.25)}
 .md b{color:#fff3d8}
-.md s{color:#6d5a48}
+.md s{color:var(--muted)}

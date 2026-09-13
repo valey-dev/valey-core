@@ -1,0 +1,21 @@
+{
+  "tag": "v0.54.0",
+  "shots": [
+    {
+      "file": "yaml-highlight-yaml-file.png",
+      "slug": "yaml-highlight",
+      "id": "yaml-file",
+      "keys": "Enter,wait:4500",
+      "viewport": "1400,860",
+      "setup": "const YML=\"# CI for the rocket shop\\nname: Tests\\non:\\n  push:\\n    branches: [main, \\\"release/*\\\"]\\nenv:\\n  NODE: 22\\n  CACHE: true\\njobs:\\n  test:\\n    runs-on: ubuntu-latest\\n    steps:\\n      - uses: actions/checkout@v4\\n      - name: Install and test\\n        run: |\\n          npm ci\\n          npm test -- --reporter=dot\\n      - name: Deploy preview\\n        if: github.ref == \\\"refs/heads/main\\\"\\n        env: { STAGE: preview }\\n        run: ./deploy.sh --stage preview # needs the token\\n\"; const MD=\"# Release checklist\\n\\nThe shop deploys from its CI file:\\n\\n\\x60\\x60\\x60yaml\\ndeploy:\\n  retries: 3 # then give up\\n  notify: [ops, \\\"#releases\\\"]\\n\\x60\\x60\\x60\\n\\nAnd the discount is one function:\\n\\n\\x60\\x60\\x60js\\n// ten percent off above a hundred\\nconst discount = (sum) => sum > 100 ? sum * 0.1 : 0;\\n\\x60\\x60\\x60\\n\"; const P=\"/Users/kolya/Projects/rocket-shop/.github/workflows/test.yml\"; const real=window.fetch.bind(window); window.fetch=(u,o)=>String(u).startsWith('/api/file')?Promise.resolve(new Response(decodeURIComponent(String(u)).endsWith('.md')?MD:YML)):real(u,o); setTimeout(()=>import('/ui.js').then((m)=>m.openFile(P)),3200)"
+    },
+    {
+      "file": "yaml-highlight-yaml-fence.png",
+      "slug": "yaml-highlight",
+      "id": "yaml-fence",
+      "keys": "Enter,wait:4500",
+      "viewport": "1400,860",
+      "setup": "const YML=\"# CI for the rocket shop\\nname: Tests\\non:\\n  push:\\n    branches: [main, \\\"release/*\\\"]\\nenv:\\n  NODE: 22\\n  CACHE: true\\njobs:\\n  test:\\n    runs-on: ubuntu-latest\\n    steps:\\n      - uses: actions/checkout@v4\\n      - name: Install and test\\n        run: |\\n          npm ci\\n          npm test -- --reporter=dot\\n      - name: Deploy preview\\n        if: github.ref == \\\"refs/heads/main\\\"\\n        env: { STAGE: preview }\\n        run: ./deploy.sh --stage preview # needs the token\\n\"; const MD=\"# Release checklist\\n\\nThe shop deploys from its CI file:\\n\\n\\x60\\x60\\x60yaml\\ndeploy:\\n  retries: 3 # then give up\\n  notify: [ops, \\\"#releases\\\"]\\n\\x60\\x60\\x60\\n\\nAnd the discount is one function:\\n\\n\\x60\\x60\\x60js\\n// ten percent off above a hundred\\nconst discount = (sum) => sum > 100 ? sum * 0.1 : 0;\\n\\x60\\x60\\x60\\n\"; const P=\"/Users/kolya/Projects/rocket-shop/RELEASE.md\"; const real=window.fetch.bind(window); window.fetch=(u,o)=>String(u).startsWith('/api/file')?Promise.resolve(new Response(decodeURIComponent(String(u)).endsWith('.md')?MD:YML)):real(u,o); setTimeout(()=>import('/ui.js').then((m)=>m.openFile(P)),3200)"
+    }
+  ]
+}

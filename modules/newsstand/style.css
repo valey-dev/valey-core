@@ -16,7 +16,7 @@
 .nstabs{flex:none; display:flex; flex-wrap:wrap; gap:6px; padding:8px 12px 0}
 .nstab{background:var(--field); color:var(--ink-dim); border:1px solid var(--frame-dim);
   font:12px "JetBrains Mono", "Courier New", monospace; padding:3px 10px; cursor:pointer}
-.nstab kbd{margin-left:6px; color:var(--muted-dim); font:10px "JetBrains Mono", monospace}
+.nstab kbd{margin-left:6px; color:var(--muted); font:10px "JetBrains Mono", monospace}
 .nstab.on{background:var(--wood); color:var(--warn); border:2px solid var(--accent); padding:2px 9px}
 :where(body:not(.bykeys)) .nstab:hover{background:var(--wood); color:var(--ink)}
 
