@@ -11,7 +11,6 @@
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { findCli, forgetCli, deliver, isBusy } from '../server/deliver.js';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -21,6 +20,10 @@ const ok = (name, cond, got) => {
 const nap = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-deliver-'));
+// The runs' files go into the stand's own folder, not the one the office on
+// this machine reads: its agents are real, and a stand must not touch them.
+process.env.VALEY_DELIVER_DIR = path.join(dir, 'runs');
+const { findCli, forgetCli, deliver, isBusy } = await import('../server/deliver.js');
 // Node rather than sh: /bin/sh on macOS is bash, and `trap '' TERM; exec sleep`
 // hands sleep a TERM it no longer ignores — the first version of this stand
 // passed with the SIGKILL taken out, because its CLI died on the SIGTERM.
