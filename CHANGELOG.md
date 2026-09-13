@@ -4,6 +4,15 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.57.1 — 13 September 2026
+
+### Fixed
+
+- **update:** an agent the updated office resumes no longer raises every office it starts on port 5177 (8e4af43)
+
+### Other
+
+- docs(readme): updating without stopping needs npm start, one restart after an office older than v0.55.0, and Ctrl-C is still a restart (9d8955d)
 ## v0.57.0 — 13 September 2026
 
 ### Added
