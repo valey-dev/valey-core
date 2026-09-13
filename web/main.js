@@ -13,6 +13,7 @@ import { sound, tickSound } from './sound.js';
 import { initPager, seePermits, renderPager, pagerKey, recall, waitingCount, forgetPermit } from './pager.js';
 import { titleOf } from './paintings.js';
 import { mealAt, DROP, MEAL, MAX_BONES } from './aquarium.js';
+import { drawPole, drawCoin, newShow, showOver, showBeats, headTop, POLE_H } from './pole.js';
 import { drawBubble } from './badges.js';
 import { skateStep, rolling, drawSkateboard, ollieStep, canOllie, OLLIE_POP } from './skate.js';
 import { readPad, edges as padEdges } from './pad.js';
@@ -1104,6 +1105,13 @@ function nearest() {
     if (d < bestD) { bestD = d; best = { kind: 'water', prop }; }
   }
 
+  // The pole is tipped from in front of the stage.
+  for (const prop of (state.layout.props || [])) {
+    if (prop.kind !== 'pole') continue;
+    const d = Math.hypot(prop.x - p.x, prop.y + 12 - p.y);
+    if (d < bestD) { bestD = d; best = { kind: 'pole', prop }; }
+  }
+
   // The tank is wide: it is measured from its nearest edge, not its middle, so
   // the whole front of the glass is somewhere to stand and throw from.
   for (const prop of (state.layout.props || [])) {
@@ -1230,6 +1238,23 @@ function feedPiranhas() {
   state.tankMeal = { at: state.t, chomp: 0 };
   setTimeout(() => { sound.bubble(1.2); sound.gulp(1.4); }, DROP);
 }
+// A tip for the robot on the pole (web/pole.js). One show at a time: a coin
+// thrown while he is still picking himself up would buy nothing he could
+// show. The sounds are timed to the show's own beats.
+function tipRobot() {
+  if (!showOver(state.poleShow, state.t)) return;
+  const p = state.player;
+  state.poleShow = newShow(state.t, { x: p.x, y: p.y }, state.poleTips || 0);
+  const b = showBeats(state.poleShow);
+  setTimeout(() => { sound.coin(); state.poleTips = (state.poleTips || 0) + 1; }, b.spin);
+  if (b.pop) setTimeout(() => sound.bubble(1.4), b.pop);
+  setTimeout(() => sound.clank(), b.bump);
+  if (!state.poleTipped) {
+    state.poleTipped = true;
+    setTimeout(() => UI.toast(tr('toast.poleFirst')), b.say);
+  }
+}
+
 function tickMeal(now) {
   const m = state.tankMeal;
   if (!m) return;
@@ -1429,6 +1454,8 @@ function interact() {
     startDrink(n);
   } else if (n.kind === 'tank') {
     feedPiranhas();
+  } else if (n.kind === 'pole') {
+    tipRobot();
   } else if (n.kind === 'seat') {
     sitDown(n);
   } else if (n.kind === 'hook') {
@@ -1651,6 +1678,7 @@ function currentPlace() {
   const near = nearest();
   if (near && near.kind === 'water') return 'cooler';
   if (near && near.kind === 'tank') return 'aquarium';
+  if (near && near.kind === 'pole') return 'pole';
   return 'floor';
 }
 
@@ -2033,6 +2061,29 @@ function draw(t) {
     // Above the ring and a line higher than the name over the owner beside it:
     // under the ring, at the desk, it sat on the reception's own hint.
     if (cap) draws.push({ y: 1e9, fn: () => label(d.x, d.y - 44, tr(cap[0]), cap[1]) });
+  }
+
+  // The pole stands in the queue rather than under it: it is tall, and whoever
+  // walks behind the stage must be drawn behind the chrome.
+  for (const prop of L.props) {
+    if (prop.kind !== 'pole') continue;
+    const show = state.poleShow;
+    draws.push({ y: prop.y + 4, fn: () => drawPole(ctx, prop, t, show, state.poleTips || 0) });
+    if (show && !showOver(show, t)) {
+      draws.push({ y: 1e9, fn: () => drawCoin(ctx, prop, show, t) });
+      const u = t - show.at, say = showBeats(show).say;
+      if (u > say) {
+        const h = headTop(prop, t, show);
+        draws.push({ y: 1e9, fn: () => label(h.x, h.y - 4, `«${tr('pole.line.' + show.line)}»`, '#f6e3c0') });
+      }
+    }
+    if (near && near.kind === 'pole' && showOver(show, t)) {
+      draws.push({ y: 1e9, fn: () => {
+        // both over the pole: in front of the stage stands whoever is tipping
+        label(prop.x, prop.y - POLE_H - 18, tr('pole.name') + (state.poleTips ? ' · ' + tr('pole.tips', { n: state.poleTips }) : ''), '#ff9ec8');
+        label(prop.x, prop.y - POLE_H - 8, tr('hint.pole'), '#9fe0a8');
+      } });
+    }
   }
 
   if (state.drink && state.drink.kind === 'water') {

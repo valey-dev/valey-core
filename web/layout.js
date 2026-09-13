@@ -296,6 +296,11 @@ export function buildLayout(agents, opts = {}) {
   // fireplace this office does not have.
   props.push({ kind: 'bearrug', x: lounge.x, y: lounge.y + 22 });
   props.push({ kind: 'kicker', x: kicker.x, y: kicker.y });
+  // The pole and its robot (web/pole.js), in the free stretch between the hookah
+  // and the control room's wall. Added 13 September 2026 on a live demo, the
+  // design phase skipped on the owner's word; the frame is owed afterwards. The
+  // stage is what blocks the way — the pole rises out of its middle.
+  props.push({ kind: 'pole', x: lounge.x + 150, y: lounge.y + 8, w: 34, h: 10 });
 
   // The landing in front of the conservatory is an ordinary corridor, only the top
   // one, and it has to be laid by hand: flushRow lays a strip above its row, and
