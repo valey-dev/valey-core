@@ -4,6 +4,21 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.55.0 — 13 September 2026
+
+### Added
+
+- **office:** the office updates itself from its repository without stopping — a version row in the office tab (118dd06)
+
+### Other
+
+- docs(notes): the picture for the office-update note, rendered from its recipe on the demo office (8c18120)
+- docs(notes): the note for updating the office without stopping, with the version row in the picture (37f3778)
+- chore(update): npm run update does from a terminal what the office tab's button does (1173c69)
+- chore(keys): the first ↓ in the office tab lands on «check for updates», and the light stays on it while it runs (515bd0f)
+- chore(update): npm start runs the supervisor, and a stand proves the swap drops nothing (9f7a35b)
+- chore(update): a supervisor holds the port and swaps the office under it without dropping anything (82c8361)
+- chore(update): the office can check its repositories and pull them forward, both or neither (9510ecd)
 ## v0.54.2 — 13 September 2026
 
 ### Fixed
