@@ -176,7 +176,9 @@ async function deepSkills(st, file, until) {
     if (!speaks && !(line.includes('"user"') && !line.includes('"tool_use_id"'))) continue;
     let r;
     try { r = JSON.parse(line); } catch { continue; }
-    if (r.type === 'user' && r.message && !r.isSidechain) {
+    // The summary a compaction writes is not something the person said (see
+    // applyLine below): shown as their line it put pages of recap in their mouth.
+    if (r.type === 'user' && r.message && !r.isSidechain && !r.isCompactSummary) {
       const content = r.message.content;
       if (Array.isArray(content) && content.some((b) => b?.type === 'tool_result')) continue;
       const txt = textOf(content);
@@ -619,6 +621,16 @@ function applyLine(st, line) {
         if (st.files.size > 60) st.files.delete(st.files.keys().next().value);
       }
     }
+  } else if (r.type === 'user' && r.message && !r.isSidechain && r.isCompactSummary) {
+    // A compaction writes its summary as a user line — «This session is being
+    // continued from a previous conversation…» — and nobody typed it. Read as
+    // a prompt it opened a turn: after a /compact the app is back at the prompt
+    // and writes nothing more, so the agent sat «working» at its desk until the
+    // person typed again, and the office read that as an agent not answering.
+    // Found 13 September 2026: in 2 of 8 manual compactions on this machine the
+    // transcript simply ends there. An automatic one is followed by the model's
+    // own reply, so leaving the turn as it was is right for both — and the
+    // summary does not become «what was asked» either.
   } else if (r.type === 'user' && r.message && !r.isSidechain) {
     const content = r.message.content;
     const isToolResult = Array.isArray(content) && content.some((b) => b?.type === 'tool_result');

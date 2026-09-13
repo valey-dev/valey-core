@@ -192,5 +192,24 @@ const both = [...bash.map((b) => ({ ...b, id: 't9' })), ...ask];
 const mixed = feed(user(0, 'x'), assistant(min(1), 'tool_use', both));
 ok('a question asked alongside another tool still waits on the person', statusOf(mixed, T0 + min(5)) === 'awaiting', statusOf(mixed, T0 + min(5)));
 
+// ------------------------------------------------------------- compaction
+// A compaction's summary arrives as a user line nobody typed. After a manual
+// /compact the app waits at the prompt and the transcript ends right there.
+{
+  const summary = (ms) => line({ type: 'user', timestamp: at(ms), isCompactSummary: true, isVisibleInTranscriptOnly: true,
+    message: { role: 'user', content: 'This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.' } });
+  const boundary = (ms) => line({ type: 'system', subtype: 'compact_boundary', timestamp: at(ms), compactMetadata: { trigger: 'manual' } });
+  const cmd = (ms) => user(ms, '<command-name>/compact</command-name>');
+  const done = [user(0, 'write the notes'), assistant(min(1), 'end_turn', text('Готово: заметки записаны.'))];
+  const before = feed(...done);
+  const after = feed(...done, boundary(min(5)), summary(min(5)), cmd(min(5)), user(min(5), '<local-command-stdout>Compacted </local-command-stdout>'));
+  ok('a manual compaction leaves the agent as it was, not «working»', statusOf(after, T0 + min(6)) === statusOf(before, T0 + min(6)), [statusOf(after, T0 + min(6)), statusOf(before, T0 + min(6))]);
+  ok('the summary is not «what was asked»', after.lastUserPrompt === before.lastUserPrompt, after.lastUserPrompt.slice(0, 40));
+  // An automatic one happens mid-turn and the model goes on: still working.
+  const mid = feed(user(0, 'run the tests'), assistant(min(1), 'tool_use', bash), user(min(1), result),
+    line({ type: 'system', subtype: 'compact_boundary', timestamp: at(min(2)), compactMetadata: { trigger: 'auto' } }), summary(min(2)));
+  ok('an automatic compaction mid-turn keeps the turn open', statusOf(mid, T0 + min(3)) === 'working', statusOf(mid, T0 + min(3)));
+}
+
 console.log(bad ? `\n${bad} failed` : '\nall passed');
 process.exit(bad ? 1 : 0);
