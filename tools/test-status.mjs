@@ -53,16 +53,24 @@ ok('end_turn an hour ago: still awaiting, not asleep', statusOf(done, T0 + min(9
 
 ok('a tool called 61 minutes ago: asleep', statusOf(running, T0 + min(62)) === 'idle', statusOf(running, T0 + min(62)));
 
-// ---------------------------------------------------- Esc is the end of the turn
+// ------------------------------------ an interrupt is «stopped», not «awaiting»
+// Cut off mid-step, the agent will not go on by itself, but it asks for nothing:
+// it has a state of its own and stays out of «! N» and the pager. 20 of 21
+// interrupts in four days were followed by the app's resume line — a restart
+// the person never saw.
 
 const stopped = feed(user(0, 'x'), assistant(min(1), 'tool_use', bash),
   user(min(2), text('[Request interrupted by user for tool use]')));
-ok('interrupted at a tool: awaiting', statusOf(stopped, T0 + min(3)) === 'awaiting', statusOf(stopped, T0 + min(3)));
+ok('interrupted at a tool: stopped', statusOf(stopped, T0 + min(3)) === 'stopped', statusOf(stopped, T0 + min(3)));
+ok('…and still stopped an hour later', statusOf(stopped, T0 + min(90)) === 'stopped', statusOf(stopped, T0 + min(90)));
 ok('the marker is not remembered as the last prompt', stopped.lastUserPrompt === 'x', stopped.lastUserPrompt);
 ok('nor as a line of the conversation', !stopped.recent.some((m) => m.text.startsWith('[Request interrupted')), stopped.recent);
 
 const stoppedPlain = feed(user(0, 'x'), user(min(2), text('[Request interrupted by user]')));
-ok('interrupted while answering: awaiting', statusOf(stoppedPlain, T0 + min(3)) === 'awaiting', statusOf(stoppedPlain, T0 + min(3)));
+ok('interrupted while answering: stopped', statusOf(stoppedPlain, T0 + min(3)) === 'stopped', statusOf(stoppedPlain, T0 + min(3)));
+
+const resumedAfterStop = feed(user(0, 'x'), user(min(2), text('[Request interrupted by user]')), user(min(5), 'продолжай'));
+ok('a prompt after the interrupt: working again', statusOf(resumedAfterStop, T0 + min(6)) === 'working', statusOf(resumedAfterStop, T0 + min(6)));
 
 // -------------------------------------------------- an API error ends the turn
 

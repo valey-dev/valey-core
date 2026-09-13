@@ -23,7 +23,7 @@ canvas{image-rendering:pixelated; display:block; border:3px solid var(--frame);
 .chip{display:inline-block; white-space:nowrap}
 #hud b{color:var(--warn); letter-spacing:.14em}
 .chip{margin-left:10px; color:var(--ink-dim)}
-.chip.work{color:var(--accent)} .chip.wait{color:var(--warn)}
+.chip.work{color:var(--accent)} .chip.wait{color:var(--warn)} .chip.stop{color:var(--off)}
 /* The pager badge is a button among spans, so it has to give back everything a
    browser gives a button and keep only the pointer: the HUD is one line of text
    and a raised control in it would read as a foreign object. */
@@ -334,12 +334,14 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
   font:12px "JetBrains Mono", "Courier New",monospace}
 .pcard.work{border-left-color:var(--accent)}
 .pcard.wait{border-left-color:var(--warn)}
+.pcard.stop{border-left-color:var(--off)}
 :where(body:not(.bykeys)) .pcard:hover{border-color:var(--frame-dim)}
 .pface{grid-area:face; align-self:start; image-rendering:pixelated}
 .pname{grid-area:name; color:var(--warn); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .ptok{grid-area:tok; font-size:10px; color:var(--muted); white-space:nowrap}
 .pcard.work .ptok{color:var(--accent)}
 .pcard.wait .ptok{color:var(--warn)}
+.pcard.stop .ptok{color:var(--off)}
 .pmeta{grid-area:meta; font-size:10px; color:var(--muted-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 /* A task gets two lines: one cuts a sentence mid-thought, while three turns the
    column into prose. A cold task or substitute text dims in full. */
@@ -673,6 +675,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .facetext #facealbum{color:var(--muted)}
 
 .limitline{color:var(--warn)}
+.stopline{color:var(--off)}
 
 /* ---- office colour ---- */
 /* ---- reception ---- */

@@ -79,6 +79,7 @@ const WEATHER_ICON = { clear: '☀', clouds: '☁', rain: '☂', storm: '⚡', s
 export function renderHud() {
   const waiting = S.agents.filter((a) => a.status === 'awaiting').length;
   const working = S.agents.filter((a) => a.status === 'working').length;
+  const stopped = S.agents.filter((a) => a.status === 'stopped').length;
   const d = new Date();
   const room = S.currentRoom ? `<span class="chip room">▣ ${esc(S.currentRoom.title)}</span>` : `<span class="chip room">${tr('hud.corridor')}</span>`;
   const w = S.weather || { kind: 'clear' };
@@ -94,6 +95,13 @@ export function renderHud() {
       // The counter says what it counts and opens the round, where those very
       // agents are listed.
       ? `<button id="waitChip" class="chip wait" title="${tr('hud.waitTitle')}">! ${waiting}</button>`
+      : ''}${stopped
+      // Its own count rather than a share of «! N»: the stopped ask for nothing,
+      // but a restart of the app cuts every agent off at once, and without a
+      // number here that is found only by walking the floor. Not a button —
+      // the way on is «continue» in the session's chat, which is the person's.
+      // Design: [HUD · stopped chip](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2126-3686)
+      ? `<span class="chip stop" title="${tr('hud.stopTitle')}">‖ ${stopped}</span>`
       : ''}
     <span class="chip">👥 ${S.agents.length}</span>
     <span class="chip zoom${z.tight ? ' wait' : ''}" title="${tr('hud.zoomTitle')}${
@@ -131,7 +139,8 @@ const said = (o, field = 'error') => {
   return key ? tr(key) : (o[field] || '');
 };
 
-const statusWord = (a) => tr('status.' + (a.status === 'awaiting' ? 'awaiting' : a.status === 'idle' ? 'idle' : 'working'));
+const STATUS_WORDS = ['awaiting', 'stopped', 'idle'];
+const statusWord = (a) => tr('status.' + (STATUS_WORDS.includes(a.status) ? a.status : 'working'));
 export const ago = (sec) => sec == null || !Number.isFinite(sec) ? ''
   : sec < 90 ? tr('ago.now')
   : sec < 5400 ? tr('ago.min', { n: Math.round(sec / 60) })
@@ -247,7 +256,10 @@ export function renderDialog() {
   // denied" does not rebuild the body and a person clicks a dead button.
   // The request is part of the key too: it disappears after any answer, ours or
   // another tab's, and the card must rebuild instead of leaving dead buttons.
-  const key = a.id + '|' + S.page + '|' + accessOf(a.id) + '|' + ((permitOf(a.id) || {}).id || '') + '|' + (denying ? 'deny' : '');
+  // So is being stopped: the talk page shows a notice instead of the reply, and
+  // an agent cut off while its card was open must not keep typing its last words.
+  const key = a.id + '|' + S.page + '|' + accessOf(a.id) + '|' + ((permitOf(a.id) || {}).id || '') + '|' + (denying ? 'deny' : '')
+    + '|' + (a.status === 'stopped' ? 'stop' : '');
   if (key === dialogKey && el.dialog.firstChild) return patchDialog(a);
   dialogKey = key;
   buildDialog(a);
@@ -332,6 +344,16 @@ function buildDialog(a) {
         <p class="hint">${tr(st === 'refused' ? 'acc.refused' : st === 'pending' ? 'acc.waiting' : 'acc.closed')}</p>
         ${btn}
         <p class="hint dim">${tr('acc.note')}</p>`;
+    }
+    // Cut off mid-step: the notice stands where the reply would, as the limit's
+    // does, because the last thing said was not an answer to anything. The hint
+    // names the one way on — «continue» in the session's own chat — and that
+    // sending there stays the person's word.
+    // Design: [Dialog · stopped](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2122-6434)
+    else if (a.status === 'stopped') {
+      body = `<p class="q">${tr('dlg.whatUp')}</p>
+        <p class="say stopline">‖ ${tr('dlg.stopped')}</p>
+        <p class="hint">${tr('dlg.stoppedHint')}</p>`;
     }
     // The subscription limit is a notice on the door, not the agent's words: it did not reply.
     else if (a.limited) {
@@ -1354,8 +1376,12 @@ export function viewerKey(raw, big = false) {
 // out of the question — the task is what this is opened for, and the lie would
 // sit exactly where the eye goes.
 
-const CARD_STATE = (a) => (a.status === 'awaiting' ? 'wait' : a.status === 'working' ? 'work' : 'idle');
-const CARD_ORDER = { wait: 0, work: 1, idle: 2 };
+// A stopped agent ranks right after the waiting ones: it will not go on until
+// somebody says so, which makes it the second thing a person looks for.
+// Design: [Person card · four states](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2122-6385)
+const CARD_STATE = (a) => (a.status === 'awaiting' ? 'wait' : a.status === 'stopped' ? 'stop'
+  : a.status === 'working' ? 'work' : 'idle');
+const CARD_ORDER = { wait: 0, stop: 1, work: 2, idle: 3 };
 
 /**
  * The teams in the order their rooms stand on the floor. The order is held by
@@ -1407,7 +1433,7 @@ export function standupCard(a) {
     cold: !t || (a.status !== 'working' && (a.idleFor || 0) > COLD_TASK),
     status: t ? (t.status || '') : '',
     need: t ? (t.need || '') : '',
-    now: a.status === 'working' ? actText(a) : '',
+    now: a.status === 'working' || a.status === 'stopped' ? actText(a) : '',
   };
 }
 
@@ -1415,8 +1441,8 @@ const cardToken = (a) => {
   const when = ago(a.idleFor);
   const s = CARD_STATE(a);
   if (s === 'work') return '● ' + tr('status.working');
-  return (s === 'wait' ? '⚑ ' : '○ ') + tr('status.' + (s === 'wait' ? 'awaiting' : 'idle'))
-    + (when ? ' · ' + when : '');
+  const [mark, word] = s === 'wait' ? ['⚑ ', 'awaiting'] : s === 'stop' ? ['‖ ', 'stopped'] : ['○ ', 'idle'];
+  return mark + tr('status.' + word) + (when ? ' · ' + when : '');
 };
 const cardFoot = (c) => (c.now ? '▸ ' + c.now : c.status ? tr('task.status', { s: c.status }) : '');
 const headLine = (teams, people, waiting) => [
@@ -1447,7 +1473,7 @@ const cardHtml = (a) => {
     <span class="pmeta">${esc(roleText(a))}${a.branch ? ' · ' + esc(a.branch) : ''}</span>
     <span class="ptask${c.cold ? ' cold' : ''}">${esc(c.task || tr('standup.untitled'))}${
       c.reported ? '' : ` <i>· ${tr('standup.noReport')}</i>`}</span>
-    <span class="pfoot${c.now ? ' now' : ''}">${esc(foot)}</span>
+    <span class="pfoot${c.now && c.state === 'work' ? ' now' : ''}">${esc(foot)}</span>
     ${c.need ? `<span class="pneed">⚑ ${tr('task.need', { s: esc(c.need) })}</span>` : ''}
     <button class="plead" data-go="${esc(a.id)}" title="${tr('standup.lead')}">⇢</button>
   </div>`;
