@@ -16,7 +16,7 @@ import { hire, release as releaseHire, hireList, hiredAt, hireCwd, resumeCommand
 import { repoRoot } from './stack.js';
 import { ask as askPermit, answer as answerPermit, permits, forgetGone, retryAll } from './permit.js';
 import { releaseNudge } from './release.js';
-import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset, modulesOff } from './modules.js';
+import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset, modulesOff, setOwnerOff } from './modules.js';
 import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
 import { isLan, deviceOf, shownDevice, deviceName, Pairings, SEEN_EVERY } from './devices.js';
 import { MIME, MAX_VIEW, fileType, fileHeaders } from './files.js';
@@ -1148,6 +1148,7 @@ async function handle(req, res) {
       try {
         const patch = await readJson(req);
         const saved = await patchSettings(patch);
+        setOwnerOff(saved.modulesOff);
         forgetWeather();
         moduleOnPatch(patch);
         last.weather = await realWeather({ force: true });
@@ -1333,6 +1334,7 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   // request and must never be written into the page.
   const mods = await loadModules(ROOT, { people: livePeople, toPerson, settings: getSettings });
   let boot = await getSettings();
+  setOwnerOff(boot.modulesOff);
   const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
   if (external && !(boot.network || {}).token) {
     // updateSettings: an office started beside this one may save a token first.

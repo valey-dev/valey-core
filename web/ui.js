@@ -4,8 +4,8 @@ import { drawPerson, drawItem, dressMe, cycle, hash, SKIN, HAIR, SHIRT, PANTS, B
   SHIRT_WORK, BLOUSE, JACKET, TIE, CUTS, BOTTOMS } from './sprites.js';
 import { renderMarkdown } from './markdown.js';
 import { highlight, langOf } from './highlight.js';
-import { collect, first, moduleIds } from './modules.js';
-import { LIBRARY, TIERS, DIRS, SUBS, byId, children, colOf, inDir, dirTally } from './library.js';
+import { collect, first, moduleIds, moduleOffIds } from './modules.js';
+import { LIBRARY, TIERS, DIRS, SUBS, byId, children, colOf, inDir, dirTally, isSub } from './library.js';
 import { theme, applyTheme, resetTheme, PRESETS, ui, UI_STEPS, applyUiScale } from './theme.js';
 import { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } from './notes.js';
 import { esc } from './esc.js';
@@ -2099,19 +2099,24 @@ let treeSel = null;
 // it grew from the work board alongside the Git tree, and two adjacent green
 // nodes read as a single object.
 const TONE = { floor1: '#c9a06a', bible: '#c9a06a', art: '#d97b6c', easel: '#d97b6c',
-  board: '#9fe0a8', gittree: '#9fe0a8', task: '#ffd166', feed: '#ffd166', cctv: '#8fbcff', dossier: '#8fbcff',
+  board: '#9fe0a8', gittree: '#9fe0a8', prboard: '#9fe0a8', task: '#ffd166', feed: '#ffd166', cctv: '#8fbcff', dossier: '#8fbcff',
   radio: '#c39bff', dress: '#f6e3c0', agents: '#e0a06a', floor: '#e0a06a', talk: '#9fe0a8', meet: '#9fe0a8',
   door: '#8c7660', guest: '#8c7660' };
 const L = (v) => (v ? (v[lang()] || v.en) : '');
 // own is lit; office/floor is dim with the tier name; room is a free branch
 // whose folder is absent (radio without modules/); ghost is "in a year."
+// off is installed and switched off by the owner: dimmed like a missing one, but
+// its card keeps the switch to bring it back.
 const treeState = (n) => (n.tier === 'more' ? 'ghost'
-  : n.module ? (moduleIds().includes(n.module) ? 'own' : n.tier)
+  : n.module ? (moduleIds().includes(n.module) ? 'own' : moduleOffIds().includes(n.module) ? 'off' : n.tier)
   : n.tier === 'room' ? 'own' : n.tier);
 const treeOwn = (n) => treeState(n) === 'own';
+// Bought, running or not: what the counts count. A switched-off module is still
+// «6 из 6 · куплен» (frame 2239:9503), not «часть модулей ещё не приехала».
+const treeHave = (n) => treeOwn(n) || treeState(n) === 'off';
 const treeCount = (tier) => {
   const all = LIBRARY.filter((n) => n.tier === tier);
-  return { t: tier, n: all.filter(treeOwn).length, m: all.length };
+  return { t: tier, n: all.filter(treeHave).length, m: all.length };
 };
 const treeSub = (c) => (c.t === 'room' ? tr(c.n === c.m ? 'tree.sub.room' : 'tree.sub.roomSome')
   : c.t === 'office' ? tr(c.n === c.m ? 'tree.sub.officeAll' : c.n ? 'tree.sub.officeSome' : 'tree.sub.office')
@@ -2119,21 +2124,52 @@ const treeSub = (c) => (c.t === 'room' ? tr(c.n === c.m ? 'tree.sub.room' : 'tre
 // Select the first missing Office module by default: that directly answers
 // "what is in the next tier." When everything is installed, select the ghost
 // node about the coming year.
-const treeDefault = () => LIBRARY.find((n) => n.tier === 'office' && !treeOwn(n)) || byId('more');
+const treeDefault = () => LIBRARY.find((n) => n.tier === 'office' && !treeHave(n)) || byId('more');
 const treeCur = () => byId(treeSel) || (treeSel = treeDefault().id, byId(treeSel));
 export const treeSelected = () => treeCur().id;
+
+// The owner's switch, on the card of an installed module: «выкл | вкл». Frames
+// 2239:9315 (on) and 2239:9503 (off). Switching reloads the page — a module's
+// client cannot be taken off a running page, only not loaded into the next one,
+// the way the stand's switches already work.
+const switchable = (n) => !!n.module && !isGuest() && ['own', 'off'].includes(treeState(n));
+const switchHtml = (n, st) => `<div class="tswitch">
+      <button class="vbtn${st === 'off' ? ' on' : ''}" data-mod="${esc(n.module)}" data-off="1">${tr('tree.switch.off')}</button>
+      <button class="vbtn${st === 'own' ? ' on' : ''}" data-mod="${esc(n.module)}" data-off="0">${tr('tree.switch.on')}</button>
+    </div>`;
+
+async function switchModule(id, off) {
+  const now = new Set((S.settings && S.settings.modulesOff) || []);
+  if (off === now.has(id)) return;
+  if (off) now.add(id); else now.delete(id);
+  const r = await api.saveSettings({ modulesOff: [...now] });
+  if (r !== false) location.reload();
+}
 
 const treeCard = (n) => {
   const st = treeState(n), from = n.parent ? L(byId(n.parent).name) : '';
   const meta = st === 'own' ? tr(n.tier === 'room' ? 'tree.meta.room' : 'tree.meta.owned', { from })
+    : st === 'off' ? tr('tree.meta.off', { from })
     : st === 'ghost' ? tr('tree.meta.more')
     : tr('tree.meta.' + n.tier, { from });
+  const sw = switchable(n);
+  // Switched off, a module with its own words replaces the whole card body with
+  // them (frame 2239:9503): what is gone, what stays, how to bring it back.
+  if (sw && st === 'off' && n.switchOff) {
+    return `<div class="lcard">
+      <div class="lhead"><b>${esc(L(n.name))}</b><span>${meta}</span></div>
+      ${n.switchOff.map((p) => `<p>${esc(L(p))}</p>`).join('')}
+      ${switchHtml(n, st)}
+    </div>`;
+  }
+  const note = st === 'off' ? tr('tree.switch.offNote') : n.switchOn ? esc(L(n.switchOn)) : tr('tree.switch.onNote');
   return `<div class="lcard">
       <div class="lhead"><b>${esc(L(n.name))}</b><span>${meta}</span></div>
       <p>${tr('tree.gives')} ${esc(L(n.gives))}</p>
       ${n.where ? `<p>${tr('tree.where')} ${esc(L(n.where))}</p>` : ''}
-      ${n.without && st !== 'own' ? `<p>${tr('tree.without')} ${esc(L(n.without))}</p>` : ''}
-      ${st === 'ghost' ? '' : `<p>${tr('tree.arrives')} ${tr('tree.arrive.' + n.tier)}</p>`}
+      ${n.without && (st !== 'own' || n.switchOn) ? `<p>${tr('tree.without')} ${esc(L(n.without))}</p>` : ''}
+      ${st === 'ghost' || sw ? '' : `<p>${tr('tree.arrives')} ${tr('tree.arrive.' + n.tier)}</p>`}
+      ${sw ? `<p>${note}</p>${switchHtml(n, st)}` : ''}
     </div>`;
 };
 
@@ -2171,7 +2207,7 @@ const treeHeadHtml = () => {
 };
 
 const dirsHtml = () => `<div class="tdirs">${DIRS.map((d, i) => {
-  const t = dirTally(d.id, treeOwn);
+  const t = dirTally(d.id, treeHave);
   return `<button class="tdir${d.id === treeDir ? ' on' : ''}${t.free ? ' free' : ''}" data-dir="${d.id}">
       <b>${i + 1} ${esc(L(d.name))}</b><span>${dirSub(t)}</span>
       ${t.free ? `<em>${tr('tree.dir.noTiers')}</em>`
@@ -2183,7 +2219,10 @@ const dirsHtml = () => `<div class="tdirs">${DIRS.map((d, i) => {
 // panel is wide enough — below that CSS hides it and the card carries the same
 // list in one line, because a label over a neighbour is worse than no label.
 const wideNode = (n, sel) => {
-  const st = treeState(n), subs = SUBS[n.id] || [];
+  // A switched-off node says so in its labels and keeps its tier tag, as in
+  // frame 2239:9503; the flat view has no labels and tags it «выкл» instead.
+  const st = treeState(n);
+  const subs = st === 'off' ? (SUBS[n.id + '.off'] || [{ ru: 'выключен', en: 'switched off' }]) : (SUBS[n.id] || []);
   return `<div class="wkey">
       <button class="tnode ${st}${n.id === sel.id ? ' on' : ''}" data-id="${n.id}">
         ${st === 'ghost' ? '' : `<i class="tico" style="--c:${TONE[n.id] || '#8c7660'}"></i>`}
@@ -2205,11 +2244,15 @@ const wideHtml = () => {
       return `<p class="wempty">${tr(tier === 'floor' ? 'tree.wide.noFloor'
         : treeDir === 'you' ? 'tree.wide.noSale' : 'tree.wide.noOffice')}</p>`;
     }
-    return `<div class="wtier">${list.map((n) => wideNode(n, sel)).join('')}</div>`;
+    // A node grown out of a node of its own tier stands a row above it, and is
+    // moved over its parent once the row is measured (wideEdges).
+    const subs = list.filter(isSub), main = list.filter((n) => !isSub(n));
+    return (subs.length ? `<div class="wtier wsubrow">${subs.map((n) => wideNode(n, sel)).join('')}</div>` : '')
+      + `<div class="wtier">${main.map((n) => wideNode(n, sel)).join('')}</div>`;
   };
   const gate = (tier) => {
     const list = here.filter((n) => n.tier === tier);
-    const own = list.filter(treeOwn).length;
+    const own = list.filter(treeHave).length;
     return `<div class="wgate"><b>${tr('tree.tier.' + tier)}</b><span>${
       list.length ? tr('tree.gate.' + tier, { n: own, m: list.length }) : tr('tree.gate.' + tier + 'None')}</span></div>`;
   };
@@ -2242,10 +2285,10 @@ const treeHtml = () => {
       <div class="tcols">${cols.map((c) => `<div class="tcol${c.n === c.m ? ' own' : ''}">
         <b>${tr('tree.col.' + c.t, { n: c.n, m: c.m })}</b><span>${treeSub(c)}</span></div>`).join('')}</div>
       <div class="tree" id="tree"><svg class="tedges"></svg>
-        ${LIBRARY.map((n) => { const st = treeState(n); return `<button class="tnode ${st}${n.id === sel.id ? ' on' : ''}"
+        ${LIBRARY.map((n) => { const st = treeState(n); return `<button class="tnode ${st}${isSub(n) ? ' sub' : ''}${n.id === sel.id ? ' on' : ''}"
           data-id="${n.id}" data-col="${colOf(n)}" data-row="${n.row}" style="grid-column:${colOf(n) * 2 + 1}; grid-row:${n.row + 1}">
           ${st === 'ghost' ? '' : `<i class="tico" style="--c:${TONE[n.id] || '#8c7660'}"></i>`}<span>${esc(L(n.name))}</span>
-          ${st === 'own' || st === 'ghost' ? '' : `<em>${tr('tree.tag.' + n.tier)}</em>`}</button>`; }).join('')}
+          ${st === 'own' || st === 'ghost' ? '' : `<em>${tr('tree.tag.' + (st === 'off' ? 'off' : n.tier))}</em>`}</button>`; }).join('')}
       </div>
       ${treeCard(sel)}
       <p class="hint dim">${tr('tree.note')} ${tr('tree.keys')}</p>
@@ -2261,14 +2304,17 @@ function treeEdges() {
   const box = el.bag.querySelector('#tree'), svg = box && box.querySelector('.tedges');
   if (!svg || !box.getBoundingClientRect) return;          // The stand's substitute DOM.
   const o = box.getBoundingClientRect();
-  const at = (b) => { const r = b.getBoundingClientRect(); return { l: r.left - o.left, r: r.right - o.left, y: r.top - o.top + r.height / 2 }; };
+  const at = (b) => { const r = b.getBoundingClientRect(); return { l: r.left - o.left, r: r.right - o.left, y: r.top - o.top + r.height / 2, b: r.bottom - o.top }; };
   const nodes = new Map([...box.querySelectorAll('.tnode')].map((b) => [b.dataset.id, b]));
   let out = '';
   for (const n of LIBRARY) {
     const p = n.parent && nodes.get(n.parent), c = nodes.get(n.id);
     if (!p || !c) continue;
     const a = at(p), z = at(c), xm = z.l - 18;
-    const d = a.y === z.y ? `M${a.r},${a.y} H${z.l}` : `M${a.r},${a.y} H${xm} V${z.y} H${z.l}`;
+    // A node grown out of its own column hangs from under its parent's left end:
+    // down, then right into the indented child. Frame 2239:9724.
+    const d = isSub(n) ? `M${a.l + 8},${a.b} V${z.y} H${z.l}`
+      : a.y === z.y ? `M${a.r},${a.y} H${z.l}` : `M${a.r},${a.y} H${xm} V${z.y} H${z.l}`;
     out += `<path d="${d}"${c.classList.contains('own') ? ' class="lit"' : ''}/>`;
   }
   svg.setAttribute('viewBox', `0 0 ${o.width} ${o.height}`);
@@ -2287,6 +2333,16 @@ function wideEdges() {
     return { x: r.left - o.left + r.width / 2, top: r.top - o.top, bottom: r.bottom - o.top };
   };
   const nodes = new Map([...box.querySelectorAll('.tnode')].map((b) => [b.dataset.id, b]));
+  // A sub-node's row starts at the left; move each over its parent before the
+  // edges are measured. One sub-node per parent today (the PR board over the git
+  // tree); two in one row would need spacing this does not do.
+  for (const n of inDir(treeDir).filter(isSub)) {
+    const p = nodes.get(n.parent), c = nodes.get(n.id);
+    const key = c && c.closest && c.closest('.wkey');
+    if (!p || !key) continue;
+    key.style.marginLeft = '0px';
+    key.style.marginLeft = Math.max(0, p.getBoundingClientRect().left - key.getBoundingClientRect().left) + 'px';
+  }
   let out = '';
   for (const n of inDir(treeDir)) {
     const p = n.parent && nodes.get(n.parent), c = nodes.get(n.id);
@@ -2341,13 +2397,18 @@ function pickDir(dir) {
   treeDir = dir;
   const here = inDir(dir);
   if (!here.some((n) => n.id === treeSel)) {
-    treeSel = (here.find((n) => !treeOwn(n)) || here[0] || {}).id || treeSel;
+    treeSel = (here.find((n) => !treeHave(n)) || here[0] || {}).id || treeSel;
   }
   renderBag();
 }
 
+function bindSwitch() {
+  el.bag.querySelectorAll('[data-mod]').forEach((b) => b.onclick = () => switchModule(b.dataset.mod, b.dataset.off === '1'));
+}
+
 function bindTree() {
   el.bag.querySelectorAll('.tnode').forEach((b) => b.onclick = () => { treeSel = b.dataset.id; renderBag(); });
+  bindSwitch();
   if (treeWide) return;
   treeEdges();
   const on = el.bag.querySelector('.tnode.on');
@@ -2366,7 +2427,8 @@ function wideKey(key, cur) {
   if (key === 'arrowdown') next = list[Math.min(i + 1, list.length - 1)];
   else if (key === 'arrowright') next = list[(i + 1) % list.length];
   else if (key === 'arrowup' || key === 'arrowleft') next = list[(i - 1 + list.length) % list.length];
-  else if (key === 'enter' || key === ' ') return true;
+  else if (key === 'enter') { if (switchable(cur)) switchModule(cur.module, treeState(cur) === 'own'); return true; }
+  else if (key === ' ') return true;
   else return false;
   if (next && next.id !== cur.id) { treeSel = next.id; renderBag(); }
   return true;
@@ -2398,8 +2460,13 @@ function treeKey(key) {
     next = cur.parent ? byId(cur.parent) : treeNear(colOf(cur) - 1, cur.row);
   } else if (key === 'arrowright') {
     next = children(cur.id)[0] || treeNear(colOf(cur) + 1, cur.row);
-  } else if (key === 'enter' || key === ' ') {
-    return true;                       // The selected item is already open in the card.
+  } else if (key === 'enter') {
+    // Enter on an installed module flips its switch; on anything else the
+    // selected item is already open in the card.
+    if (switchable(cur)) switchModule(cur.module, treeState(cur) === 'own');
+    return true;
+  } else if (key === ' ') {
+    return true;
   } else return false;
   // The edge of the tree is not a reason to hand the arrow back to the office.
   if (next && next.id !== cur.id) { treeSel = next.id; renderBag(); }
