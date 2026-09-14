@@ -866,7 +866,7 @@ function paintRadio() {
     <button class="rst" data-i="${i}">${i === radio.current ? '●' : '○'} ${esc(stationName(s))}${i < 9 ? ` <kbd>${i + 1}</kbd>` : ''}</button>
     <span class="rsrc">${tr(kindOf(s) === 'stream' ? 'radio.srcStream' : 'radio.srcSpotify')}</span>
     ${radio.stations.length > 1 ? `<button class="rdel" data-del="${i}" title="${tr('radio.remove')}">✕</button>` : ''}</li>`).join('');
-  el.radio.querySelectorAll('.rst').forEach((b) => b.onclick = () => radio.tune(Number(b.dataset.i)));
+  el.radio.querySelectorAll('.rst').forEach((b) => b.onclick = () => radio.start(Number(b.dataset.i)));
   el.radio.querySelectorAll('.rdel').forEach((b) => b.onclick = () => radio.remove(Number(b.dataset.del)));
   paintAdding();
   paintFinding();
