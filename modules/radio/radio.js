@@ -419,6 +419,26 @@ export const radio = {
     if (this.onChange) this.onChange();
   },
 
+  // A wave pressed in the list plays. tune() only moves the needle and carries on
+  // whatever was already sounding, so until 14 September 2026 Enter and Space on a
+  // chosen wave did nothing audible with the receiver stopped — and on the current
+  // wave nothing at all. A wave already playing is left alone: pressing it again
+  // is not a request for silence, the big knob is.
+  start(i) {
+    if (!this.stations.length) return;
+    const same = (i + this.stations.length) % this.stations.length === this.current;
+    const was = this.playing;
+    if (!same) this.tune(i);
+    if (was) return;   // tune() has carried the music over
+    if (this.isStream()) { this.streamPlay(); return; }
+    if (this.sdk) { if (same) player.toggle(); return; }   // playUri in tune() already plays
+    if (this.controller) {
+      // loadUri stops the embed; play() sent straight after it is lost.
+      if (same) this.controller.play();
+      else setTimeout(() => this.controller && this.controller.play(), 400);
+    }
+  },
+
   // A stream caught by hand starts playing at once: it was just checked, and the press
   // that caught it is the gesture the browser wants before it lets sound out.
   add(name, uri) {

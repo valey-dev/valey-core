@@ -176,6 +176,21 @@ check('Enter presses “enable”', ctl[1].clicked === 1, ctl[1].clicked);
 // the waves and their crosses stand in the same ring: deleting a wave without a mouse has to work too
 UI.radioKey('ArrowRight'); UI.radioKey('ArrowRight');
 check('focus comes to the list of waves', ctl[at(ctl)].has('rst'), at(ctl));
+const [wave1, wave2] = radioBox.stations;
+check('it is on the first wave', ctl[at(ctl)] === wave1, at(ctl));
+
+// ↑↓ walk wave to wave, stepping over the ✕ beside each; → reaches the ✕
+UI.radioKey('ArrowDown');
+check('down goes to the next wave, not to the cross', ctl[at(ctl)] === wave2, at(ctl));
+UI.radioKey('ArrowUp');
+check('and up comes back to the wave above', ctl[at(ctl)] === wave1, at(ctl));
+UI.radioKey('ArrowRight');
+check('right reaches the cross of the wave', ctl[at(ctl)].has('rdel') && ctl[at(ctl) - 1] === wave1, at(ctl));
+UI.radioKey('ArrowDown');
+check('down from a cross goes to the next wave', ctl[at(ctl)] === wave2, at(ctl));
+UI.radioKey('ArrowUp'); UI.radioKey('ArrowUp');
+check('up from the first wave goes back to the knobs', ctl[at(ctl)].id === 'radionext', at(ctl));
+UI.radioKey('ArrowDown');
 
 // the volume: sideways it turns itself, up and down lead away from it
 const vol = ctl.find((b) => b.id === 'radiovol');
