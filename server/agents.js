@@ -585,7 +585,10 @@ function applyLine(st, line) {
   if (r.type === 'assistant' && r.message) {
     born(st, r.timestamp);
     gap(st.shift, Date.parse(r.timestamp || '') || 0, st.clock);
-    st.model = r.message.model || st.model;
+    // «<synthetic>» is the app's own line (an API error, a resume), not a model:
+    // taken as one, it stood in the dossier until the agent next said a word —
+    // 353 such lines in 200 transcripts on 15 September 2026.
+    if (r.message.model && r.message.model !== '<synthetic>') st.model = r.message.model;
     const content = r.message.content || [];
     const txt = textOf(content);
     const said = txt ? reportTail(txt) : null;
