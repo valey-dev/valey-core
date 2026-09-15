@@ -102,8 +102,8 @@ export const LIBRARY = [
   // off from its card — see setOwnerOff() in server/modules.js.
   { id: 'prboard', dir: 'work', tier: 'office', row: 3, parent: 'gittree', module: 'prboard',
     name: { ru: 'Табло PR и CI', en: 'The PR and CI board' },
-    gives: { ru: 'Табло на стене у входа и лампа на столе: открытые PR репозиториев, где сидят агенты, проверки CI и чья ветка упала. Данные — gh этой машины, раз в минуту.',
-             en: 'A board on the entrance wall and a lamp on the desk: the open PRs of the repositories the agents sit in, their CI checks, and whose branch failed. The data is this machine’s gh, once a minute.' },
+    gives: { ru: 'Табло на стене у входа и лампа на столе: main после мержа, ветки агентов с их PR и проверками, влитое за сутки — и чья ветка или чей мерж упал. Данные — gh этой машины, раз в минуту.',
+             en: 'A board on the entrance wall and a lamp on the desk: main after a merge, the agents’ branches with their PRs and checks, what was merged today — and whose branch or merge went red. The data is this machine’s gh, once a minute.' },
     without: { ru: 'Дерево гита остаётся — история, ветки, диф. Про PR и CI офис молчит.',
                en: 'The git tree stays — history, branches, the diff. The office says nothing about PRs and CI.' },
     // What the owner's switch does, in this module's words (frames 2239:9315 and
