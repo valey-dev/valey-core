@@ -92,5 +92,5 @@ ok('the office does not obey the entrance scene',
 const zero = viewport(0, 0, 1);
 ok('null window does not give null canvas', zero.vw > 0 && zero.vh > 0, zero);
 
-console.log(bad ? `\n${bad} упало` : '\nall intact');
+console.log(bad ? `\n${bad} failed` : '\nall intact');
 process.exit(bad ? 1 : 0);

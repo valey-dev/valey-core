@@ -41,7 +41,7 @@ console.log('ok    | no tags yet; there is nothing to compare');
 } else {
   const newest = reachable.replace(/^v/, '');
   ok('the tag that sees HEAD and package.json say the same thing', newest === version,
-    `тег v${newest}, package.json ${version} — либо тег ушёл без релизного коммита, либо коммит не запушен`);
+    `tag v${newest}, package.json ${version} — either the tag went out without its release commit, or the commit is not pushed`);
 }
 
 // Tags that exist but are not on this branch are worth a word rather than a

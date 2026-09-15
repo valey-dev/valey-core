@@ -284,7 +284,7 @@ state.agents = twoTeams(3, 2);
 roster = makeRoster([3, 2]);
 UI.renderRoster();
 check('planning meeting: focus is on the first card', at(roster.cards) === 0, at(roster.cards));
-check('down arrow processed', UI.rosterKey('ArrowDown') === true, 'не обработана');
+check('down arrow processed', UI.rosterKey('ArrowDown') === true, 'not handled');
 // Since 13 September 2026 a project is not a column: down from a full row goes
 // on to the next project's first row, onto the card straight below.
 check('down goes to the next row, into the next project', at(roster.cards) === 3, at(roster.cards));
@@ -331,24 +331,24 @@ UI.closeRoster(); UI.renderRoster();
 // G is the standup's only key of its own, and it is caught by the physical code:
 // under "ЙЦУКЕН" that key types «п», and the office must not care.
 led = null;
-check('G processed', UI.rosterKey({ key: 'п', code: 'KeyG' }) === true, 'не обработана');
+check('G processed', UI.rosterKey({ key: 'п', code: 'KeyG' }) === true, 'not handled');
 check('and leads to the one on whom the focus was', led === 't0-0', led);
-check('the panel then closed', UI.rosterOpen() === false, 'осталась открыта');
+check('the panel then closed', UI.rosterOpen() === false, 'stayed open');
 
 roster.hidden = false;
 UI.renderRoster();
 // a closed panel must not take the arrows — otherwise after the very first
 // standup the player stops walking around the office
 roster.hidden = true;
-check('closed planning meeting does not eat arrows', UI.rosterKey('ArrowDown') === false, 'съел');
-check('and G doesn\'t eat', UI.rosterKey({ key: 'g', code: 'KeyG' }) === false, 'съел');
+check('closed planning meeting does not eat arrows', UI.rosterKey('ArrowDown') === false, 'ate it');
+check('and G doesn\'t eat', UI.rosterKey({ key: 'g', code: 'KeyG' }) === false, 'ate it');
 
 // an empty standup: nobody is in the office, there is nothing to press
 state.agents = [];
 roster = makeRoster([]);
 UI.renderRoster();
-check('empty planner doesn\'t eat arrows', UI.rosterKey('ArrowDown') === false, 'съел');
-check('and Enter doesn\'t eat', UI.rosterKey('Enter') === false, 'съел');
+check('empty planner doesn\'t eat arrows', UI.rosterKey('ArrowDown') === false, 'ate it');
+check('and Enter doesn\'t eat', UI.rosterKey('Enter') === false, 'ate it');
 
 // ----------------------------------------------------------------- the notes
 notes = makeNotes(2);            // two notes: each has "open" and ✕
@@ -371,12 +371,12 @@ check('the top of the notes is a wall, not a way round to the last', at(nb) === 
 
 // a closed panel does not take the keys
 UI.closeNotes();
-check('closed notes arrows don\'t eat', UI.notesKey('ArrowDown') === false, 'съели');
+check('closed notes arrows don\'t eat', UI.notesKey('ArrowDown') === false, 'ate them');
 
 // an empty panel: there is nothing to press, the arrows have to go to the office
 notes = makeNotes(0);
 UI.renderNotes();
-check('empty notes arrows don\'t eat', UI.notesKey('ArrowDown') === false, 'съели');
+check('empty notes arrows don\'t eat', UI.notesKey('ArrowDown') === false, 'ate them');
 
 // --------------------------------------------------------------- the bag
 // The "worn" tab is the former panel C, word for word: up and down the slots,
@@ -391,7 +391,7 @@ UI.bagKey('ArrowRight');
 check('to the right presses ▶ of this slot, but does not move', rows[1].next.clicked === 1 && rows[1].has('focus'), `${rows[1].next.clicked}`);
 UI.bagKey('ArrowLeft');
 check('to the left presses ◀ of the same slot', rows[1].prev.clicked === 1, rows[1].prev.clicked);
-check('the adjacent slot is not touched', rows[2].next.clicked === 0 && rows[2].prev.clicked === 0, 'тронут');
+check('the adjacent slot is not touched', rows[2].next.clicked === 0 && rows[2].prev.clicked === 0, 'touched');
 UI.bagKey('Enter');
 check('Enter on a slot does the same as ▶', rows[1].next.clicked === 2, rows[1].next.clicked);
 
@@ -409,7 +409,7 @@ UI.bagKey('ArrowDown');
 UI.bagKey('ArrowUp');
 check('moving onto the name puts the caret in it', document.activeElement === rows[0].input, document.activeElement && document.activeElement.tagName);
 UI.bagKey('ArrowDown');
-check('moving off it takes the caret out', document.activeElement !== rows[0].input, 'осталась');
+check('moving off it takes the caret out', document.activeElement !== rows[0].input, 'stayed');
 UI.bagKey('ArrowUp');
 rows[0].input.blur();                        // the caret taken out, as Escape does there
 UI.bagKey('Enter');
@@ -418,7 +418,7 @@ rows[0].input.blur();
 
 // The tabs: a digit switches, and the arrows mean something else afterwards.
 bag = makeBagThings([3, 2]);
-check('number 2 processed by panel', UI.bagKey('2') === true, 'не обработана');
+check('number 2 processed by panel', UI.bagKey('2') === true, 'not handled');
 const cells = bag.cells;
 const focusCell = () => {
   for (let r = 0; r < cells.length; r++) {
@@ -452,38 +452,38 @@ check('and the first row is a wall too', focusCell() === '0:0', focusCell());
 bag = makeBagSelf(3);
 UI.bagKey('1');
 check('the number 1 returned to “on itself”', focusRow() === 0, focusRow());
-check('non-existent tab is not caught', UI.bagKey('9') === false, 'поймана');
-check('there is no sixth tab', UI.bagKey('6') === false, 'поймана');
+check('non-existent tab is not caught', UI.bagKey('9') === false, 'caught');
+check('there is no sixth tab', UI.bagKey('6') === false, 'caught');
 
 // The "keys" tab: a shelf of two floors. Left and right walk the cards, down
 // steps into the open card, and up out of its first row comes back to the shelf.
 // The office is walked with the keyboard: a card whose buttons need a mouse is
 // a card nobody sets up.
 bag = makeBagKeys(3);
-check('keys: number 5 opened a tab', UI.bagKey('5') === true, 'не обработана');
-check('shelf arrow processed', UI.bagKey('ArrowRight') === true, 'не обработана');
-check('doesn\'t lead anywhere up from the shelf', UI.bagKey('ArrowUp') === true, 'не обработана');
+check('keys: number 5 opened a tab', UI.bagKey('5') === true, 'not handled');
+check('shelf arrow processed', UI.bagKey('ArrowRight') === true, 'not handled');
+check('doesn\'t lead anywhere up from the shelf', UI.bagKey('ArrowUp') === true, 'not handled');
 UI.bagKey('ArrowDown');
-check('brought it down inside the card', bag.btn.classList.contains('focus'), 'фокус не встал');
+check('brought it down inside the card', bag.btn.classList.contains('focus'), 'focus did not land');
 UI.bagKey('Enter');
 check('Enter presses the button inside the card', bag.btn.clicked === 1, `${bag.btn.clicked}`);
 UI.bagKey('ArrowDown');
-check('moved down to the second line', bag.btn2.classList.contains('focus'), 'фокус не переехал');
+check('moved down to the second line', bag.btn2.classList.contains('focus'), 'focus did not move');
 UI.bagKey('ArrowUp');
-check('up returned to first', bag.btn.classList.contains('focus'), 'фокус не вернулся');
+check('up returned to first', bag.btn.classList.contains('focus'), 'focus did not come back');
 UI.bagKey('ArrowUp');
-check('up from the first line went onto the shelf', !bag.btn.classList.contains('focus'), 'застряло в карточке');
-check('and the shelf again listens to the arrows to the side', UI.bagKey('ArrowRight') === true, 'не обработана');
-check('someone else\'s key goes off the shelf into the office', UI.bagKey('q') === false, 'съедена');
+check('up from the first line went onto the shelf', !bag.btn.classList.contains('focus'), 'stuck in the card');
+check('and the shelf again listens to the arrows to the side', UI.bagKey('ArrowRight') === true, 'not handled');
+check('someone else\'s key goes off the shelf into the office', UI.bagKey('q') === false, 'eaten');
 // A guest reads the cards and presses nothing: the class is what hides the
 // controls, and it also drops the fields out of the tab order.
 state.owner = false;
 UI.renderBag('keys');
 check('guest: the card is marked as guest', /class="keydetail guest"/.test(bag.innerHTML), bag.innerHTML.slice(0, 60));
-check('and he is told who starts the keys', /keys are set up|заводит хозяин/i.test(bag.innerHTML), 'молчит');
+check('and he is told who starts the keys', /keys are set up|заводит хозяин/i.test(bag.innerHTML), 'silent');
 state.owner = true;
 UI.renderBag('keys');
-check('the owner has no guest class', !/keydetail guest/.test(bag.innerHTML), 'есть');
+check('the owner has no guest class', !/keydetail guest/.test(bag.innerHTML), 'it has one');
 
 // The "office" tab: a row of buttons, and the down arrow has to walk along them.
 // Until 31 August 2026 it did nothing — the handler knew only two tabs out of
@@ -510,7 +510,7 @@ UI.bagKey('ArrowUp');
 check('up returns to first', bag.btns[0].has('focus'), 'did not return');
 
 UI.closeBag();
-check('closed inventory arrows do not eat', UI.bagKey('ArrowDown') === false, 'съело');
+check('closed inventory arrows do not eat', UI.bagKey('ArrowDown') === false, 'ate it');
 
 // ------------------------------------------- the window on the world and the office colour (the ring)
 // A field in a ring holds the caret: arriving puts it in, Escape takes it out
@@ -520,13 +520,13 @@ document.activeElement = null;
 sky = makeFieldRing([{ id: 'skytoggle' }, { id: 'skyq', tagName: 'INPUT' }, { id: 'skyq2', tagName: 'INPUT' }, { id: 'skygeo' }]);
 const [skyToggle, skyQ, skyQ2, skyGeo] = sky.btns;
 const caret = () => (document.activeElement ? document.activeElement.id : null);
-check('window to the world: arrow processed', UI.skyKey('ArrowDown') === true, 'нет');
+check('window to the world: arrow processed', UI.skyKey('ArrowDown') === true, 'no');
 check('arriving on the city field puts the caret in it, no Enter needed', caret() === 'skyq', caret());
 check('and doesn’t press it like a button', skyQ.clicked === 0, skyQ.clicked);
 let esc = sky.press(skyQ, 'Escape');
 check('Escape in the field takes the caret out', caret() === null, caret());
-check('and keeps the ring on the field', skyQ.has('focus'), 'кольцо ушло');
-check('and is not left for the office to close the panel with', esc.defaultPrevented, 'не забрано');
+check('and keeps the ring on the field', skyQ.has('focus'), 'the ring moved away');
+check('and is not left for the office to close the panel with', esc.defaultPrevented, 'not taken');
 UI.skyKey('Enter');
 check('Enter on the parked field gives the caret back', caret() === 'skyq', caret());
 sky.press(skyQ, 'Tab');
@@ -546,7 +546,7 @@ check('↑ from a field onto the next field carries the caret', caret() === 'sky
 check('a button in the ring never takes the caret', skyToggle.focused === 0 && skyGeo.focused === 0, `${skyToggle.focused}/${skyGeo.focused}`);
 UI.closeSky();
 document.activeElement = null;
-check('closed window to the world arrows do not eat', UI.skyKey('ArrowDown') === false, 'съело');
+check('closed window to the world arrows do not eat', UI.skyKey('ArrowDown') === false, 'ate it');
 
 // the hue slider: the sideways arrows turn it rather than lead the focus away
 skin = makeRing([
@@ -557,12 +557,12 @@ skin = makeRing([
 let hueSet = 0;
 skin.btns[1].oninput = () => { hueSet += 1; };
 UI.skinKey('ArrowDown');
-check('office color: reached the slider', skin.btns[1].has('focus'), 'нет');
+check('office color: reached the slider', skin.btns[1].has('focus'), 'no');
 UI.skinKey('ArrowRight');
 check('the slider rotates to the right, but does not move', skin.btns[1].has('focus') && Number(skin.btns[1].value) > 100, skin.btns[1].value);
 check('and its handler pulls', hueSet === 1, hueSet);
 UI.skinKey('ArrowDown');
-check('still leads down from the slider', !skin.btns[1].has('focus'), 'застряли');
+check('still leads down from the slider', !skin.btns[1].has('focus'), 'stuck');
 
 // A control without a box is not in the ring. The radio's volume sits under a
 // hidden row until the full Spotify player connects, and one press of the down
@@ -576,12 +576,12 @@ seenRing.key('ArrowDown', true);
 check('a hidden control is stepped over', seen[2].has('focus') && !seen[1].has('focus'),
   seen.map((b) => b.has('focus')).join());
 seenRing.on(seen[0]);
-check('on() finds a control by itself, not by a count', seen[0].has('focus'), 'не нашла');
+check('on() finds a control by itself, not by a count', seen[0].has('focus'), 'not found');
 // A panel may paint its ring a moment before it opens; while it has no box of
 // its own, nothing in it has one either, and the ring must not come up empty.
 const shut = three();
 UI.focusRing(() => ({ ...box(false), querySelectorAll: () => shut }), '*').paint();
-check('a panel painted before it opens still shows a focus', shut[0].has('focus'), 'пусто');
+check('a panel painted before it opens still shows a focus', shut[0].has('focus'), 'empty');
 
 // ------------------------------------------------- the language and the agents' names
 // A panel of two rows: the interface and the names. A flat round would lie to
@@ -592,7 +592,7 @@ langPanel = makeLang();
 await UI.openLang();
 const focused = () => langPanel.btns.findIndex((b) => b.has('focus'));
 check('language: focus is on the first button', focused() === 0, focused());
-check('right arrow processed', UI.langKey('ArrowRight') === true, 'нет');
+check('right arrow processed', UI.langKey('ArrowRight') === true, 'no');
 check('and walks inside the interface line', focused() === 1, focused());
 UI.langKey('ArrowDown');
 check('takes you down to the second row, keeping the column', focused() === 3, focused());
@@ -602,7 +602,7 @@ check('and this is “Russian”, and not “like the language of the office”'
 check('there is no price for a package that will not replace anything', langPanel.warn.hidden === true, langPanel.warn.textContent);
 UI.langKey('ArrowRight');
 check('reached English', langPanel.btns[4].dataset.pack === 'en' && focused() === 4, focused());
-check('price shown before clicking', langPanel.warn.hidden === false, 'скрыта');
+check('price shown before clicking', langPanel.warn.hidden === false, 'hidden');
 check('and gives a number and an example', /2/.test(langPanel.warn.textContent) && /Pete/.test(langPanel.warn.textContent),
   langPanel.warn.textContent);
 UI.langKey('ArrowLeft');
@@ -624,7 +624,7 @@ check('Enter presses what the focus is on', langPanel.btns[4].clicked === 1, lan
   setLang(was);
 }
 UI.closeLang();
-check('closed arrow tongue panel does not eat', UI.langKey('ArrowDown') === false, 'съела');
+check('closed arrow tongue panel does not eat', UI.langKey('ArrowDown') === false, 'ate it');
 
 console.log(failed ? `\nfailed: ${failed}` : '\nall matched');
 process.exit(failed ? 1 : 0);

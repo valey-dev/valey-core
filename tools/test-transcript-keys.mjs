@@ -74,7 +74,7 @@ UI.viewerKey('Home', false);
 check('Home takes you to the beginning', chatlog.scrollTop === 0, chatlog.scrollTop);
 UI.viewerKey('End', false);
 check('End - to the end', chatlog.scrollTop === chatlog.scrollHeight, chatlog.scrollTop);
-check('the office doesn\'t see these shooters', UI.viewerKey('ArrowUp', false) === true, 'клавиша ушла мимо');
+check('the office doesn\'t see these shooters', UI.viewerKey('ArrowUp', false) === true, 'the key went past');
 
 // --- 3. R brings a new reply ---
 served = { messages: [...served.messages, msg('assistant', 'а вот и новое')] };
@@ -83,8 +83,8 @@ chatlog.scrollTop = 0;
 UI.viewerKey('r', false);
 await new Promise((r) => setTimeout(r, 0));
 check('R reread the conversation', calls === 1, calls);
-check('new replica in the log', chatlog.innerHTML.includes('а вот и новое'), 'нет');
-check('it\'s marked fresh', chatlog.innerHTML.includes('fresh'), 'метки нет');
+check('new replica in the log', chatlog.innerHTML.includes('а вот и новое'), 'no');
+check('it\'s marked fresh', chatlog.innerHTML.includes('fresh'), 'no mark');
 check('and they approached her', chatlog.scrollTop > 1000, chatlog.scrollTop);
 check('The title shows how much has arrived', chatst.textContent.includes('+1'), chatst.textContent);
 
@@ -92,7 +92,7 @@ check('The title shows how much has arrived', chatst.textContent.includes('+1'),
 const before = chatlog.innerHTML;
 UI.viewerKey('к', false);            // the Russian layout — the same key
 await new Promise((r) => setTimeout(r, 0));
-check('without new replicas the log does not change', chatlog.innerHTML === before, 'перерисовался');
+check('without new replicas the log does not change', chatlog.innerHTML === before, 'it was redrawn');
 check('and this is said', chatst.textContent.includes('новых реплик нет'), chatst.textContent);
 
 // --- 5. an answer that grew is not a new reply, but it must still refresh ---
@@ -101,15 +101,15 @@ grown[grown.length - 1] = msg('assistant', 'а вот и новое, и ещё �
 served = { messages: grown };
 UI.viewerKey('r', false);
 await new Promise((r) => setTimeout(r, 0));
-check('the finished tail was picked up', chatlog.innerHTML.includes('и ещё продолжение'), 'нет');
+check('the finished tail was picked up', chatlog.innerHTML.includes('и ещё продолжение'), 'no');
 check('and called addition', chatst.textContent.includes('дописан'), chatst.textContent);
 
 // --- 6. Esc closes, and after that the keys do not belong to the conversation ---
 UI.viewerKey('Escape', false);
 check('Esc closed the conversation', viewer.hidden === true, viewer.hidden);
 logPresent = false;                  // the log is no longer in the document
-check('on the closed screen the arrows return to the office', UI.viewerKey('ArrowUp', false) === false, 'перехвачены');
-check('and R too', UI.viewerKey('r', false) === false, 'перехвачен');
+check('on the closed screen the arrows return to the office', UI.viewerKey('ArrowUp', false) === false, 'intercepted');
+check('and R too', UI.viewerKey('r', false) === false, 'intercepted');
 
 // --- copying a code block with C ---
 // The boundary matters more here than the copying itself: while there is a code
@@ -124,8 +124,8 @@ logPresent = true;
 // when no code block was around; now an empty page answers in the header and a
 // full one lights the numbers. A key that behaves differently depending on what
 // the page happens to hold reads as broken.
-check('without code blocks, C still belongs to the view', UI.viewerKey('c') === true, 'ушла в офис');
-check('and the numbers didn’t light up because there was nothing to copy', UI.pickOn() === false, 'зажглись');
+check('without code blocks, C still belongs to the view', UI.viewerKey('c') === true, 'it went to the office');
+check('and the numbers didn’t light up because there was nothing to copy', UI.pickOn() === false, 'they lit up');
 
 let copied = null;
 // In node globalThis.navigator has only a getter, so we substitute it through
@@ -144,17 +144,17 @@ viewer.querySelector = (sel) => (sel === '.mdblock' ? cblock : sel === '#chatlog
 viewer.querySelectorAll = (sel) => (sel === '.mdblock' ? [cblock] : []);
 chatlog.getBoundingClientRect = () => ({ top: 0, bottom: 400 });
 
-check('with C code block picks up view', UI.viewerKey('c') === true, 'не забрала');
+check('with C code block picks up view', UI.viewerKey('c') === true, 'did not take it');
 await new Promise((r) => setTimeout(r, 0));
 check('The code text went into the buffer, not the highlighting', copied === 'git push origin main', copied);
 check('the button said "copied"', cbtn.textContent === 'скопировано', cbtn.textContent);
-check('and lit up', cbtn.classList.contains('done'), 'нет класса');
+check('and lit up', cbtn.classList.contains('done'), 'no class');
 
 // A clipboard refusal is what anyone who opened the office through a tunnel will
 // see. A second C in a row goes to the numbers, so this copies the way the first
 // one did — after another key has cleared the memory of that press.
 copied = null;
-setClipboard(async () => { throw new Error('нет доступа'); });
+setClipboard(async () => { throw new Error('no access'); });
 globalThis.document.execCommand = () => false;
 UI.viewerKey('ArrowDown');                // any other key clears «already copied»
 UI.viewerKey('с');                        // and in Russian too
@@ -186,22 +186,22 @@ viewer.querySelector = (sel) => (sel === '.mdblock' ? cblock : sel === '#chatlog
 setClipboard(async (t) => { copied = t; });
 UI.viewerKey('ArrowDown');                // clear «already copied»
 UI.viewerKey('c');                        // the first C takes the top block
-check('the first C copies the block without lighting the numbers', UI.pickOn() === false, 'зажглись');
+check('the first C copies the block without lighting the numbers', UI.pickOn() === false, 'they lit up');
 UI.viewerKey('c');                        // the second in a row lights the numbers
-check('second C lights numbers', UI.pickOn() === true, 'не зажглись');
+check('second C lights numbers', UI.pickOn() === true, 'they did not light up');
 check('each piece got a number', [cblock, w1, w2].every((n, i) => n.dataset.pick === String(i + 1)),
   [cblock.dataset.pick, w1.dataset.pick, w2.dataset.pick].join(','));
 copied = null;
 UI.viewerKey('3');                        // the third is the link: its address is what lands in the clipboard
 await new Promise((r) => setTimeout(r, 0));
 check('the number copies the link address, not its text', copied === 'https://valey.dev', copied);
-check('and the numbers go out after selection', UI.pickOn() === false, 'горят');
+check('and the numbers go out after selection', UI.pickOn() === false, 'they are lit');
 // After a digit pick the «already copied» memory is cleared, so the numbers are
 // two presses away again: the first takes the block, the second lights them.
 UI.viewerKey('c'); UI.viewerKey('c');
-check('numbers lit up before ESC check', UI.pickOn() === true, 'не зажглись');
-check('ESC extinguishes numbers', (UI.viewerKey('Escape'), UI.pickOn()) === false, 'горят');
-check('and does not close the conversation', viewer.hidden === false, 'закрыл');
+check('numbers lit up before ESC check', UI.pickOn() === true, 'they did not light up');
+check('ESC extinguishes numbers', (UI.viewerKey('Escape'), UI.pickOn()) === false, 'they are lit');
+check('and does not close the conversation', viewer.hidden === false, 'it closed');
 
 console.log(failed ? `\nfailed: ${failed}` : '\nall matched');
 process.exit(failed ? 1 : 0);

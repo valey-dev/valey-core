@@ -85,7 +85,7 @@ UI.openLift(floors, 2, (n) => { picked = n; });
 check('focus on the current floor, not the first one', focusAt() === 1, focusAt());
 
 // --- 2. the arrows walk the floors ---
-check('up processed', UI.liftKey('ArrowUp') === true, 'не обработана');
+check('up processed', UI.liftKey('ArrowUp') === true, 'not handled');
 check('and raised me to a floor higher on the list', focusAt() === 0, focusAt());
 UI.liftKey('ArrowDown'); UI.liftKey('ArrowDown');
 check('lowers down', focusAt() === 2, focusAt());
@@ -101,19 +101,19 @@ check('and only him', lift.btns.filter((b) => b.clicked).length === 1, lift.btns
 
 // --- 5. a digit picks a floor directly: "3" is floor three, not item three ---
 lift = makeLift('floors', 3);
-check('the figure is processed by the panel', UI.liftKey('2') === true, 'не обработана');
+check('the figure is processed by the panel', UI.liftKey('2') === true, 'not handled');
 check('and pressed the floor with this number', lift.btns[1].clicked === 1, lift.btns[1].clicked);
-check('the adjacent floors are not touched', lift.btns[0].clicked === 0 && lift.btns[2].clicked === 0, 'тронуты');
-check('and the focus moved there', lift.btns[1].has('focus'), 'не переехал');
+check('the adjacent floors are not touched', lift.btns[0].clicked === 0 && lift.btns[2].clicked === 0, 'touched');
+check('and the focus moved there', lift.btns[1].has('focus'), 'did not move');
 UI.liftKey('7');
-check('the number past the list did not press anything', lift.btns.every((b) => b.clicked <= 1), 'нажала');
-check('but didn\'t go to the office', UI.liftKey('7') === true, 'уехала');
+check('the number past the list did not press anything', lift.btns.every((b) => b.clicked <= 1), 'it pressed');
+check('but didn\'t go to the office', UI.liftKey('7') === true, 'it went away');
 
 // --- 6. a closed panel does not take the keys ---
 // otherwise the arrows stop walking the office after the very first ride
 lift.hidden = true;
-check('closed panel does not accept arrows', UI.liftKey('ArrowUp') === false, 'съела');
-check('and doesn\'t eat Enter', UI.liftKey('Enter') === false, 'съела');
+check('closed panel does not accept arrows', UI.liftKey('ArrowUp') === false, 'ate it');
+check('and doesn\'t eat Enter', UI.liftKey('Enter') === false, 'ate it');
 
 // --- 6. the reception desk: the same keys on the same node ---
 lift = makeLift('rec', 2);
@@ -146,8 +146,8 @@ check('other keys are not the desk\'s to take', UI.receptionHire('a') === false)
 // on an empty floor the desk draws a greeting and not a single button
 lift = makeLift('rec', 0);
 UI.openReception({ n: 9, rooms: [] }, () => {});
-check('empty arrow stand does not pick up', UI.liftKey('ArrowDown') === false, 'забрала');
-check('and Enter too', UI.liftKey('Enter') === false, 'забрала');
+check('empty arrow stand does not pick up', UI.liftKey('ArrowDown') === false, 'it took it');
+check('and Enter too', UI.liftKey('Enter') === false, 'it took it');
 
 console.log(failed ? `\nfailed: ${failed}` : '\nall matched');
 process.exit(failed ? 1 : 0);

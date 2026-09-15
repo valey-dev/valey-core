@@ -168,7 +168,7 @@ UI.repaintRadioFocus();
 
 const ctl = radioBox.ctl;
 check('radio: focus is on the first knob', at(ctl) === 0, at(ctl));
-check('right arrow processed', UI.radioKey('ArrowRight') === true, 'не обработана');
+check('right arrow processed', UI.radioKey('ArrowRight') === true, 'not handled');
 check('and switches to “enable”', ctl[1].id === 'radiotoggle' && at(ctl) === 1, at(ctl));
 UI.radioKey('Enter');
 check('Enter presses “enable”', ctl[1].clicked === 1, ctl[1].clicked);
@@ -198,12 +198,12 @@ let volSet = 0;
 vol.oninput = () => { volSet += 1; };
 while (ctl[at(ctl)] !== vol) UI.radioKey('ArrowDown');
 UI.radioKey('ArrowRight');
-check('at volume, it turns it to the right, but does not move it away', ctl[at(ctl)] === vol && Number(vol.value) === 55, `${vol.value}, фокус ${at(ctl)}`);
+check('at volume, it turns it to the right, but does not move it away', ctl[at(ctl)] === vol && Number(vol.value) === 55, `${vol.value}, focus ${at(ctl)}`);
 check('and pulls the slider handler', volSet === 1, volSet);
 UI.radioKey('ArrowLeft'); UI.radioKey('ArrowLeft');
 check('turns back to the left and doesn’t go below zero right away', Number(vol.value) === 45, vol.value);
 UI.radioKey('ArrowDown');
-check('It still takes the volume down', ctl[at(ctl)] !== vol, 'застряли');
+check('It still takes the volume down', ctl[at(ctl)] !== vol, 'stuck');
 
 // your own wave is an input field: arriving on it puts the caret in — no Enter
 // first, or the next letter falls through to the office — and it is never
@@ -216,7 +216,7 @@ check('and Enter doesn’t press it like a button', uri.clicked === 0, uri.click
 
 // a closed panel does not take the keys
 UI.closeRadio();
-check('closed radio arrows do not eat', UI.radioKey('ArrowDown') === false, 'съело');
+check('closed radio arrows do not eat', UI.radioKey('ArrowDown') === false, 'ate it');
 
 
 
