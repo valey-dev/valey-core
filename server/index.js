@@ -88,6 +88,9 @@ const SHOWN = [
   'id', 'name', 'gender', 'project', 'seat', 'role', 'roleKey',
   'status', 'act', 'activity', 'mood', 'idleFor', 'startedAt',
   'limited', 'version', 'stack', 'trinkets', 'hired',
+  // What the agent answers with is a fact about the desk, like the trade — not
+  // about the work. Decided with the frame on 15 September 2026 (#model-card).
+  'model', 'effort',
 ];
 
 // Who was granted what: guest id -> Set of agent ids. Lives in memory and only

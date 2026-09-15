@@ -9,6 +9,8 @@ import { LIBRARY, TIERS, DIRS, SUBS, byId, children, colOf, inDir, dirTally, isS
 import { theme, applyTheme, resetTheme, PRESETS, ui, UI_STEPS, applyUiScale } from './theme.js';
 import { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } from './notes.js';
 import { esc } from './esc.js';
+import { modelLabel } from './model-name.js';
+import { roleIcon } from './roleicon.js';
 import { owned } from './owned.js';
 // The standup catches its own key by the physical code rather than by the
 // letter — see rosterKey below.
@@ -273,6 +275,11 @@ export function renderDialog() {
 function patchDialog(a) {
   const set = (sel, html) => { const n = el.dialog.querySelector(sel); if (n && n.innerHTML !== html) n.innerHTML = html; };
   set('.meta', metaLine(a));
+  // By text, not markup: innerHTML hands the no-break spaces back as &nbsp;, and
+  // a comparison that never matches would rewrite the model on every tick.
+  const model = el.dialog.querySelector('.model');
+  const label = modelLabel(a.model, a.effort);
+  if (model && model.textContent !== label) model.textContent = label;
   set('.act', actLine(a));
   // The task is rewritten by every answer, so its row moves as a whole rather
   // than being patched piece by piece: between "you are needed" and its absence
@@ -512,7 +519,7 @@ function buildDialog(a) {
   el.dialog.innerHTML = `
     <div class="portrait"><canvas width="48" height="48" id="pf"></canvas></div>
     <div class="content">
-      <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${esc(roleText(a))}</span>
+      <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${roleIcon(a.roleKey)}${esc(roleText(a))}</span><span class="model">${esc(modelLabel(a.model, a.effort))}</span>
         <span class="meta">${metaLine(a)}</span><div class="taskrow">${taskRow(a)}</div></div>
       <div class="act">${actLine(a)}</div>
       <div class="hiredrow">${hiredRow(a)}</div>

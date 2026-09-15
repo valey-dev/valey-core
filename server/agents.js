@@ -545,7 +545,7 @@ function emptyState() {
     lastUserPrompt: '', acts: [], role: '', files: new Map(),
     ended: '',               // how the turn ended, if it did — see endOf()
     background: new Map(),   // tool_use id -> when that background job started
-    turns: 0, model: '', branch: '', slug: '', title: '', aiTitle: '', task: null,
+    turns: 0, model: '', effort: '', turnEffort: '', branch: '', slug: '', title: '', aiTitle: '', task: null,
     bornAt: 0,             // the first reply in the file, see born()
     skills: newSkills(),   // the grade counter: it grows and is never trimmed
     shift: newShift(),     // replies, characters and idle gaps, over the whole file
@@ -588,7 +588,16 @@ function applyLine(st, line) {
     // «<synthetic>» is the app's own line (an API error, a resume), not a model:
     // taken as one, it stood in the dossier until the agent next said a word —
     // 353 such lines in 200 transcripts on 15 September 2026.
-    if (r.message.model && r.message.model !== '<synthetic>') st.model = r.message.model;
+    if (r.message.model && r.message.model !== '<synthetic>') {
+      st.model = r.message.model;
+      // The reasoning level rides on every reply: `effort` is the session's,
+      // `perTurnEffort` a one-turn boost that is gone with the turn. Both are
+      // read off the last reply, as the model is — /effort mid-session shows
+      // from the next answer. In 60 transcripts on 15 September 2026 it
+      // changed mid-session in 22.
+      st.effort = r.effort || '';
+      st.turnEffort = r.perTurnEffort || '';
+    }
     const content = r.message.content || [];
     const txt = textOf(content);
     const said = txt ? reportTail(txt) : null;
@@ -1059,6 +1068,8 @@ export async function snapshot() {
       repo: !!repo.git,
       branch: t.branch,
       model: t.model,
+      // A one-turn boost is the level only while that turn is open.
+      effort: (status === 'working' && t.turnEffort) || t.effort,
       title: t.title || t.aiTitle || '',
       role: roleInfo.role,
       roleKey: roleInfo.short,
