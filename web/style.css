@@ -508,12 +508,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .tnode.off em{color:var(--muted)}
 .tnode.sub{margin-left:16px}
 .wsubrow{justify-content:flex-start}
-.tswitch{display:flex; gap:8px; margin-top:4px}
-.tswitch .vbtn{flex:1}
-/* The switch's current position is the warm yellow of the tabs, not the theme's
-   accent (frames 2239:9315, 2239:9503): the view toggle above it already wears
-   the accent, and two lit pairs in one panel read as one control. */
-.tswitch .vbtn.on{border-color:var(--warn); color:var(--warn)}
+.tswitch{margin-top:4px}
 :where(body:not(.bykeys)) .tnode:hover{background:var(--wood)}
 .tnode.on{background:var(--wood); border:2px solid var(--accent); padding:0 5px; color:var(--ink); font-weight:bold}
 .tico{width:16px; height:16px; flex:none;

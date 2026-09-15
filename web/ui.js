@@ -2128,14 +2128,15 @@ const treeDefault = () => LIBRARY.find((n) => n.tier === 'office' && !treeHave(n
 const treeCur = () => byId(treeSel) || (treeSel = treeDefault().id, byId(treeSel));
 export const treeSelected = () => treeCur().id;
 
-// The owner's switch, on the card of an installed module: «выкл | вкл». Frames
+// The owner's switch, on the card of an installed module: «выкл | вкл», the
+// office's Segmented control (.sizes/.szbtn, component 1402:491). Frames
 // 2239:9315 (on) and 2239:9503 (off). Switching reloads the page — a module's
 // client cannot be taken off a running page, only not loaded into the next one,
 // the way the stand's switches already work.
 const switchable = (n) => !!n.module && !isGuest() && ['own', 'off'].includes(treeState(n));
-const switchHtml = (n, st) => `<div class="tswitch">
-      <button class="vbtn${st === 'off' ? ' on' : ''}" data-mod="${esc(n.module)}" data-off="1">${tr('tree.switch.off')}</button>
-      <button class="vbtn${st === 'own' ? ' on' : ''}" data-mod="${esc(n.module)}" data-off="0">${tr('tree.switch.on')}</button>
+const switchHtml = (n, st) => `<div class="sizes tswitch">
+      <button class="szbtn${st === 'off' ? ' on' : ''}" data-mod="${esc(n.module)}" data-off="1">${tr('tree.switch.off')}</button>
+      <button class="szbtn${st === 'own' ? ' on' : ''}" data-mod="${esc(n.module)}" data-off="0">${tr('tree.switch.on')}</button>
     </div>`;
 
 async function switchModule(id, off) {
