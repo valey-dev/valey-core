@@ -26,13 +26,13 @@ for (const n of LIBRARY) {
   check(`${n.id}: “what gives” in two languages`, n.gives && n.gives.ru && n.gives.en, n.gives);
   if (n.parent) {
     const p = byId(n.parent);
-    check(`${n.id}: parent ${n.parent} exists`, !!p, 'нет');
+    check(`${n.id}: parent ${n.parent} exists`, !!p, 'no');
     // A node grown out of a node of its own tier (the PR board out of the git
     // tree) stands in its parent's column, indented under it.
     if (p && isSub(n)) check(`${n.id}: grows under its parent, in the same column`, colOf(p) === colOf(n) && p.row < n.row, `${colOf(p)}:${p.row} → ${colOf(n)}:${n.row}`);
     else if (p) check(`${n.id}: grows from the previous column`, colOf(p) < colOf(n), `${colOf(p)} → ${colOf(n)}`);
   }
-  if (n.tier !== 'room' && n.tier !== 'more') check(`${n.id}: paid thread grows from something`, !!n.parent, 'корень');
+  if (n.tier !== 'room' && n.tier !== 'more') check(`${n.id}: paid thread grows from something`, !!n.parent, 'a root');
 }
 for (const c of [0, 1, 2]) {
   const rows = LIBRARY.filter((n) => colOf(n) === c).map((n) => n.row);
@@ -42,12 +42,12 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 for (const n of LIBRARY.filter((x) => x.module)) {
   const mf = path.join(root, 'modules', n.module, 'module.json');
   // Paid folders are not in the core — they are absent and that is normal; a free one must be there.
-  if (!fs.existsSync(mf)) { check(`${n.id}: module ${n.module} is not on disk - acceptable for paid`, n.tier !== 'room', 'бесплатный без папки'); continue; }
+  if (!fs.existsSync(mf)) { check(`${n.id}: module ${n.module} is not on disk - acceptable for paid`, n.tier !== 'room', 'a free one with no folder'); continue; }
   const m = JSON.parse(fs.readFileSync(mf, 'utf8'));
   check(`${n.id}: manifest ${n.module} matches by id`, m.id === n.module, m.id);
   check(`${n.id}: manifest tier agreed (${m.tier})`, (m.tier === 'core') === (n.tier === 'room'), `${m.tier} vs ${n.tier}`);
 }
-check('“Office” has exactly six modules plus a node about the year', LIBRARY.filter((n) => n.tier === 'office').length === 6 && !!byId('more'), 'нет');
+check('“Office” has exactly six modules plus a node about the year', LIBRARY.filter((n) => n.tier === 'office').length === 6 && !!byId('more'), 'no');
 
 // ------------------------------------------------------------------- the keys
 function node(cls = '', props = {}) {
@@ -89,10 +89,10 @@ const state = { agents: [], looks: new Map(), settings: {}, delivery: {}, visite
 UI.initUI(state, { guideTo: () => {}, saveMe: () => {} });
 
 UI.renderBag('self');
-check('number 4 opens the “tree”', UI.bagKey('4') === true, 'не обработана');
+check('number 4 opens the “tree”', UI.bagKey('4') === true, 'not handled');
 check('tab is drawn', /class="tnode/.test(bag.innerHTML), bag.innerHTML.slice(0, 80));
 check('By default, the first Office module is selected, which is not present', UI.treeSelected() === 'bible', UI.treeSelected());
-check('in the free assembly, not a single “Office” node lights up', !/tnode own[^"]*" data-id="(bible|easel|gittree|feed|dossier)"/.test(bag.innerHTML), 'горит');
+check('in the free assembly, not a single “Office” node lights up', !/tnode own[^"]*" data-id="(bible|easel|gittree|feed|dossier)"/.test(bag.innerHTML), 'lit');
 check('the whole root burns', (bag.innerHTML.match(/tnode own/g) || []).length === LIBRARY.filter((n) => n.tier === 'room' && !n.module).length, (bag.innerHTML.match(/tnode own/g) || []).length);
 UI.bagKey('ArrowDown');
 check('down - next in column', UI.treeSelected() === 'easel', UI.treeSelected());
@@ -122,61 +122,61 @@ check('went up to the dress code', UI.treeSelected() === 'dress', UI.treeSelecte
 check('to the right without a child - the closest one in the line (node about the year)', (UI.bagKey('ArrowRight'), UI.treeSelected()) === 'more', UI.treeSelected());
 check('left without parent - closest in line (dress code)', (UI.bagKey('ArrowLeft'), UI.treeSelected()) === 'dress', UI.treeSelected());
 check('Enter is processed and does not break anything', UI.bagKey('Enter') === true && UI.treeSelected() === 'dress', UI.treeSelected());
-check('card shows selected', /<b>Дресс-код, инвентарь<\/b>/.test(bag.innerHTML), 'нет');
+check('card shows selected', /<b>Дресс-код, инвентарь<\/b>/.test(bag.innerHTML), 'no');
 // --- the detailed view: six directions, one branch at a time ---
 // The flat columns stay the default; this one is entered on purpose with V, and
 // while it is up the digits belong to it rather than to the inventory tabs.
 UI.renderBag('tree');
-check('default view is flat', /class="tcols"/.test(bag.innerHTML), 'не плоский');
-check('V processed', UI.bagKey('v') === true, 'не обработана');
-check('and opened a detailed view', /class="tdirs"/.test(bag.innerHTML) && /id="wtree"/.test(bag.innerHTML), 'не открыла');
+check('default view is flat', /class="tcols"/.test(bag.innerHTML), 'not flat');
+check('V processed', UI.bagKey('v') === true, 'not handled');
+check('and opened a detailed view', /class="tdirs"/.test(bag.innerHTML) && /id="wtree"/.test(bag.innerHTML), 'did not open');
 // The wrapper carries three classes now — rwrap bagwrap steady wide — so the
 // check asks for the one that matters instead of a pair in order.
-check('the panel is wider at this time', /class="[^"]*\bwide\b/.test(bag.innerHTML), 'ширина прежняя');
-check('and the height of the tree is fixed', /class="[^"]*\bsteady\b/.test(bag.innerHTML), 'не зафиксирована');
+check('the panel is wider at this time', /class="[^"]*\bwide\b/.test(bag.innerHTML), 'the width is unchanged');
+check('and the height of the tree is fixed', /class="[^"]*\bsteady\b/.test(bag.innerHTML), 'not fixed');
 // `class="tdir` matches the container too, so the count goes by the attribute.
 check('exactly six directions', (bag.innerHTML.match(/data-dir="/g) || []).length === 6,
   (bag.innerHTML.match(/data-dir="/g) || []).length);
-check('the tree tab remains selected', /btab on" data-tab="tree"/.test(bag.innerHTML) || /data-tab="tree"/.test(bag.innerHTML), 'нет');
+check('the tree tab remains selected', /btab on" data-tab="tree"/.test(bag.innerHTML) || /data-tab="tree"/.test(bag.innerHTML), 'no');
 
-check('the number selects the direction, not the tab', UI.bagKey('5') === true, 'не обработана');
-check('and this is DECOR', /tdir on free" data-dir="decor"/.test(bag.innerHTML), 'не он');
-check('the tree remains on the screen', /id="wtree"/.test(bag.innerHTML), 'вкладка сменилась');
+check('the number selects the direction, not the tab', UI.bagKey('5') === true, 'not handled');
+check('and this is DECOR', /tdir on free" data-dir="decor"/.test(bag.innerHTML), 'not it');
+check('the tree remains on the screen', /id="wtree"/.test(bag.innerHTML), 'the tab changed');
 // A direction with nothing paid in it does not count — it says so in words:
 // mood is not for sale.
-check('DECOR does not have an account, it is “all yours”', /всё твоё/.test(bag.innerHTML) && /без тарифов/.test(bag.innerHTML), 'считает');
+check('DECOR does not have an account, it is “all yours”', /всё твоё/.test(bag.innerHTML) && /без тарифов/.test(bag.innerHTML), 'it counts');
 check('and the card moved to the same thread', ['art', 'radio'].includes(UI.treeSelected()), UI.treeSelected());
 
 UI.bagKey('3');
-check('third direction - work', /tdir on" data-dir="work"/.test(bag.innerHTML), 'не оно');
+check('third direction - work', /tdir on" data-dir="work"/.test(bag.innerHTML), 'not it');
 const wasWork = UI.treeSelected();
 UI.bagKey('ArrowDown');
-check('the arrow moves along the branch', UI.treeSelected() !== wasWork, 'стоит на месте');
+check('the arrow moves along the branch', UI.treeSelected() !== wasWork, 'it stays put');
 check('and doesn\'t go out of direction', ['board', 'task', 'easel', 'gittree', 'feed'].includes(UI.treeSelected()), UI.treeSelected());
 for (let i = 0; i < 8; i++) UI.bagKey('ArrowDown');
 check('in detailed view, Down stops on the last skill', UI.treeSelected() === 'task', UI.treeSelected());
 UI.bagKey('ArrowDown');
 check('another Down press does not wrap back to the top', UI.treeSelected() === 'task', UI.treeSelected());
 
-check('V returns flat view', (UI.bagKey('v'), /class="tcols"/.test(bag.innerHTML)), 'не вернула');
-check('and the numbers are about tabs again', (UI.bagKey('2'), /class="bcat"/.test(bag.innerHTML) || !/class="tcols"/.test(bag.innerHTML)), 'вкладка не сменилась');
+check('V returns flat view', (UI.bagKey('v'), /class="tcols"/.test(bag.innerHTML)), 'did not return');
+check('and the numbers are about tabs again', (UI.bagKey('2'), /class="bcat"/.test(bag.innerHTML) || !/class="tcols"/.test(bag.innerHTML)), 'the tab did not change');
 
 UI.renderBag('tree');
 UI.bagKey('1');
-check('the number takes you to another tab', !/class="tnode/.test(bag.innerHTML), 'дерево осталось');
+check('the number takes you to another tab', !/class="tnode/.test(bag.innerHTML), 'the tree stayed');
 UI.closeBag();
-check('closed inventory arrows do not eat', UI.bagKey('ArrowDown') === false, 'съело');
+check('closed inventory arrows do not eat', UI.bagKey('ArrowDown') === false, 'ate it');
 
 // A guest does not see the tab and does not open it with a digit. Digits count
 // the tabs a guest actually sees, so since keys took the last slot the fourth
 // one is keys for him and the fifth is nobody's.
 state.owner = false;
 UI.renderBag('self');
-check('guest: there is no “tree” tab', !/data-tab="tree"/.test(bag.innerHTML), 'есть');
+check('guest: there is no “tree” tab', !/data-tab="tree"/.test(bag.innerHTML), 'there is one');
 check('guest: number 4 leads to the keys, not to the tree',
-  UI.bagKey('4') === true && !/class="tnode/.test(bag.innerHTML), 'открылось дерево');
-check('guest: there is no fifth tab', UI.bagKey('5') === false, 'открыла');
+  UI.bagKey('4') === true && !/class="tnode/.test(bag.innerHTML), 'the tree opened');
+check('guest: there is no fifth tab', UI.bagKey('5') === false, 'it opened');
 UI.closeBag();
 
-console.log(failed ? `\nупало: ${failed}` : '\nall passed');
+console.log(failed ? `\nfailed: ${failed}` : '\nall passed');
 process.exit(failed ? 1 : 0);
