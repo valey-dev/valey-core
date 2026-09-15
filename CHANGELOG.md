@@ -4,6 +4,21 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.60.0 — 15 September 2026
+
+### Added
+
+- **office:** the agent card names its model and reasoning level, and a trade wears a pixel icon instead of a border (cf77577)
+
+### Fixed
+
+- **dossier:** the model no longer reads «<synthetic>» after an API error or a resume (f368269)
+
+### Other
+
+- test(language): the guard reads what a stand prints, not only its label — failure details, assert messages, summaries (a054abf)
+- chore(stand-stop): the stand stopper reports in English (ab2da9c)
+- test(stands): failure details, assert messages and summaries print in English, as the rule has said since 9 September (3406dc2)
 ## v0.59.1 — 15 September 2026
 
 ### Fixed
