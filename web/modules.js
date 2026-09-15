@@ -38,6 +38,9 @@ const dicts = [];
 // which owns the connection.
 const streams = [];
 let ids = [];
+// Installed and switched off by the owner: nothing to load, but the module tree
+// has to tell such a node from one that is not there.
+let offIds = [];
 // The modules that did not come up. An empty list is not the same as "all is
 // well": while it was not shown, the easel was silently missing from the office,
 // because register threw on an unknown point, and that was visible only in the
@@ -86,6 +89,7 @@ export async function loadModules(callbacks = {}) {
   if (styles.length) await Promise.all(styles);
 
   for (const m of list) {
+    if (m.off) { offIds.push(m.id); continue; }
     if (!m.client) continue;
     try {
       const mod = await import(`/modules/${m.id}/${m.client}`);
@@ -170,6 +174,7 @@ export function attachStreams(es) {
 
 export function moduleDicts() { return dicts; }
 export function moduleIds() { return ids.slice(); }
+export function moduleOffIds() { return offIds.slice(); }
 export function moduleFailures() { return failed.slice(); }
 
 export function collect(name, ...args) {

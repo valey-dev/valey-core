@@ -145,6 +145,9 @@ const DEFAULTS = {
   // The floor's dress code: 'casual' is how it was always drawn, 'office' is
   // light tops, ties, jackets and skirts. A setting of the office, not of the
   // browser: every tab changes clothes at once, as with the weather.
+  // Modules the owner switched off from the module tree. Ids only: the folder
+  // stays, the office stops running it. See setOwnerOff() in server/modules.js.
+  modulesOff: [],
   dress: { code: 'casual' },
   // The greenhouse. Shared across the office, like the names and the seating:
   // you water it, everyone sees. pots: pot index -> { wateredAt, streak }. Four

@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LIBRARY, TIERS, byId, colOf } from '../web/library.js';
+import { LIBRARY, TIERS, byId, colOf, isSub } from '../web/library.js';
 
 let failed = 0;
 const check = (name, ok, got) => {
@@ -27,7 +27,10 @@ for (const n of LIBRARY) {
   if (n.parent) {
     const p = byId(n.parent);
     check(`${n.id}: parent ${n.parent} exists`, !!p, 'нет');
-    if (p) check(`${n.id}: grows from the previous column`, colOf(p) < colOf(n), `${colOf(p)} → ${colOf(n)}`);
+    // A node grown out of a node of its own tier (the PR board out of the git
+    // tree) stands in its parent's column, indented under it.
+    if (p && isSub(n)) check(`${n.id}: grows under its parent, in the same column`, colOf(p) === colOf(n) && p.row < n.row, `${colOf(p)}:${p.row} → ${colOf(n)}:${n.row}`);
+    else if (p) check(`${n.id}: grows from the previous column`, colOf(p) < colOf(n), `${colOf(p)} → ${colOf(n)}`);
   }
   if (n.tier !== 'room' && n.tier !== 'more') check(`${n.id}: paid thread grows from something`, !!n.parent, 'корень');
 }
@@ -44,7 +47,7 @@ for (const n of LIBRARY.filter((x) => x.module)) {
   check(`${n.id}: manifest ${n.module} matches by id`, m.id === n.module, m.id);
   check(`${n.id}: manifest tier agreed (${m.tier})`, (m.tier === 'core') === (n.tier === 'room'), `${m.tier} vs ${n.tier}`);
 }
-check('“Office” has exactly five modules plus a node about the year', LIBRARY.filter((n) => n.tier === 'office').length === 5 && !!byId('more'), 'нет');
+check('“Office” has exactly six modules plus a node about the year', LIBRARY.filter((n) => n.tier === 'office').length === 6 && !!byId('more'), 'нет');
 
 // ------------------------------------------------------------------- the keys
 function node(cls = '', props = {}) {
@@ -111,12 +114,15 @@ UI.bagKey('ArrowDown');
 check('down from the last stays on the last', UI.treeSelected() === 'door', UI.treeSelected());
 check('to the right from the entrance - through “Office” to “Floor”', (UI.bagKey('ArrowRight'), UI.treeSelected()) === 'guest', UI.treeSelected());
 check('the edge of the tree does not give the shooter to the office', UI.bagKey('ArrowRight') === true && UI.treeSelected() === 'guest', UI.treeSelected());
-UI.bagKey('ArrowLeft'); UI.bagKey('ArrowUp'); UI.bagKey('ArrowUp'); UI.bagKey('ArrowUp'); UI.bagKey('ArrowUp');
-check('went up to the radio', UI.treeSelected() === 'radio', UI.treeSelected());
+// The dress code, not the radio: since the PR board took a row in the Office
+// column, the radio's row holds the dossier, which has a parent and so would not
+// walk back to where it came from.
+UI.bagKey('ArrowLeft'); UI.bagKey('ArrowUp'); UI.bagKey('ArrowUp'); UI.bagKey('ArrowUp');
+check('went up to the dress code', UI.treeSelected() === 'dress', UI.treeSelected());
 check('to the right without a child - the closest one in the line (node about the year)', (UI.bagKey('ArrowRight'), UI.treeSelected()) === 'more', UI.treeSelected());
-check('left without parent - closest in line (radio)', (UI.bagKey('ArrowLeft'), UI.treeSelected()) === 'radio', UI.treeSelected());
-check('Enter is processed and does not break anything', UI.bagKey('Enter') === true && UI.treeSelected() === 'radio', UI.treeSelected());
-check('card shows selected', /<b>Радио у входа<\/b>/.test(bag.innerHTML), 'нет');
+check('left without parent - closest in line (dress code)', (UI.bagKey('ArrowLeft'), UI.treeSelected()) === 'dress', UI.treeSelected());
+check('Enter is processed and does not break anything', UI.bagKey('Enter') === true && UI.treeSelected() === 'dress', UI.treeSelected());
+check('card shows selected', /<b>Дресс-код, инвентарь<\/b>/.test(bag.innerHTML), 'нет');
 // --- the detailed view: six directions, one branch at a time ---
 // The flat columns stay the default; this one is entered on purpose with V, and
 // while it is up the digits belong to it rather than to the inventory tabs.

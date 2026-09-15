@@ -93,17 +93,41 @@ export const LIBRARY = [
              en: 'A tree grows in a room with a repository. SPACE — the project history: branches, commits, who and when, a mark for “not on origin yet”. ENTER on a commit opens the diff.' },
     without: { ru: 'В углу комнаты обычный цветок, и смотреть историю негде. Серых заглушек в комнате не остаётся.',
                en: 'An ordinary plant stands in the corner and there is nowhere to read the history. No grey placeholders are left in the room.' } },
-  { id: 'feed', dir: 'work', tier: 'office', row: 3, parent: 'task', module: 'feed',
+  // The PR and CI board grows out of the git tree rather than out of the room:
+  // it stands on the same ground — the room's repository and its branches — and
+  // reads as the tree's next branch, not a sibling of it. The first node whose
+  // parent is itself a paid node: the flat view indents it under its parent and
+  // the detailed view lifts it a row above. Frames: WIP «Табло PR и CI»
+  // (2203:1700), 13 September 2026. It is the first module the owner can switch
+  // off from its card — see setOwnerOff() in server/modules.js.
+  { id: 'prboard', dir: 'work', tier: 'office', row: 3, parent: 'gittree', module: 'prboard',
+    name: { ru: 'Табло PR и CI', en: 'The PR and CI board' },
+    gives: { ru: 'Табло на стене у входа и лампа на столе: открытые PR репозиториев, где сидят агенты, проверки CI и чья ветка упала. Данные — gh этой машины, раз в минуту.',
+             en: 'A board on the entrance wall and a lamp on the desk: the open PRs of the repositories the agents sit in, their CI checks, and whose branch failed. The data is this machine’s gh, once a minute.' },
+    without: { ru: 'Дерево гита остаётся — история, ветки, диф. Про PR и CI офис молчит.',
+               en: 'The git tree stays — history, branches, the diff. The office says nothing about PRs and CI.' },
+    // What the owner's switch does, in this module's words (frames 2239:9315 and
+    // 2239:9503). A module without them gets the general tree.switch.* lines.
+    switchOn: { ru: 'Выключается здесь: табло снимается со стены, лампы гаснут, gh больше не спрашивается. Включить — так же.',
+                en: 'Switched off here: the board comes off the wall, the lamps go out, gh is not asked any more. Switched on the same way.' },
+    switchOff: [
+      { ru: 'Выключено: табла на стене нет, лампы на столах не горят, gh не спрашивается ни разу.',
+        en: 'Switched off: no board on the wall, no lamps on the desks, gh is not asked even once.' },
+      { ru: 'Дерево гита работает как было: история, ветки, диф. Узел остаётся в дереве — выключенный, а не проданный.',
+        en: 'The git tree works as before: history, branches, the diff. The node stays in the tree — switched off, not sold.' },
+      { ru: 'Включить — здесь же: табло вернётся на стену со следующим опросом, через минуту.',
+        en: 'Switch it on right here: the board returns to the wall with the next poll, within a minute.' }] },
+  { id: 'feed', dir: 'work', tier: 'office', row: 4, parent: 'task', module: 'feed',
     name: { ru: 'Живая лента', en: 'The live feed' },
     gives: { ru: 'События офиса на телефоне: PWA и журнал. Телефон достаёт офис по твоей же сети или туннелю, наших серверов в этом нет.',
              en: 'Office events on your phone: a PWA and a journal. The phone reaches the office over your own network or tunnel; none of our servers are involved.' },
     without: { ru: 'Телефону показать нечего: ленты нет.', en: 'There is nothing to show the phone: no feed.' } },
-  { id: 'dossier', dir: 'people', tier: 'office', row: 4, parent: 'cctv', module: 'dossier',
+  { id: 'dossier', dir: 'people', tier: 'office', row: 5, parent: 'cctv', module: 'dossier',
     name: { ru: 'Картотека личных дел', en: 'Personnel files' },
     gives: { ru: 'Личное дело каждого агента: бланк, счётчики, история.',
              en: 'A personnel file for every agent: the form, counters, history.' },
     without: { ru: 'Шкафа в пультовой нет.', en: 'There is no cabinet in the control room.' } },
-  { id: 'more', dir: 'work', tier: 'more', row: 5,
+  { id: 'more', dir: 'work', tier: 'more', row: 6,
     name: { ru: '+ то, что выйдет за год', en: '+ whatever ships this year' },
     gives: { ru: '«Офис» — год обновлений: модули приезжают вместе с ними и появляются в офисе сами. Списка нет нарочно: обещать число нельзя, обещать «приедет само» — можно.',
              en: '“Office” is a year of updates: modules arrive with them and appear in the office by themselves. There is no list on purpose: a number cannot be promised, “it arrives on its own” can.' } },
@@ -161,6 +185,9 @@ export const SUBS = {
   bible: [{ ru: 'Читальня на этаже 0', en: 'The reading room on floor 0' }, { ru: 'Главы метода', en: 'Chapters of the method' }],
   easel: [{ ru: 'Страница WIP', en: 'The WIP page' }, { ru: 'Кружок состояния', en: 'The state circle' }, { ru: 'Токен Figma', en: 'The Figma token' }],
   gittree: [{ ru: 'Ветки и коммиты', en: 'Branches and commits' }, { ru: 'Диф по ENTER', en: 'The diff on ENTER' }, { ru: 'Метка origin', en: 'The origin mark' }],
+  prboard: [{ ru: 'PR и проверки', en: 'PRs and checks' }, { ru: 'Лампа на столе', en: 'A lamp on the desk' }, { ru: 'Отдать агенту', en: 'Hand it to the agent' }],
+  // The labels of a node the owner switched off, in place of the ones above.
+  'prboard.off': [{ ru: 'выключен', en: 'switched off' }, { ru: 'табло снято', en: 'the board is down' }, { ru: 'gh молчит', en: 'gh is quiet' }],
   feed: [{ ru: 'PWA на телефоне', en: 'A PWA on the phone' }, { ru: 'Журнал событий', en: 'The event journal' }],
   dossier: [{ ru: 'Бланк', en: 'The form' }, { ru: 'Счётчики', en: 'Counters' }, { ru: 'История', en: 'History' }],
   floor: [{ ru: 'Чужие сессии', en: 'Other people’s sessions' }, { ru: 'Проекция, не копия', en: 'A projection, not a copy' }],
@@ -169,6 +196,9 @@ export const SUBS = {
 };
 
 export const dirOf = (id) => DIRS.find((d) => d.id === id);
+// A node grown out of another node of its own tier — the PR board out of the git
+// tree. Drawn indented under its parent, not in the next column.
+export const isSub = (n) => !!(n && n.parent && (LIBRARY.find((p) => p.id === n.parent) || {}).tier === n.tier);
 export const inDir = (dir) => LIBRARY.filter((n) => n.dir === dir);
 // «Own» here means what lights up in the flat view: free, or installed. A
 // direction with nothing paid in it is not empty but free all the way through,

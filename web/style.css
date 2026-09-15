@@ -500,6 +500,15 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .tnode.office, .tnode.floor, .tnode.room{border-color:var(--frame); color:var(--muted)}
 .tnode.office .tico, .tnode.floor .tico, .tnode.room .tico{opacity:.4}
 .tnode.ghost{background:none; border:1px dashed var(--frame); color:var(--muted)}
+/* Installed and switched off by the owner: dimmed like a missing node, with its
+   own tag. A node grown out of a node of its own column is indented under it,
+   the edge hangs from the parent's left end (frame 2239:9724). */
+.tnode.off{border-color:var(--frame); color:var(--muted)}
+.tnode.off .tico{opacity:.4}
+.tnode.off em{color:var(--muted)}
+.tnode.sub{margin-left:16px}
+.wsubrow{justify-content:flex-start}
+.tswitch{margin-top:4px}
 :where(body:not(.bykeys)) .tnode:hover{background:var(--wood)}
 .tnode.on{background:var(--wood); border:2px solid var(--accent); padding:0 5px; color:var(--ink); font-weight:bold}
 .tico{width:16px; height:16px; flex:none;
