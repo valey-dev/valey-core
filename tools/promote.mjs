@@ -154,8 +154,12 @@ if (w.shop) {
 if (dry) { console.log('\n--dry: nothing was pushed'); process.exit(0); }
 
 console.log(`\npushing to ${PUBLIC}:`);
+// Atomic for the reason release.mjs gives: without it a public main that
+// refuses — moved by hand, or by a second promote — still lets the tag out,
+// and a public tag with no branch under it is the one state nobody can take
+// back.
 try {
-  run(ROOT, 'push', PUBLIC, `${tag}^{commit}:refs/heads/main`, tag);
+  run(ROOT, 'push', '--atomic', PUBLIC, `${tag}^{commit}:refs/heads/main`, tag);
 } catch (e) {
   die(`push failed: ${String(e.stderr || e.message).trim().split('\n')[0]}`);
 }
