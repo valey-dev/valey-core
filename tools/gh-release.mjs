@@ -27,12 +27,13 @@
 // to these assets, so a release without them is a version the one-liner cannot
 // install — the four files are as much a part of the release as the notes.
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { readdirSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { releaseBody } from './notes.mjs';
 import { carried } from './promote-plan.mjs';
+import { textAt, lastTouched, section, headingOf } from './lib/at-tag.mjs';
 
 // The root comes from this file rather than from the cwd, for the reason
 // release.mjs carries in its own header: git and the files have to look at one
@@ -79,22 +80,10 @@ const tags = git('tag', '-l', 'v*').split('\n').filter(Boolean)
   .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 if (!tags.length) die('the repository has no v* tags');
 
-// The section of CHANGELOG.md for one version: from its heading to the next one.
-// Missing is a hard stop rather than an empty release — an empty release page is
-// worse than none, because it looks finished.
-function notes(tag) {
-  const md = readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8');
-  const lines = md.split('\n');
-  const from = lines.findIndex((l) => l.startsWith(`## ${tag} `) || l.trim() === `## ${tag}`);
-  if (from < 0) return null;
-  let to = lines.length;
-  for (let i = from + 1; i < lines.length; i++) {
-    if (lines[i].startsWith('## ')) { to = i; break; }
-  }
-  // The heading itself is dropped: GitHub prints the version above the body, and
-  // repeating it puts the same line on the page twice.
-  return lines.slice(from + 1, to).join('\n').trim();
-}
+// The section of CHANGELOG.md for one version, read as that version has it (see
+// lib/at-tag.mjs). Missing is a hard stop rather than an empty release — an
+// empty release page is worse than none, because it looks finished.
+const notes = (tag) => section(textAt(ROOT, tag, 'CHANGELOG.md'), tag);
 
 // The body for one tag: the note if there is one the remote can serve, the
 // changelog section otherwise. «Can serve» is the part that bites. The pictures
@@ -102,9 +91,9 @@ function notes(tag) {
 // has never received is a page of broken images — so a note whose commit is
 // not on the remote's main yet falls back to the changelog, out loud.
 function bodyFor(tag) {
-  const file = path.join(ROOT, 'notes', `${tag}.md`);
-  if (!existsSync(file)) return { text: notes(tag), from: 'changelog' };
-  const sha = git('log', '-1', '--format=%H', '--', `notes/${tag}.md`, `notes/${tag}`);
+  const note = textAt(ROOT, tag, `notes/${tag}.md`);
+  if (!note) return { text: notes(tag), from: 'changelog' };
+  const sha = lastTouched(ROOT, tag, [`notes/${tag}.md`, `notes/${tag}`]);
   const remoteMain = execFileSync('git', ['-C', ROOT, 'ls-remote', remote, 'refs/heads/main'],
     { encoding: 'utf8' }).split(/\s/)[0];
   let served = false;
@@ -113,7 +102,7 @@ function bodyFor(tag) {
     console.log(`${tag}: the note's commit ${sha.slice(0, 7)} is not on ${remote}/main; using the changelog`);
     return { text: notes(tag), from: 'changelog' };
   }
-  return { text: releaseBody(readFileSync(file, 'utf8'), { repo, sha }), from: 'note' };
+  return { text: releaseBody(note, { repo, sha }), from: 'note' };
 }
 
 // The body of a publication that carries several versions: each one's own body
@@ -122,13 +111,12 @@ function bodyFor(tag) {
 function bodyOver(tag) {
   const span = carried(tags, since, tag).reverse();
   if (span.length < 2) return bodyFor(tag);
-  const md = readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8').split('\n');
+  const md = textAt(ROOT, tag, 'CHANGELOG.md');
   const parts = [];
   for (const t of span) {
     const { text } = bodyFor(t);
     if (!text) continue;
-    const head = md.find((l) => l.startsWith(`## ${t} `) || l.trim() === `## ${t}`);
-    parts.push(head || `## ${t}`, '', text.trim(), '');
+    parts.push(headingOf(md, t) || `## ${t}`, '', text.trim(), '');
   }
   return { text: parts.join('\n').trim(), from: `${span.length} versions since ${since}` };
 }
