@@ -4,7 +4,7 @@ import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, pic
 import { loadModules, collect, first, attachStreams } from './modules.js';
 import { owned, passQuery, setTokens } from './owned.js';
 import { initStand } from './stand.js';
-import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, drawPortal, pxText, kickerBusy } from './office.js';
+import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, drawPortal, pxText, kickerBusy, RUGS, rugIndex, rugRect } from './office.js';
 import { drawCamera, buildCameras } from './cctv.js';
 import { syncActors, tickActors } from './actors.js';
 import * as UI from './ui.js';
@@ -442,6 +442,8 @@ function pourOn(room, pot) {
 // and flies out to every open tab. The dressed look is computed once per change of the
 // code rather than in every frame: there are three dozen people on the floor, and a new
 // object for each of them sixty times a second is garbage for nothing.
+// Each project room's rug colourway, an office setting like the dress code.
+const rugs = () => (state.settings && state.settings.rugs) || {};
 const dressCode = () => (state.settings && state.settings.dress && state.settings.dress.code) || 'casual';
 let wornCode = null;
 let myWorn = null;
@@ -1214,6 +1216,12 @@ function nearest() {
   for (const c of collect('near', p, state.layout, room)) {
     if (c && c.d < bestD) { bestD = c.d; best = c; }
   }
+  // The rug is the floor, not a thing beside you: it answers SPACE only when nothing
+  // else nearer does. The owner's alone — to a guest it simply lies there.
+  if (!best && state.owner === true && room && !room.draw && room.tone) {
+    const g = rugRect(room);
+    if (p.x >= g.x && p.x <= g.x + g.w && p.y >= g.y && p.y <= g.y + g.h + 4) best = { kind: 'rug', room };
+  }
   return best;
 }
 
@@ -1470,6 +1478,8 @@ function interact() {
     startPlay();
   } else if (n.kind === 'lang') {
     UI.openLang();
+  } else if (n.kind === 'rug') {
+    recolourRug(n.room);
     } else if (n.kind === 'cams') {
     openCams();
     } else if (n.kind === 'reception') {
@@ -1479,6 +1489,15 @@ function interact() {
   } else {
     UI.openGallery(boardItems(n.room), tr('board.title', { room: n.room.title }));
   }
+}
+
+// The next colourway round the circle. Drawn at once from the local copy, then
+// saved: the stream brings the same value back and every other tab repaints with it.
+function recolourRug(room) {
+  const next = RUGS[(rugIndex(rugs()[room.key]) + 1) % RUGS.length];
+  state.settings = { ...(state.settings || {}), rugs: { ...rugs(), [room.key]: next.id } };
+  saveSettings({ rugs: { [room.key]: next.id } });
+  UI.toast(tr('toast.rug', { name: tr(`rug.${next.id}`), n: rugIndex(next.id) + 1, of: RUGS.length }));
 }
 
 // the list of cameras is rebuilt along with the plan of the floor
@@ -1935,7 +1954,7 @@ function draw(t) {
       layout: L, night: nightAmount(), weather: state.weather, cat: state.cat,
       player: state.player, me: myLook(), unlocked: state.cctv.unlocked,
       index: state.cctv.idx, total: cams.length,
-      auto: state.cctv.auto, dwell: CAM_DWELL, since: state.cctv.since,
+      auto: state.cctv.auto, dwell: CAM_DWELL, since: state.cctv.since, rugs: rugs(),
       online: t - state.cctv.since > 260,   // a short ripple on switching
     }, t);
     return;
@@ -1971,7 +1990,7 @@ function draw(t) {
     // The core has nothing to do here — drawRoom would paint an ordinary office with a tone
     // and desks over the reading room, and it has neither.
     if (r.draw) continue;
-    drawRoom(ctx, r, t); drawRoomProps(ctx, r, t);
+    drawRoom(ctx, r, t, rugs()[r.key]); drawRoomProps(ctx, r, t);
     if (r.micro) drawMicro(ctx, r.micro, t, state.micro && state.micro.key === r.key ? state.micro : null);
   }
   drawLift(ctx, L, t, state.lift);
@@ -2154,6 +2173,13 @@ function draw(t) {
   if (near && near.kind === 'lang') {
     const q = near.prop;
     draws.push({ y: 1e9, fn: () => label(q.x, q.y - 44, tr('hint.lang'), '#ffd166') });
+  }
+
+  // Yellow like the language plaque: a setting, not an action. It sits in the strip
+  // between the rug and the bottom wall, so it never covers the rug being judged.
+  if (near && near.kind === 'rug') {
+    const g = rugRect(near.room);
+    draws.push({ y: 1e9, fn: () => label(g.x + g.w / 2, g.y + g.h + 8, tr('hint.rug'), '#ffd166') });
   }
 
   if (near && near.kind === 'kicker' && !state.play) {

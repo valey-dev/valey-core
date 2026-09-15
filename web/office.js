@@ -483,7 +483,23 @@ function drawCorridorProp(ctx, p, t) {
 // tuning scale and the equaliser, which breathes only when the music is really playing.
 
 // ---------------------------------------------------------------------- room
-export function drawRoom(ctx, r, t) {
+// The rug colourways, in the order SPACE walks them: border, field, medallion.
+// The first is the terracotta every room had before the rug could change, so an
+// office where nobody has pressed anything looks as it did.
+export const RUGS = [
+  { id: 'terracotta', tones: ['#8c4038', '#a54c40', '#c06a4a'] },
+  { id: 'indigo', tones: ['#34406e', '#45558c', '#6a7fb4'] },
+  { id: 'emerald', tones: ['#2f5a44', '#3d7456', '#5e9a6e'] },
+  { id: 'mustard', tones: ['#7a5a1e', '#a07a2a', '#c9a043'] },
+  { id: 'plum', tones: ['#5a3456', '#74446c', '#9a6490'] },
+  { id: 'graphite', tones: ['#3e3a38', '#524c48', '#78706a'] },
+];
+export const rugIndex = (id) => Math.max(0, RUGS.findIndex((c) => c.id === id));
+
+// Where the rug lies: one place for the brush and for "standing on it".
+export const rugRect = (r) => ({ x: r.x + r.w / 2 - 54, y: r.y + r.h - 46, w: 108, h: 26 });
+
+export function drawRoom(ctx, r, t, rug) {
   const T = r.tone;
   for (let y = r.y + WALL; y < r.y + r.h; y += 16) {
     for (let x = r.x; x < r.x + r.w; x += 16) {
@@ -494,10 +510,11 @@ export function drawRoom(ctx, r, t) {
     }
   }
   // rug in the middle of the room
-  const rx = r.x + r.w / 2 - 54, ry = r.y + r.h - 46;
-  px(ctx, rx, ry, 108, 26, '#8c4038');
-  px(ctx, rx + 5, ry + 4, 98, 18, '#a54c40');
-  px(ctx, rx + 18, ry + 9, 72, 8, '#c06a4a');
+  const { x: rx, y: ry } = rugRect(r);
+  const [border, field, medallion] = RUGS[rugIndex(rug)].tones;
+  px(ctx, rx, ry, 108, 26, border);
+  px(ctx, rx + 5, ry + 4, 98, 18, field);
+  px(ctx, rx + 18, ry + 9, 72, 8, medallion);
 
   // walls
   px(ctx, r.x, r.y, r.w, WALL, T.wall);

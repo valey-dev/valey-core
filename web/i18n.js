@@ -124,6 +124,10 @@ const DICT = {
     'hint.board': '[ ПРОБЕЛ ] посмотреть доску',
     // the little switch figure is labelled with what it will switch to, not with what it is
     'hint.lang': '[ ПРОБЕЛ ] язык и имена',
+    'hint.rug': '[ ПРОБЕЛ ] перекрасить ковёр',
+    'toast.rug': 'ковёр: {name} · {n} из {of}',
+    'rug.terracotta': 'терракота', 'rug.indigo': 'индиго', 'rug.emerald': 'изумруд',
+    'rug.mustard': 'горчица', 'rug.plum': 'слива', 'rug.graphite': 'графит',
     'hint.kicker': '[ ПРОБЕЛ ] сыграть',
     'label.me': 'ТЫ',
     // «ТЫ» is how the office addresses you, and it never travels outward: over
@@ -926,6 +930,10 @@ const DICT = {
     'hint.liftCall': '[ SPACE ] call the lift',
     'hint.board': '[ SPACE ] look at the board',
     'hint.lang': '[ SPACE ] language and names',
+    'hint.rug': '[ SPACE ] recolour the rug',
+    'toast.rug': 'rug: {name} · {n} of {of}',
+    'rug.terracotta': 'terracotta', 'rug.indigo': 'indigo', 'rug.emerald': 'emerald',
+    'rug.mustard': 'mustard', 'rug.plum': 'plum', 'rug.graphite': 'graphite',
     'hint.kicker': '[ SPACE ] play a round',
     'label.me': 'YOU',
     'title.yourName': 'what should we call you',
