@@ -62,11 +62,13 @@ export async function fakeClaudeDir(dir, {
     pid: process.pid, sessionId, cwd, startedAt: Date.now() - 60_000, version: '2.1.260', kind: 'interactive',
   }));
   const ts = (back) => new Date(Date.now() - back).toISOString();
+  // effort rides on every reply at the top level, as the app writes it, so the
+  // card draws the level beside the model (#model-card).
   const lines = [
     { type: 'user', timestamp: ts(50_000), gitBranch: branch, message: { role: 'user', content: asked } },
-    { type: 'assistant', timestamp: ts(40_000), message: { role: 'assistant', model: 'claude-fable-5', stop_reason: 'tool_use',
+    { type: 'assistant', timestamp: ts(40_000), effort: 'high', message: { role: 'assistant', model: 'claude-fable-5', stop_reason: 'tool_use',
       content: [{ type: 'tool_use', name: 'Edit', input: { file_path: file } }] } },
-    { type: 'assistant', timestamp: ts(30_000), message: { role: 'assistant', model: 'claude-fable-5', stop_reason: 'end_turn',
+    { type: 'assistant', timestamp: ts(30_000), effort: 'high', message: { role: 'assistant', model: 'claude-fable-5', stop_reason: 'end_turn',
       content: [{ type: 'text', text: said }] } },
   ];
   await fsp.writeFile(path.join(project, `${sessionId}.jsonl`), lines.map((l) => JSON.stringify(l)).join('\n') + '\n');

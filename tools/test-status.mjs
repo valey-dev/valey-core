@@ -166,6 +166,7 @@ ok('an ordinary tool result is not background work', foreground.background.size 
 const resumed = feed(user(0, 'x'), assistant(min(1), 'end_turn', report('Ничего')),
   line({ type: 'assistant', timestamp: at(min(20)), message: { role: 'assistant', model: '<synthetic>', stop_reason: 'stop_sequence', content: text('No response requested.') } }));
 ok('«No response requested.» on a resume changes nothing: still at rest', statusOf(resumed, T0 + min(21)) === 'idle', statusOf(resumed, T0 + min(21)));
+ok('…and the model stays the one that last spoke', resumed.model === 'claude-fable-5-1', resumed.model);
 
 // ----------------------------------------------------------- no transcript at all
 

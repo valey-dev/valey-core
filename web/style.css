@@ -40,10 +40,16 @@ button.chip:focus-visible{outline:2px solid var(--warn); outline-offset:2px}
 .portrait canvas{width:72px; height:72px; image-rendering:pixelated; border:2px solid var(--frame)}
 .content{flex:1; min-width:0; container-type:inline-size}
 .who b{color:var(--warn); font-size:15px; letter-spacing:.05em}
-.role{font-size:10px; padding:1px 6px; border:1px solid var(--frame-dim); margin-left:6px; color:var(--ink-dim)}
-.role.r-design{color:var(--lilac);border-color:var(--lilac-edge)} .role.r-research{color:var(--info);border-color:var(--info-edge)}
-.role.r-plan{color:var(--warn);border-color:var(--warn-edge)} .role.r-code{color:var(--accent);border-color:var(--accent-edge)}
-.role.r-qa{color:var(--role-qa);border-color:var(--role-qa-edge)} .role.r-release{color:var(--role-rel);border-color:var(--role-rel-edge)}
+/* The trade is a pixel icon and its name in the role colour, no border: a box
+   around the text could not share the baseline with the name beside it. The
+   icon is inline SVG, so it stands on that baseline by itself (web/roleicon.js). */
+.role{font-size:10px; margin-left:6px; color:var(--ink-dim); white-space:nowrap}
+.role .ricon{fill:currentColor; shape-rendering:crispEdges; margin-right:4px}
+.role.r-design{color:var(--lilac)} .role.r-research{color:var(--info)} .role.r-plan{color:var(--warn)}
+.role.r-code{color:var(--accent)} .role.r-qa{color:var(--role-qa)} .role.r-release{color:var(--role-rel)}
+/* The model beside the trade, as dim as the meta line: who is answering, not where. */
+.who .model{font-size:11px; color:var(--muted); margin-left:6px}
+.who .model:empty{display:none}
 .meta{display:block; color:var(--muted); font-size:11px; margin-top:2px}
 .act{color:var(--ink-dim); font-size:12px; margin:6px 0 4px; border-left:3px solid var(--frame); padding-left:8px}
 .body{min-height:64px; max-height:min(300px,40vh); overflow:auto; padding-right:6px}
