@@ -2932,6 +2932,10 @@ function bindResults() {
 // carries the caret to the panel's next field; ↑↓ leave the field the way they
 // leave a button. Asked for by the owner on 13 September 2026, reversing the
 // earlier «Enter first» rule.
+// opts.sideways — a class whose items ↑↓ step over and only ←→ reach: a small
+//   button that belongs to the row beside it, like the radio's ✕ by each wave.
+//   Until 15 September 2026 the down arrow walked a list of waves through every
+//   cross, so reaching the third wave took five presses instead of two.
 // opts.startEmpty — nothing is lit when the panel opens, and the first arrow
 //   picks the first (or, going up, the last) button. For a panel whose first
 //   button does something that should not happen on a stray Enter: the office
@@ -3178,7 +3182,20 @@ export function focusRing(nodeOf, selector, opts = {}) {
       }
 
       const step = { arrowup: -1, arrowdown: 1, arrowleft: -1, arrowright: 1 }[key];
-      if (step !== undefined) { idx = stepTo(idx, step, l.length); paint(); return true; }
+      if (step !== undefined) {
+        let to = stepTo(idx, step, l.length);
+        // A sideways item is stepped over going up or down; only ←→ land on it.
+        if (opts.sideways && (key === 'arrowup' || key === 'arrowdown')) {
+          const side = (i) => l[i].classList.contains(opts.sideways);
+          for (let n = l.length; n > 0 && side(to); n--) {
+            const next = stepTo(to, step, l.length);
+            if (next === to) break;
+            to = next;
+          }
+          if (side(to)) to = idx;
+        }
+        idx = to; paint(); return true;
+      }
       if (key === 'enter' || key === ' ') {
         if (!cur || cur.disabled) return true;
         // A parked field takes the caret back; anything else is pressed.

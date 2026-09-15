@@ -324,7 +324,8 @@ function openRadio() {
 // buttons and the picks — all of them reachable without the mouse, like the rest.
 // Search added its results and genres on 13 September 2026, in the same markup order.
 const RING = '.radioknobs button, #radiovol, .rst, .rdel, #radiouri, .rfound, #radiowave, #radiocatch, #radiocancel, .rpick, .rgenre, .radioauth button';
-const radioRing = focusRing(() => el.radio, RING, { numbers: '.rst' });
+// sideways: 'rdel' — ↑↓ walk wave to wave; the ✕ beside a wave is reached with →.
+const radioRing = focusRing(() => el.radio, RING, { numbers: '.rst', sideways: 'rdel' });
 
 // Put the ring on a given wave, by its number in the list. Used after a wave is
 // added: the one just caught is the one now playing, and it is what the hand
@@ -866,7 +867,7 @@ function paintRadio() {
     <button class="rst" data-i="${i}">${i === radio.current ? '●' : '○'} ${esc(stationName(s))}${i < 9 ? ` <kbd>${i + 1}</kbd>` : ''}</button>
     <span class="rsrc">${tr(kindOf(s) === 'stream' ? 'radio.srcStream' : 'radio.srcSpotify')}</span>
     ${radio.stations.length > 1 ? `<button class="rdel" data-del="${i}" title="${tr('radio.remove')}">✕</button>` : ''}</li>`).join('');
-  el.radio.querySelectorAll('.rst').forEach((b) => b.onclick = () => radio.tune(Number(b.dataset.i)));
+  el.radio.querySelectorAll('.rst').forEach((b) => b.onclick = () => radio.start(Number(b.dataset.i)));
   el.radio.querySelectorAll('.rdel').forEach((b) => b.onclick = () => radio.remove(Number(b.dataset.del)));
   paintAdding();
   paintFinding();
