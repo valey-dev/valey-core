@@ -35,6 +35,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { findCli } from './deliver.js';
+import { agentEnv } from './agent-env.js';
 
 export const MODELS = new Set(['opus', 'sonnet']);
 const TASK_MAX = 4000;
@@ -162,7 +163,7 @@ export async function hire({ project, cwd, task, model = 'opus', quote = null, s
     h.err = `${base}.err`;
     outFd = fs.openSync(h.out, 'w', 0o600);
     errFd = fs.openSync(h.err, 'w', 0o600);
-    child = spawn(c.path, args, { cwd, env: process.env, stdio: ['pipe', outFd, errFd], detached: true });
+    child = spawn(c.path, args, { cwd, env: agentEnv(), stdio: ['pipe', outFd, errFd], detached: true });
   } catch (e) {
     set(h, 'failed', { error: e.message });
     return view(h);

@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { agentEnv } from './agent-env.js';
 
 const run = promisify(execFile);
 const TIMEOUT_MS = 10 * 60 * 1000;
@@ -204,7 +205,7 @@ export async function deliver(task, agent, mode = 'default', { timeout = TIMEOUT
   try {
     child = spawn(c.path, args, {
       cwd: agent.cwd || process.cwd(),
-      env: process.env,
+      env: agentEnv(),
       stdio: ['ignore', outFd, errFd],
       detached: true,
     });
