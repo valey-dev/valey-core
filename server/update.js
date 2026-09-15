@@ -43,20 +43,26 @@ const versionAt = async (dir, rev) => {
   try { return JSON.parse(raw).version || null; } catch { return null; }
 };
 
-// Why a repository cannot move forward, or null. Tracked changes only: an
-// untracked file — the core's own BACKLOG.md lives that way — is not in the
-// way of a fast-forward.
+// Why a repository cannot move forward, or null. A local change is in the way
+// only where the update writes: that is where `git merge --ff-only` itself
+// refuses, and anywhere else it carries the change across untouched. Until
+// v0.58.1 any tracked change refused — and the Modules' BACKLOG.md, tracked
+// and edited by every session, held the office on 15 September 2026 while
+// none of the seven commits waiting touched it. Untracked files count too,
+// where the update adds a file by that name: the merge would stop on them
+// after the core had already moved, which is the «both or neither» broken.
 async function refusal(dir) {
   if (!(await tryGit(dir, ['rev-parse', '--git-dir']))) return { reason: 'notGit' };
   if (!(await tryGit(dir, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']))) return { reason: 'noUpstream' };
+  const ahead = await tryGit(dir, ['merge-base', '--is-ancestor', 'HEAD', '@{u}']);
+  if (ahead === null) return { reason: 'diverged' };
+  const touched = new Set(((await tryGit(dir, ['diff', '--name-only', '--no-renames', '-z', 'HEAD', '@{u}'])) || '').split('\0').filter(Boolean));
   // Not through git(): porcelain lines begin with a space (« M file»), and the
   // trim there ate it — the first name came out as «ackage.json».
   let dirty = '';
-  try { dirty = (await run('git', ['status', '--porcelain', '--untracked-files=no'], { cwd: dir, timeout: 15_000 })).stdout; } catch { /* checked above that this is a repository */ }
-  const lines = dirty.split('\n').filter(Boolean);
-  if (lines.length) return { reason: 'dirty', detail: lines.slice(0, 3).map((l) => l.slice(3)).join(', ') };
-  const ahead = await tryGit(dir, ['merge-base', '--is-ancestor', 'HEAD', '@{u}']);
-  if (ahead === null) return { reason: 'diverged' };
+  try { dirty = (await run('git', ['status', '--porcelain', '-z', '--no-renames', '--untracked-files=all'], { cwd: dir, timeout: 15_000 })).stdout; } catch { /* checked above that this is a repository */ }
+  const hit = dirty.split('\0').filter(Boolean).map((l) => l.slice(3)).filter((f) => touched.has(f));
+  if (hit.length) return { reason: 'dirty', detail: hit.slice(0, 3).join(', ') };
   return null;
 }
 
