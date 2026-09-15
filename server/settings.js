@@ -149,6 +149,9 @@ const DEFAULTS = {
   // stays, the office stops running it. See setOwnerOff() in server/modules.js.
   modulesOff: [],
   dress: { code: 'casual' },
+  // project -> rug colourway id ('indigo'). Missing is the terracotta every room
+  // had before; the owner recolours a rug by standing on it and pressing SPACE.
+  rugs: {},
   // The greenhouse. Shared across the office, like the names and the seating:
   // you water it, everyone sees. pots: pot index -> { wateredAt, streak }. Four
   // waterings in the can — the same as CAN_FULL in web/garden.js; it cannot be
@@ -399,6 +402,16 @@ export async function patchSettings(patch) {
     // recovered.
     names: patch.names || s.names,
     seats: patch.seats || s.seats,
+    // Key-wise: a page sends only the rug it recoloured, and two tabs
+    // recolouring two rooms must not undo each other.
+    // The server does not know the colourway names (they live in web/); it
+    // only keeps the values short strings, and the page falls back to the
+    // terracotta for anything it does not recognise.
+    rugs: {
+      ...(s.rugs || {}),
+      ...Object.fromEntries(Object.entries(patch.rugs || {})
+        .filter(([, v]) => typeof v === 'string' && v.length <= 24)),
+    },
     // The pack mark travels beside the names and is replaced the same way: it
     // describes them. An empty string is a legal value here ("nobody has been
     // handed a name yet"), so || will not do.

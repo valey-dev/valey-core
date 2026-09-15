@@ -41,7 +41,7 @@ function inFrame(cam, agents, actors) {
 }
 
 export function drawCamera(ctx, VW, VH, cam, view, t) {
-  const { agents, actors, looks, boardItems, index, total, online, layout, night, weather, cat, player, me, unlocked, auto, dwell, since } = view;
+  const { agents, actors, looks, boardItems, index, total, online, layout, night, weather, cat, player, me, unlocked, auto, dwell, since, rugs = {} } = view;
 
   ctx.fillStyle = '#0b0f0e';
   ctx.fillRect(0, 0, VW, VH);
@@ -67,7 +67,7 @@ export function drawCamera(ctx, VW, VH, cam, view, t) {
   const byId = new Map(agents.map((a) => [a.id, a]));
   const draws = [];
   const addRoom = (room) => {
-    drawRoom(ctx, room, t);
+    drawRoom(ctx, room, t, rugs[room.key]);
     drawRoomProps(ctx, room, t);
     draws.push({ y: room.y - 1, fn: () => drawBoard(ctx, room, boardItems(room), t, false) });
     for (const d of room.desks) {
