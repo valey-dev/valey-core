@@ -6,6 +6,9 @@
 import fs from 'node:fs';
 import { effectivePack, namePool } from '../server/agents.js';
 import { geocode } from '../server/weather.js';
+// The reader of JavaScript this guard needs — and, since 16 September 2026, the
+// guard over a page module's callbacks too — lives in one place.
+import { code, argsAt, stringEnd, regexAt, regexEnd } from './lib/jsscan.mjs';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -88,62 +91,6 @@ const MESSAGE_AT = {
 // the stands' own reporters: the label, and a literal detail after the verdict
 // (a variable there is the value got, which is data)
 const REPORTER = [0, 2];
-// The index of a string's closing quote; `${…}` inside a template is walked
-// through, strings within it included.
-function stringEnd(text, i) {
-  const q = text[i];
-  for (let j = i + 1; j < text.length; j++) {
-    if (text[j] === '\\') { j++; continue; }
-    if (q === '`' && text[j] === '$' && text[j + 1] === '{') {
-      let depth = 1;
-      for (j += 2; j < text.length && depth; j++) {
-        if (text[j] === '{') depth++;
-        else if (text[j] === '}') depth--;
-        else if ('"\'`'.includes(text[j])) j = stringEnd(text, j);
-      }
-      j--;
-      continue;
-    }
-    if (text[j] === q) return j;
-  }
-  return text.length;
-}
-// A `/` that opens a regular expression rather than divides: what stands before
-// it cannot end a value. The stands match markup with patterns full of quotes
-// and brackets — /tnode own[^"]*" data-id="(bible|easel)"/ — and read as code
-// such a pattern opened a string that never closed, hiding the rest of the file.
-function regexAt(text, i) {
-  if (text[i] !== '/' || text[i + 1] === '/' || text[i + 1] === '*') return false;
-  let j = i - 1;
-  while (j >= 0 && /\s/.test(text[j])) j--;
-  return j < 0 || '(,=:[!&|?{};+-*%<>~^'.includes(text[j]) || /\b(?:return|typeof|of|in)$/.test(text.slice(Math.max(0, j - 6), j + 1));
-}
-function regexEnd(text, i) {
-  let cls = false;
-  for (let j = i + 1; j < text.length; j++) {
-    const c = text[j];
-    if (c === '\\') { j++; continue; }
-    if (c === '\n') return j - 1;
-    if (cls) { if (c === ']') cls = false; continue; }
-    if (c === '[') cls = true;
-    else if (c === '/') return j;
-  }
-  return text.length;
-}
-// The arguments of the call whose `(` is at `open`, as source text.
-function argsAt(text, open) {
-  const args = [];
-  let depth = 0, start = open + 1;
-  for (let i = open + 1; i < text.length; i++) {
-    const c = text[i];
-    if ('"\'`'.includes(c)) { i = stringEnd(text, i); continue; }
-    if (regexAt(text, i)) { i = regexEnd(text, i); continue; }
-    if ('([{'.includes(c)) depth++;
-    else if (')]}'.includes(c)) { if (depth === 0) { args.push(text.slice(start, i)); return args; } depth--; }
-    else if (c === ',' && depth === 0) { args.push(text.slice(start, i)); start = i + 1; }
-  }
-  return args;
-}
 // The literal text an argument prints: its strings and templates at the top
 // level — a sum, or both arms of `bad ? `${bad} failed` : 'all passed'` — with
 // `${…}` left out. A string inside a nested call is that call's data, and an
@@ -162,21 +109,6 @@ function literal(arg) {
     else if (')]}'.includes(c)) depth--;
   }
   return parts.length ? parts.join(' ') : null;
-}
-// The text with comments and strings blanked out, length for length: a call is
-// looked for here, so `console.log('…')` quoted inside a fixture, or a reporter
-// named in a comment, is not taken for one.
-function code(text) {
-  let out = '';
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if ('"\'`'.includes(c)) { const end = stringEnd(text, i); out += c + text.slice(i + 1, end).replace(/[^\n]/g, ' ') + (end < text.length ? text[end] : ''); i = end; continue; }
-    if (c === '/' && text[i + 1] === '/') { const end = text.indexOf('\n', i); const stop = end < 0 ? text.length : end; out += ' '.repeat(stop - i); i = stop - 1; continue; }
-    if (c === '/' && text[i + 1] === '*') { const end = text.indexOf('*/', i + 2); const stop = end < 0 ? text.length : end + 2; out += text.slice(i, stop).replace(/[^\n]/g, ' '); i = stop - 1; continue; }
-    if (regexAt(text, i)) { const end = regexEnd(text, i); out += text.slice(i, end + 1).replace(/[^\n]/g, ' '); i = end; continue; }
-    out += c;
-  }
-  return out;
 }
 function printed(file) {
   const text = read(file);
