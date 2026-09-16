@@ -657,7 +657,7 @@ function bindPermit(a) {
       const r = await api.answerPermit(p.id, 'answer', '', label);
       denying = false;
       if (r && r.error) UI_toastKey(r);
-      else api.toast(tr('toast.permitAnswered', { who: a.name, answer: label, a: a.gender === 'f' ? 'а' : '' }));
+      else toast(tr('toast.permitAnswered', { who: a.name, answer: label, a: a.gender === 'f' ? 'а' : '' }));
       api.forgetPermit(p.id);
       S.page = 'talk';
       renderDialog();
@@ -676,10 +676,10 @@ function bindPermit(a) {
     // The server may not find the request because another tab answered it or it
     // expired. In that case the card simply rebuilds and says so.
       if (r && r.error) UI_toastKey(r);
-      else if (act === 'always' && p.rule) api.toast(tr('toast.permitAlways', { rule: p.rule }), 'news');
-      else if (act === 'allow') api.toast(tr('toast.permitAllowed', { who: a.name }));
-      else if (act === 'deny') api.toast(tr('toast.permitDenied', { who: a.name }), 'wait');
-      else if (act === 'terminal') api.toast(tr('toast.permitTerminal', { who: a.name }), 'wait');
+      else if (act === 'always' && p.rule) toast(tr('toast.permitAlways', { rule: p.rule }), 'news');
+      else if (act === 'allow') toast(tr('toast.permitAllowed', { who: a.name }));
+      else if (act === 'deny') toast(tr('toast.permitDenied', { who: a.name }), 'wait');
+      else if (act === 'terminal') toast(tr('toast.permitTerminal', { who: a.name }), 'wait');
       api.forgetPermit(p.id);
       S.page = 'talk';
       renderDialog();
