@@ -8,35 +8,16 @@
 // list of things that must not be fetched, and that list is checked here.
 import { parseFeed, normalizeChannel, splitHeadline, toText } from './feed.js';
 import { route, merge, setup, _reset } from './server.js';
+// The markup is built by the papers of the picture office, so a page under test
+// and a page in a release picture cannot drift apart. The words here stay
+// Russian: they are what checks the entity decoding.
+import { post, page, PHOTO } from './demo.js';
 
 let bad = 0;
 const ok = (name, cond, got) => {
   if (cond) console.log('ok    |', name);
   else { bad += 1; console.log('FAIL  |', name, '→', JSON.stringify(got)); }
 };
-
-const post = (ch, id, { text = '', photo = '', views = '1.2K', date = '2026-09-12T11:32:00+00:00' } = {}) => `
-<div class="tgme_widget_message_wrap js-widget_message_wrap"><div class="tgme_widget_message text_not_supported_wrap js-widget_message" data-post="${ch}/${id}">
-  <div class="tgme_widget_message_bubble">
-    ${photo ? `<a class="tgme_widget_message_photo_wrap 1 2" href="https://t.me/${ch}/${id}" style="width:800px;background-image:url('${photo}')"></a>` : ''}
-    ${text ? `<div class="tgme_widget_message_text js-message_text" dir="auto">${text}</div>` : ''}
-    <div class="tgme_widget_message_footer"><div class="tgme_widget_message_info">
-      <span class="tgme_widget_message_views">${views}</span>
-      <a class="tgme_widget_message_date" href="https://t.me/${ch}/${id}"><time datetime="${date}" class="time">14:32</time></a>
-    </div></div>
-  </div></div></div>`;
-
-const page = (ch, posts, { title = 'Тихая сборка', before = 4100 } = {}) => `<!DOCTYPE html><html><body>
-<div class="tgme_channel_info"><div class="tgme_channel_info_header">
-  <div class="tgme_channel_info_header_title_wrap"><div class="tgme_channel_info_header_title"><span dir="auto">${title}</span></div>
-  <div class="tgme_channel_info_header_labels"><i class="verified-icon"> ✔</i></div></div></div>
-  <div class="tgme_channel_info_counters"><div class="tgme_channel_info_counter"><span class="counter_value">12.4K</span> <span class="counter_type">subscribers</span></div></div>
-  <div class="tgme_channel_info_description">о сборках, релизах и тишине в логах</div>
-</div>
-<section class="tgme_channel_history js-message_history">
-  ${before ? `<div class="tgme_widget_message_centered js-messages_more_wrap"><a href="/s/${ch}?before=${before}" class="tme_messages_more js-messages_more" data-before="${before}"></a></div>` : ''}
-  ${posts.join('\n')}
-</section></body></html>`;
 
 const PIC = 'https://cdn4.telesco.pe/file/mug.jpg';
 const sample = page('tihaya_sborka', [
@@ -174,6 +155,26 @@ const ask = async (path) => {
   ok('the owner probes a public channel', good.body.title === 'Пиксель дня' && good.body.name === 'pixel_dnya', good.body);
   const badName = await ask('/api/newsstand/probe?ch=t.me/+secret');
   ok('an invitation link is not a name', badName.code === 400, badName);
+}
+
+// ------------------------------------------------- the office for pictures
+// With VALEY_PICTURE=1 the stand reads invented papers and makes no request at
+// all: a public screenshot of a real channel is a screenshot of real people's
+// posts. Until 17 September 2026 there was no seam for it, and the note for
+// v0.45.0 went out with a photograph of an empty stand.
+{
+  process.env.VALEY_PICTURE = '1';
+  _reset(); calls = []; answers = {}; channels = ['quiet_build', 'pixel_dnya'];
+  const stand = await ask('/api/newsstand');
+  ok('the picture office has papers on the stand', stand.body.channels.length === 2 && stand.body.channels[0].title === 'The quiet build', stand.body.channels);
+  const one = await ask('/api/newsstand/issue?ch=pixel_dnya');
+  ok('and a paper has a lead post with a picture', one.body.posts[0].photo && one.body.posts[0].text.startsWith('A lamp on the desk'), one.body.posts[0]);
+  const img = await ask('/api/newsstand/img?u=' + encodeURIComponent(PHOTO));
+  ok('the picture is drawn here, as a PNG', img.code === 200 && img.type === 'image/png' && img.body.length > 100, { code: img.code, type: img.type });
+  const older = await ask('/api/newsstand/issue?ch=pixel_dnya&before=' + one.body.before);
+  ok('an older issue is there to turn back to', older.code === 200 && older.body.posts.length >= 1, older.body);
+  ok('and nothing at all was fetched', calls.length === 0, calls.map((c) => c.url));
+  delete process.env.VALEY_PICTURE;
 }
 
 console.log(bad ? `\n${bad} failed` : '\nall passed');

@@ -14,6 +14,15 @@
 //     browser never talks to Telegram. Only a picture address the feed itself
 //     named is fetched — the proxy does not go where a page asks it to.
 import { parseFeed, normalizeChannel } from './feed.js';
+import { demoPage, picture as demoPicture } from './demo.js';
+
+// The picture office (tools/lib/office.mjs, PICTURE_ENV) reads invented papers
+// instead of Telegram: a public screenshot of a real channel is a screenshot of
+// real people's posts, which the rule about invented data forbids, and v0.45.0
+// shipped its note with a photograph of an empty stand for exactly that reason.
+// The switch is an environment variable of the process — nothing arriving over
+// the network can set it — and with it on, no request leaves this machine.
+const invented = () => process.env.VALEY_PICTURE === '1';
 
 // How many papers fit on the stand. Not a technical ceiling: past a dozen the
 // stand stops being something you read in the morning.
@@ -53,6 +62,12 @@ const cursors = new Set();   // `${name}:${before}`
 const nofeed = () => Object.assign(new Error('no public feed'), { code: 'nofeed' });
 
 async function fetchPage(name, before) {
+  if (invented()) {
+    const feed = parseFeed(demoPage(name, before));
+    for (const p of feed.posts) if (p.photo) pictures.add(p.photo);
+    if (feed.before) cursors.add(`${name}:${feed.before}`);
+    return feed;
+  }
   const url = `https://t.me/s/${name}` + (before ? `?before=${before}` : '');
   // A redirect is how t.me says «there is no public feed here»: a group, a
   // private name or no such name at all is sent on to t.me/<name>. Following it
@@ -108,6 +123,9 @@ async function channelsOnStand() {
 // never through a redirect, and never bigger than a picture needs to be.
 const CDN = /(^|\.)(telesco\.pe|cdn-telegram\.org|telegram-cdn\.org)$/;
 async function fetchImage(src) {
+  // Drawn rather than fetched, and only for an address an invented paper named:
+  // the `pictures` guard above is what lets it through, exactly as for a real one.
+  if (invented()) return demoPicture();
   const u = new URL(src);
   if (u.protocol !== 'https:' || !CDN.test(u.hostname)) throw new Error('unexpected picture host');
   const r = await fetch(u, { signal: AbortSignal.timeout(10_000), redirect: 'error' });
