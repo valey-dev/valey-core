@@ -170,6 +170,7 @@ const stand = {
   issues: new Map(),      // name → { stack: [before…], data, error, loading }
   msg: '',                // the error line under the add field
   invented: false,        // the papers came from demo.js: nothing to open in Telegram
+  said: '',               // a line answered on the sheet itself, under the columns
 };
 
 // What the owner has already read, per channel: the newest post id seen. Kept
@@ -564,6 +565,7 @@ function paint() {
       <span class="nshead"><span class="nskeys">${esc(tr(keysHint))}</span><button id="nsx">✕</button></span></div>
     ${stand.channels.length ? `<div class="nstabs">${tabsHtml()}</div>` : ''}
     <div class="nsbody">${listView ? channelsHtml() : paperHtml(c)}</div>
+    ${listView || !stand.said ? '' : `<p class="nssaid">${esc(stand.said)}</p>`}
     ${listView ? '' : footHtml(c)}
   </div>`;
   const body = $('.nsbody', el.root);
@@ -621,7 +623,11 @@ function openPost(id) {
   // is nobody's address: opening it would send the reader to Telegram's «this
   // channel does not exist». Asked for by the owner on 17 September 2026, on
   // the first stand where the invented papers were shown.
-  if (stand.invented) { toast(tr('news.invented')); return; }
+  // Said on the paper, not in a toast: the toasts live in the bottom left
+  // corner, and the answer to a key pressed inside the panel was read as
+  // nothing happening — the owner said so on 17 September 2026, looking at the
+  // open paper while the line sat under it.
+  if (stand.invented) { stand.said = tr('news.invented'); paint(); return; }
   window.open(`https://t.me/${encodeURIComponent(c.name)}/${id}`, '_blank', 'noopener,noreferrer');
 }
 
@@ -704,6 +710,7 @@ function onKey(raw, shift) {
   const k = String(raw).toLowerCase();
   const c = curChannel();
   const listView = stand.view === 'channels' || !c;
+  if (k !== 'enter' && k !== ' ') stand.said = '';
   if (k === 'tab') { cycle(shift ? -1 : 1); return true; }
   const n = Number(k);
   if (Number.isInteger(n) && n >= 1 && n <= 9) {
@@ -711,7 +718,10 @@ function onKey(raw, shift) {
     return true;
   }
   if (!listView && (k === 'arrowleft' || k === 'arrowright')) { turn(k === 'arrowleft' ? -1 : 1); return true; }
-  if (!listView && k === 'enter') { openPost(focusedPostId()); return true; }
+  // Space opens the post too. In the office Space is «do the thing in front of
+  // you», and a reader who has just walked to the stand with it keeps pressing
+  // it inside the paper; asked for by the owner on 17 September 2026.
+  if (!listView && (k === 'enter' || k === ' ')) { openPost(focusedPostId()); return true; }
   if (listView && (k === 'delete' || k === 'backspace')) {
     const f = el.root && $('.nsrm.focus', el.root);
     if (f) removeChannel(Number(f.dataset.i));
