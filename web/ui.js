@@ -203,13 +203,20 @@ const readLabel = (a) => {
   const cut = (a.saidLen || 0) - (a.lastSaid || '').length;
   return cut > 0 ? tr('dlg.readOnArrow', { n: cut }) : tr('dlg.readAll');
 };
-const NOTE_ICON = { note: '📋', sending: '✈', delivered: '✅', failed: '⚠' };
+const NOTE_ICON = { note: '📋', sending: '⏳', delivered: '✅', failed: '⚠' };
 // Which note is holding its breath before going into a real chat. Kept here rather
 // than in the DOM, so the two-second repaint of the list does not disarm it.
 let armedNote = 0;
 const noteList = (a) => (a.outbox || []).map((t) => {
   const icon = t.blocked ? '🔒' : NOTE_ICON[t.state] || '📋';
-  const tail = t.state === 'sending' ? `<span class="ntail">${tr('note.sending')}</span>`
+  // Two waits, told apart on purpose (#drop-files, v2). The file's wait is a
+  // chip under the field and lasts milliseconds; this one is the session's —
+  // `claude --resume` loads the whole transcript, so it runs to a minute and
+  // beyond on a working one. Same words for both read as an upload that never
+  // ends, so the desk gets the hourglass, the waiting colour and mm:ss.
+  const waited = Math.max(0, Math.round((Date.now() - (t.startedAt || t.at || Date.now())) / 1000));
+  const clock = `${Math.floor(waited / 60)}:${String(waited % 60).padStart(2, '0')}`;
+  const tail = t.state === 'sending' ? `<span class="ntail warn">${tr('note.waitingFor', { t: clock })}</span>`
     : t.state === 'delivered' ? `<span class="ntail ${t.blocked ? 'warn' : 'ok'}">${
         t.blocked ? tr('note.blocked') : tr('note.replied')}${esc(clean(t.reply || '').slice(0, 110))}</span>`
     : t.state === 'failed' ? `<span class="ntail bad">${esc(said(t) || tr('note.failed'))}</span>`
@@ -221,7 +228,12 @@ const noteList = (a) => (a.outbox || []).map((t) => {
   const toChat = t.state === 'note'
     ? `<button class="tochat${armed ? ' arm' : ''}" data-send="${t.id}">${armed ? tr('note.confirm') : tr('note.toChat')}</button>`
     : '';
-  return `<li>${icon} ${esc(t.text.slice(0, 90))}${tail}${retry}${toChat}</li>`;
+  const clip = (t.files || []).length ? ` <span class="nclip">📎 ${t.files.length}</span>` : '';
+  // A note of files only still has to say what it is: its name is what it
+  // carries.
+  // `said` is taken by the helper above; this is the note's own line.
+  const titled = t.text || (t.files || []).map((f) => f.name).join(', ');
+  return `<li>${icon} ${esc(titled.slice(0, 90))}${clip}${tail}${retry}${toChat}</li>`;
 }).join('');
 const fileList = (a) => (a.files || []).map((f) =>
   `<li data-path="${encodeURIComponent(f.path)}"><span class="ic">${f.image ? '▨' : '▤'}</span>${esc(f.name)}</li>`).join('');
@@ -267,6 +279,9 @@ export function renderDialog() {
   // an agent cut off while its card was open must not keep typing its last words.
   const key = a.id + '|' + S.page + '|' + accessOf(a.id) + '|' + ((permitOf(a.id) || {}).id || '') + '|' + (denying ? 'deny' : '')
     + '|' + (a.status === 'stopped' ? 'stop' : '');
+  // Files follow the card they were dropped on: walking to another agent must
+  // not carry somebody else's screenshot into his task.
+  if (taskFilesFor !== a.id) { taskFiles = []; taskFilesFor = a.id; }
   if (key === dialogKey && el.dialog.firstChild) return patchDialog(a);
   dialogKey = key;
   buildDialog(a);
@@ -275,6 +290,7 @@ export function renderDialog() {
 function patchDialog(a) {
   const set = (sel, html) => { const n = el.dialog.querySelector(sel); if (n && n.innerHTML !== html) n.innerHTML = html; };
   set('.meta', metaLine(a));
+  paintTaskChips();
   // By text, not markup: innerHTML hands the no-break spaces back as &nbsp;, and
   // a comparison that never matches would rewrite the model on every tick.
   const model = el.dialog.querySelector('.model');
@@ -393,6 +409,109 @@ function accessOf(id) {
   return 'closed';
 }
 
+
+// ------------------------------------------------------- files on a task
+// A file dropped onto the task field (or pasted — a screenshot in the
+// clipboard is the common one). The browser hands over bytes and never a
+// path, so the office puts them into its inbox at once and keeps the answer;
+// on send the paths ride in the text as «@<path>» and Claude Code opens them
+// itself. Frame: WIP «Files dropped into a task #drop-files», v1.
+//
+// The chip appears the moment the file is taken, before the bytes are up:
+// «загружаю…» is the honest state of a 12 MB screenshot on a slow disk, and a
+// chip that appears only afterwards reads as a drop that did nothing.
+const DROP_MAX_FILES = 5;
+const DROP_MAX_BYTES = 16 * 1024 * 1024;
+let taskFiles = [];       // what is attached to the task being typed
+let taskFilesFor = '';    // whose card they were attached on
+
+const sizeLabel = (n) => (n < 1024 ? tr('drop.bytes', { n })
+  : n < 1024 * 1024 ? tr('drop.kb', { n: Math.round(n / 1024) })
+  : tr('drop.mb', { n: (n / (1024 * 1024)).toFixed(1) }));
+
+const chipRow = (files) => (files || []).map((f, i) => {
+  const tail = f.error ? tr(f.error) : f.pending ? tr('drop.uploading') : esc(sizeLabel(f.size));
+  const cls = f.error ? ' bad' : f.pending ? ' wait' : '';
+  return `<span class="fchip${cls}">${f.image ? '▨' : '▤'} ${esc(f.name)}`
+    + `<span class="csize">${tail}</span>`
+    + `<button class="cdel" data-i="${i}" title="${tr('drop.remove')}">✕</button></span>`;
+}).join('');
+
+// Only files that are actually on disk go with the task: a chip with an error
+// is a message to the person, not an attachment.
+const readyFiles = (files) => (files || []).filter((f) => f.path && !f.error && !f.pending)
+  .map((f) => ({ path: f.path, name: f.name, size: f.size }));
+
+// Taking files is the same everywhere — the card, the hire panel. `paint` is
+// how that place redraws its own row: the dialog must not be rebuilt under a
+// half-typed task.
+async function takeFiles(list, files, paint) {
+  if (isGuest()) { toast(tr('drop.guest')); return; }
+  const going = [];
+  for (const file of [...list]) {
+    if (files.length >= DROP_MAX_FILES) { toast(tr('drop.many', { n: DROP_MAX_FILES })); break; }
+    const item = { name: file.name || tr('drop.pasted'), size: file.size, image: /^image\//.test(file.type || ''), pending: true };
+    files.push(item);
+    if (file.size > DROP_MAX_BYTES) { item.pending = false; item.error = 'drop.tooBig'; continue; }
+    // All of them at once: three screenshots in one drop should not queue
+    // behind the first one's bytes.
+    going.push(api.putFile(file).then((r) => {
+      item.pending = false;
+      if (r && r.ok && r.file) { item.path = r.file.path; item.name = r.file.name; item.size = r.file.size; }
+      else item.error = 'drop.failed';
+      paint();
+    }));
+  }
+  paint();
+  await Promise.all(going);
+}
+
+// The whole card takes the drop, not only the field: aiming at a three-line
+// textarea with a file in hand is a needless test of the mouse.
+function bindDrop(zone, field, files, paint) {
+  if (!zone) return;
+  // The dashed border says «something is being held over me»; the line says
+  // what will happen to it. It goes into the placeholder, so a task already
+  // typed is never covered by a message about a file.
+  const over = (on) => {
+    if (!field) return;
+    field.classList.toggle('dropping', on);
+    if (on) { if (field.dataset.said === undefined) field.dataset.said = field.placeholder; field.placeholder = tr('drop.hint'); }
+    else if (field.dataset.said !== undefined) { field.placeholder = field.dataset.said; delete field.dataset.said; }
+  };
+  zone.ondragover = (e) => { e.preventDefault(); over(true); };
+  zone.ondragleave = (e) => { if (e.target === zone) over(false); };
+  zone.ondrop = async (e) => {
+    e.preventDefault(); over(false);
+    const dropped = e.dataTransfer && e.dataTransfer.files;
+    if (dropped && dropped.length) await takeFiles(dropped, files, paint);
+  };
+  if (field) field.onpaste = async (e) => {
+    const items = [...((e.clipboardData && e.clipboardData.files) || [])];
+    if (!items.length) return;   // ordinary text: the field keeps it
+    e.preventDefault();
+    await takeFiles(items, files, paint);
+  };
+}
+
+// The task's own row of chips. One painter for everyone who can change it —
+// a drop, the ✕, and the tick that patches the card — because the card is
+// patched piece by piece and would otherwise keep showing files that have
+// already left with the task (17 September 2026).
+function paintTaskChips() {
+  const row = el.dialog && el.dialog.querySelector('#taskChips');
+  if (!row) return;
+  const html = chipRow(taskFiles);
+  if (row.innerHTML !== html) row.innerHTML = html;
+  bindChips(row, taskFiles, paintTaskChips);
+}
+
+// The ✕ on a chip. Bound after every repaint of the row, by index in it.
+function bindChips(root, files, paint) {
+  if (!root) return;
+  root.querySelectorAll('.cdel').forEach((b) => b.onclick = () => { files.splice(Number(b.dataset.i), 1); paint(); });
+}
+
 function buildDialog(a) {
   let body = '';
   if (S.page === 'talk') {
@@ -446,6 +565,7 @@ function buildDialog(a) {
     const guest = isGuest();
     body = `<p class="q">${tr('dlg.whatToDo')}</p>
       <textarea id="taskInput" rows="3" placeholder="${tr(guest ? 'dlg.enterHintGuest' : 'dlg.enterHint')}"></textarea>
+      <div class="fchips" id="taskChips">${chipRow(taskFiles)}</div>
       <div class="sendrow">
         <button id="asNote">${tr('dlg.onDesk')}</button>
         ${guest ? '' : `<button id="asSend" ${d.available ? '' : 'disabled'}>${tr('dlg.send')}</button>
@@ -580,17 +700,19 @@ function buildDialog(a) {
       // A guest always leaves the note on the desk. Keyboard shortcuts outlive
       // buttons, and otherwise Ctrl+Enter would still reach the server and be denied.
       const deliver = wanted && !isGuest();
-      const text = ta.value.trim(); if (!text) return;
+      const text = ta.value.trim();
+      // A file with no words is still a message; only nothing at all is not.
+      if (!text && !readyFiles(taskFiles).length) return;
       if (deliver && armed !== 'yes') { armed = 'yes'; renderArm(); return; }
       armed = '';
       ta.disabled = true;
-      const r = await api.sendTask(a.id, text, deliver);
+      const r = await api.sendTask(a.id, text, deliver, null, null, readyFiles(taskFiles));
       ta.disabled = false;
       if (!r.ok) S.notice = tr('task.failed', { err: said(r) || '?' });
       else if (!deliver) { S.notice = tr('task.onDeskToast'); toast(tr('task.onDeskTitle', { name: a.name })); }
       else if (r.task && r.task.state === 'failed') S.notice = tr('task.notSent', { err: said(r.task) || '?' });
       else { S.notice = tr('task.sentToast', { name: a.name }); toast(tr('task.sentTitle', { name: a.name })); }
-      if (r.ok) ta.value = '';
+      if (r.ok) { ta.value = ''; taskFiles = []; paintTaskChips(); }
       ta.focus();
       renderDialog();
     };
@@ -611,6 +733,8 @@ function buildDialog(a) {
     };
     const note = $('#asNote'); if (note) note.onclick = () => submit(false);
     const snd = $('#asSend'); if (snd) snd.onclick = () => submit(true);
+    bindDrop(el.dialog, ta, taskFiles, paintTaskChips);
+    bindChips($('#taskChips'), taskFiles, paintTaskChips);
     bindNotes(a);
     const sel = $('#sendMode');
     if (sel) sel.onchange = () => api.saveSettings({ delivery: { mode: sel.value } });
@@ -3706,7 +3830,7 @@ export function openHire(opts = {}) {
   const project = rooms.includes(opts.project) ? opts.project : rooms[0];
   if (!project) { toast(tr('hire.noRooms')); return; }
   hire = {
-    project, task: opts.task || '', model: 'opus', quote: opts.quote || null,
+    project, task: opts.task || '', files: [], model: 'opus', quote: opts.quote || null,
     from: opts.from || null, back: opts.back || null, done: opts.done || null, busy: false, error: '',
   };
   el.hire.hidden = false;
@@ -3743,6 +3867,7 @@ function renderHire() {
       <p class="hwhere">${esc(hireWhere(hire.project))}</p>
       <p class="hlabel">${tr('hire.task')}</p>
       <textarea id="hireTask" rows="3" maxlength="4000" placeholder="${tr('hire.taskHint')}">${esc(hire.task)}</textarea>
+      <div class="fchips" id="hireChips">${chipRow(hire.files)}</div>
       <p class="hlabel">${tr('hire.model')}</p>
       <div class="hmodels" role="radiogroup">${['sonnet', 'opus'].map((m) => `<button class="hmodel${m === hire.model ? ' on' : ''}" data-model="${m}"
         role="radio" aria-checked="${m === hire.model}" tabindex="${m === hire.model ? 0 : -1}">${m === 'opus' ? 'Opus' : 'Sonnet'}</button>`).join('')}</div>
@@ -3768,6 +3893,14 @@ function renderHire() {
   const pick = (group) => { const on = el.hire.querySelector(group + '.on'); if (on) on.focus(); };
   el.hire.querySelectorAll('[data-room]').forEach((b) => b.onclick = () => { hire.project = b.dataset.room; hire.error = ''; renderHire(); pick('.hchip'); });
   el.hire.querySelectorAll('[data-model]').forEach((b) => b.onclick = () => { hire.model = b.dataset.model; renderHire(); pick('.hmodel'); });
+  const paintHireChips = () => {
+    const row = $('#hireChips');
+    if (!row) return;
+    row.innerHTML = chipRow(hire.files);
+    bindChips(row, hire.files, paintHireChips);
+  };
+  bindDrop(el.hire, $('#hireTask'), hire.files, paintHireChips);
+  bindChips($('#hireChips'), hire.files, paintHireChips);
 }
 
 async function submitHire() {
@@ -3776,7 +3909,7 @@ async function submitHire() {
   if (!task) { hire.error = tr('hire.errEmpty'); renderHire(); $('#hireTask')?.focus(); return; }
   hire.busy = true; hire.error = '';
   renderHire();
-  const r = await api.hire({ project: hire.project, task, model: hire.model, quote: hire.quote, source: hire.from ? hire.from.source : null });
+  const r = await api.hire({ project: hire.project, task, files: readyFiles(hire.files), model: hire.model, quote: hire.quote, source: hire.from ? hire.from.source : null });
   if (!hire) return;
   hire.busy = false;
   if (!r || !r.ok) {
