@@ -155,6 +155,26 @@ ok('a shelf that cannot be reached is closed, not a failure', r.shelf === 'close
 r = await pullUpdate(office);
 ok('and the core updates alone', r.ok && r.to === '0.58.0' && r.shelf === 'closed', r);
 
+// ------------------------------------------------------------- the manifest
+// The file the check reads is the file the release writes. Without this the two
+// halves could drift apart silently: a manifest renamed here would only be
+// noticed by an office out in the world, pressing a button that says «offline».
+const tag = execFileSync('git', ['tag', '-l', 'v*'], { cwd: path.dirname(import.meta.dirname), encoding: 'utf8' })
+  .split('\n').filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).pop();
+if (!tag) {
+  console.log('skip  | the manifest: this checkout has no v* tag to build one from');
+} else {
+  const out = path.join(tmp, 'dist');
+  execFileSync(process.execPath, [path.join(import.meta.dirname, 'dist.mjs'), tag, '--out', out], { stdio: 'ignore' });
+  const m = JSON.parse(fs.readFileSync(path.join(out, 'valey-latest.json'), 'utf8'));
+  ok('the release writes the manifest the check asks for', m.version === tag.replace(/^v/, '') && typeof m.sha256 === 'string' && Number.isFinite(m.feats) && Number.isFinite(m.fixes), m);
+  // And it is read as such: served in place of the stand's own, it drives the row.
+  serve = (url) => (url === '/latest/valey-latest.json' ? JSON.stringify(m) : wholeSite(url));
+  build();
+  const seen = await checkUpdate(office);
+  ok('and an office reads that manifest as the published version', seen.available === m.version, seen);
+}
+
 site.close();
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(bad ? `\n${bad} failed` : '\nall passed');
