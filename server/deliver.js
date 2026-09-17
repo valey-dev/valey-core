@@ -3,6 +3,7 @@
 // the session transcript, so the office sees it. The open desktop window will not
 // redraw itself; the exchange shows up in the history (and in the game).
 import { spawn, execFile } from 'node:child_process';
+import { withMentions } from './inbox.js';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -173,7 +174,10 @@ export async function deliver(task, agent, mode = 'default', { timeout = TIMEOUT
   if (!c.path) { task.state = 'failed'; task.error = 'claude CLI is not installed'; task.errorKey = 'err.notInstalled'; return task; }
   if (busy.has(agent.id)) { task.state = 'failed'; task.error = 'another message is already being sent to this agent'; task.errorKey = 'err.busy'; return task; }
 
-  const args = ['--resume', agent.id, '-p', task.text];
+  // The files ride in the text: «@<path>» per line, and the CLI opens them
+  // itself — no permission is asked and no --add-dir is needed (checked on
+  // 2.1.263, 16 September 2026). See server/inbox.js.
+  const args = ['--resume', agent.id, '-p', withMentions(task.text, task.files)];
   if (MODES.has(mode) && mode !== 'default') args.push('--permission-mode', mode);
 
   busy.add(agent.id);
