@@ -75,7 +75,9 @@ const DICT = {
     'news.loading': 'Выпуск печатается…',
     'news.failed': 'Выпуск не пришёл: {err}',
     'news.photo': 'Фото',
-    'news.invented': 'Это выдуманные газеты — для кадров и ролика. Таких каналов в Telegram нет, открывать нечего. Добавь свой канал кнопкой «+ канал», и посты будут открываться.',
+    'news.invented': 'Это выдуманные газеты — офис поднят для кадров и ролика. Таких каналов в Telegram нет, открывать нечего. Настоящие каналы читает обычный офис, запущенный без VALEY_PICTURE.',
+    'news.inventedOnly': 'Офис поднят для кадров: он читает только свои выдуманные газеты и в Telegram не ходит вовсе. Чтобы добавить {name}, запусти обычный офис — без VALEY_PICTURE.',
+    'news.stateInvented': 'выдуманная',
     'news.video': 'Видео',
     'news.yesterday': 'вчера',
     'news.stateLatest': 'выпуск {time}',
@@ -138,7 +140,9 @@ const DICT = {
     'news.loading': 'The issue is being printed…',
     'news.failed': 'The issue did not arrive: {err}',
     'news.photo': 'Photo',
-    'news.invented': 'These papers are invented, for pictures and the video. No such channels exist in Telegram, so there is nothing to open. Add a channel of your own with «+ channel» and the posts will open.',
+    'news.invented': 'These papers are invented — this office was raised for pictures and the video. No such channels exist in Telegram, so there is nothing to open. Real channels are read by an ordinary office, started without VALEY_PICTURE.',
+    'news.inventedOnly': 'This office was raised for pictures: it reads only its own invented papers and does not go to Telegram at all. To add {name}, start an ordinary office — without VALEY_PICTURE.',
+    'news.stateInvented': 'invented',
     'news.video': 'Video',
     'news.yesterday': 'yesterday',
     'news.stateLatest': 'issue {time}',
@@ -492,7 +496,7 @@ function paperHtml(c) {
   const nav = navOf(c.name);
   const d = nav.data;
   if (!d) {
-    const line = nav.error ? tr('news.failed', { err: esc(nav.error === 'nofeed' ? tr('news.stateNoFeed') : nav.error) }) : tr('news.loading');
+    const line = nav.error ? tr('news.failed', { err: esc(nav.error === 'invented' ? tr('news.inventedOnly', { name: '@' + c.name }) : nav.error === 'nofeed' ? tr('news.stateNoFeed') : nav.error) }) : tr('news.loading');
     return `<div class="nspaper nswait"><p>${line}</p></div>`;
   }
   const [lead, ...rest] = d.posts;
@@ -532,7 +536,8 @@ function channelsHtml() {
   const list = has ? `<p class="nscap">${esc(tr('news.onStand'))}</p><div class="nslist">${stand.channels.map((c, i) => {
     const n = unread(c);
     const nav = stand.issues.get(c.name);
-    const state = c.error === 'nofeed' ? tr('news.stateNoFeed')
+    const state = c.error === 'invented' ? tr('news.stateInvented')
+      : c.error === 'nofeed' ? tr('news.stateNoFeed')
       : n ? tr('news.newN', { n })
         : nav && nav.data && nav.data.posts[0] ? tr('news.stateLatest', { time: fmtWhen(nav.data.posts[0].date, new Date()) }) : '';
     return `<div class="nsrow"><span class="nsname">${esc(c.title || c.name)}</span><span class="nsaddr">t.me/${esc(c.name)}</span>
@@ -648,7 +653,9 @@ async function addChannel() {
     probe = await r.json();
   } catch { probe = { error: 'network' }; }
   if (probe.error) {
-    stand.msg = probe.error === 'nofeed' ? tr('news.noFeed', { name: '@' + name }) : probe.error === 'badname' ? tr('news.badName') : tr('news.netFail');
+    stand.msg = probe.error === 'invented' ? tr('news.inventedOnly', { name: '@' + name })
+      : probe.error === 'nofeed' ? tr('news.noFeed', { name: '@' + name })
+        : probe.error === 'badname' ? tr('news.badName') : tr('news.netFail');
     return paint();
   }
   // A new paper arrives whole and unread: every post in it is news.

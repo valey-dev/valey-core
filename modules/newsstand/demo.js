@@ -68,13 +68,19 @@ const PAPERS = [
   },
 ];
 
-const paperFor = (name) => PAPERS.find((p) => p.name === name) || PAPERS[0];
+// Only these two names have a paper. Until 17 September 2026 any name got the
+// first one, so a real channel typed into the picture office — `xoykonline` —
+// came back as «The quiet build»: an invented paper wearing somebody's address.
+const paperFor = (name) => PAPERS.find((p) => p.name === name) || null;
+export const invented = (name) => !!paperFor(name);
 
-// The page a picture office serves for a channel. Any name gets a paper — the
-// recipe types whichever address the frame wants — and the older issue is the
-// same paper one step shorter, so turning a page back has somewhere to go.
+// The page a picture office serves for one of its own names, or null: a name
+// nobody invented has no paper here, and the office says so rather than
+// dressing it in one. The older issue is the same paper one step shorter, so
+// turning a page back has somewhere to go.
 export function demoPage(name, before = 0) {
   const paper = paperFor(name);
+  if (!paper) return null;
   const posts = before ? paper.posts.slice(1) : paper.posts;
   return page(name, posts.map((p) => post(name, p.id, p)),
     { title: paper.title, about: paper.about, subscribers: paper.subscribers, before: before ? 0 : paper.posts[paper.posts.length - 1].id - 9 });

@@ -63,7 +63,12 @@ const nofeed = () => Object.assign(new Error('no public feed'), { code: 'nofeed'
 
 async function fetchPage(name, before) {
   if (invented()) {
-    const feed = parseFeed(demoPage(name, before));
+    const html = demoPage(name, before);
+    // A name nobody invented is not dressed in an invented paper, and the
+    // office does not go to Telegram to find the real one either: the picture
+    // office reads its own two papers and nothing else.
+    if (!html) throw Object.assign(new Error('the picture office reads only its invented papers'), { code: 'invented' });
+    const feed = parseFeed(html);
     for (const p of feed.posts) if (p.photo) pictures.add(p.photo);
     if (feed.before) cursors.add(`${name}:${feed.before}`);
     return feed;
@@ -101,7 +106,7 @@ export async function issue(name, before = 0) {
       pending.delete(key);
       // A network error is not remembered: the next poll should try again,
       // unlike «no public feed», which will still be true in a quarter of an hour.
-      if (entry.feed || entry.error === 'nofeed') {
+      if (entry.feed || entry.error === 'nofeed' || entry.error === 'invented') {
         pages.set(key, entry);
         if (pages.size > 80) pages.delete(pages.keys().next().value);
       }

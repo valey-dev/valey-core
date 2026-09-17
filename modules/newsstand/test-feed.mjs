@@ -174,7 +174,16 @@ const ask = async (path) => {
   ok('the picture is drawn here, as a PNG', img.code === 200 && img.type === 'image/png' && img.body.length > 100, { code: img.code, type: img.type });
   const older = await ask('/api/newsstand/issue?ch=pixel_dnya&before=' + one.body.before);
   ok('an older issue is there to turn back to', older.code === 200 && older.body.posts.length >= 1, older.body);
-  ok('and nothing at all was fetched', calls.length === 0, calls.map((c) => c.url));
+  // A real name typed into the picture office: no paper is put on it, and the
+  // office does not go looking for the real one either. Until 17 September 2026
+  // any name got the first invented paper — `xoykonline` came back titled «The
+  // quiet build», which is an invented paper wearing somebody's address.
+  _reset(); calls = []; channels = ['xoykonline'];
+  const foreign = await ask('/api/newsstand/probe?ch=xoykonline');
+  ok('a name nobody invented is refused, not dressed in a paper', foreign.body.error === 'invented' && !foreign.body.title, foreign.body);
+  const stand2 = await ask('/api/newsstand');
+  ok('and it stands on the shelf as invented-only, with no posts', stand2.body.channels[0].error === 'invented' && !stand2.body.channels[0].ids, stand2.body.channels[0]);
+  ok('still nothing fetched', calls.length === 0, calls.map((c) => c.url));
   delete process.env.VALEY_PICTURE;
   _reset(); calls = []; channels = ['tihaya_sborka'];
   answers = { 'https://t.me/s/tihaya_sborka': { status: 200, body: sample } };
