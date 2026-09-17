@@ -31,6 +31,7 @@
 // file rather than a pipe, which would break under it when the office goes. An
 // office that stops or restarts leaves a hired agent to finish its task and go.
 import { spawn as nodeSpawn } from 'node:child_process';
+import { withMentions } from './inbox.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -138,8 +139,9 @@ function tail(h) {
 const readErr = (h) => { try { return fs.readFileSync(h.err, 'utf8').slice(-20_000); } catch { return ''; } };
 
 // `spawn` and `cli` are for the stand: the real ones start a real agent.
-export async function hire({ project, cwd, task, model = 'opus', quote = null, source = null, spot = null }, { spawn = nodeSpawn, cli = findCli } = {}) {
-  const text = String(task || '').trim();
+export async function hire({ project, cwd, task, files = [], model = 'opus', quote = null, source = null, spot = null }, { spawn = nodeSpawn, cli = findCli } = {}) {
+  // Dropped files ride in the first message the same way they ride in a task.
+  const text = withMentions(String(task || '').trim(), files);
   const h = {
     id: ++seq, project, cwd, model, at: Date.now(), changedAt: Date.now(), state: 'starting',
     source: SOURCE_RE.test(source || '') ? source : null,

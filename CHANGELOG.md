@@ -4,6 +4,37 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.62.0 — 17 September 2026
+
+### Added
+
+- **office:** a file dropped onto a task goes to the agent with it (2d69c46)
+## v0.61.4 — 17 September 2026
+
+### Fixed
+
+- **release:** a package.json version that is not X.Y.Z stops the release instead of cutting vNaN.undefined.NaN (31a7b46)
+
+### Other
+
+- chore(demo): the product demo, 20–30 seconds, shot from an invented office (b077996)
+- docs(keys): the office walks on arrows only — WASD leaves the Russian README and the W examples of the picture recipes (31da8c5)
+- docs(readme): a one-page Russian instruction for the first cohort — install, first screen, keys, the hook (293d986)
+- ci(tests): main no longer goes red after every release — the release dry run step reads «nothing to cut» as green (5768b0c)
+## v0.61.3 — 17 September 2026
+
+### Fixed
+
+- **tree:** the PR board's card says what the board shows — main, the agents' branches and today's merges (19c3eb4)
+## v0.61.2 — 17 September 2026
+
+### Fixed
+
+- **office:** answering an agent's question leaves the card on «what are you working on», not on «this question is already closed» (83bf59b)
+
+### Other
+
+- test(ui): a page module may only call the callbacks it was handed (2567670)
 ## v0.61.1 — 16 September 2026
 
 ### Fixed

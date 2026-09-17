@@ -1,0 +1,13 @@
+{
+  "tag": "v0.62.0",
+  "shots": [
+    {
+      "file": "drop-files-drop-files.png",
+      "slug": "drop-files",
+      "id": "drop-files",
+      "url": "#room=standup",
+      "keys": "Enter,wait:2500,Tab,wait:900,Enter,wait:900,3,wait:900,wait:1500",
+      "setup": "(() => { const t = setInterval(() => { const ta = document.querySelector('#taskInput'); if (!ta) return; clearInterval(t); const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array(184 * 1024)], 'макет-каталога.png', { type: 'image/png' })); dt.items.add(new File(['# отступы'], 'заметки-по-отступам.md', { type: 'text/markdown' })); ta.value = 'шапка съехала на 4 пикселя — вот макет и мои заметки'; document.querySelector('#dialog').dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true })); }, 200); })()"
+    }
+  ]
+}

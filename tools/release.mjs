@@ -86,6 +86,9 @@ if (!dry && git('status', '--porcelain')) die('the working tree is dirty; commit
 
 const pkgPath = path.join(ROOT, 'package.json');
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+// The CI step says it catches an unreadable version, and until 15 September 2026
+// nothing did: «nope» went through the dry run as «vNaN.undefined.NaN».
+if (!/^\d+\.\d+\.\d+$/.test(String(pkg.version || ''))) die(`package.json version "${pkg.version}" is not X.Y.Z`);
 const [maj, min, pat] = pkg.version.split('.').map(Number);
 
 // The previous tag can only be missing before the very first release.

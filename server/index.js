@@ -13,6 +13,7 @@ import {
 } from './settings.js';
 import { deliver, deliveryStatus, forgetCli, isBusy, MODES, adopt, releaseRuns } from './deliver.js';
 import { queueToThread, codexDelivery } from './codex.js';
+import { saveFile, prune as pruneInbox, inboxDir, MAX_BYTES as INBOX_MAX, MAX_FILES } from './inbox.js';
 import { hire, release as releaseHire, hireList, hiredAt, hireCwd, resumeCommand, pruneHires } from './hire.js';
 import { repoRoot } from './stack.js';
 import { ask as askPermit, answer as answerPermit, permits, forgetGone, retryAll } from './permit.js';
@@ -486,6 +487,18 @@ function send(res, code, body, type = 'application/json; charset=utf-8', extra =
 // A body error is an answer, not a crash: the code and the key go to the client
 // from the handler wrapper, and it closes the connection so an unread body does
 // not hang in the socket.
+// The files a task may carry: the owner's, and only ones this office wrote
+// into its inbox. Everything else is dropped in silence — a task is not the
+// place to discover that somebody tried.
+function ownFiles(owner, list) {
+  if (!owner || !Array.isArray(list)) return [];
+  const root = inboxDir() + path.sep;
+  return list
+    .filter((f) => f && typeof f.path === 'string' && path.resolve(f.path).startsWith(root) && fs.existsSync(f.path))
+    .slice(0, MAX_FILES)
+    .map((f) => ({ path: path.resolve(f.path), name: String(f.name || path.basename(f.path)).slice(0, 80), size: Number(f.size) || 0 }));
+}
+
 class BodyError extends Error {
   constructor(code, key, message) { super(message); this.code = code; this.key = key; }
 }
@@ -512,6 +525,19 @@ async function readBody(req, max = BODY_MAX) {
 // browser will not send a request with that header from another site without a
 // preflight, and the office does not answer preflights. An empty body is an
 // empty object, as before.
+// The same ceiling, without the utf8: a dropped file is bytes, and decoding
+// them as text would corrupt every picture on the way in.
+async function readBuffer(req, max = BODY_MAX) {
+  const chunks = [];
+  let size = 0;
+  for await (const c of req) {
+    size += c.length;
+    if (size > max) throw new BodyError(413, 'err.tooBig', 'request body is too large');
+    chunks.push(c);
+  }
+  return Buffer.concat(chunks);
+}
+
 async function readJson(req, max = BODY_MAX) {
   const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
   if (type !== 'application/json') throw new BodyError(415, 'err.notJson', 'application/json is required');
@@ -1009,12 +1035,13 @@ async function handle(req, res) {
   // Leave a note on the desk, or actually send it into the agent's chat.
   if (url.pathname === '/api/task' && req.method === 'POST') {
     try {
-      const { agentId, text, deliver: wantsDelivery, mode: wantedMode, resend } = await readJson(req);
+      const { agentId, text, files: sent, deliver: wantsDelivery, mode: wantedMode, resend } = await readJson(req);
+      const owner = await isOwner(req);
       // Anyone may leave a note on the desk: the owner sees it when he comes
       // back and decides himself. Sending into the chat is another matter: it
       // starts claude --resume in a live session, and with bypassPermissions
       // that is the terminal. Watching is allowed, commanding is not.
-      if ((wantsDelivery || resend) && !(await isOwner(req))) return forbidden(res);
+      if ((wantsDelivery || resend) && !owner) return forbidden(res);
       // A note already lying on the desk can be handed over to the chat as it is:
       // it moves rather than multiplies, so the desk does not keep a stale twin.
       const lying = resend
@@ -1022,10 +1049,20 @@ async function handle(req, res) {
         : null;
       if (resend && !lying) return send(res, 400, { error: 'this note is no longer on the desk', errorKey: 'err.noteGone' });
       const body = lying ? lying.text : text;
-      if (!agentId || !body) return send(res, 400, { error: 'agentId and text required' });
+      // Files are the owner's alone, and only the ones this office wrote down.
+      // A note may be left by a guest, and the owner hands notes to the chat
+      // later: a path named by somebody else would be read by the agent as the
+      // owner, out of any folder on the machine.
+      const files = lying ? (lying.files || []) : ownFiles(owner, sent);
+      // A file with no words is a message too — «here, look» — so the text
+      // may be empty when something is attached. Until 17 September 2026 only
+      // the browser knew that: the field let a lone screenshot through and the
+      // server answered «agentId and text required», which reads as if the
+      // agent were gone.
+      if (!agentId || (!body && !files.length)) return send(res, 400, { error: 'a task needs an agent and either words or a file', errorKey: 'err.taskEmpty' });
       if (lying) outbox.splice(outbox.indexOf(lying), 1);
       const task = {
-        id: ++taskSeq, agentId, text: String(body).slice(0, 4000),
+        id: ++taskSeq, agentId, text: String(body).slice(0, 4000), files,
         at: Date.now(), state: 'note', reply: null, error: null,
       };
       outbox.push(task);
@@ -1066,12 +1103,12 @@ async function handle(req, res) {
   // room, never a path: the folder is the one the room's live agents work in.
   if (url.pathname === '/api/hire' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
-    const { project: room, task, model, quote, source, spot } = await readJson(req);
+    const { project: room, task, files: sent, model, quote, source, spot } = await readJson(req);
     const cwd = cwdOfProject(room);
     if (!cwd) return send(res, 400, { error: 'there is no such room on the floor', errorKey: 'hire.errRoom' });
     const status = await deliveryStatus();
     if (!status.available) return send(res, 200, { ok: false, error: status.hint, errorKey: status.hintKey });
-    const h = await hire({ project: room, cwd: await repoRoot(cwd) || cwd, task, model, quote, source, spot });
+    const h = await hire({ project: room, cwd: await repoRoot(cwd) || cwd, task, files: ownFiles(true, sent), model, quote, source, spot });
     return send(res, 200, { ok: h.state !== 'failed', hire: h });
   }
   // Let a hired agent go before it is continued in a terminal: two processes
@@ -1188,6 +1225,24 @@ async function handle(req, res) {
     }
   }
 
+
+  // A file dropped onto a task for an agent. The browser has no path to give —
+  // only bytes — so the office writes them beside its settings and hands the
+  // agent «@<path>» in the text of the task.
+  if (url.pathname === '/api/inbox' && req.method === 'POST') {
+    // A guest may drag a file around his own screen; writing it to the owner's
+    // disk is not his to do, and neither is naming a path in a task — see
+    // ownFiles() below.
+    if (!(await isOwner(req))) return forbidden(res);
+    const buf = await readBuffer(req, INBOX_MAX);
+    try {
+      const file = await saveFile(buf, url.searchParams.get('name') || 'file');
+      console.log(`[inbox] ${file.name}, ${file.size} bytes`);
+      return send(res, 200, { ok: true, file });
+    } catch (e) {
+      return send(res, 400, { error: e.message, errorKey: e.key || 'inbox.failed' });
+    }
+  }
 
   // Dev helper: the game posts a rendered frame, we drop it on disk to look at.
   if (url.pathname === '/api/shot' && req.method === 'POST') {
@@ -1392,6 +1447,11 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
     console.log(`[update] v${VERSION} is serving http://localhost:${port}`);
     return server;
   }
+  // Dropped files outlive their task by a fortnight and no longer; the sweep
+  // runs here rather than on a timer — an office that is not running is not
+  // filling up.
+  pruneInbox().then((r) => { if (r.files) console.log(`[inbox] swept ${r.files} file(s)`); })
+    .catch(() => { /* no inbox yet, or it is not ours to clean */ });
   const token = await ownerToken();
   const s = await getSettings();
   console.log(`Valey office at http://localhost:${port}`);

@@ -2,6 +2,8 @@
 
 A pixel-art office for the agents you already run.
 
+По-русски — [README.ru.md](README.ru.md).
+
 Your Claude Code sessions become people in rooms — one room per project, one person per session. They type, get up for coffee and pin finished work on the board. Instead of a list of chats that all look the same, you glance at a floor and see who needs you.
 
 ![The office](docs/office.png)

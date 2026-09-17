@@ -242,9 +242,14 @@ UI.initUI(state, {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({ sessionId }),
   }).then((r) => r.json()).catch((e) => ({ error: e.message })),
-  sendTask: (agentId, text, deliver = false, mode = null, resend = null) => fetch('/api/task', {
+  sendTask: (agentId, text, deliver = false, mode = null, resend = null, files = []) => fetch('/api/task', {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
-    body: JSON.stringify({ agentId, text, deliver, mode, resend }),
+    body: JSON.stringify({ agentId, text, deliver, mode, resend, files }),
+  }).then((r) => r.json()).catch((e) => ({ error: e.message })),
+  // A dropped file: the bytes go up, a path comes back. The name rides in the
+  // query — a header would have to be ascii, and these names are not.
+  putFile: (file) => fetch('/api/inbox?name=' + encodeURIComponent(file.name || 'file'), {
+    method: 'POST', headers: owned({ 'content-type': file.type || 'application/octet-stream' }), body: file,
   }).then((r) => r.json()).catch((e) => ({ error: e.message })),
   guideTo: (id) => { state.waypoint = id; UI.toast(tr('toast.guide')); },
   // The standup opens a card without walking to the desk: the panel is
