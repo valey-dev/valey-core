@@ -32,6 +32,7 @@ import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { useTool, remember, born, gap, reportTail, endOf } from './agents.js';
+import { withMentions } from './inbox.js';
 
 // A stand that points the office at invented Claude sessions must not get the
 // real Codex ones from next door: a demo office photographs its floor for
@@ -214,7 +215,12 @@ export async function queueToThread(task, agent) {
   }
   task.state = 'sending';
   task.startedAt = Date.now();
-  const { err, stderr, stdout } = await run(bin, ['queue', '--thread', agent.id, '--message', task.text], { timeout: 30_000 });
+  // The files ride in the text the same way as for Claude — «@<path>» per
+  // line — so a task made of a dropped screenshot alone is not queued empty.
+  // Whether Codex expands the «@» is unverified; the whole path is in the
+  // message either way, and Codex opens files itself.
+  const message = withMentions(task.text, task.files);
+  const { err, stderr, stdout } = await run(bin, ['queue', '--thread', agent.id, '--message', message], { timeout: 30_000 });
   task.finishedAt = Date.now();
   task.provider = 'codex';
   if (err) {

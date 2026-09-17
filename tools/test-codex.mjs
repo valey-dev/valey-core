@@ -116,6 +116,20 @@ ok('a refused queue is a failed task, not a delivered one', refused.state === 'f
 ok('with Codex\'s own words, without its «Error:»', /^failed to queue session message/.test(refused.error || ''), refused.error);
 delete process.env.CODEX_BIN;
 
+// A task can be a dropped file with no words at all (#drop-files, 17 September
+// 2026). `queue` is given one --message, so the paths have to ride inside it,
+// or the thread is queued an empty line and the file is simply lost.
+const recording = path.join(dir, 'codex-recording');
+const argvOut = path.join(dir, 'argv.json');
+await fsp.writeFile(recording, `#!${process.execPath}\nimport fs from 'node:fs';\nfs.writeFileSync(${JSON.stringify(argvOut)}, JSON.stringify(process.argv.slice(2)));\n`, { mode: 0o755 });
+process.env.CODEX_BIN = recording;
+const shot = '/Users/kolya/.config/valey/inbox/2026-09-17/screen.png';
+const withFile = await queueToThread({ text: '', files: [{ path: shot }] }, { id: 'live', name: 'x' });
+const argv = JSON.parse(await fsp.readFile(argvOut, 'utf8'));
+const msg = argv[argv.indexOf('--message') + 1];
+ok('a file-only task is queued as the path, not as an empty message', withFile.state === 'delivered' && msg === `@${shot}`, { state: withFile.state, msg });
+delete process.env.CODEX_BIN;
+
 // --- the public pictures ------------------------------------------------------
 // A separate process: the directory is decided when the module loads.
 const probe = `import('${new URL('../server/codex.js', import.meta.url).href}').then(async (m) => console.log(JSON.stringify(await m.liveCodexSessions())))`;
