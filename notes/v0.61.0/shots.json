@@ -1,0 +1,12 @@
+{
+  "tag": "v0.61.0",
+  "shots": [
+    {
+      "file": "rugs-indigo.png",
+      "slug": "rugs",
+      "id": "indigo",
+      "setup": "setTimeout(()=>{const g=__game;const r=g.layout.projectRooms[0];g.player.x=r.x+r.w/2+22;g.player.y=r.y+r.h-32;},3200)",
+      "keys": "Enter,wait:4000,Space,wait:700"
+    }
+  ]
+}

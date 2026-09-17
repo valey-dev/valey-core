@@ -69,35 +69,35 @@ function myStands() {
 
 const targets = mine ? myStands() : ports.map((port) => ({ port, pid: listenerOf(port) }));
 if (!targets.length) {
-  console.log(mine ? 'своих стендов не нашлось' : 'нечего гасить: назовите порт или --mine');
+  console.log(mine ? 'no stands of this tree found' : 'nothing to stop: name a port or --mine');
   process.exit(0);
 }
 
 let stopped = 0, refused = 0;
 for (const { port, pid } of targets) {
-  if (!pid) { console.log(`${port}: никто не слушает`); continue; }
+  if (!pid) { console.log(`${port}: nobody is listening`); continue; }
   const cwd = cwdOf(pid);
   const cmd = cmdOf(pid);
   if (cwd !== HERE) {
     refused += 1;
-    console.log(`${port}: ЧУЖОЙ — pid ${pid} работает в ${cwd || '?'}, а мы в ${HERE}`);
-    console.log('     не гашу. Если он всё-таки мешает — это разговор с тем, кто его поднял.');
+    console.log(`${port}: NOT OURS — pid ${pid} runs in ${cwd || '?'}, and we are in ${HERE}`);
+    console.log('     left running. If it is in the way, that is a word with whoever started it.');
     continue;
   }
   if (!/node\b/.test(cmd)) {
     refused += 1;
-    console.log(`${port}: pid ${pid} — не офис, а «${cmd.slice(0, 60)}». Не гашу.`);
+    console.log(`${port}: pid ${pid} is not an office but «${cmd.slice(0, 60)}». Left running.`);
     continue;
   }
-  if (dry) { console.log(`${port}: свой (pid ${pid}) — погасил бы`); continue; }
+  if (dry) { console.log(`${port}: ours (pid ${pid}) — would stop it`); continue; }
   try {
     process.kill(pid, 'SIGTERM');
     stopped += 1;
-    console.log(`${port}: погашен (pid ${pid})`);
+    console.log(`${port}: stopped (pid ${pid})`);
   } catch (err) {
-    console.log(`${port}: не вышло — ${err.message}`);
+    console.log(`${port}: could not — ${err.message}`);
   }
 }
 
-if (refused) console.log(`\nчужих не тронуто: ${refused}`);
-if (!dry && stopped) console.log(`погашено своих: ${stopped}`);
+if (refused) console.log(`\nleft running, not ours: ${refused}`);
+if (!dry && stopped) console.log(`stopped, ours: ${stopped}`);

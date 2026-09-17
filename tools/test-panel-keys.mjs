@@ -14,29 +14,29 @@ let sky = null;
 let skin = null;
 let langPanel = null;
 
-// The standup: columns of cards. The card is the focus target itself, and the
-// column is what the up-down arrows must stay inside, so the stand-in has to
-// know which cards belong to which column — that is the whole difference from a
-// flat ring, and the only thing worth checking here.
-function makeRoster(cols) {
+// The standup: each project across the whole width, its cards in a grid of
+// `per` columns, projects one under another. The arrows walk by where the cards
+// stand, so the stand-in gives every card a box: that is the whole difference
+// from a flat ring, and the only thing worth checking here.
+function makeRoster(teams, per = 3) {
   const cards = [];
-  const columns = [].concat(cols).map((n, ci) => {
-    const mine = Array.from({ length: n }, (_, i) => {
+  let top = 0;
+  [].concat(teams).forEach((n, ti) => {
+    top += 30;                                  // the project's name
+    for (let i = 0; i < n; i++) {
       const c = node('pcard');
-      c.dataset.id = `t${ci}-${i}`;
-      return c;
-    });
-    cards.push(...mine);
-    const col = node('pcol');
-    col.contains = (x) => mine.includes(x);
-    col.cards = mine;
-    return col;
+      c.dataset.id = `t${ti}-${i}`;
+      const left = (i % per) * 328, y = top + Math.floor(i / per) * 110;
+      c.getBoundingClientRect = () => ({ left, right: left + 316, top: y, bottom: y + 100, width: 316, height: 100 });
+      cards.push(c);
+    }
+    top += Math.ceil(n / per) * 110;
   });
   return {
-    hidden: false, innerHTML: '', cards, cols: columns,
+    hidden: false, innerHTML: '', cards,
     querySelector: (sel) => (sel === '.rbody' ? node('rbody')
       : sel === '.pcard.focus' ? (cards.find((c) => c.has('focus')) || null) : null),
-    querySelectorAll: (sel) => (sel === '.pcard' ? cards : sel === '.pcol' ? columns : []),
+    querySelectorAll: (sel) => (sel === '.pcard' ? cards : []),
   };
 }
 
@@ -45,7 +45,7 @@ function makeRoster(cols) {
 function makeBagSelf(slots) {
   const rows = [];
   const name = node('namerow');
-  const input = node('', { tagName: 'INPUT' });
+  const input = tracked(node('', { tagName: 'INPUT' }));
   name.querySelector = (sel) => (sel === 'input' ? input : null);
   name.input = input;
   rows.push(name);
@@ -133,6 +133,38 @@ function makeRing(items) {
   };
 }
 
+// Where the caret is. A field in a ring takes it on arrival and gives it up on
+// Escape, and «was focus() called» cannot tell those apart — so these nodes
+// keep document.activeElement the way a browser does.
+function tracked(n) {
+  n.focus = function () { this.focused += 1; document.activeElement = this; };
+  n.blur = function () { this.blurred = (this.blurred || 0) + 1; if (document.activeElement === this) document.activeElement = null; };
+  return n;
+}
+
+// A ring panel that can be typed into: it records the listeners the ring hangs
+// on it, and press() delivers a key to a field the way the browser does —
+// capture first, then bubble. `taken` stands for the field's own handler having
+// already claimed the key (the newsstand's Tab).
+function makeFieldRing(items) {
+  const btns = items.map((it) => tracked(node('', it)));
+  const handlers = [];
+  return {
+    hidden: false, innerHTML: '', btns, dataset: {},
+    querySelector: () => null,
+    querySelectorAll: () => btns,
+    addEventListener: (type, fn, capture) => handlers.push({ type, fn, capture: !!capture }),
+    press(target, key, { shiftKey = false, taken = false } = {}) {
+      const e = { key, shiftKey, target, defaultPrevented: false,
+        preventDefault() { this.defaultPrevented = true; }, stopPropagation() {} };
+      for (const h of handlers) if (h.type === 'keydown' && h.capture) h.fn(e);
+      if (taken) e.preventDefault();
+      for (const h of handlers) if (h.type === 'keydown' && !h.capture) h.fn(e);
+      return e;
+    },
+  };
+}
+
 // The language and names panel. The rows here are not decoration: ↑↓ walk
 // between them, ←→ inside one, and the stand-in rows have to be able to say
 // whose button it is.
@@ -204,8 +236,7 @@ const agents = (n, project = 'AI valey') => Array.from({ length: n }, (_, i) => 
   id: 'a' + i, name: 'Агент ' + i, project, status: 'awaiting', seat: i,
   title: 'задача', lastSaid: 'ждёт', idleFor: 60, roleKey: 'code',
 }));
-// Two teams: the standup lays them out in columns, and the arrows mean
-// different things across a column and along one.
+// Two teams: the standup puts each across the whole width, one under the other.
 const twoTeams = (a, b) => [
   ...agents(a, 'team-a'),
   ...agents(b, 'team-b').map((x, i) => ({ ...x, id: 'b' + i })),
@@ -235,6 +266,9 @@ UI.initUI(state, {
   names: async () => JSON.parse(JSON.stringify(PACKS)),
   saveSettings: async (patch) => { savedPatch = patch; return {}; },
   setLang: () => {},
+  // What main.js does with an arrow a field hands back: the office's own walk.
+  // Only the world window's ring has fields in this stand.
+  pressKey: (key) => UI.skyKey(key),
 });
 
 let failed = 0;
@@ -250,27 +284,21 @@ state.agents = twoTeams(3, 2);
 roster = makeRoster([3, 2]);
 UI.renderRoster();
 check('planning meeting: focus is on the first card', at(roster.cards) === 0, at(roster.cards));
-check('down arrow processed', UI.rosterKey('ArrowDown') === true, 'не обработана');
-check('and follows his own command, and not everyone else', at(roster.cards) === 1, at(roster.cards));
-check('the right arrow takes you to the neighboring team', UI.rosterKey('ArrowRight') === true && at(roster.cards) === 4,
-  at(roster.cards));
-check('and holds space in the column rather than falling to the first line',
-  roster.cols[1].cards.indexOf(roster.cards[4]) === 1, at(roster.cards));
-// Down at the bottom of a column stays there. It used to loop back to the top of
-// the same column, and this stand pinned that; the owner asked for the opposite
-// on 7 September 2026, because a long list is read to the end and the last press
-// silently teleporting you to the top is indistinguishable from a redraw. Short
-// panels — the lift, the language, the radio — keep their ring; only a panel
-// that scrolls asks for noWrap.
+check('down arrow processed', UI.rosterKey('ArrowDown') === true, 'not handled');
+// Since 13 September 2026 a project is not a column: down from a full row goes
+// on to the next project's first row, onto the card straight below.
+check('down goes to the next row, into the next project', at(roster.cards) === 3, at(roster.cards));
+check('right is the neighbour in reading order', UI.rosterKey('ArrowRight') === true && at(roster.cards) === 4, at(roster.cards));
+// Down at the bottom stays there. It used to loop back to the top, and this
+// stand pinned that; the owner asked for the opposite on 7 September 2026,
+// because a long list is read to the end and the last press silently
+// teleporting you to the top is indistinguishable from a redraw.
 UI.rosterKey('ArrowDown');
-check('at the bottom of a column it stops instead of looping', at(roster.cards) === 4, at(roster.cards));
-UI.rosterKey('ArrowDown');
-check('and pressing again keeps it there', at(roster.cards) === 4, at(roster.cards));
-
-UI.rosterKey('ArrowLeft');
-check('left carries the place in the column across', at(roster.cards) === 1, at(roster.cards));
+check('at the bottom it stops instead of looping', at(roster.cards) === 4, at(roster.cards));
 UI.rosterKey('ArrowUp');
-check('up walks the column', at(roster.cards) === 0, at(roster.cards));
+check('up goes to the row above, onto the card straight over it', at(roster.cards) === 1, at(roster.cards));
+UI.rosterKey('ArrowLeft');
+check('left is the neighbour in reading order too', at(roster.cards) === 0, at(roster.cards));
 UI.rosterKey('ArrowUp');
 check('and the top is a wall too, not a way round to the bottom', at(roster.cards) === 0, at(roster.cards));
 
@@ -278,27 +306,49 @@ UI.rosterKey('Enter');
 check('ENTER opens the card you are on',
   roster.cards[0].clicked === 1, roster.cards.map((b) => b.clicked).join(','));
 
+// One big project: seven people in three columns, the arrows walk its rows.
+state.agents = twoTeams(7, 2);
+roster = makeRoster([7, 2]);
+UI.closeRoster(); UI.renderRoster();
+UI.rosterKey('ArrowRight'); UI.rosterKey('ArrowRight');
+check('a row of a big project: right walks it', at(roster.cards) === 2, at(roster.cards));
+UI.rosterKey('ArrowDown');
+check('down stays in the project while it has rows', at(roster.cards) === 5, at(roster.cards));
+UI.rosterKey('ArrowDown');
+check('onto a short last row: the nearest card across, not a jump out', at(roster.cards) === 6, at(roster.cards));
+UI.rosterKey('ArrowDown');
+check('then on into the next project', at(roster.cards) === 7, at(roster.cards));
+// Two columns at 175%: the grid decides, and the walk follows it.
+roster = makeRoster([4], 2);
+state.agents = agents(4, 'team-a');
+UI.closeRoster(); UI.renderRoster();
+UI.rosterKey('ArrowDown');
+check('in two columns down moves by two', at(roster.cards) === 2, at(roster.cards));
+state.agents = twoTeams(3, 2);
+roster = makeRoster([3, 2]);
+UI.closeRoster(); UI.renderRoster();
+
 // G is the standup's only key of its own, and it is caught by the physical code:
 // under "ЙЦУКЕН" that key types «п», and the office must not care.
 led = null;
-check('G processed', UI.rosterKey({ key: 'п', code: 'KeyG' }) === true, 'не обработана');
+check('G processed', UI.rosterKey({ key: 'п', code: 'KeyG' }) === true, 'not handled');
 check('and leads to the one on whom the focus was', led === 't0-0', led);
-check('the panel then closed', UI.rosterOpen() === false, 'осталась открыта');
+check('the panel then closed', UI.rosterOpen() === false, 'stayed open');
 
 roster.hidden = false;
 UI.renderRoster();
 // a closed panel must not take the arrows — otherwise after the very first
 // standup the player stops walking around the office
 roster.hidden = true;
-check('closed planning meeting does not eat arrows', UI.rosterKey('ArrowDown') === false, 'съел');
-check('and G doesn\'t eat', UI.rosterKey({ key: 'g', code: 'KeyG' }) === false, 'съел');
+check('closed planning meeting does not eat arrows', UI.rosterKey('ArrowDown') === false, 'ate it');
+check('and G doesn\'t eat', UI.rosterKey({ key: 'g', code: 'KeyG' }) === false, 'ate it');
 
 // an empty standup: nobody is in the office, there is nothing to press
 state.agents = [];
 roster = makeRoster([]);
 UI.renderRoster();
-check('empty planner doesn\'t eat arrows', UI.rosterKey('ArrowDown') === false, 'съел');
-check('and Enter doesn\'t eat', UI.rosterKey('Enter') === false, 'съел');
+check('empty planner doesn\'t eat arrows', UI.rosterKey('ArrowDown') === false, 'ate it');
+check('and Enter doesn\'t eat', UI.rosterKey('Enter') === false, 'ate it');
 
 // ----------------------------------------------------------------- the notes
 notes = makeNotes(2);            // two notes: each has "open" and ✕
@@ -321,12 +371,12 @@ check('the top of the notes is a wall, not a way round to the last', at(nb) === 
 
 // a closed panel does not take the keys
 UI.closeNotes();
-check('closed notes arrows don\'t eat', UI.notesKey('ArrowDown') === false, 'съели');
+check('closed notes arrows don\'t eat', UI.notesKey('ArrowDown') === false, 'ate them');
 
 // an empty panel: there is nothing to press, the arrows have to go to the office
 notes = makeNotes(0);
 UI.renderNotes();
-check('empty notes arrows don\'t eat', UI.notesKey('ArrowDown') === false, 'съели');
+check('empty notes arrows don\'t eat', UI.notesKey('ArrowDown') === false, 'ate them');
 
 // --------------------------------------------------------------- the bag
 // The "worn" tab is the former panel C, word for word: up and down the slots,
@@ -341,7 +391,7 @@ UI.bagKey('ArrowRight');
 check('to the right presses ▶ of this slot, but does not move', rows[1].next.clicked === 1 && rows[1].has('focus'), `${rows[1].next.clicked}`);
 UI.bagKey('ArrowLeft');
 check('to the left presses ◀ of the same slot', rows[1].prev.clicked === 1, rows[1].prev.clicked);
-check('the adjacent slot is not touched', rows[2].next.clicked === 0 && rows[2].prev.clicked === 0, 'тронут');
+check('the adjacent slot is not touched', rows[2].next.clicked === 0 && rows[2].prev.clicked === 0, 'touched');
 UI.bagKey('Enter');
 check('Enter on a slot does the same as ▶', rows[1].next.clicked === 2, rows[1].next.clicked);
 
@@ -353,14 +403,22 @@ UI.bagKey('ArrowUp'); UI.bagKey('ArrowUp'); UI.bagKey('ArrowUp'); UI.bagKey('Arr
 check('and the name line is the other wall', focusRow() === 0, focusRow());
 UI.bagKey('ArrowDown');
 
-// the name is an input: Enter has to give it the focus, or it cannot be typed from the keyboard
+// The name is the wardrobe's one field. Moving onto it puts the caret in — no
+// Enter first, or the next letter falls through to the office — and moving off
+// takes it out, so the slots' arrows are not typed into the name.
 UI.bagKey('ArrowUp');
+check('moving onto the name puts the caret in it', document.activeElement === rows[0].input, document.activeElement && document.activeElement.tagName);
+UI.bagKey('ArrowDown');
+check('moving off it takes the caret out', document.activeElement !== rows[0].input, 'stayed');
+UI.bagKey('ArrowUp');
+rows[0].input.blur();                        // the caret taken out, as Escape does there
 UI.bagKey('Enter');
-check('Enter on the name gives the field focus', rows[0].input.focused === 1, rows[0].input.focused);
+check('Enter on the parked name gives the caret back', document.activeElement === rows[0].input, document.activeElement && document.activeElement.tagName);
+rows[0].input.blur();
 
 // The tabs: a digit switches, and the arrows mean something else afterwards.
 bag = makeBagThings([3, 2]);
-check('number 2 processed by panel', UI.bagKey('2') === true, 'не обработана');
+check('number 2 processed by panel', UI.bagKey('2') === true, 'not handled');
 const cells = bag.cells;
 const focusCell = () => {
   for (let r = 0; r < cells.length; r++) {
@@ -394,65 +452,101 @@ check('and the first row is a wall too', focusCell() === '0:0', focusCell());
 bag = makeBagSelf(3);
 UI.bagKey('1');
 check('the number 1 returned to “on itself”', focusRow() === 0, focusRow());
-check('non-existent tab is not caught', UI.bagKey('9') === false, 'поймана');
-check('there is no sixth tab', UI.bagKey('6') === false, 'поймана');
+check('non-existent tab is not caught', UI.bagKey('9') === false, 'caught');
+check('there is no sixth tab', UI.bagKey('6') === false, 'caught');
 
 // The "keys" tab: a shelf of two floors. Left and right walk the cards, down
 // steps into the open card, and up out of its first row comes back to the shelf.
 // The office is walked with the keyboard: a card whose buttons need a mouse is
 // a card nobody sets up.
 bag = makeBagKeys(3);
-check('keys: number 5 opened a tab', UI.bagKey('5') === true, 'не обработана');
-check('shelf arrow processed', UI.bagKey('ArrowRight') === true, 'не обработана');
-check('doesn\'t lead anywhere up from the shelf', UI.bagKey('ArrowUp') === true, 'не обработана');
+check('keys: number 5 opened a tab', UI.bagKey('5') === true, 'not handled');
+check('shelf arrow processed', UI.bagKey('ArrowRight') === true, 'not handled');
+check('doesn\'t lead anywhere up from the shelf', UI.bagKey('ArrowUp') === true, 'not handled');
 UI.bagKey('ArrowDown');
-check('brought it down inside the card', bag.btn.classList.contains('focus'), 'фокус не встал');
+check('brought it down inside the card', bag.btn.classList.contains('focus'), 'focus did not land');
 UI.bagKey('Enter');
 check('Enter presses the button inside the card', bag.btn.clicked === 1, `${bag.btn.clicked}`);
 UI.bagKey('ArrowDown');
-check('moved down to the second line', bag.btn2.classList.contains('focus'), 'фокус не переехал');
+check('moved down to the second line', bag.btn2.classList.contains('focus'), 'focus did not move');
 UI.bagKey('ArrowUp');
-check('up returned to first', bag.btn.classList.contains('focus'), 'фокус не вернулся');
+check('up returned to first', bag.btn.classList.contains('focus'), 'focus did not come back');
 UI.bagKey('ArrowUp');
-check('up from the first line went onto the shelf', !bag.btn.classList.contains('focus'), 'застряло в карточке');
-check('and the shelf again listens to the arrows to the side', UI.bagKey('ArrowRight') === true, 'не обработана');
-check('someone else\'s key goes off the shelf into the office', UI.bagKey('q') === false, 'съедена');
+check('up from the first line went onto the shelf', !bag.btn.classList.contains('focus'), 'stuck in the card');
+check('and the shelf again listens to the arrows to the side', UI.bagKey('ArrowRight') === true, 'not handled');
+check('someone else\'s key goes off the shelf into the office', UI.bagKey('q') === false, 'eaten');
 // A guest reads the cards and presses nothing: the class is what hides the
 // controls, and it also drops the fields out of the tab order.
 state.owner = false;
 UI.renderBag('keys');
 check('guest: the card is marked as guest', /class="keydetail guest"/.test(bag.innerHTML), bag.innerHTML.slice(0, 60));
-check('and he is told who starts the keys', /keys are set up|заводит хозяин/i.test(bag.innerHTML), 'молчит');
+check('and he is told who starts the keys', /keys are set up|заводит хозяин/i.test(bag.innerHTML), 'silent');
 state.owner = true;
 UI.renderBag('keys');
-check('the owner has no guest class', !/keydetail guest/.test(bag.innerHTML), 'есть');
+check('the owner has no guest class', !/keydetail guest/.test(bag.innerHTML), 'it has one');
 
 // The "office" tab: a row of buttons, and the down arrow has to walk along them.
 // Until 31 August 2026 it did nothing — the handler knew only two tabs out of
 // three, and the key went off into the office from under an open panel. Keys
 // took the last slot on 5 September 2026, so the office stayed on digit 3.
+// Since 13 September 2026 the tab opens with nothing lit: its first button is
+// «check for updates», a trip to git, and a stray Enter must not take it. The
+// first ↓ lands on it — until then reaching it took a lap round the whole tab.
 bag = makeBagOffice(5);
-check('office: number 3 opened a tab', UI.bagKey('3') === true, 'не обработана');
-check('down processed', UI.bagKey('ArrowDown') === true, 'не обработана');
-check('and transfers to the second button', bag.btns[1].has('focus'), 'фокус не там');
+check('office: number 3 opened a tab', UI.bagKey('3') === true, 'not handled');
+check('nothing is lit when the tab opens', bag.btns.every((b) => !b.has('focus')),
+  bag.btns.map((b) => b.has('focus')));
+UI.bagKey('Enter');
+check('and Enter presses nothing before an arrow picked', bag.btns.every((b) => !b.clicked), bag.btns.map((b) => b.clicked));
+check('down processed', UI.bagKey('ArrowDown') === true, 'not handled');
+check('the first down lands on the first button', bag.btns[0].has('focus'), 'focus elsewhere');
 check('exactly one is highlighted', bag.btns.filter((b) => b.has('focus')).length === 1,
   bag.btns.filter((b) => b.has('focus')).length);
+UI.bagKey('ArrowDown');
+check('and the next one moves to the second', bag.btns[1].has('focus'), 'focus elsewhere');
 UI.bagKey('Enter');
 check('Enter presses what you\'re standing on', bag.btns[1].clicked === 1, bag.btns[1].clicked);
 UI.bagKey('ArrowUp');
-check('up returns to first', bag.btns[0].has('focus'), 'не вернулась');
+check('up returns to first', bag.btns[0].has('focus'), 'did not return');
 
 UI.closeBag();
-check('closed inventory arrows do not eat', UI.bagKey('ArrowDown') === false, 'съело');
+check('closed inventory arrows do not eat', UI.bagKey('ArrowDown') === false, 'ate it');
 
 // ------------------------------------------- the window on the world and the office colour (the ring)
-sky = makeRing([{ id: 'skytoggle' }, { id: 'skyq', tagName: 'INPUT' }, { id: 'skygeo' }]);
-check('window to the world: arrow processed', UI.skyKey('ArrowDown') === true, 'нет');
+// A field in a ring holds the caret: arriving puts it in, Escape takes it out
+// and leaves the ring on the field, Tab walks the fields, ↑↓ leave through the
+// office (api.pressKey). Two fields here so Tab has somewhere to go.
+document.activeElement = null;
+sky = makeFieldRing([{ id: 'skytoggle' }, { id: 'skyq', tagName: 'INPUT' }, { id: 'skyq2', tagName: 'INPUT' }, { id: 'skygeo' }]);
+const [skyToggle, skyQ, skyQ2, skyGeo] = sky.btns;
+const caret = () => (document.activeElement ? document.activeElement.id : null);
+check('window to the world: arrow processed', UI.skyKey('ArrowDown') === true, 'no');
+check('arriving on the city field puts the caret in it, no Enter needed', caret() === 'skyq', caret());
+check('and doesn’t press it like a button', skyQ.clicked === 0, skyQ.clicked);
+let esc = sky.press(skyQ, 'Escape');
+check('Escape in the field takes the caret out', caret() === null, caret());
+check('and keeps the ring on the field', skyQ.has('focus'), 'the ring moved away');
+check('and is not left for the office to close the panel with', esc.defaultPrevented, 'not taken');
 UI.skyKey('Enter');
-check('Entering the city field gives it real focus', sky.btns[1].focused === 1, sky.btns[1].focused);
-check('and doesn’t press it like a button', sky.btns[1].clicked === 0, sky.btns[1].clicked);
+check('Enter on the parked field gives the caret back', caret() === 'skyq', caret());
+sky.press(skyQ, 'Tab');
+check('Tab carries the caret to the next field', caret() === 'skyq2' && skyQ2.has('focus'), caret());
+sky.press(skyQ2, 'Tab');
+check('and round from the last field to the first', caret() === 'skyq', caret());
+sky.press(skyQ, 'Tab', { shiftKey: true });
+check('Shift+Tab goes back', caret() === 'skyq2', caret());
+sky.press(skyQ2, 'Tab', { taken: true });
+check('a Tab the field\'s owner already took stays theirs', caret() === 'skyq2', caret());
+sky.press(skyQ2, 'ArrowDown');
+check('↓ in the field leaves it along the ring', skyGeo.has('focus') && caret() === null, caret());
+UI.skyKey('ArrowUp');
+check('↑ onto a field puts the caret back in', caret() === 'skyq2', caret());
+sky.press(skyQ2, 'ArrowUp');
+check('↑ from a field onto the next field carries the caret', caret() === 'skyq' && skyQ.has('focus'), caret());
+check('a button in the ring never takes the caret', skyToggle.focused === 0 && skyGeo.focused === 0, `${skyToggle.focused}/${skyGeo.focused}`);
 UI.closeSky();
-check('closed window to the world arrows do not eat', UI.skyKey('ArrowDown') === false, 'съело');
+document.activeElement = null;
+check('closed window to the world arrows do not eat', UI.skyKey('ArrowDown') === false, 'ate it');
 
 // the hue slider: the sideways arrows turn it rather than lead the focus away
 skin = makeRing([
@@ -463,12 +557,12 @@ skin = makeRing([
 let hueSet = 0;
 skin.btns[1].oninput = () => { hueSet += 1; };
 UI.skinKey('ArrowDown');
-check('office color: reached the slider', skin.btns[1].has('focus'), 'нет');
+check('office color: reached the slider', skin.btns[1].has('focus'), 'no');
 UI.skinKey('ArrowRight');
 check('the slider rotates to the right, but does not move', skin.btns[1].has('focus') && Number(skin.btns[1].value) > 100, skin.btns[1].value);
 check('and its handler pulls', hueSet === 1, hueSet);
 UI.skinKey('ArrowDown');
-check('still leads down from the slider', !skin.btns[1].has('focus'), 'застряли');
+check('still leads down from the slider', !skin.btns[1].has('focus'), 'stuck');
 
 // A control without a box is not in the ring. The radio's volume sits under a
 // hidden row until the full Spotify player connects, and one press of the down
@@ -482,12 +576,12 @@ seenRing.key('ArrowDown', true);
 check('a hidden control is stepped over', seen[2].has('focus') && !seen[1].has('focus'),
   seen.map((b) => b.has('focus')).join());
 seenRing.on(seen[0]);
-check('on() finds a control by itself, not by a count', seen[0].has('focus'), 'не нашла');
+check('on() finds a control by itself, not by a count', seen[0].has('focus'), 'not found');
 // A panel may paint its ring a moment before it opens; while it has no box of
 // its own, nothing in it has one either, and the ring must not come up empty.
 const shut = three();
 UI.focusRing(() => ({ ...box(false), querySelectorAll: () => shut }), '*').paint();
-check('a panel painted before it opens still shows a focus', shut[0].has('focus'), 'пусто');
+check('a panel painted before it opens still shows a focus', shut[0].has('focus'), 'empty');
 
 // ------------------------------------------------- the language and the agents' names
 // A panel of two rows: the interface and the names. A flat round would lie to
@@ -498,7 +592,7 @@ langPanel = makeLang();
 await UI.openLang();
 const focused = () => langPanel.btns.findIndex((b) => b.has('focus'));
 check('language: focus is on the first button', focused() === 0, focused());
-check('right arrow processed', UI.langKey('ArrowRight') === true, 'нет');
+check('right arrow processed', UI.langKey('ArrowRight') === true, 'no');
 check('and walks inside the interface line', focused() === 1, focused());
 UI.langKey('ArrowDown');
 check('takes you down to the second row, keeping the column', focused() === 3, focused());
@@ -508,7 +602,7 @@ check('and this is “Russian”, and not “like the language of the office”'
 check('there is no price for a package that will not replace anything', langPanel.warn.hidden === true, langPanel.warn.textContent);
 UI.langKey('ArrowRight');
 check('reached English', langPanel.btns[4].dataset.pack === 'en' && focused() === 4, focused());
-check('price shown before clicking', langPanel.warn.hidden === false, 'скрыта');
+check('price shown before clicking', langPanel.warn.hidden === false, 'hidden');
 check('and gives a number and an example', /2/.test(langPanel.warn.textContent) && /Pete/.test(langPanel.warn.textContent),
   langPanel.warn.textContent);
 UI.langKey('ArrowLeft');
@@ -530,7 +624,7 @@ check('Enter presses what the focus is on', langPanel.btns[4].clicked === 1, lan
   setLang(was);
 }
 UI.closeLang();
-check('closed arrow tongue panel does not eat', UI.langKey('ArrowDown') === false, 'съела');
+check('closed arrow tongue panel does not eat', UI.langKey('ArrowDown') === false, 'ate it');
 
 console.log(failed ? `\nfailed: ${failed}` : '\nall matched');
 process.exit(failed ? 1 : 0);

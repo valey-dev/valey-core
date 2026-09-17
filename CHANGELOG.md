@@ -4,6 +4,142 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.61.1 — 16 September 2026
+
+### Fixed
+
+- **release:** a release that loses the race for main pushes nothing and takes its tag back, instead of leaving a tag no branch can see (4efafb5)
+## v0.61.0 — 15 September 2026
+
+### Added
+
+- **office:** each room's rug takes its own colour — SPACE on the rug walks six colourways (151e7c7)
+## v0.60.0 — 15 September 2026
+
+### Added
+
+- **office:** the agent card names its model and reasoning level, and a trade wears a pixel icon instead of a border (cf77577)
+
+### Fixed
+
+- **dossier:** the model no longer reads «<synthetic>» after an API error or a resume (f368269)
+
+### Other
+
+- test(language): the guard reads what a stand prints, not only its label — failure details, assert messages, summaries (a054abf)
+- chore(stand-stop): the stand stopper reports in English (ab2da9c)
+- test(stands): failure details, assert messages and summaries print in English, as the rule has said since 9 September (3406dc2)
+## v0.59.1 — 15 September 2026
+
+### Fixed
+
+- **release:** a release page is built from its tag's changelog, so `promote` from a tree behind the tag no longer publishes a version without one (e432ebe)
+## v0.59.0 — 15 September 2026
+
+### Added
+
+- **tree:** an installed module is switched off and back on from its card in the module tree, and the PR board has its node (6473101)
+
+### Fixed
+
+- **office:** a delivered or hired session no longer inherits the office's settings, port and stand plaque (1cb25eb)
+
+### Other
+
+- refactor(tree): the module switch is the office's segmented control, as its frame is (a8fb9a4)
+## v0.58.2 — 15 September 2026
+
+### Fixed
+
+- **update:** «update» no longer refuses over an uncommitted change the update does not touch, and catches an untracked file in its way before the core moves (9f3b43f)
+## v0.58.1 — 15 September 2026
+
+### Fixed
+
+- **radio:** the down arrow walks wave to wave instead of through every ✕ (9849513)
+- **radio:** Enter and Space on a wave in the list start it playing (aaee62a)
+
+### Other
+
+- ci(runners): keep private checks off hosted minute quota (c27234a)
+## v0.58.0 — 13 September 2026
+
+### Added
+
+- **office:** the standup gives a project the whole width, and its name stays pinned while you arrow down (ceb0a6a)
+
+### Other
+
+- chore(notes): the demo cast puts four people in rocket-shop, so a project's row shows in the pictures (71b32bf)
+## v0.57.1 — 13 September 2026
+
+### Fixed
+
+- **update:** an agent the updated office resumes no longer raises every office it starts on port 5177 (8e4af43)
+
+### Other
+
+- docs(readme): updating without stopping needs npm start, one restart after an office older than v0.55.0, and Ctrl-C is still a restart (9d8955d)
+## v0.57.0 — 13 September 2026
+
+### Added
+
+- **office:** a pole in the lounge, and Bolty, a tin robot who dances on it badly — SPACE tips him (de82074)
+
+### Other
+
+- docs(notes): the note for the pole and its robot, with the head coming off (3b54dab)
+- docs(readme): SPACE tips the robot on the pole in the lounge (13a6146)
+## v0.56.0 — 13 September 2026
+
+### Added
+
+- **office:** the office hires agents — a new session starts at the reception and walks out of a portal at the room's door (6dbc0b3)
+
+### Fixed
+
+- **office:** a hire into a far room is seen — the portal opens beside the owner and the agent walks to its room (def73d9)
+- **tree:** the module tree's lines and borders are the frame's tone, not a step darker (4e5d735)
+- **radio:** the receiver scales its own panel only, and keeps the digit on its stations (ba48cdb)
+- **office:** the reception's arrows reach «нанять», and the hiring panel picks its room with arrows instead of digits that typed into the task (507197d)
+
+### Other
+
+- docs(notes): hiring opens the portal beside you — the note, the README line and the pictures (640ff44)
+- test(styles): a module's stylesheet cannot repaint the office (856dbdf)
+- refactor(style): the core stops carrying the git tree's diff styles (81ba78a)
+- docs(notes): the hiring note says the arrows, not digits, and its pictures are retaken (f1f3188)
+- docs(notes): the note for hiring, with the reception, the panel and the portal (5e27642)
+- docs(readme): + at the reception desk hires, and what a hire runs (4cbb14e)
+- test(hire): a stand for hiring — the first message, refusals, a run that starts, stays and is let go, and one that never starts (7551ccb)
+## v0.55.0 — 13 September 2026
+
+### Added
+
+- **office:** the office updates itself from its repository without stopping — a version row in the office tab (118dd06)
+
+### Other
+
+- docs(notes): the picture for the office-update note, rendered from its recipe on the demo office (8c18120)
+- docs(notes): the note for updating the office without stopping, with the version row in the picture (37f3778)
+- chore(update): npm run update does from a terminal what the office tab's button does (1173c69)
+- chore(keys): the first ↓ in the office tab lands on «check for updates», and the light stays on it while it runs (515bd0f)
+- chore(update): npm start runs the supervisor, and a stand proves the swap drops nothing (9f7a35b)
+- chore(update): a supervisor holds the port and swaps the office under it without dropping anything (82c8361)
+- chore(update): the office can check its repositories and pull them forward, both or neither (9510ecd)
+## v0.54.2 — 13 September 2026
+
+### Fixed
+
+- **office:** a manual /compact over a stalled turn shows the agent waiting for you, not working (9fa002a)
+- **office:** an agent after /compact is back at the prompt, not «working» forever (fa5b9c7)
+## v0.54.1 — 13 September 2026
+
+### Fixed
+
+- **keys:** a field in a panel takes the caret the moment the arrows land on it (d2982bd)
+- **notes:** the «conversation closed» badge no longer takes half the row and cuts the quote (b3f05cd)
+- **office:** an agent asking a question or showing a plan is «waiting on you», not working (5dfc97e)
 ## v0.54.0 — 13 September 2026
 
 ### Added

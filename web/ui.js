@@ -4,11 +4,13 @@ import { drawPerson, drawItem, dressMe, cycle, hash, SKIN, HAIR, SHIRT, PANTS, B
   SHIRT_WORK, BLOUSE, JACKET, TIE, CUTS, BOTTOMS } from './sprites.js';
 import { renderMarkdown } from './markdown.js';
 import { highlight, langOf } from './highlight.js';
-import { collect, first, moduleIds } from './modules.js';
-import { LIBRARY, TIERS, DIRS, SUBS, byId, children, colOf, inDir, dirTally } from './library.js';
+import { collect, first, moduleIds, moduleOffIds } from './modules.js';
+import { LIBRARY, TIERS, DIRS, SUBS, byId, children, colOf, inDir, dirTally, isSub } from './library.js';
 import { theme, applyTheme, resetTheme, PRESETS, ui, UI_STEPS, applyUiScale } from './theme.js';
 import { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } from './notes.js';
 import { esc } from './esc.js';
+import { modelLabel } from './model-name.js';
+import { roleIcon } from './roleicon.js';
 import { owned } from './owned.js';
 // The standup catches its own key by the physical code rather than by the
 // letter — see rosterKey below.
@@ -28,6 +30,7 @@ export function initUI(state, callbacks) {
   el.invite = $('#invite');
   el.notes = $('#notes');
   el.lang = $('#lang');
+  el.hire = $('#hire');
   // One handler for the whole viewer panel, set at the entrance: the markup
   // inside it is repainted constantly, and the handler outlives that.
   bindCopyButtons();
@@ -42,6 +45,8 @@ export function initUI(state, callbacks) {
   selfClosing(el.invite, closeInvite);
   selfClosing(el.bag, closeBag);
   selfClosing(el.skin, closeSkin);
+  selfClosing(el.hire, closeHire);
+  if (el.hire && el.hire.addEventListener) el.hire.addEventListener('keydown', hirePanelKey);
 }
 
 // The handler is hung on the panel itself rather than on the field: the innards
@@ -49,7 +54,9 @@ export function initUI(state, callbacks) {
 function selfClosing(box, close) {
   if (!box) return;
   box.onkeydown = (e) => {
-    if (e.key !== 'Escape') return;
+    // An Escape typed into a field of the panel's ring takes the caret out and
+    // no more (focusRing marks it on the way down); the next one closes.
+    if (e.key !== 'Escape' || e.fromRingField) return;
     e.preventDefault(); e.stopPropagation(); close();
   };
 }
@@ -275,11 +282,18 @@ export function renderDialog() {
 function patchDialog(a) {
   const set = (sel, html) => { const n = el.dialog.querySelector(sel); if (n && n.innerHTML !== html) n.innerHTML = html; };
   set('.meta', metaLine(a));
+  // By text, not markup: innerHTML hands the no-break spaces back as &nbsp;, and
+  // a comparison that never matches would rewrite the model on every tick.
+  const model = el.dialog.querySelector('.model');
+  const label = modelLabel(a.model, a.effort);
+  if (model && model.textContent !== label) model.textContent = label;
   set('.act', actLine(a));
   // The task is rewritten by every answer, so its row moves as a whole rather
   // than being patched piece by piece: between "you are needed" and its absence
   // what changes is the set of rows, not the text.
   set('.taskrow', taskRow(a));
+  const hr = el.dialog.querySelector('.hiredrow');
+  if (hr && hr.innerHTML !== hiredRow(a)) { hr.innerHTML = hiredRow(a); bindHired(a); }
 
   if (S.page === 'talk') {
     const said = clean(a.lastSaid) || tr('dlg.silent');
@@ -318,6 +332,57 @@ function patchDialog(a) {
   }
   // Paint the highlight again: an update may have replaced the node and its class.
   paintDialogFocus();
+}
+
+// An agent the office hired says so on its card, and once its turn is over the
+// card offers to continue it in a terminal. Not while it works: the terminal
+// would be a second process writing the same transcript. Continuing lets the
+// office's process go first, so the agent leaves the floor as the command is
+// copied.
+// Frames: [Card · hired, working](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2092-2031)
+// [Card · hired, finished](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2092-2046)
+const hireOf = (id) => (S.hires || []).find((h) => h.sessionId === id) || null;
+// The command as the server gave it, kept after the release: without a
+// clipboard it is copied by hand from the field, and the next repaint must not
+// take the field away.
+const resumed = new Map();
+
+function hiredRow(a) {
+  if (!a.hired) return '';
+  const h = hireOf(a.id);
+  const line = [tr('hire.hiredAt', { at: when(a.hired), a: a.gender === 'f' ? 'а' : '' }), h && h.source ? tr('hire.src.' + h.source) : '']
+    .filter(Boolean).join(' · ');
+  let rest = '';
+  const cmd = resumed.get(a.id);
+  if (!isGuest() && h && h.state === 'working') rest = `<p class="hint dim">${tr('hire.busyNote')}</p>`;
+  else if (!isGuest() && h && (h.state === 'done' || cmd)) {
+    rest = `<div class="sendrow"><input class="hirecmd" readonly value="${esc(cmd || 'claude --resume ' + a.id)}">
+        <button class="hirecopy" ${cmd ? 'disabled' : ''}>${tr(cmd ? 'hire.copiedBtn' : 'hire.copy')}</button></div>
+      <p class="hint dim">${tr(cmd ? 'hire.leftNote' : 'hire.copyNote')}</p>`;
+  }
+  return `<p class="hiredline">${esc(line)}</p>${rest}`;
+}
+
+function bindHired(a) {
+  const b = el.dialog.querySelector('.hirecopy');
+  if (!b) return;
+  b.onclick = async () => {
+    b.disabled = true;
+    const r = await api.releaseHire(a.id);
+    if (!r || !r.command) { toast(said(r) || tr('hire.errUnknown')); b.disabled = false; return; }
+    resumed.set(a.id, r.command);
+    const hr = el.dialog.querySelector('.hiredrow');
+    if (hr) hr.innerHTML = hiredRow(a);
+    const box = el.dialog.querySelector('.hirecmd');
+    try {
+      await navigator.clipboard.writeText(r.command);
+      toast(tr('hire.copied', { name: a.name, a: a.gender === 'f' ? 'ла' : 'ёл' }));
+    } catch {
+      // Over plain http on the network there is no clipboard: the command stays
+      // selected in the field for Cmd+C.
+      if (box) { box.focus(); box.select(); }
+    }
+  };
 }
 
 // The permission request this agent is waiting on. A guest has no such list—the
@@ -475,9 +540,10 @@ function buildDialog(a) {
   el.dialog.innerHTML = `
     <div class="portrait"><canvas width="48" height="48" id="pf"></canvas></div>
     <div class="content">
-      <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${esc(roleText(a))}</span>${providerBadge(a)}
+      <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${roleIcon(a.roleKey)}${esc(roleText(a))}</span>${providerBadge(a)}<span class="model">${esc(modelLabel(a.model, a.effort))}</span>
         <span class="meta">${metaLine(a)}</span><div class="taskrow">${taskRow(a)}</div></div>
       <div class="act">${actLine(a)}</div>
+      <div class="hiredrow">${hiredRow(a)}</div>
       <div class="body">${body}</div>
       <div class="acts">
         <button data-p="talk" class="${S.page === 'talk' ? 'on' : ''}">${tr('tab.talk')} <kbd>1</kbd></button>
@@ -506,6 +572,7 @@ function buildDialog(a) {
   });
   bindFiles();
   bindPermit(a);
+  bindHired(a);
 
   const say = $('#say');
   if (say) say.onclick = () => finishTypewriter();
@@ -1274,6 +1341,7 @@ export function viewerOpen() {
   return gallery.mode === 'single' ? 'single' : 'gallery';
 }
 export function liftOpen() { return !!(el.lift && !el.lift.hidden); }
+export function receptionOpen() { return liftOpen() && !!el.lift.querySelector('.recwrap'); }
 // The tab the card is reading. In «поговорить» the cursor sits in the field, and
 // that is a different place from the card itself: there the letters type.
 export function cardPage() { return S.page; }
@@ -1514,9 +1582,9 @@ export function renderRoster() {
 
   el.roster.innerHTML = `<div class="rwrap pwrap">
     <div class="vhead"><span id="rcount">${headLine(teams.length, S.agents.length, waiting)}</span><button id="rx">✕</button></div>
-    <div class="rbody">${teams.length ? `<div class="pcols">${teams.map((t) => `
-      <div class="pcol"><h4>▣ ${esc(t.project)}<i>${t.list.length}${t.waiting ? ' · ⚑' + t.waiting : ''}</i></h4>
-        ${t.list.map(cardHtml).join('')}</div>`).join('')}</div>`
+    <div class="rbody">${teams.length ? `<div class="pteams">${teams.map((t) => `
+      <section class="pteam"><h4>▣ ${esc(t.project)}<i>${t.list.length}${t.waiting ? ' · ⚑' + t.waiting : ''}</i></h4>
+        <div class="pgrid">${t.list.map(cardHtml).join('')}</div></section>`).join('')}</div>`
     : `<p class="empty">${tr('standup.nobody')}<span>${tr('standup.nobodyWhy')}</span></p>`}</div>
     <p class="pkeys">${tr('standup.keys')}</p>
   </div>`;
@@ -1586,10 +1654,12 @@ function openFromStandup(id) {
   api.openAgent(a.id);
 }
 
-// The ring walks the cards: up and down inside a column, sideways between
-// columns. A card is one thing rather than a row of buttons, so in the ring it
-// is one thing too.
-const rosterRing = focusRing(() => el.roster, '.pcard', { cols: '.pcol', noWrap: true });
+// The ring walks the cards as they stand: up and down a row at a time, across
+// projects, sideways in reading order. Until 13 September 2026 a project was a
+// column and the arrows stayed inside it — and a project of seven was a column
+// of seven with the rest of the width empty. A card is one thing rather than a
+// row of buttons, so in the ring it is one thing too.
+const rosterRing = focusRing(() => el.roster, '.pcard', { grid: true, noWrap: true });
 export function closeRoster() { el.roster.hidden = true; rosterSig = ''; rosterRing.reset(); }
 export function rosterOpen() { return !!(el.roster && !el.roster.hidden); }
 
@@ -1864,17 +1934,13 @@ function bindKeys() {
   // of a field has to be the field's own. Escape hands the ring back rather than
   // shutting the shelf: el.bag is selfClosing, and without this an Escape typed
   // into a half-filled Client ID threw the whole inventory away. A second Escape,
-  // with the ring back on, still closes it — the two steps are the point.
-  //
-  // A listener rather than onkeydown: a module binds its own handler to the same
-  // field, and assigning would wipe it.
-  detail.querySelectorAll('input').forEach((f) => f.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    e.preventDefault();
-    e.stopPropagation();
-    f.blur();
-    paintBagFocus();
-  }));
+  // with the ring back on, still closes it — the two steps are the point. The
+  // ring does it now, for every panel (focusRing); armed here because a field
+  // can be reached with the mouse before any arrow has painted the ring.
+  keysRing.arm();
+  // A field entered by the mouse puts the hand inside the card: ↑↓ from it then
+  // walk the card's rows instead of stepping in again from the top.
+  detail.addEventListener('focusin', () => { keysIn = true; });
   paintBagFocus();
 }
 
@@ -1935,12 +2001,97 @@ function keysKey(key) {
   return keysRing.key(key, true);
 }
 
+// ------------------------------------------------------------ the office version
+// The first row of the office tab: which version runs, and pulling a newer one
+// from the repository without stopping the office. The owner's alone — a guest
+// cannot update somebody else's office. Checking reaches outside (a git fetch),
+// so nothing here asks on its own: only the buttons do.
+// Frames: WIP section #office-update, node 2169:6969 (states 2169:7029, 2169:7104,
+// 2169:7181, 2170:2564, 2170:2641).
+let upd = null;
+let updPoll = null;
+
+async function loadUpd() {
+  try {
+    const r = await fetch('/api/update', { headers: owned() });
+    upd = r.ok ? await r.json() : null;
+  } catch { upd = null; }
+}
+
+const UPD_REASONS = new Set(['dirty', 'diverged', 'noUpstream', 'notGit', 'fetch', 'newServer', 'noSupervisor']);
+const updRepo = (key) => tr(key === 'modules' ? 'upd.inModules' : 'upd.inCore');
+
+function updRow() {
+  const u = upd || { state: 'idle', running: '' };
+  const ver = `v${esc(u.running || '')}`;
+  let desc = tr((u.repos || []).includes('modules') ? 'upd.from' : 'upd.fromCore');
+  let btn = tr('upd.check'), act = 'check', prim = false, off = false, note = tr('upd.idleNote');
+  if (u.state === 'checking') { desc = tr('upd.checking'); btn = tr('upd.checking'); off = true; }
+  if (u.state === 'available') {
+    const what = [u.feats ? tr('upd.feats', { n: u.feats }) : '', u.fixes ? tr('upd.fixes', { n: u.fixes }) : ''].filter(Boolean).join(', ');
+    desc = tr('upd.available', { v: esc(u.available || '') }) + (what ? ` · ${what}` : '');
+    btn = tr('upd.run'); act = 'run'; prim = true; note = tr('upd.availNote');
+  }
+  if (u.state === 'latest') { desc = tr('upd.latest'); note = tr('upd.latestNote'); }
+  if (u.state === 'updating') {
+    const done = new Set(u.steps || []);
+    const steps = [tr('upd.stepCore') + (done.has('core') ? ' ✓' : '')];
+    if ((u.repos || []).includes('modules')) steps.push(tr('upd.stepModules') + (done.has('modules') ? ' ✓' : ''));
+    steps.push(tr('upd.stepServer') + (done.has('server') ? '…' : ''));
+    desc = `git pull · ${steps.join(' · ')}`;
+    btn = tr('upd.running'); off = true; note = tr('upd.updNote');
+  }
+  if (u.state === 'failed') {
+    desc = tr('upd.failed', { v: esc(u.running || '') });
+    btn = tr('upd.retry'); act = u.available ? 'run' : 'check';
+    const key = UPD_REASONS.has(u.reason) ? u.reason : 'other';
+    note = tr(`upd.why.${key}`, { repo: updRepo(u.repo), detail: esc(u.detail || '') });
+  }
+  return `<p class="dcap">${tr('upd.cap')}</p>
+      <div class="orow"><b>${tr('upd.name')}</b><span>${desc}</span><i>${ver}</i>
+        <button class="obtn${prim ? ' prim' : ''}" data-upd="${act}"${off ? ' disabled' : ''}>${btn}</button></div>
+      <p class="hint">${note}</p>`;
+}
+
+// Only the block is redrawn: the whole tab would take the focus off whatever
+// the hand is on while the steps tick past.
+function paintUpd() {
+  const box = el.bag && el.bag.querySelector('.updblock');
+  if (!box) return;
+  box.innerHTML = updRow();
+  const b = box.querySelector('[data-upd]');
+  if (b) b.onclick = () => updPost(b.dataset.upd);
+  // The button is a new node after every repaint — once a second while an
+  // update runs — and the ring's light has to land on it again, or the hand
+  // loses its place mid-update.
+  if (bagTab === 'office' && !el.bag.hidden) officeRing.paint();
+}
+
+async function updPost(what) {
+  try {
+    const r = await fetch(`/api/update/${what}`, { method: 'POST', headers: owned({ 'content-type': 'application/json' }), body: '{}' });
+    if (r.ok) upd = await r.json();
+  } catch { /* the office is changing hands; the stream will say so */ }
+  paintUpd();
+  watchUpd();
+}
+
+// While something runs the row follows it, once a second, and only while the
+// tab is open: nobody watching means nobody to show the steps to.
+function watchUpd() {
+  clearTimeout(updPoll);
+  const busy = upd && (upd.state === 'checking' || upd.state === 'updating');
+  if (!busy || !el.bag.querySelector('.updblock')) return;
+  updPoll = setTimeout(async () => { await loadUpd(); paintUpd(); watchUpd(); }, 1000);
+}
+
 // The "office" tab. Dress code lives here because it has no object in the
 // office: weather is set at the window, language at the sign, while "put ties
 // on everyone" hangs nowhere.
 const officeHtml = () => {
   const on = officeOn();
   return `<div class="bbody">
+      ${isGuest() ? '' : `<div class="updblock">${updRow()}</div>`}
       <p class="dcap">${tr('bag.dressCode')}</p>
       <div class="oseg">
         <button class="obtn${on ? '' : ' on'}" data-code="casual">${tr('bag.casual')}</button>
@@ -1976,19 +2127,24 @@ let treeSel = null;
 // it grew from the work board alongside the Git tree, and two adjacent green
 // nodes read as a single object.
 const TONE = { floor1: '#c9a06a', bible: '#c9a06a', art: '#d97b6c', easel: '#d97b6c',
-  board: '#9fe0a8', gittree: '#9fe0a8', task: '#ffd166', feed: '#ffd166', cctv: '#8fbcff', dossier: '#8fbcff',
+  board: '#9fe0a8', gittree: '#9fe0a8', prboard: '#9fe0a8', task: '#ffd166', feed: '#ffd166', cctv: '#8fbcff', dossier: '#8fbcff',
   radio: '#c39bff', dress: '#f6e3c0', agents: '#e0a06a', floor: '#e0a06a', talk: '#9fe0a8', meet: '#9fe0a8',
   door: '#8c7660', guest: '#8c7660' };
 const L = (v) => (v ? (v[lang()] || v.en) : '');
 // own is lit; office/floor is dim with the tier name; room is a free branch
 // whose folder is absent (radio without modules/); ghost is "in a year."
+// off is installed and switched off by the owner: dimmed like a missing one, but
+// its card keeps the switch to bring it back.
 const treeState = (n) => (n.tier === 'more' ? 'ghost'
-  : n.module ? (moduleIds().includes(n.module) ? 'own' : n.tier)
+  : n.module ? (moduleIds().includes(n.module) ? 'own' : moduleOffIds().includes(n.module) ? 'off' : n.tier)
   : n.tier === 'room' ? 'own' : n.tier);
 const treeOwn = (n) => treeState(n) === 'own';
+// Bought, running or not: what the counts count. A switched-off module is still
+// «6 из 6 · куплен» (frame 2239:9503), not «часть модулей ещё не приехала».
+const treeHave = (n) => treeOwn(n) || treeState(n) === 'off';
 const treeCount = (tier) => {
   const all = LIBRARY.filter((n) => n.tier === tier);
-  return { t: tier, n: all.filter(treeOwn).length, m: all.length };
+  return { t: tier, n: all.filter(treeHave).length, m: all.length };
 };
 const treeSub = (c) => (c.t === 'room' ? tr(c.n === c.m ? 'tree.sub.room' : 'tree.sub.roomSome')
   : c.t === 'office' ? tr(c.n === c.m ? 'tree.sub.officeAll' : c.n ? 'tree.sub.officeSome' : 'tree.sub.office')
@@ -1996,21 +2152,53 @@ const treeSub = (c) => (c.t === 'room' ? tr(c.n === c.m ? 'tree.sub.room' : 'tre
 // Select the first missing Office module by default: that directly answers
 // "what is in the next tier." When everything is installed, select the ghost
 // node about the coming year.
-const treeDefault = () => LIBRARY.find((n) => n.tier === 'office' && !treeOwn(n)) || byId('more');
+const treeDefault = () => LIBRARY.find((n) => n.tier === 'office' && !treeHave(n)) || byId('more');
 const treeCur = () => byId(treeSel) || (treeSel = treeDefault().id, byId(treeSel));
 export const treeSelected = () => treeCur().id;
+
+// The owner's switch, on the card of an installed module: «выкл | вкл», the
+// office's Segmented control (.sizes/.szbtn, component 1402:491). Frames
+// 2239:9315 (on) and 2239:9503 (off). Switching reloads the page — a module's
+// client cannot be taken off a running page, only not loaded into the next one,
+// the way the stand's switches already work.
+const switchable = (n) => !!n.module && !isGuest() && ['own', 'off'].includes(treeState(n));
+const switchHtml = (n, st) => `<div class="sizes tswitch">
+      <button class="szbtn${st === 'off' ? ' on' : ''}" data-mod="${esc(n.module)}" data-off="1">${tr('tree.switch.off')}</button>
+      <button class="szbtn${st === 'own' ? ' on' : ''}" data-mod="${esc(n.module)}" data-off="0">${tr('tree.switch.on')}</button>
+    </div>`;
+
+async function switchModule(id, off) {
+  const now = new Set((S.settings && S.settings.modulesOff) || []);
+  if (off === now.has(id)) return;
+  if (off) now.add(id); else now.delete(id);
+  const r = await api.saveSettings({ modulesOff: [...now] });
+  if (r !== false) location.reload();
+}
 
 const treeCard = (n) => {
   const st = treeState(n), from = n.parent ? L(byId(n.parent).name) : '';
   const meta = st === 'own' ? tr(n.tier === 'room' ? 'tree.meta.room' : 'tree.meta.owned', { from })
+    : st === 'off' ? tr('tree.meta.off', { from })
     : st === 'ghost' ? tr('tree.meta.more')
     : tr('tree.meta.' + n.tier, { from });
+  const sw = switchable(n);
+  // Switched off, a module with its own words replaces the whole card body with
+  // them (frame 2239:9503): what is gone, what stays, how to bring it back.
+  if (sw && st === 'off' && n.switchOff) {
+    return `<div class="lcard">
+      <div class="lhead"><b>${esc(L(n.name))}</b><span>${meta}</span></div>
+      ${n.switchOff.map((p) => `<p>${esc(L(p))}</p>`).join('')}
+      ${switchHtml(n, st)}
+    </div>`;
+  }
+  const note = st === 'off' ? tr('tree.switch.offNote') : n.switchOn ? esc(L(n.switchOn)) : tr('tree.switch.onNote');
   return `<div class="lcard">
       <div class="lhead"><b>${esc(L(n.name))}</b><span>${meta}</span></div>
       <p>${tr('tree.gives')} ${esc(L(n.gives))}</p>
       ${n.where ? `<p>${tr('tree.where')} ${esc(L(n.where))}</p>` : ''}
-      ${n.without && st !== 'own' ? `<p>${tr('tree.without')} ${esc(L(n.without))}</p>` : ''}
-      ${st === 'ghost' ? '' : `<p>${tr('tree.arrives')} ${tr('tree.arrive.' + n.tier)}</p>`}
+      ${n.without && (st !== 'own' || n.switchOn) ? `<p>${tr('tree.without')} ${esc(L(n.without))}</p>` : ''}
+      ${st === 'ghost' || sw ? '' : `<p>${tr('tree.arrives')} ${tr('tree.arrive.' + n.tier)}</p>`}
+      ${sw ? `<p>${note}</p>${switchHtml(n, st)}` : ''}
     </div>`;
 };
 
@@ -2048,7 +2236,7 @@ const treeHeadHtml = () => {
 };
 
 const dirsHtml = () => `<div class="tdirs">${DIRS.map((d, i) => {
-  const t = dirTally(d.id, treeOwn);
+  const t = dirTally(d.id, treeHave);
   return `<button class="tdir${d.id === treeDir ? ' on' : ''}${t.free ? ' free' : ''}" data-dir="${d.id}">
       <b>${i + 1} ${esc(L(d.name))}</b><span>${dirSub(t)}</span>
       ${t.free ? `<em>${tr('tree.dir.noTiers')}</em>`
@@ -2060,7 +2248,10 @@ const dirsHtml = () => `<div class="tdirs">${DIRS.map((d, i) => {
 // panel is wide enough — below that CSS hides it and the card carries the same
 // list in one line, because a label over a neighbour is worse than no label.
 const wideNode = (n, sel) => {
-  const st = treeState(n), subs = SUBS[n.id] || [];
+  // A switched-off node says so in its labels and keeps its tier tag, as in
+  // frame 2239:9503; the flat view has no labels and tags it «выкл» instead.
+  const st = treeState(n);
+  const subs = st === 'off' ? (SUBS[n.id + '.off'] || [{ ru: 'выключен', en: 'switched off' }]) : (SUBS[n.id] || []);
   return `<div class="wkey">
       <button class="tnode ${st}${n.id === sel.id ? ' on' : ''}" data-id="${n.id}">
         ${st === 'ghost' ? '' : `<i class="tico" style="--c:${TONE[n.id] || '#8c7660'}"></i>`}
@@ -2082,11 +2273,15 @@ const wideHtml = () => {
       return `<p class="wempty">${tr(tier === 'floor' ? 'tree.wide.noFloor'
         : treeDir === 'you' ? 'tree.wide.noSale' : 'tree.wide.noOffice')}</p>`;
     }
-    return `<div class="wtier">${list.map((n) => wideNode(n, sel)).join('')}</div>`;
+    // A node grown out of a node of its own tier stands a row above it, and is
+    // moved over its parent once the row is measured (wideEdges).
+    const subs = list.filter(isSub), main = list.filter((n) => !isSub(n));
+    return (subs.length ? `<div class="wtier wsubrow">${subs.map((n) => wideNode(n, sel)).join('')}</div>` : '')
+      + `<div class="wtier">${main.map((n) => wideNode(n, sel)).join('')}</div>`;
   };
   const gate = (tier) => {
     const list = here.filter((n) => n.tier === tier);
-    const own = list.filter(treeOwn).length;
+    const own = list.filter(treeHave).length;
     return `<div class="wgate"><b>${tr('tree.tier.' + tier)}</b><span>${
       list.length ? tr('tree.gate.' + tier, { n: own, m: list.length }) : tr('tree.gate.' + tier + 'None')}</span></div>`;
   };
@@ -2119,10 +2314,10 @@ const treeHtml = () => {
       <div class="tcols">${cols.map((c) => `<div class="tcol${c.n === c.m ? ' own' : ''}">
         <b>${tr('tree.col.' + c.t, { n: c.n, m: c.m })}</b><span>${treeSub(c)}</span></div>`).join('')}</div>
       <div class="tree" id="tree"><svg class="tedges"></svg>
-        ${LIBRARY.map((n) => { const st = treeState(n); return `<button class="tnode ${st}${n.id === sel.id ? ' on' : ''}"
+        ${LIBRARY.map((n) => { const st = treeState(n); return `<button class="tnode ${st}${isSub(n) ? ' sub' : ''}${n.id === sel.id ? ' on' : ''}"
           data-id="${n.id}" data-col="${colOf(n)}" data-row="${n.row}" style="grid-column:${colOf(n) * 2 + 1}; grid-row:${n.row + 1}">
           ${st === 'ghost' ? '' : `<i class="tico" style="--c:${TONE[n.id] || '#8c7660'}"></i>`}<span>${esc(L(n.name))}</span>
-          ${st === 'own' || st === 'ghost' ? '' : `<em>${tr('tree.tag.' + n.tier)}</em>`}</button>`; }).join('')}
+          ${st === 'own' || st === 'ghost' ? '' : `<em>${tr('tree.tag.' + (st === 'off' ? 'off' : n.tier))}</em>`}</button>`; }).join('')}
       </div>
       ${treeCard(sel)}
       <p class="hint dim">${tr('tree.note')} ${tr('tree.keys')}</p>
@@ -2138,14 +2333,17 @@ function treeEdges() {
   const box = el.bag.querySelector('#tree'), svg = box && box.querySelector('.tedges');
   if (!svg || !box.getBoundingClientRect) return;          // The stand's substitute DOM.
   const o = box.getBoundingClientRect();
-  const at = (b) => { const r = b.getBoundingClientRect(); return { l: r.left - o.left, r: r.right - o.left, y: r.top - o.top + r.height / 2 }; };
+  const at = (b) => { const r = b.getBoundingClientRect(); return { l: r.left - o.left, r: r.right - o.left, y: r.top - o.top + r.height / 2, b: r.bottom - o.top }; };
   const nodes = new Map([...box.querySelectorAll('.tnode')].map((b) => [b.dataset.id, b]));
   let out = '';
   for (const n of LIBRARY) {
     const p = n.parent && nodes.get(n.parent), c = nodes.get(n.id);
     if (!p || !c) continue;
     const a = at(p), z = at(c), xm = z.l - 18;
-    const d = a.y === z.y ? `M${a.r},${a.y} H${z.l}` : `M${a.r},${a.y} H${xm} V${z.y} H${z.l}`;
+    // A node grown out of its own column hangs from under its parent's left end:
+    // down, then right into the indented child. Frame 2239:9724.
+    const d = isSub(n) ? `M${a.l + 8},${a.b} V${z.y} H${z.l}`
+      : a.y === z.y ? `M${a.r},${a.y} H${z.l}` : `M${a.r},${a.y} H${xm} V${z.y} H${z.l}`;
     out += `<path d="${d}"${c.classList.contains('own') ? ' class="lit"' : ''}/>`;
   }
   svg.setAttribute('viewBox', `0 0 ${o.width} ${o.height}`);
@@ -2164,6 +2362,16 @@ function wideEdges() {
     return { x: r.left - o.left + r.width / 2, top: r.top - o.top, bottom: r.bottom - o.top };
   };
   const nodes = new Map([...box.querySelectorAll('.tnode')].map((b) => [b.dataset.id, b]));
+  // A sub-node's row starts at the left; move each over its parent before the
+  // edges are measured. One sub-node per parent today (the PR board over the git
+  // tree); two in one row would need spacing this does not do.
+  for (const n of inDir(treeDir).filter(isSub)) {
+    const p = nodes.get(n.parent), c = nodes.get(n.id);
+    const key = c && c.closest && c.closest('.wkey');
+    if (!p || !key) continue;
+    key.style.marginLeft = '0px';
+    key.style.marginLeft = Math.max(0, p.getBoundingClientRect().left - key.getBoundingClientRect().left) + 'px';
+  }
   let out = '';
   for (const n of inDir(treeDir)) {
     const p = n.parent && nodes.get(n.parent), c = nodes.get(n.id);
@@ -2218,13 +2426,18 @@ function pickDir(dir) {
   treeDir = dir;
   const here = inDir(dir);
   if (!here.some((n) => n.id === treeSel)) {
-    treeSel = (here.find((n) => !treeOwn(n)) || here[0] || {}).id || treeSel;
+    treeSel = (here.find((n) => !treeHave(n)) || here[0] || {}).id || treeSel;
   }
   renderBag();
 }
 
+function bindSwitch() {
+  el.bag.querySelectorAll('[data-mod]').forEach((b) => b.onclick = () => switchModule(b.dataset.mod, b.dataset.off === '1'));
+}
+
 function bindTree() {
   el.bag.querySelectorAll('.tnode').forEach((b) => b.onclick = () => { treeSel = b.dataset.id; renderBag(); });
+  bindSwitch();
   if (treeWide) return;
   treeEdges();
   const on = el.bag.querySelector('.tnode.on');
@@ -2243,7 +2456,8 @@ function wideKey(key, cur) {
   if (key === 'arrowdown') next = list[Math.min(i + 1, list.length - 1)];
   else if (key === 'arrowright') next = list[(i + 1) % list.length];
   else if (key === 'arrowup' || key === 'arrowleft') next = list[(i - 1 + list.length) % list.length];
-  else if (key === 'enter' || key === ' ') return true;
+  else if (key === 'enter') { if (switchable(cur)) switchModule(cur.module, treeState(cur) === 'own'); return true; }
+  else if (key === ' ') return true;
   else return false;
   if (next && next.id !== cur.id) { treeSel = next.id; renderBag(); }
   return true;
@@ -2275,8 +2489,13 @@ function treeKey(key) {
     next = cur.parent ? byId(cur.parent) : treeNear(colOf(cur) - 1, cur.row);
   } else if (key === 'arrowright') {
     next = children(cur.id)[0] || treeNear(colOf(cur) + 1, cur.row);
-  } else if (key === 'enter' || key === ' ') {
-    return true;                       // The selected item is already open in the card.
+  } else if (key === 'enter') {
+    // Enter on an installed module flips its switch; on anything else the
+    // selected item is already open in the card.
+    if (switchable(cur)) switchModule(cur.module, treeState(cur) === 'own');
+    return true;
+  } else if (key === ' ') {
+    return true;
   } else return false;
   // The edge of the tree is not a reason to hand the arrow back to the office.
   if (next && next.id !== cur.id) { treeSel = next.id; renderBag(); }
@@ -2343,6 +2562,10 @@ function bindOffice() {
     if (act === 'skin') { closeBag(); return renderSkin(); }
     if (act === 'sound') { api.sound(); renderBag(); }
   });
+  if (el.bag.querySelector('.updblock')) {
+    paintUpd();
+    loadUpd().then(() => { paintUpd(); watchUpd(); });
+  }
   paintBagFocus();
 }
 
@@ -2375,6 +2598,22 @@ function bindSelf() {
   // An empty field is an empty name, not the word «ТЫ» stored as one: that
   // string used to travel outward and label a stranger YOU.
   $('#myname').oninput = (e) => { S.me.name = e.target.value.toUpperCase().slice(0, 14); api.saveMe(); };
+  // The name is the wardrobe's one field, and it keys the way a field in any
+  // ring does (focusRing): Escape parks, ↑↓ leave through the office, Tab has
+  // nowhere else to go and stays.
+  $('#myname').onkeydown = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      nameParked = true; e.target.blur(); paintBagFocus();
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault(); e.stopPropagation();
+      nameParked = true; e.target.blur();
+      if (api.pressKey) api.pressKey(e.key);
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+    }
+  };
+  $('#myname').onfocus = () => { nameParked = false; };
   paintBagFocus();
   const rowFields = () => [...colorFields(), ...BODY, bottomCut];
   el.bag.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => {
@@ -2411,17 +2650,20 @@ function bindThings() {
 
 // The "office" tab is a row of buttons, not a slot list or a grid. It has a
 // third keyboard behaviour, which need not be maintained beside the other two.
-const officeRing = focusRing(() => el.bag, '.obtn');
+// Nothing lit on open: the first button is «check for updates», a trip to git,
+// and the first ↓ lands on it — asked by Sergey on 13 September 2026, when
+// reaching it took a lap round the whole tab.
+const officeRing = focusRing(() => el.bag, '.obtn', { startEmpty: true });
 
 function openTab(tab) {
   if (!tabs().includes(tab) || tab === bagTab) return;
-  bagTab = tab; bagIdx = 0; cellIdx = 0;
+  bagTab = tab; bagIdx = 0; cellIdx = 0; nameParked = true;
   keysOut();
   officeRing.reset();
   renderBag();
 }
 
-export function closeBag() { el.bag.hidden = true; bagIdx = 0; cellIdx = 0; officeRing.reset(); keysOut(); }
+export function closeBag() { el.bag.hidden = true; bagIdx = 0; cellIdx = 0; nameParked = true; officeRing.reset(); keysOut(); }
 
 // Open the shelf on one particular key. The thing that uses a key is the natural
 // place to ask for it — the receiver knows the office has no Spotify long before
@@ -2444,6 +2686,11 @@ export function openKeyCard(id) {
 // represent both interactions, so there are two.
 let bagIdx = 0;
 let cellIdx = 0;
+// The wardrobe opens with the ring on the name row, and a caret there on
+// opening would take the very letter that opened it: C would type «c» instead of
+// closing, and the digits would land in the name instead of picking a tab. So
+// the caret comes in when the hand moves onto the row, not when the panel opens.
+let nameParked = true;
 const bagRows = () => [...el.bag.querySelectorAll('.namerow, .drow')];
 const bagCats = () => [...el.bag.querySelectorAll('.bcat')];
 const catCells = (cat) => (cat ? [...cat.querySelectorAll('.bcell')] : []);
@@ -2472,6 +2719,17 @@ function paintBagFocus() {
   bagIdx = Math.max(0, Math.min(list.length - 1, bagIdx));
   list.forEach((r, i) => r.classList.toggle('focus', i === bagIdx));
   list[bagIdx].scrollIntoView({ block: 'nearest' });
+  // The caret follows the ring on and off the name, as in any other ring.
+  const input = list[bagIdx].querySelector('input');
+  const name = list.map((r) => r.querySelector('input')).find(Boolean);
+  const active = typeof document !== 'undefined' ? document.activeElement : null;
+  if (input && !nameParked && active !== input) {
+    input.focus({ preventScroll: true });
+    const n = String(input.value || '').length;
+    try { input.setSelectionRange(n, n); } catch { /* a type without a caret */ }
+  } else if (!input && name && active === name) {
+    name.blur();
+  }
 }
 
 // Leave Escape alone: closeAll() in main.js handles it.
@@ -2509,6 +2767,13 @@ export function bagKey(raw) {
 // this point — and a const would still be in its dead zone there.
 function stopAt(pos, by, len) { return Math.max(0, Math.min(len - 1, pos + by)); }
 function wrapAt(pos, by, len) { return (pos + by + len) % len; }
+// What takes typing: a text-like input or a textarea. A range, a checkbox or a
+// button in the ring is walked and pressed like any other control.
+function isField(n) {
+  if (!n) return false;
+  if (n.tagName === 'TEXTAREA') return true;
+  return n.tagName === 'INPUT' && !/^(range|checkbox|radio|button|submit|color|file)$/.test(n.type || '');
+}
 
 function selfKey(key) {
   const list = bagRows();
@@ -2516,7 +2781,10 @@ function selfKey(key) {
 
   const step = { arrowup: -1, arrowdown: 1 }[key];
   if (step !== undefined) {
+    const was = bagIdx;
     bagIdx = stopAt(bagIdx, step, list.length);
+    // Moving onto the name brings the caret; bumping the top edge does not.
+    if (bagIdx !== was) nameParked = false;
     paintBagFocus();
     return true;
   }
@@ -2530,10 +2798,10 @@ function selfKey(key) {
                                  // arrow should not escape into the office.
   }
   if (key === 'enter' || key === ' ') {
-    // The name is an input: Enter gives it real focus, then the browser types.
-    // On a slot, Enter does the same thing as ▶.
+    // The name is an input: Enter puts the caret back in a parked field. On a
+    // slot, Enter does the same thing as ▶.
     const input = row && row.querySelector('input');
-    if (input) { input.focus(); return true; }
+    if (input) { nameParked = false; paintBagFocus(); return true; }
     const next = row && row.querySelector('[data-d="1"]');
     if (next) next.click();
     return true;
@@ -2679,11 +2947,33 @@ function bindResults() {
 //   numbers: true          — every item in the ring
 //   numbers: '.rst'        — only these (in radio a digit is a station, not a knob)
 // opts.cols — the mirror of opts.rows for a panel laid out in columns.
+// opts.grid — a wrapping grid: ↑↓ go to the nearest row above or below, onto the
+//   item closest across; ←→ go to the neighbour in reading order.
 //   byData: 'n'            — find data-n="digit" instead of the Nth item: in the
 //                            lift, "3" is floor three even if it is second in the list.
+//
+// A text field in the ring holds the caret. Arriving on it puts the caret in —
+// the hand came to type, and making it press Enter first let the next letter
+// fall through to the office, where C shut the inventory around a half-typed
+// Client ID. Escape takes the caret out and leaves the ring standing on the
+// field, «parked», so the next Escape closes the panel as everywhere else. Tab
+// carries the caret to the panel's next field; ↑↓ leave the field the way they
+// leave a button. Asked for by the owner on 13 September 2026, reversing the
+// earlier «Enter first» rule.
+// opts.sideways — a class whose items ↑↓ step over and only ←→ reach: a small
+//   button that belongs to the row beside it, like the radio's ✕ by each wave.
+//   Until 15 September 2026 the down arrow walked a list of waves through every
+//   cross, so reaching the third wave took five presses instead of two.
+// opts.startEmpty — nothing is lit when the panel opens, and the first arrow
+//   picks the first (or, going up, the last) button. For a panel whose first
+//   button does something that should not happen on a stray Enter: the office
+//   tab's is «check for updates», a trip to git.
 export function focusRing(nodeOf, selector, opts = {}) {
   const stepTo = opts.noWrap ? stopAt : wrapAt;
-  let idx = 0;
+  const start = opts.startEmpty ? -1 : 0;
+  let idx = start;
+  let parked = false;   // Escape took the caret out; the ring stays on the field
+  let shown = -1;       // the index last painted: moving off it unparks
   // Only what has a box is in the ring. The radio's volume knob sits under a
   // `hidden` row until the full Spotify player connects, and until 11 September
   // 2026 one press of the down arrow went into it: the outline vanished and the
@@ -2717,19 +3007,78 @@ export function focusRing(nodeOf, selector, opts = {}) {
     node.addEventListener('focusin', (e) => {
       const l = list();
       const at = l.indexOf(e.target);
-      if (at < 0 || at === idx) return;
-      idx = at;
+      if (at < 0) return;
+      if (isField(e.target)) parked = false;
+      if (at === idx) return;
+      idx = at; shown = at;
       l.forEach((b, i) => b.classList.toggle('focus', i === at));
     });
+    // The field's keys. main.js hands nothing from an INPUT to the office, so a
+    // field that did not let go by itself was a room without a door.
+    //
+    // Escape is marked parked in the capture phase, before the field's own
+    // handler runs: the radio's and the newsstand's repaint the ring from there,
+    // and a repaint that did not know yet would put the caret straight back. The
+    // event is marked too, for selfClosing(): its Escape sits on this same panel,
+    // was hung on it first, and would shut the panel before the bubble below.
+    node.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !isField(e.target) || !list().includes(e.target)) return;
+      parked = true;
+      e.fromRingField = true;
+    }, true);
+    node.addEventListener('keydown', (e) => {
+      const f = e.target;
+      // A key the field's owner already took is theirs: the newsstand's Tab
+      // walks its channels, and that is not this ring's to overrule.
+      if (e.defaultPrevented || !isField(f)) return;
+      const l = list();
+      const at = l.indexOf(f);
+      if (at < 0) return;
+      if (e.key === 'Escape') {
+        e.preventDefault(); e.stopPropagation();
+        idx = at; f.blur(); paint();
+      } else if (e.key === 'Tab') {
+        e.preventDefault(); e.stopPropagation();
+        const fields = l.filter(isField);
+        const next = fields[(fields.indexOf(f) + (e.shiftKey ? -1 : 1) + fields.length) % fields.length];
+        idx = l.indexOf(next); parked = false; paint();
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        // Handed to the office as if pressed outside the field, so the panel's
+        // own walk decides where it goes — the key card's «up from the first row
+        // leaves the card» included. Parked first: if nothing moves, the caret
+        // must not come back into the field it has just left.
+        e.preventDefault(); e.stopPropagation();
+        idx = at; parked = true; f.blur();
+        if (api && api.pressKey) api.pressKey(e.key);
+      }
+    });
+  };
+  // Where the caret goes after a paint: into the field the ring stands on, or
+  // out of a field the ring has left.
+  const settle = (cur, l) => {
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    if (isField(cur)) {
+      if (parked || active === cur) return;
+      cur.focus({ preventScroll: true });
+      // At the end of what is already typed: the hand came to add, not to retype.
+      const n = String(cur.value || '').length;
+      try { cur.setSelectionRange(n, n); } catch { /* a type without a caret */ }
+    } else if (isField(active) && l.includes(active)) {
+      active.blur();
+    }
   };
 
   const paint = () => {
     const l = list();
     if (!l.length) return;
+    if (idx < 0) { l.forEach((b) => b.classList.remove('focus')); follow(); return; }
     idx = Math.max(0, Math.min(l.length - 1, idx));
+    if (idx !== shown) parked = false;
+    shown = idx;
     l.forEach((b, i) => b.classList.toggle('focus', i === idx));
     l[idx].scrollIntoView({ block: 'nearest' });
     follow();
+    settle(l[idx], l);
     // Some panels need more than a highlighted button. The language panel has a
     // "what happens if pressed" line below, which must follow focus, not a click.
     // Otherwise the cost would be shown only after it had already been paid.
@@ -2737,7 +3086,10 @@ export function focusRing(nodeOf, selector, opts = {}) {
   };
   return {
     paint,
-    reset() { idx = 0; },
+    reset() { idx = start; shown = -1; parked = false; },
+    // Hang the field keys on a panel drawn before the ring ever painted it: a
+    // field reached with the mouse must let go on Escape just the same.
+    arm: follow,
     // Focus a particular index: the current floor in the lift, or the first note
     // after leaving search.
     at(i) { idx = i; paint(); },
@@ -2749,6 +3101,12 @@ export function focusRing(nodeOf, selector, opts = {}) {
       const key = raw.toLowerCase();
       const l = list();
       if (!l.length) return false;
+      // Nothing picked yet: an arrow picks, and Enter has nothing to press.
+      if (idx < 0) {
+        const into = { arrowdown: 0, arrowright: 0, arrowup: l.length - 1, arrowleft: l.length - 1 }[key];
+        if (into !== undefined) { idx = into; paint(); return true; }
+        if (key === 'enter' || key === ' ') return true;
+      }
       const cur = l[idx];
 
       if (cur && cur.type === 'range' && (key === 'arrowleft' || key === 'arrowright')) {
@@ -2772,6 +3130,31 @@ export function focusRing(nodeOf, selector, opts = {}) {
           if (at >= 0) { idx = at; paint(); }
           if (!hit.disabled) hit.click();
           return true;
+        }
+      }
+
+      // A wrapping grid is walked by where its items stand, since the grid, not
+      // the markup, decides how many fit in a row: three at 100%, two at 175%.
+      // The standup has been one since 13 September 2026 — a project across every
+      // column — and the down arrow goes on into the next project's first row
+      // rather than stopping at its own last card. Items with no box to measure
+      // (a stand's stand-in DOM) fall through to the flat walk below.
+      if (opts.grid && cur && (key === 'arrowup' || key === 'arrowdown')) {
+        const box = (n) => (n.getBoundingClientRect ? n.getBoundingClientRect() : null);
+        const c = box(cur);
+        if (c && (c.width || c.height)) {
+          const down = key === 'arrowdown';
+          const beyond = l.map((n, i) => ({ i, r: box(n) }))
+            .filter(({ i, r }) => i !== idx && r && (down ? r.top >= c.bottom - 1 : r.bottom <= c.top + 1));
+          if (!beyond.length) {
+            if (opts.noWrap) { paint(); return true; }
+          } else {
+            const edge = down ? Math.min(...beyond.map((o) => o.r.top)) : Math.max(...beyond.map((o) => o.r.top));
+            const mid = (r) => (r.left + r.right) / 2;
+            const row = beyond.filter((o) => Math.abs(o.r.top - edge) < 2)
+              .sort((a, b) => Math.abs(mid(a.r) - mid(c)) - Math.abs(mid(b.r) - mid(c)));
+            idx = row[0].i; paint(); return true;
+          }
         }
       }
 
@@ -2827,12 +3210,24 @@ export function focusRing(nodeOf, selector, opts = {}) {
       }
 
       const step = { arrowup: -1, arrowdown: 1, arrowleft: -1, arrowright: 1 }[key];
-      if (step !== undefined) { idx = stepTo(idx, step, l.length); paint(); return true; }
+      if (step !== undefined) {
+        let to = stepTo(idx, step, l.length);
+        // A sideways item is stepped over going up or down; only ←→ land on it.
+        if (opts.sideways && (key === 'arrowup' || key === 'arrowdown')) {
+          const side = (i) => l[i].classList.contains(opts.sideways);
+          for (let n = l.length; n > 0 && side(to); n--) {
+            const next = stepTo(to, step, l.length);
+            if (next === to) break;
+            to = next;
+          }
+          if (side(to)) to = idx;
+        }
+        idx = to; paint(); return true;
+      }
       if (key === 'enter' || key === ' ') {
         if (!cur || cur.disabled) return true;
-        // Give an input real focus, then let the browser type.
-        if (cur.tagName === 'INPUT' && cur.type !== 'range') cur.focus();
-        else cur.click();
+        // A parked field takes the caret back; anything else is pressed.
+        if (isField(cur)) { parked = false; settle(cur, l); } else cur.click();
         return true;
       }
       return false;
@@ -3227,7 +3622,9 @@ export function openLift(lift, floorNow, pick) {
 // merely inconvenient—without a mouse.
 //
 // Escape is left to closeAll() in main.js.
-const liftRing = focusRing(() => el.lift, '.liftbtn, .recgo', { numbers: '.liftbtn', byData: 'n' });
+// At the desk the ring is rows: ↑↓ walk the projects and keep the column,
+// ←→ walk the row — «проводить», «нанять». The lift has no rows and walks flat.
+const liftRing = focusRing(() => el.lift, '.liftbtn, .recgo, .rechire', { numbers: '.liftbtn', byData: 'n', rows: '.recrow' });
 export function closeLift() { el.lift.hidden = true; liftRing.reset(); }
 export function liftKey(raw) { return liftRing.key(raw, el.lift && !el.lift.hidden); }
 
@@ -3252,9 +3649,15 @@ export function openReception(desk, guide) {
           ? tr('rec.waiting', { n: total, word: tr(pluralKey('rec.wait', total)) })
           : tr('rec.nobodyWaits') });
 
+  // Hiring is the owner's: it starts a process on the owner's machine. A guest
+  // sees the same desk without the button, and the line under it says why.
+  // Frames: [Reception · owner](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2122-5869)
+  // [Reception · guest](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2122-5906)
+  const hires = !isGuest();
   el.lift.hidden = false;
   el.lift.innerHTML = `<div class="rwrap recwrap">
-    <div class="vhead">${tr('rec.title', { n: desk.n })}<button id="recx">✕</button></div>
+    <div class="vhead"><span>${tr('rec.title', { n: desk.n })}</span>
+      <span class="rechead"><span class="reckeys">${tr(hires ? 'rec.keysOwner' : 'rec.keys')}</span><button id="recx">✕</button></span></div>
     <div class="recbody">
       <p class="recgreet">${esc(greet)}</p>
       ${rows.map((r) => `<div class="recrow">
@@ -3263,15 +3666,180 @@ export function openReception(desk, guide) {
         <span class="reccnt">${tr('rec.agents', { n: r.n, word: tr(pluralKey('rec.agent', r.n)) })}</span>
         <span class="recwait${r.waiting ? ' on' : ''}">! ${r.waiting}</span>
         ${r.lead ? `<button class="recgo" data-go="${r.lead.id}">${tr('rec.lead')}</button>` : ''}
+        ${hires ? `<button class="rechire" data-hire="${esc(r.title)}">${tr('rec.hire')} <kbd>+</kbd></button>` : ''}
       </div>`).join('')}
-      <p class="hint">${tr('rec.hint')}</p>
+      <p class="hint">${tr(hires ? 'rec.hintOwner' : 'rec.hintGuest')}</p>
     </div></div>`;
   $('#recx').onclick = closeLift;
   el.lift.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => {
     closeLift();
     guide(b.dataset.go);
   });
+  el.lift.querySelectorAll('[data-hire]').forEach((b) => b.onclick = () => {
+    closeLift();
+    openHire({ project: b.dataset.hire });
+  });
   liftRing.at(0);
+}
+
+// «+» at the desk hires into the room the arrows stand on, whichever of its
+// two buttons they are on — the shortcut for → Enter.
+export function receptionHire(raw) {
+  if (!el.lift || el.lift.hidden || !el.lift.querySelector('.recwrap')) return false;
+  if (raw !== '+' && raw !== '=') return false;
+  const cur = el.lift.querySelector('.recgo.focus, .rechire.focus') || el.lift.querySelector('.recgo');
+  const row = cur && cur.closest('.recrow');
+  const b = row && row.querySelector('.rechire');
+  // a guest's «+» is swallowed rather than handed to the zoom under the panel
+  if (b) b.click();
+  return true;
+}
+
+// ------------------------------------------------------------------- hiring
+// A new Claude Code session, started by the office in a project's folder. The
+// panel names a room, never a path; the server finds the folder itself.
+// Frames: [Hire panel](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2090-747)
+// [Hire panel · from a letter](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2090-789)
+// [Hire panel · 175%](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2090-814)
+//
+// A module opens it with a task already written — the mail does, from a
+// letter — and hands the letter over as `quote`: it goes to the agent as a
+// quotation marked as somebody else's text, and the owner sees and edits the
+// task before anything starts.
+let hire = null;   // { project, task, model, quote, from, back, done, busy, error } while open
+
+const hireRooms = () => ((S.layout && S.layout.projectRooms) || [])
+  .map((r) => r.key).filter((k) => S.agents.some((a) => a.project === k));
+
+// Where the agent will sit, said the way the room is known: the folder of the
+// agent who works in the project root, and how many desks are taken.
+function hireWhere(project) {
+  const here = S.agents.filter((a) => a.project === project);
+  const root = here.find((a) => a.cwd && a.cwd.split('/').pop() === project);
+  const dir = root ? root.cwd.replace(/^\/(?:Users|home)\/[^/]+/, '~') : '';
+  const seats = tr('hire.seats', { n: here.length, word: tr(pluralKey('rec.agent', here.length)) });
+  return [dir, seats].filter(Boolean).join(' · ');
+}
+
+export function openHire(opts = {}) {
+  if (isGuest()) return;
+  const rooms = hireRooms();
+  const project = rooms.includes(opts.project) ? opts.project : rooms[0];
+  if (!project) { toast(tr('hire.noRooms')); return; }
+  hire = {
+    project, task: opts.task || '', model: 'opus', quote: opts.quote || null,
+    from: opts.from || null, back: opts.back || null, done: opts.done || null, busy: false, error: '',
+  };
+  el.hire.hidden = false;
+  renderHire();
+  setTimeout(() => { const ta = $('#hireTask'); if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } }, 30);
+}
+
+export function hireOpen() { return !!(el.hire && !el.hire.hidden); }
+
+// Esc from a panel a module opened goes back to that module — to the letter.
+export function closeHire(goBack = true) {
+  if (!el.hire || el.hire.hidden) return;
+  const back = hire && hire.back;
+  el.hire.hidden = true;
+  hire = null;
+  if (goBack && back) back();
+}
+
+function renderHire() {
+  if (!hire) return;
+  const rooms = hireRooms();
+  const d = S.delivery || {};
+  const blocked = d.checked !== false && d.available === false;
+  const f = hire.from;
+  el.hire.innerHTML = `<div class="rwrap hirewrap">
+    <div class="vhead"><span>${tr('hire.title')}</span>
+      <span class="rechead"><span class="reckeys">${tr(hire.back ? 'hire.keysBack' : 'hire.keys')}</span><button id="hirex">✕</button></span></div>
+    <div class="hirebody">
+      ${f ? `<div class="hirefrom"><i>${esc(f.kind || '')}</i><b>${esc(f.title || '')}</b>
+        <span>${tr('hire.quoteNote')}</span></div>` : ''}
+      <p class="hlabel">${tr('hire.room')}</p>
+      <div class="hchips" role="radiogroup">${rooms.map((k) => `<button class="hchip${k === hire.project ? ' on' : ''}" data-room="${esc(k)}"
+        role="radio" aria-checked="${k === hire.project}" tabindex="${k === hire.project ? 0 : -1}">${esc(k)}</button>`).join('')}</div>
+      <p class="hwhere">${esc(hireWhere(hire.project))}</p>
+      <p class="hlabel">${tr('hire.task')}</p>
+      <textarea id="hireTask" rows="3" maxlength="4000" placeholder="${tr('hire.taskHint')}">${esc(hire.task)}</textarea>
+      <p class="hlabel">${tr('hire.model')}</p>
+      <div class="hmodels" role="radiogroup">${['sonnet', 'opus'].map((m) => `<button class="hmodel${m === hire.model ? ' on' : ''}" data-model="${m}"
+        role="radio" aria-checked="${m === hire.model}" tabindex="${m === hire.model ? 0 : -1}">${m === 'opus' ? 'Opus' : 'Sonnet'}</button>`).join('')}</div>
+      <p class="hint">${tr('hire.rules')}</p>
+      ${blocked ? `<p class="hint warn">${esc(said(d, 'hint') || tr('hire.noCli'))}</p>` : ''}
+      ${hire.error ? `<p class="hint warn">${esc(hire.error)}</p>` : ''}
+    </div>
+    <div class="hirefoot">
+      <button id="hireNo">${tr('hire.cancel')} <kbd>Esc</kbd></button>
+      <button id="hireGo" class="primary" ${blocked || hire.busy ? 'disabled' : ''}>${tr(hire.busy ? 'hire.going' : 'hire.go')} <kbd>Enter</kbd></button>
+    </div></div>`;
+
+  const ta = $('#hireTask');
+  ta.oninput = () => { hire.task = ta.value; };
+  ta.onkeydown = (e) => {
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    e.preventDefault();
+    submitHire();
+  };
+  $('#hirex').onclick = () => closeHire();
+  $('#hireNo').onclick = () => closeHire();
+  $('#hireGo').onclick = submitHire;
+  const pick = (group) => { const on = el.hire.querySelector(group + '.on'); if (on) on.focus(); };
+  el.hire.querySelectorAll('[data-room]').forEach((b) => b.onclick = () => { hire.project = b.dataset.room; hire.error = ''; renderHire(); pick('.hchip'); });
+  el.hire.querySelectorAll('[data-model]').forEach((b) => b.onclick = () => { hire.model = b.dataset.model; renderHire(); pick('.hmodel'); });
+}
+
+async function submitHire() {
+  if (!hire || hire.busy) return;
+  const task = hire.task.trim();
+  if (!task) { hire.error = tr('hire.errEmpty'); renderHire(); $('#hireTask')?.focus(); return; }
+  hire.busy = true; hire.error = '';
+  renderHire();
+  const r = await api.hire({ project: hire.project, task, model: hire.model, quote: hire.quote, source: hire.from ? hire.from.source : null });
+  if (!hire) return;
+  hire.busy = false;
+  if (!r || !r.ok) {
+    hire.error = said(r && r.hire ? r.hire : r) || tr('hire.errUnknown');
+    renderHire();
+    return;
+  }
+  const { project, done } = hire;
+  closeHire(false);
+  toast(tr('hire.opened', { room: project }));
+  if (done) done(r.hire);
+}
+
+// The rooms and the models are two switches, each one stop for Tab: on them
+// ← → move the choice, and Enter hires rather than pressing the chip that is
+// already chosen. The focus opens in the task — the room was picked at the
+// desk — so Shift+Tab is the way back to it. Digits were here first, and they
+// could not work: with the caret in the task they typed into it (Sergey,
+// 13 September 2026).
+function hirePanelKey(e) {
+  const b = e.target;
+  if (!hire || !b || !b.classList) return;
+  const group = b.classList.contains('hchip') ? '.hchip' : b.classList.contains('hmodel') ? '.hmodel' : null;
+  if (!group) return;
+  if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); submitHire(); return; }
+  const step = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[e.key];
+  if (!step) return;
+  e.preventDefault(); e.stopPropagation();
+  const all = [...el.hire.querySelectorAll(group)];
+  const next = all[(all.indexOf(b) + step + all.length) % all.length];
+  if (group === '.hchip') { hire.project = next.dataset.room; hire.error = ''; } else hire.model = next.dataset.model;
+  renderHire();
+  const on = el.hire.querySelector(group + '.on');
+  if (on) on.focus();
+}
+
+// Whatever reaches the office past the panel's own fields waits: the panel is
+// in front of it.
+export function hireKey(raw) {
+  if (!hireOpen()) return false;
+  if (raw === 'Enter') { submitHire(); return true; }
+  return raw !== 'Tab' && raw !== 'Escape';
 }
 
 // English has two forms and Russian has three. Both use the same keys, while the

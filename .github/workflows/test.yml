@@ -20,9 +20,20 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+# Superseded PR commits need no result; main runs still finish their audit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Private staging sets CI_RUNNER_LABELS to its dedicated runner labels.
+# Public clones default to GitHub-hosted Linux without private infrastructure.
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS || '["ubuntu-latest"]') }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false        # A failure on 18 still leaves 20 and 22 useful.
       matrix:
@@ -72,7 +83,8 @@ jobs:
   # on ordinary edits and gets bypassed; this one stays quiet until coverage
   # collapses because part of the office has no stand at all.
   coverage:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS || '["ubuntu-latest"]') }}
+    timeout-minutes: 15
     name: coverage
     steps:
       - uses: actions/checkout@v5
@@ -103,12 +115,16 @@ jobs:
   branch-hygiene:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [test, coverage]
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS || '["ubuntu-latest"]') }}
+    timeout-minutes: 15
     name: merged branches
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
       - name: fetch all branch refs
         run: git fetch origin --prune '+refs/heads/*:refs/remotes/origin/*'
       - name: no merged remote branches remain

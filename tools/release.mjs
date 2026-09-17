@@ -349,7 +349,27 @@ if (ship) {
   const remote = (() => { try { return git('remote', 'get-url', 'origin'); } catch { return ''; } })();
   if (!remote) die(`tag ${tag} exists locally, but origin is not configured; there is nowhere to push`);
   console.log(`\npushing to origin (${remote}):`);
-  git('push', 'origin', 'HEAD:main', tag);
+  // --atomic or nothing: two refspecs in one push land independently, so a main
+  // rejected as non-fast-forward still lets the tag through. On 6 September 2026
+  // v0.18.0 spent an hour as a tag no branch could see, and --atomic went in
+  // (ff4c3d7). The rewrite of this tail on 11 September dropped it without a
+  // word, and on 15 September two landings ran at once: v0.58.3 reached staging
+  // while main refused it, and the fix it carried shipped in the neighbour's
+  // v0.59.0. test-release-atomic plays that race against this script, so the
+  // flag cannot go quietly a second time.
+  //
+  // A refusal leaves nothing on origin, and the tag made here is taken back:
+  // left in the shared refs it would collide with the neighbour's tag of the
+  // same number, and the rerun has to count from what main really holds.
+  try {
+    git('push', '--atomic', 'origin', 'HEAD:main', tag);
+  } catch (err) {
+    git('tag', '-d', tag);
+    const why = String(err.stderr || err.message || '').trim().split('\n').filter(Boolean).slice(-2).join('\n  ');
+    die(`origin refused the push, and nothing was pushed — main moved while this release was cut:\n  ${why}\n` +
+      `  the local tag ${tag} is removed. Rerun the landing (\`npm run land -- <PR>\` resumes at the release),\n` +
+      '  and the version is counted from what main holds now.');
+  }
   console.log(`  main and ${tag} pushed`);
 
   // The released repository can borrow this release suite without carrying a

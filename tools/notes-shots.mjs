@@ -75,8 +75,8 @@ if (only) fragments = fragments.filter((f) => f.slug === only);
 const wanted = fragments.filter((f) => (f.shots || []).length);
 if (!wanted.length) die(only ? `${only} declares no shots` : 'no fragment waiting for the release declares a shot');
 
-// The cast. Invented people, invented projects, invented branches — and three of
-// them, because an office with one person in it looks broken rather than quiet.
+// The cast. Invented people, invented projects, invented branches — and more than
+// one, because an office with one person in it looks broken rather than quiet.
 const CAST = [
   { slot: 'a', sessionId: 'aaaaaaaa-0000-4000-8000-00000000000a', cwd: '/Users/kolya/Projects/rocket-shop',
     branch: 'feature/cart-discount', asked: 'Calculate the discount in the cart',
@@ -90,6 +90,21 @@ const CAST = [
     branch: 'feature/sleep-timer', asked: 'Add a sleep timer',
     said: 'The timer is in. It fades the volume out over the last minute.',
     file: '/Users/kolya/Projects/paper-radio/src/timer.js' },
+  // Three more in rocket-shop, since 13 September 2026: the standup gives a project
+  // the whole width, and with one person a project nothing in the picture showed
+  // it — a row of three and one below does.
+  { slot: 'd', sessionId: 'aaaaaaaa-0000-4000-8000-00000000000d', cwd: '/Users/kolya/Projects/rocket-shop',
+    branch: 'feature/checkout-address', asked: 'Check the delivery address before payment',
+    said: 'The address form checks the postcode before it lets you pay.',
+    file: '/Users/kolya/Projects/rocket-shop/src/checkout.js' },
+  { slot: 'e', sessionId: 'aaaaaaaa-0000-4000-8000-00000000000e', cwd: '/Users/kolya/Projects/rocket-shop',
+    branch: 'feature/lazy-photos', asked: 'Load product photos as the page scrolls',
+    said: 'Photos load as you scroll; the first screen is 40% lighter.',
+    file: '/Users/kolya/Projects/rocket-shop/src/gallery.js' },
+  { slot: 'f', sessionId: 'aaaaaaaa-0000-4000-8000-00000000000f', cwd: '/Users/kolya/Projects/rocket-shop',
+    branch: 'fix/stock-after-refund', asked: 'Stock goes negative after a refund',
+    said: 'A refund puts the item back once now, not twice.',
+    file: '/Users/kolya/Projects/rocket-shop/src/stock.js' },
 ];
 
 const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-notes-shots-'));

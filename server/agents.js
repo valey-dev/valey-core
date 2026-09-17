@@ -177,7 +177,9 @@ async function deepSkills(st, file, until) {
     if (!speaks && !(line.includes('"user"') && !line.includes('"tool_use_id"'))) continue;
     let r;
     try { r = JSON.parse(line); } catch { continue; }
-    if (r.type === 'user' && r.message && !r.isSidechain) {
+    // The summary a compaction writes is not something the person said (see
+    // applyLine below): shown as their line it put pages of recap in their mouth.
+    if (r.type === 'user' && r.message && !r.isSidechain && !r.isCompactSummary) {
       const content = r.message.content;
       if (Array.isArray(content) && content.some((b) => b?.type === 'tool_result')) continue;
       const txt = textOf(content);
@@ -512,6 +514,15 @@ const TOOL_USE_ID_RE = /<tool-use-id>([^<\s\\]+)<\/tool-use-id>/g;
 // known about it.
 const endOf = (said) => (!said ? 'bare' : said.need ? 'asked' : 'settled');
 
+// Tools that put the agent on hold until the person answers: a question with
+// options, a plan waiting for approval. The turn is not over — no end_turn is
+// written — but nothing moves until somebody replies, and the transcript stays
+// silent the whole time. Read as an ordinary step, that silence counted as work
+// for up to an hour (STEP_MS below): until 13 September 2026 an agent asking
+// «Какой цвет?» sat «working» at its desk while it waited for the answer. The
+// answer comes back as the tool's result, which reopens the turn like any other.
+const ASKING = new Set(['AskUserQuestion', 'ExitPlanMode']);
+
 const RECENT_MAX = 16;
 const MSG_MAX = 12000;
 
@@ -535,7 +546,7 @@ function emptyState() {
     lastUserPrompt: '', acts: [], role: '', files: new Map(),
     ended: '',               // how the turn ended, if it did — see endOf()
     background: new Map(),   // tool_use id -> when that background job started
-    turns: 0, model: '', branch: '', slug: '', title: '', aiTitle: '', task: null,
+    turns: 0, model: '', effort: '', turnEffort: '', branch: '', slug: '', title: '', aiTitle: '', task: null,
     bornAt: 0,             // the first reply in the file, see born()
     skills: newSkills(),   // the grade counter: it grows and is never trimmed
     shift: newShift(),     // replies, characters and idle gaps, over the whole file
@@ -583,11 +594,33 @@ function applyLine(st, line) {
   if (r.type === 'custom-title' && r.customTitle) st.title = r.customTitle;
   if (r.type === 'ai-title' && r.aiTitle) st.aiTitle = r.aiTitle;
   if (r.type === 'last-prompt' && r.lastPrompt) st.lastUserPrompt = String(r.lastPrompt).slice(0, 400);
+  // A manual compaction cuts a turn that was still open. The app runs /compact
+  // and then waits at the prompt: it does not pick the interrupted work back
+  // up. On 13 September 2026 a session stalled after a tool result, the owner
+  // ran /compact ten minutes later, and the office — whose last word from that
+  // session was the tool result — kept the agent «working» for the hour it
+  // gives a pending tool, while the agent was in fact waiting for a word. So a
+  // manual compaction over an open turn is the same as an interruption. An
+  // automatic one happens inside the model's turn and the model goes on.
+  if (r.type === 'system' && r.subtype === 'compact_boundary'
+    && r.compactMetadata && r.compactMetadata.trigger === 'manual' && !st.ended) st.ended = 'stopped';
 
   if (r.type === 'assistant' && r.message) {
     born(st, r.timestamp);
     gap(st.shift, Date.parse(r.timestamp || '') || 0, st.clock);
-    st.model = r.message.model || st.model;
+    // «<synthetic>» is the app's own line (an API error, a resume), not a model:
+    // taken as one, it stood in the dossier until the agent next said a word —
+    // 353 such lines in 200 transcripts on 15 September 2026.
+    if (r.message.model && r.message.model !== '<synthetic>') {
+      st.model = r.message.model;
+      // The reasoning level rides on every reply: `effort` is the session's,
+      // `perTurnEffort` a one-turn boost that is gone with the turn. Both are
+      // read off the last reply, as the model is — /effort mid-session shows
+      // from the next answer. In 60 transcripts on 15 September 2026 it
+      // changed mid-session in 22.
+      st.effort = r.effort || '';
+      st.turnEffort = r.perTurnEffort || '';
+    }
     const content = r.message.content || [];
     const txt = textOf(content);
     const said = txt ? reportTail(txt) : null;
@@ -614,8 +647,23 @@ function applyLine(st, line) {
     else if (r.message.model === '<synthetic>') { /* neither opens nor closes a turn */ }
     else st.ended = r.message.stop_reason === 'end_turn' ? endOf(said) : '';
     for (const b of Array.isArray(content) ? content : []) {
-      if (b?.type === 'tool_use') useTool(st, b.name, b.input);
+      if (b?.type !== 'tool_use') continue;
+      useTool(st, b.name, b.input);
+      // Asking is Claude's own: the two tools that end a turn on a question
+      // have no counterpart in a Codex rollout, so it stays with this parser
+      // rather than moving into useTool().
+      if (ASKING.has(b.name)) st.ended = 'asked';
     }
+  } else if (r.type === 'user' && r.message && !r.isSidechain && r.isCompactSummary) {
+    // A compaction writes its summary as a user line — «This session is being
+    // continued from a previous conversation…» — and nobody typed it. Read as
+    // a prompt it opened a turn: after a /compact the app is back at the prompt
+    // and writes nothing more, so the agent sat «working» at its desk until the
+    // person typed again, and the office read that as an agent not answering.
+    // Found 13 September 2026: in 2 of 8 manual compactions on this machine the
+    // transcript simply ends there. An automatic one is followed by the model's
+    // own reply, so leaving the turn as it was is right for both — and the
+    // summary does not become «what was asked» either.
   } else if (r.type === 'user' && r.message && !r.isSidechain) {
     const content = r.message.content;
     const isToolResult = Array.isArray(content) && content.some((b) => b?.type === 'tool_result');
@@ -1046,6 +1094,9 @@ export async function snapshot() {
       repo: !!repo.git,
       branch: t.branch,
       model: t.model,
+      // A one-turn boost is the level only while that turn is open.
+      effort: (status === 'working' && t.turnEffort) || t.effort,
+      // A Codex thread carries the name the app shows on the session itself.
       title: t.title || t.aiTitle || s.title || '',
       role: roleInfo.role,
       roleKey: roleInfo.short,

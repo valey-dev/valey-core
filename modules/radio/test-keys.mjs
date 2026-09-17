@@ -168,7 +168,7 @@ UI.repaintRadioFocus();
 
 const ctl = radioBox.ctl;
 check('radio: focus is on the first knob', at(ctl) === 0, at(ctl));
-check('right arrow processed', UI.radioKey('ArrowRight') === true, 'не обработана');
+check('right arrow processed', UI.radioKey('ArrowRight') === true, 'not handled');
 check('and switches to “enable”', ctl[1].id === 'radiotoggle' && at(ctl) === 1, at(ctl));
 UI.radioKey('Enter');
 check('Enter presses “enable”', ctl[1].clicked === 1, ctl[1].clicked);
@@ -176,6 +176,21 @@ check('Enter presses “enable”', ctl[1].clicked === 1, ctl[1].clicked);
 // the waves and their crosses stand in the same ring: deleting a wave without a mouse has to work too
 UI.radioKey('ArrowRight'); UI.radioKey('ArrowRight');
 check('focus comes to the list of waves', ctl[at(ctl)].has('rst'), at(ctl));
+const [wave1, wave2] = radioBox.stations;
+check('it is on the first wave', ctl[at(ctl)] === wave1, at(ctl));
+
+// ↑↓ walk wave to wave, stepping over the ✕ beside each; → reaches the ✕
+UI.radioKey('ArrowDown');
+check('down goes to the next wave, not to the cross', ctl[at(ctl)] === wave2, at(ctl));
+UI.radioKey('ArrowUp');
+check('and up comes back to the wave above', ctl[at(ctl)] === wave1, at(ctl));
+UI.radioKey('ArrowRight');
+check('right reaches the cross of the wave', ctl[at(ctl)].has('rdel') && ctl[at(ctl) - 1] === wave1, at(ctl));
+UI.radioKey('ArrowDown');
+check('down from a cross goes to the next wave', ctl[at(ctl)] === wave2, at(ctl));
+UI.radioKey('ArrowUp'); UI.radioKey('ArrowUp');
+check('up from the first wave goes back to the knobs', ctl[at(ctl)].id === 'radionext', at(ctl));
+UI.radioKey('ArrowDown');
 
 // the volume: sideways it turns itself, up and down lead away from it
 const vol = ctl.find((b) => b.id === 'radiovol');
@@ -183,24 +198,25 @@ let volSet = 0;
 vol.oninput = () => { volSet += 1; };
 while (ctl[at(ctl)] !== vol) UI.radioKey('ArrowDown');
 UI.radioKey('ArrowRight');
-check('at volume, it turns it to the right, but does not move it away', ctl[at(ctl)] === vol && Number(vol.value) === 55, `${vol.value}, фокус ${at(ctl)}`);
+check('at volume, it turns it to the right, but does not move it away', ctl[at(ctl)] === vol && Number(vol.value) === 55, `${vol.value}, focus ${at(ctl)}`);
 check('and pulls the slider handler', volSet === 1, volSet);
 UI.radioKey('ArrowLeft'); UI.radioKey('ArrowLeft');
 check('turns back to the left and doesn’t go below zero right away', Number(vol.value) === 45, vol.value);
 UI.radioKey('ArrowDown');
-check('It still takes the volume down', ctl[at(ctl)] !== vol, 'застряли');
+check('It still takes the volume down', ctl[at(ctl)] !== vol, 'stuck');
 
-// your own wave is an input field: Enter has to give it real focus rather than "press"
-// it, or typing into it from the keyboard is still impossible
+// your own wave is an input field: arriving on it puts the caret in — no Enter
+// first, or the next letter falls through to the office — and it is never
+// "pressed" like a button (focusRing in web/ui.js, since 13 September 2026)
 const uri = ctl.find((b) => b.id === 'radiouri');
 while (ctl[at(ctl)] !== uri) UI.radioKey('ArrowDown');
+check('arriving on its wave puts the caret in the field', uri.focused >= 1, uri.focused);
 UI.radioKey('Enter');
-check('Enter on its wave gives focus to the field', uri.focused === 1, uri.focused);
-check('and doesn’t press it like a button', uri.clicked === 0, uri.clicked);
+check('and Enter doesn’t press it like a button', uri.clicked === 0, uri.clicked);
 
 // a closed panel does not take the keys
 UI.closeRadio();
-check('closed radio arrows do not eat', UI.radioKey('ArrowDown') === false, 'съело');
+check('closed radio arrows do not eat', UI.radioKey('ArrowDown') === false, 'ate it');
 
 
 

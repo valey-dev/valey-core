@@ -24,6 +24,8 @@ Then open <http://localhost:5177>.
 
 Run it twice and the second one says where the first is and exits: two offices on one port would be two offices, not one. If something that is not Valey holds 5177, the office takes the next free port and says so — with the reminder that Claude Code sends its questions to 5177, so a hook set up later needs the port freed or `network.port` in the settings changed.
 
+To update a running office from its repository, press **update** in the office tab of the inventory (C), or run `npm run update` in another terminal: the core and the Modules are pulled and the office is swapped for the new version without stopping — guests, notes and questions it holds for agents come along, and open pages reload onto it. It never checks on its own: a `git fetch` happens only when you ask. The swap needs the office started with `npm start`, which runs a small supervisor holding the port; `npm run dev` runs the office alone, and the button says so. An office started before v0.55.0 has no supervisor yet, so restart it once with Ctrl-C and `npm start`. Ctrl-C stays a restart: guests lose their access. An office installed from an archive is updated by running the install command again.
+
 The server binds `127.0.0.1`, so the office answers this machine and nothing
 else. 
 
@@ -134,7 +136,9 @@ The repository is called `valey-core` because that is what it is. The office is 
 
 ## Keys
 
-Arrow keys walk · `SHIFT` runs · `SPACE` is the action — talk, drink at the cooler, feed the piranhas, sit on a bench · `TAB` the standup — who is on what · `N` notes · `C` clothes · `P` window on the world · `U` office colour · `M` sound · `R` radio · `S` starts and stops the music wherever you are · `K` the office plan · `G` the newspaper stand · `H` the pager you put off · `F9` a 1:1 frame · `+` `0` scale · `ESC` back. The security room is below the floor and has the cameras. Press `?` in the office for the whole keyboard, which is generated from the same list the office answers to and cannot drift from this one.
+Arrow keys walk · `SHIFT` runs · `SPACE` is the action — talk, drink at the cooler, feed the piranhas, tip the robot on the pole in the lounge, sit on a bench · `+` at the reception desk hires a new agent · `TAB` the standup — who is on what · `N` notes · `C` clothes · `P` window on the world · `U` office colour · `M` sound · `R` radio · `S` starts and stops the music wherever you are · `K` the office plan · `G` the newspaper stand · `H` the pager you put off · `F9` a 1:1 frame · `+` `0` scale · `ESC` back. The security room is below the floor and has the cameras. Press `?` in the office for the whole keyboard, which is generated from the same list the office answers to and cannot drift from this one.
+
+Hiring starts a new Claude Code session in a project's folder: `claude -p` in the default permission mode, so anything risky still reaches you on the pager. The office takes the folder from the room the agent is hired into — the page never sends a path — and the agent steps out of a portal beside you and walks to its room. When it has finished, its card copies `claude --resume <id>` to carry the conversation on in a terminal; the office lets it go first, so two processes never write one transcript.
 
 The office fills the window. The scale is a whole number of screen dots per game pixel and is counted from the width — it promises at least 400 pixels of world across, and everything else the window gives goes into showing more of the floor, so a tall or a vertical monitor shows more of it rather than black bars. `+` and `−` pick the step by hand between ×2 and ×8, `0` hands the count back to the window.
 

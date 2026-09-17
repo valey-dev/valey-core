@@ -6,7 +6,8 @@
 // the normal path, and the person sees the native dialog.
 
 export function hookOutput(payload, answer) {
-  if (!answer || !answer.decision) return null;
+  // `retry` is an instruction to the hook, not a verdict for Claude Code.
+  if (!answer || !answer.decision || answer.decision === 'retry') return null;
   const event = String((payload && payload.hook_event_name) || 'PermissionRequest');
   if (event === 'PreToolUse') return preToolUse(payload, answer);
   if (event !== 'PermissionRequest') return null;

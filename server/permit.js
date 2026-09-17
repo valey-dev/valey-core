@@ -154,7 +154,7 @@ export function holdable(payload, input) {
 // A request arrived. Returns a promise with the verdict for the hook; `null`
 // means "the office steps aside" — the hook answers with nothing and the
 // terminal asks.
-export function ask(payload, { audience }) {
+export function ask(payload, { audience, canRetry = false }) {
   const agentId = String((payload && payload.session_id) || '');
   const tool = String((payload && payload.tool_name) || '');
   const input = (payload && payload.tool_input) || {};
@@ -178,6 +178,7 @@ export function ask(payload, { audience }) {
     suggestions: (payload && payload.permission_suggestions) || [],
     at: Date.now(),
     until: Date.now() + WAIT_MS,
+    canRetry,
   };
   const verdict = new Promise((resolve) => { e.resolve = resolve; });
   e.timer = setTimeout(() => finish(e.id, null), WAIT_MS);
@@ -268,4 +269,14 @@ export function forgetGone(aliveIds, now = Date.now()) {
 // For the stands and for shutting the server down: release everything waiting.
 export function releaseAll() {
   for (const id of [...waiting.keys()]) finish(id, null);
+}
+
+// The office is being replaced by a newer one. A question it holds is not
+// dropped to the terminal — an update must not break anything — but sent back
+// to its hook with «ask again», and the hook asks the next office, which holds
+// it anew. Only a hook that said it understands `retry` gets one: a hook
+// started before this existed would print it to Claude Code as a malformed
+// verdict, so those are let go as on a restart.
+export function retryAll() {
+  for (const e of [...waiting.values()]) finish(e.id, e.canRetry ? { decision: 'retry' } : null);
 }

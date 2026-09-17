@@ -93,5 +93,5 @@ const l = readPad(pad({ axes: [-1, 0] })), r = readPad(pad({ axes: [1, 0] }));
 const flip = edges(l, r);
 ok('Stick Flip: ArrowLeft released, ArrowRight pressed', flip.released.join() === 'ArrowLeft' && flip.pressed.join() === 'ArrowRight', flip);
 
-console.log(bad ? `\n${bad} упало` : '\nall intact');
+console.log(bad ? `\n${bad} failed` : '\nall intact');
 process.exit(bad ? 1 : 0);

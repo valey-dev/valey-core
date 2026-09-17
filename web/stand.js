@@ -66,12 +66,15 @@ export async function initStand() {
       const name = document.createElement('b');
       name.textContent = m.id;
       const state = document.createElement('i');
-      state.textContent = m.broken ? 'BROKEN' : m.inactive ? 'OFF · manifest' : m.off ? 'OFF' : 'on';
+      state.textContent = m.broken ? 'BROKEN' : m.inactive ? 'OFF · manifest' : m.owner ? 'OFF · owner' : m.off ? 'OFF' : 'on';
       b.append(name, state);
       b.title = m.off ? `enable ${m.id}` : `disable ${m.id}`;
       // Off in its manifest is the owner's decision, not the stand's: the switch
-      // would only be refused, so it is not offered.
+      // would only be refused, so it is not offered. The same for the owner's
+      // switch in the module tree: the stand's would flip a different set and
+      // change nothing on screen.
       if (m.inactive) { b.disabled = true; b.title = `${m.id}: "active": false in module.json`; }
+      else if (m.owner) { b.disabled = true; b.title = `${m.id}: switched off in the module tree (modulesOff)`; }
       b.onclick = async () => {
         if (b.disabled) return;
         b.disabled = true;

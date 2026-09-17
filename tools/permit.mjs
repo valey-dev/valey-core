@@ -80,22 +80,38 @@ const passThrough = () => process.exit(0);
 const payload = JSON.parse(await readStdin().catch(() => '')) || null;
 if (!payload || !payload.tool_name) passThrough();
 
-let answer = null;
-try {
+// `x-valey-hook: 2` says this hook understands `retry`: the office sends it
+// while it is being replaced by a newer one, and the question is asked again
+// of that one instead of falling to the terminal. An update must not break a
+// question that is being held. The retries are bounded: a minute is far longer
+// than a swap takes, and past it the terminal asks, as it always could.
+const ask = async () => {
   const token = ownerToken();
   const res = await fetch(URL_BASE + '/api/permit', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      'x-valey-hook': '2',
       ...(token ? { 'x-valey-owner': token } : {}),
     },
     body: JSON.stringify(payload),
   });
-  if (res.ok) answer = await res.json();
+  return res.ok ? res.json() : null;
+};
+
+let answer = null;
+try {
+  answer = await ask();
 } catch {
   // There is no office on this port — the most ordinary case: it is not obliged
   // to be running. The connection is refused instantly, with no delay for the
   // person.
+}
+const until = Date.now() + 60_000;
+while (answer && answer.decision === 'retry' && Date.now() < until) {
+  await new Promise((r) => setTimeout(r, 300));
+  // Refused or reset mid-swap is the same «not yet»: the next office is coming.
+  try { answer = await ask(); } catch { answer = { decision: 'retry' }; }
 }
 
 const out = hookOutput(payload, answer);
