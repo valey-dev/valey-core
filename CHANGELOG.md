@@ -4,6 +4,15 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.61.2 — 17 September 2026
+
+### Fixed
+
+- **office:** answering an agent's question leaves the card on «what are you working on», not on «this question is already closed» (83bf59b)
+
+### Other
+
+- test(ui): a page module may only call the callbacks it was handed (2567670)
 ## v0.61.1 — 16 September 2026
 
 ### Fixed
