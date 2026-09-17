@@ -75,6 +75,7 @@ const DICT = {
     'news.loading': 'Выпуск печатается…',
     'news.failed': 'Выпуск не пришёл: {err}',
     'news.photo': 'Фото',
+    'news.invented': 'Это выдуманные газеты — для кадров и ролика. Таких каналов в Telegram нет, открывать нечего. Добавь свой канал кнопкой «+ канал», и посты будут открываться.',
     'news.video': 'Видео',
     'news.yesterday': 'вчера',
     'news.stateLatest': 'выпуск {time}',
@@ -137,6 +138,7 @@ const DICT = {
     'news.loading': 'The issue is being printed…',
     'news.failed': 'The issue did not arrive: {err}',
     'news.photo': 'Photo',
+    'news.invented': 'These papers are invented, for pictures and the video. No such channels exist in Telegram, so there is nothing to open. Add a channel of your own with «+ channel» and the posts will open.',
     'news.video': 'Video',
     'news.yesterday': 'yesterday',
     'news.stateLatest': 'issue {time}',
@@ -167,6 +169,7 @@ const stand = {
   view: 'paper',          // 'paper' | 'channels'
   issues: new Map(),      // name → { stack: [before…], data, error, loading }
   msg: '',                // the error line under the add field
+  invented: false,        // the papers came from demo.js: nothing to open in Telegram
 };
 
 // What the owner has already read, per channel: the newest post id seen. Kept
@@ -187,6 +190,7 @@ async function loadStand() {
     const r = await fetch('/api/newsstand', { headers: owned() });
     const j = await r.json();
     stand.channels = Array.isArray(j.channels) ? j.channels : [];
+    stand.invented = !!j.invented;
   } catch { /* the stand keeps what it had; the next poll tries again */ }
   paint();
 }
@@ -401,6 +405,12 @@ function paintMast(cv, title, maxScale) {
 // A photo becomes two colours of the paper: an ordered 4×4 Bayer dither with a
 // cell of `cell` CSS pixels. A colour photograph on the cream sheet fell out of
 // the office; dots are both the newspaper and the pixel.
+//
+// The cell is 2 px everywhere since 17 September 2026. It was 4 in the lead
+// picture and 3 in a column, and at that size a face or a lamp arrived as
+// squares: the owner read the first invented paper as «too pixelated». Two is
+// still a dot grid — the paper has not become a photograph — but the shape
+// inside it survives.
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 const pictures = new Map();   // src → HTMLImageElement (loaded) | 'fail'
 
@@ -465,7 +475,7 @@ function noteHtml(p, cls, issueDay) {
   const { head, body } = splitHeadline(p.text);
   const title = head || (p.kind === 'video' ? tr('news.video') : tr('news.photo'));
   const meta = [fmtWhen(p.date, issueDay), p.views ? tr('news.circulation', { n: esc(fmtViews(p.views)) }) : ''].filter(Boolean).join(' · ');
-  const photo = p.photo ? `<canvas class="nsphoto" data-src="${esc(p.photo)}" data-cell="${cls === 'nslead' ? 4 : 3}"></canvas>` : '';
+  const photo = p.photo ? `<canvas class="nsphoto" data-src="${esc(p.photo)}" data-cell="2"></canvas>` : '';
   const text = body ? `<p class="nstext">${esc(body).replace(/\n/g, '<br>')}</p>` : '';
   if (cls === 'nslead') {
     return `<section class="nsnote nslead" tabindex="-1" data-id="${p.id}">
@@ -607,6 +617,11 @@ function focusedPostId() {
 function openPost(id) {
   const c = curChannel();
   if (!c || !id) return;
+  // The picture office reads papers invented in demo.js, and `t.me/quiet_build`
+  // is nobody's address: opening it would send the reader to Telegram's «this
+  // channel does not exist». Asked for by the owner on 17 September 2026, on
+  // the first stand where the invented papers were shown.
+  if (stand.invented) { toast(tr('news.invented')); return; }
   window.open(`https://t.me/${encodeURIComponent(c.name)}/${id}`, '_blank', 'noopener,noreferrer');
 }
 

@@ -104,36 +104,32 @@ const chunk = (type, data) => {
 let cached = null;
 export function picture(width = 480, height = 320) {
   if (cached) return cached;
-  // A halftone photograph of a desk lamp: the brightness is a soft glow around
-  // a point, and every cell of the grid answers it with a dot whose radius
-  // grows as the light falls. Dots rather than a gradient on purpose — the
-  // office stretches a picture by whole pixels, and a gradient turns into
-  // bands, which is also what the paper's own post says.
-  const cell = 8;
+  // A smooth photograph, not a halftone one: the page dithers it itself — an
+  // ordered 4×4 Bayer over a grid of whole pixels (client.js, halftone) — and a
+  // picture that arrives already made of dots is dithered a second time, which
+  // is the coarse moiré the owner saw on the first stand, 17 September 2026.
+  // What it shows: a desk lamp lit over a desk, in grey.
   const glow = (x, y) => {
-    const dx = (x - width * 0.42) / (width * 0.38);
-    const dy = (y - height * 0.38) / (height * 0.42);
-    const light = Math.exp(-(dx * dx + dy * dy) * 1.6);
-    const desk = y > height * 0.72 ? 0.35 : 0;      // the desk it stands on
-    return Math.min(1, light + desk);
+    const dx = (x - width * 0.42) / (width * 0.34);
+    const dy = (y - height * 0.34) / (height * 0.40);
+    const light = Math.exp(-(dx * dx + dy * dy) * 1.5);
+    // the desk below takes the light at a glance, dimmer towards the edges
+    const desk = y > height * 0.66
+      ? 0.42 * Math.exp(-Math.pow((x - width * 0.46) / (width * 0.6), 2) * 1.2)
+      : 0;
+    // the lamp's shade: a darker cap over the light
+    const shade = Math.abs(y - height * 0.2) < height * 0.06 && Math.abs(x - width * 0.42) < width * 0.16 ? -0.55 : 0;
+    return Math.max(0, Math.min(1, 0.06 + light + desk + shade));
   };
   const rows = [];
   for (let y = 0; y < height; y++) {
-    const row = Buffer.alloc(width + 1);            // the leading filter byte stays 0
-    for (let x = 0; x < width; x++) {
-      const cx = Math.floor(x / cell) * cell + cell / 2;
-      const cy = Math.floor(y / cell) * cell + cell / 2;
-      const dist = Math.hypot(x - cx + 0.5, y - cy + 0.5);
-      // 0.8 of a half-cell at the darkest: at a full one the dots touch and
-      // the shadow goes solid black, which is a blot rather than a photograph.
-      const radius = (cell / 2) * 0.8 * Math.pow(1 - glow(cx, cy), 0.75);
-      row[x + 1] = dist < radius ? 0x2b : 0xe4;
-    }
+    const row = Buffer.alloc(width + 1);   // the leading filter byte stays 0
+    for (let x = 0; x < width; x++) row[x + 1] = Math.round(255 * glow(x, y));
     rows.push(row);
   }
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8; ihdr[9] = 0;                         // 8 bits, greyscale
+  ihdr[8] = 8; ihdr[9] = 0;                // 8 bits, greyscale
   cached = {
     buf: Buffer.concat([
       Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),

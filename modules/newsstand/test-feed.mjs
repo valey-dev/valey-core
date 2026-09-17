@@ -167,6 +167,7 @@ const ask = async (path) => {
   _reset(); calls = []; answers = {}; channels = ['quiet_build', 'pixel_dnya'];
   const stand = await ask('/api/newsstand');
   ok('the picture office has papers on the stand', stand.body.channels.length === 2 && stand.body.channels[0].title === 'The quiet build', stand.body.channels);
+  ok('and says so, so the page does not offer a channel that does not exist', stand.body.invented === true, stand.body.invented);
   const one = await ask('/api/newsstand/issue?ch=pixel_dnya');
   ok('and a paper has a lead post with a picture', one.body.posts[0].photo && one.body.posts[0].text.startsWith('A lamp on the desk'), one.body.posts[0]);
   const img = await ask('/api/newsstand/img?u=' + encodeURIComponent(PHOTO));
@@ -175,6 +176,10 @@ const ask = async (path) => {
   ok('an older issue is there to turn back to', older.code === 200 && older.body.posts.length >= 1, older.body);
   ok('and nothing at all was fetched', calls.length === 0, calls.map((c) => c.url));
   delete process.env.VALEY_PICTURE;
+  _reset(); calls = []; channels = ['tihaya_sborka'];
+  answers = { 'https://t.me/s/tihaya_sborka': { status: 200, body: sample } };
+  const real = await ask('/api/newsstand');
+  ok('a real stand is not marked invented', real.body.invented === undefined, real.body.invented);
 }
 
 console.log(bad ? `\n${bad} failed` : '\nall passed');

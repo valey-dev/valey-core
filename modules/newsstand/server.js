@@ -152,7 +152,10 @@ export async function route(url, req, res, send, rctx = {}) {
       // the ids of the newest issue: the page counts what it has not read yet
       return { name, title: e.feed.title || name, latest: e.feed.posts.length ? e.feed.posts[0].id : null, ids: e.feed.posts.map((p) => p.id) };
     }));
-    return reply(res, 200, { channels: list, fresh: FRESH_MS });
+    // `invented` rides out to the page: a paper that came from demo.js has no
+    // channel behind it, so the page must not offer to open its posts in
+    // Telegram — there is nothing there to open.
+    return reply(res, 200, { channels: list, fresh: FRESH_MS, invented: invented() || undefined });
   }
 
   // One issue of one paper. Only a paper that is on the stand: otherwise
@@ -168,6 +171,7 @@ export async function route(url, req, res, send, rctx = {}) {
     return reply(res, 200, {
       name, title: f.title || name, about: f.about, subscribers: f.subscribers,
       posts: f.posts.map(forPage), before: f.before, after: f.after, at: e.at,
+      invented: invented() || undefined,
     });
   }
 
