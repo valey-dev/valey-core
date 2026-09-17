@@ -64,8 +64,26 @@ jobs:
         run: node --no-experimental-detect-module tools/run-tests.mjs
       # The release dry run reads history and package.json and can fail silently,
       # for example on an unparseable version. It is cheaper to check here.
+      #
+      # «Nothing to cut» is not a failure of that check. The release commit is
+      # the last one on main, so its own run always asked «patch after vX?» of an
+      # empty range, and release.mjs rightly says no — land --dry depends on that
+      # refusal, so it stays in the script and is read here instead. Until
+      # 15 September 2026 this painted main red after every release whose run was
+      # not cancelled by a later push (v0.57.1, v0.58.1, v0.59.1), with every test
+      # green; the PR board showed the office «broken» for it. No digit either:
+      # the range picks it, and a hardcoded one refused every unreleased feature.
+      # What still fails here: an unreadable version, two features without a
+      # release between them, a tag that already exists.
       - name: release dry run
-        run: node tools/release.mjs patch --dry
+        run: |
+          out=$(node tools/release.mjs --dry 2>&1) && { echo "$out"; exit 0; }
+          echo "$out"
+          case "$out" in
+            *"there are no commits after"*|*"nothing to release"*)
+              echo "release dry run: nothing to cut here, which is not an error"; exit 0 ;;
+          esac
+          exit 1
 
   # Coverage is a separate job on one Node version: the number does not depend
   # on the version, and running it three times pays three times for one result.
