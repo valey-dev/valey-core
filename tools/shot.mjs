@@ -5,19 +5,19 @@
 //
 //   node tools/shot.mjs                        # the whole frame, into .shots/shot.png
 //   node tools/shot.mjs --port 5179            # an office on another port
-//   node tools/shot.mjs --keys Enter,hold-w:1500,shift-F9
+//   node tools/shot.mjs --keys Enter,hold-ArrowUp:1500,shift-F9
 //   node tools/shot.mjs --out /tmp/office.png --wait 6000
 //   node tools/shot.mjs --url .../soon.html --viewport 390,900   # a phone's width
 //   node tools/shot.mjs --eval "document.title"   # look inside the live page
 //   node tools/shot.mjs --setup "fetch(...)"      # prepare the page before the keys
-//   node tools/shot.mjs --video .shots/v0.2.0.mp4 --keys Enter,hold-w:4000
+//   node tools/shot.mjs --video .shots/v0.2.0.mp4 --keys Enter,hold-ArrowUp:4000
 //   node tools/shot.mjs --help                 # this text, down to the traps
 //
 // --keys walks the office through CDP, step by step, to reach the right place:
 //   Enter        press and release
 //   Space        the space bar; a literal space between commas works too
 //   ArrowUp      arrows; Up/Down/Left/Right are synonyms
-//   hold-w:1500  hold W for a second and a half (walking)
+//   hold-ArrowUp:1500  hold ↑ for a second and a half (walking)
 //   wait:800     simply wait
 //   F9           the office's own 1:1 canvas shot into .shots (written by the office)
 //   shift-F9     the same, but ×4 with no smoothing
