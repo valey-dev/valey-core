@@ -366,14 +366,24 @@ function tailField(tail, label) {
   return last[1].replace(/[*_`]/g, '').trim().slice(0, TAIL_VALUE);
 }
 
+// Both languages, because the tail belongs to the project rather than to the
+// office: a repository whose AGENTS.md is written in English closes its answers
+// in English, and until 19 September 2026 the office saw none of it — the card
+// fell back to the chat title, dim, in a room where the agents were reporting
+// properly all along. The English labels are the ones the rulebook template
+// ships: «Current task», «Status», «Needed from you».
+const L_WHAT = 'Текущая (?:фича\\/задача|задача|фича)|Current (?:feature\\/task|task|feature)';
+const L_STATUS = 'Статус|Status';
+const L_NEED = 'Что нужно от меня|Needed from you';
+
 export function reportTail(text) {
   const tail = String(text || '').slice(-TAIL_MAX);
-  const what = tailField(tail, 'Текущая (?:фича\\/задача|задача|фича)');
+  const what = tailField(tail, L_WHAT);
   if (!what) return null;
-  const need = tailField(tail, 'Что нужно от меня');
+  const need = tailField(tail, L_NEED);
   return {
     what,
-    status: tailField(tail, 'Статус'),
+    status: tailField(tail, L_STATUS),
     // "Ничего" is a full answer, and it has no business in the head: the ⚑ plate
     // must mean "you are needed", not "the line was filled in".
     need: NOTHING.test(need) ? '' : need,
