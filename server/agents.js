@@ -65,6 +65,62 @@ export async function liveSessions() {
   return dedupeSessions(out);
 }
 
+// A conversation the desktop app has put to sleep. The app shuts the CLI of an
+// idle session down by itself — «[CliGovernor] pressure evicting … (idle 747s)»
+// in its own log, fourteen times on 19 September 2026, sometimes after ninety
+// seconds of silence — and the chat stays in its list, resumable. The office saw
+// only processes, so the agent left the floor the same second and took with it
+// the desk one could leave a note on, while the app still offered to write to it.
+//
+// So a session whose transcript was touched within the hour stays in the office,
+// asleep. An hour, because that is how long a conversation stays worth resuming
+// by hand; after it the agent goes for good. Waking one needs no process: the
+// office resumes it exactly as the app does, with `claude --resume`.
+const PAUSED_MS = 60 * 60_000;
+const PAUSED_TTL = 10_000;          // the scan is a stat per transcript; a tick is a second
+let pausedAt = 0;
+let pausedList = [];
+
+// Every record carries the session's cwd, so the tail is enough to learn where
+// the agent sat. Read as text: a 64 KB tail crosses no record boundary that
+// matters, and a half-line at its head simply does not match.
+const CWD_RE = /"cwd"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+async function cwdOf(file, size) {
+  const len = Math.min(size, 64 * 1024);
+  const fh = await fsp.open(file, 'r');
+  try {
+    const buf = Buffer.alloc(len);
+    await fh.read(buf, 0, len, size - len);
+    const text = buf.toString('utf8');
+    let last = null, m;
+    CWD_RE.lastIndex = 0;
+    while ((m = CWD_RE.exec(text))) last = m[1];
+    return last ? JSON.parse('"' + last + '"') : '';
+  } finally { await fh.close(); }
+}
+
+export async function pausedSessions(live = [], now = Date.now()) {
+  if (now - pausedAt < PAUSED_TTL) return pausedList.filter((s) => !live.some((l) => l.sessionId === s.sessionId));
+  const index = await indexTranscripts();
+  const out = [];
+  for (const [id, paths] of index) {
+    for (const file of paths) {
+      let st;
+      try { st = await fsp.stat(file); } catch { continue; }
+      if (now - st.mtimeMs > PAUSED_MS || !st.size) continue;
+      let cwd = '';
+      try { cwd = await cwdOf(file, st.size); } catch { /* rotated under us */ }
+      if (!cwd) continue;
+      // startedAt belongs to the session rather than to the file's last write:
+      // the trinkets on a veteran's desk are counted from it.
+      out.push({ sessionId: id, cwd, pid: 0, paused: true, startedAt: Math.round(st.birthtimeMs || st.mtimeMs) });
+      break;
+    }
+  }
+  pausedList = out; pausedAt = now;
+  return out.filter((s) => !live.some((l) => l.sessionId === s.sessionId));
+}
+
 const projectDirOf = (cwd) => (cwd || '').replace(/[^a-zA-Z0-9]/g, '-');
 
 // picks the transcript that belongs to this session's own working directory
@@ -1035,12 +1091,15 @@ export function statusOf(t, now = Date.now()) {
 }
 
 export async function snapshot() {
-  const sessions = await liveSessions();
+  const live = await liveSessions();
+  await indexTranscripts();
+  // The ones the app put to sleep join the live ones: same desks, same names,
+  // same notes — see pausedSessions above for why they are here at all.
+  const sessions = [...live, ...await pausedSessions(live)];
   // Warm the roots cache before the seats are computed: projectOf is
   // synchronous while git is asynchronous, and without the warm-up the first
   // snapshot would seat everyone by directory.
   await Promise.all(sessions.map((s) => repoRoot(s.cwd)));
-  await indexTranscripts();
   const names = await nameRegistry(sessions);
   const namesPack = effectivePack(await getSettings());
   const seats = await seatRegistry(sessions);
@@ -1053,7 +1112,10 @@ export async function snapshot() {
     const files = await present([...t.files.values()].sort((a, b) => b.ts - a.ts), 16);
     const artifacts = files.filter((f) => f.made || f.image);
     const idleFor = t.lastTs ? Date.now() - t.lastTs : Infinity;
-    const status = statusOf(t);
+    // A paused session has no process to be working in: whatever the tail was
+    // in the middle of, it is not happening now. «Awaiting» stays — the question
+    // it asked is still the person's to answer.
+    const status = s.paused && statusOf(t) === 'working' ? 'idle' : statusOf(t);
     const busy = status === 'working';
     const act = t.lastTool ? describeTool(t.lastTool, t.lastToolInput) : { key: 'thinking', mood: 'plan' };
     const roleInfo = inferRole(t);
@@ -1065,6 +1127,7 @@ export async function snapshot() {
     agents.push({
       id: s.sessionId,
       pid: s.pid,
+      paused: !!s.paused,
       handle: s.name || s.sessionId.slice(0, 8),
       name: names[s.sessionId] || s.sessionId.slice(0, 6),
       // gender travels with the snapshot: on the page the name is one line,
