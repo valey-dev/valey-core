@@ -10,6 +10,7 @@ import { getSettings, patchSettings } from './settings.js';
 import { projectInfo, repoRoot, repoRootCached } from './stack.js';
 import { present } from './files.js';
 import { trinketTier } from '../web/trinkets.js';
+import { liveCodexSessions, applyCodexLine } from './codex.js';
 
 // Where the office reads sessions from. The variable is for the stands: until
 // 4 September 2026 the directory was pinned to the home one, and transcript
@@ -283,13 +284,13 @@ async function readRange(file, start, length) {
   }
 }
 
-async function follow(sessionId, file, apply, fresh, deep) {
+async function follow(sessionId, file, apply, fresh, deep, firstRead = FIRST_READ_BYTES) {
   let c = cache.get(sessionId);
   let size = 0;
   try { size = (await fsp.stat(file)).size; } catch { return c?.st; }
 
   if (!c || c.file !== file || size < c.offset) {
-    const start = Math.max(0, size - FIRST_READ_BYTES);
+    const start = Math.max(0, size - firstRead);
     const text = await readRange(file, start, size - start);
     const lines = text.split('\n');
     if (start > 0) lines.shift();
@@ -620,6 +621,28 @@ function emptyState() {
   };
 }
 
+// One tool call, whoever made it. Claude names its tools itself; the Codex
+// parser (server/codex.js) translates its items into the same names, so the
+// act, the role, the grade and the files are counted one way for both.
+function useTool(st, name, input = {}) {
+  const d = describeTool(name, input);
+  const mood = (IMAGE_RE.test(input?.file_path || '') && /Write|Edit/.test(name)) ? 'design' : d.mood;
+  st.acts.push({ mood, ts: st.lastTs || Date.now() });
+  if (st.acts.length > 60) st.acts.splice(0, st.acts.length - 60);
+  // The grade counts the same mood — but before the trim and with no window.
+  if (SKILL_OF[mood]) st.skills[SKILL_OF[mood]]++;
+  st.lastTool = name;
+  st.lastToolInput = input;
+  const fp = input?.file_path;
+  if (fp) {
+    st.files.set(fp, {
+      path: fp, name: base(fp), image: IMAGE_RE.test(fp), ts: st.lastTs,
+      made: /Write|Edit|Artifact/.test(name),
+    });
+    if (st.files.size > 60) st.files.delete(st.files.keys().next().value);
+  }
+}
+
 function applyLine(st, line) {
   if (!line) return;
   let r;
@@ -691,23 +714,11 @@ function applyLine(st, line) {
     else st.ended = r.message.stop_reason === 'end_turn' ? endOf(said) : '';
     for (const b of Array.isArray(content) ? content : []) {
       if (b?.type !== 'tool_use') continue;
-      const d = describeTool(b.name, b.input);
-      const mood = (IMAGE_RE.test(b.input?.file_path || '') && /Write|Edit/.test(b.name)) ? 'design' : d.mood;
-      st.acts.push({ mood, ts: st.lastTs || Date.now() });
-      if (st.acts.length > 60) st.acts.splice(0, st.acts.length - 60);
-      // The grade counts the same mood — but before the trim and with no window.
-      if (SKILL_OF[mood]) st.skills[SKILL_OF[mood]]++;
-      st.lastTool = b.name;
-      st.lastToolInput = b.input;
+      useTool(st, b.name, b.input);
+      // Asking is Claude's own: the two tools that end a turn on a question
+      // have no counterpart in a Codex rollout, so it stays with this parser
+      // rather than moving into useTool().
       if (ASKING.has(b.name)) st.ended = 'asked';
-      const fp = b.input?.file_path;
-      if (fp) {
-        st.files.set(fp, {
-          path: fp, name: base(fp), image: IMAGE_RE.test(fp), ts: st.lastTs,
-          made: /Write|Edit|Artifact/.test(b.name),
-        });
-        if (st.files.size > 60) st.files.delete(st.files.keys().next().value);
-      }
     }
   } else if (r.type === 'user' && r.message && !r.isSidechain && r.isCompactSummary) {
     // A compaction writes its summary as a user line — «This session is being
@@ -1090,12 +1101,19 @@ export function statusOf(t, now = Date.now()) {
   return idleFor < STEP_MS ? 'working' : 'idle';
 }
 
+// A Codex rollout is read whole rather than by its last megabyte: it has no
+// deep pass of its own, and its files run to a few megabytes here. The cap is
+// for the thread that has been fed screenshots.
+const CODEX_FIRST_READ = 16 * 1024 * 1024;
+
 export async function snapshot() {
   const live = await liveSessions();
   await indexTranscripts();
   // The ones the app put to sleep join the live ones: same desks, same names,
-  // same notes — see pausedSessions above for why they are here at all.
-  const sessions = [...live, ...await pausedSessions(live)];
+  // same notes — see pausedSessions above for why they are here at all. Codex
+  // threads take desks in the same list too, with one registry of names and
+  // seats for everybody; the provider travels with the agent.
+  const sessions = [...live, ...await pausedSessions(live), ...await liveCodexSessions()];
   // Warm the roots cache before the seats are computed: projectOf is
   // synchronous while git is asynchronous, and without the warm-up the first
   // snapshot would seat everyone by directory.
@@ -1106,8 +1124,11 @@ export async function snapshot() {
   const agents = [];
 
   for (const s of sessions) {
-    const file = await transcriptFor(s.sessionId, s.cwd);
-    const t = (file ? await follow(s.sessionId, file, applyLine, emptyState, deepSkills) : null) || emptyState();
+    const codex = s.provider === 'codex';
+    const file = codex ? s.file : await transcriptFor(s.sessionId, s.cwd);
+    const t = (file ? await (codex
+      ? follow(s.sessionId, file, applyCodexLine, emptyState, null, CODEX_FIRST_READ)
+      : follow(s.sessionId, file, applyLine, emptyState, deepSkills)) : null) || emptyState();
     // Only what can still be opened: see present() in files.js.
     const files = await present([...t.files.values()].sort((a, b) => b.ts - a.ts), 16);
     const artifacts = files.filter((f) => f.made || f.image);
@@ -1126,8 +1147,13 @@ export async function snapshot() {
 
     agents.push({
       id: s.sessionId,
-      pid: s.pid,
+      // Codex threads have no process of their own: the pid that holds their
+      // lock is the whole app, and nothing should ever be sent to it per agent.
+      pid: codex ? null : s.pid,
       paused: !!s.paused,
+      // 'claude' | 'codex': the badge on the floor and in the card, and what
+      // the office can do for the agent — delivery is Claude's alone.
+      provider: codex ? 'codex' : 'claude',
       handle: s.name || s.sessionId.slice(0, 8),
       name: names[s.sessionId] || s.sessionId.slice(0, 6),
       // gender travels with the snapshot: on the page the name is one line,
@@ -1143,7 +1169,8 @@ export async function snapshot() {
       model: t.model,
       // A one-turn boost is the level only while that turn is open.
       effort: (status === 'working' && t.turnEffort) || t.effort,
-      title: t.title || t.aiTitle || '',
+      // A Codex thread carries the name the app shows on the session itself.
+      title: t.title || t.aiTitle || s.title || '',
       role: roleInfo.role,
       roleKey: roleInfo.short,
       status,
@@ -1206,4 +1233,6 @@ export {
   fs, inferRole, describeTool, ROLES, ROLE_WINDOW_MS, ROLE_STALE_MS,
   // exported for the stand alone: it runs the parser on real transcript lines
   applyLine, emptyState, SKILL_OF, SKILL_BRANCHES, follow, deepSkills,
+  // shared with the Codex parser, server/codex.js
+  useTool, remember, born, gap, endOf,
 };

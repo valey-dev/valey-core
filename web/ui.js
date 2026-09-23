@@ -217,6 +217,8 @@ const noteList = (a) => (a.outbox || []).map((t) => {
   const waited = Math.max(0, Math.round((Date.now() - (t.startedAt || t.at || Date.now())) / 1000));
   const clock = `${Math.floor(waited / 60)}:${String(waited % 60).padStart(2, '0')}`;
   const tail = t.state === 'sending' ? `<span class="ntail warn">${tr('note.waitingFor', { t: clock })}</span>`
+    // a Codex task is taken in by the thread later; its answer arrives in the conversation
+    : t.state === 'delivered' && t.queued ? `<span class="ntail ok">${tr('note.queued')}</span>`
     : t.state === 'delivered' ? `<span class="ntail ${t.blocked ? 'warn' : 'ok'}">${
         t.blocked ? tr('note.blocked') : tr('note.replied')}${esc(clean(t.reply || '').slice(0, 110))}</span>`
     : t.state === 'failed' ? `<span class="ntail bad">${esc(said(t) || tr('note.failed'))}</span>`
@@ -261,7 +263,12 @@ const hintText = () => {
 // 2026 the latter overwrote the guest hint with the owner's: the button was
 // already gone, while the text still promised delivery.
 const isGuest = () => S.owner === false;
-const taskHint = () => (isGuest() ? tr('hint.guest') : hintText());
+// A Codex thread takes its task through Codex's own queue (server/codex.js):
+// its hint says so, or that the codex CLI is missing; Claude's is as before.
+const codexOf = (a) => !!a && a.provider === 'codex';
+const taskHint = (a) => (isGuest() ? tr('hint.guest')
+  : codexOf(a) ? tr((S.delivery && S.delivery.codex && S.delivery.codex.available) ? 'dlg.codexHint' : 'err.codexNoCli')
+  : hintText());
 
 let btnIndex = 0;   // which of the bottom buttons the arrows are standing on
 
@@ -329,7 +336,7 @@ function patchDialog(a) {
     else if (!list && html) buildDialog(a);
   }
   if (S.page === 'task') {
-    set('.hint', taskHint());
+    set('.hint', taskHint(a));
     const notes = el.dialog.querySelector('.notes');
     const html = noteList(a);
     // Rewriting the list drops the handlers with it, so bind them again right after.
@@ -410,6 +417,14 @@ function accessOf(id) {
 }
 
 
+// Which source the agent came from, after the role: ✶ Claude, ◇ Codex. The
+// role's own frame without its colour — roles are coloured, and a provider
+// must not read as one. Brand names, so not translated. ✶ rather than ✳: the
+// second is not in the office's font.
+const PROVIDER_MARK = { claude: '✶', codex: '◇' };
+const providerBadge = (a) => (PROVIDER_MARK[a.provider]
+  ? `<span class="role prov">${PROVIDER_MARK[a.provider]} ${a.provider === 'codex' ? 'Codex' : 'Claude'}</span>`
+  : '');
 // ------------------------------------------------------- files on a task
 // A file dropped onto the task field (or pasted — a screenshot in the
 // clipboard is the common one). The browser hands over bytes and never a
@@ -563,22 +578,26 @@ function buildDialog(a) {
     const d = S.delivery || {};
     const mode = (S.settings && S.settings.delivery && S.settings.delivery.mode) || 'default';
     const guest = isGuest();
+    // Codex: its own CLI decides whether «send» works, and there is no mode —
+    // permission modes are Claude's (frame WIP «Codex sessions», v4)
+    const codex = codexOf(a);
+    const canSend = codex ? !!(d.codex && d.codex.available) : !!d.available;
     body = `<p class="q">${tr('dlg.whatToDo')}</p>
       <textarea id="taskInput" rows="3" placeholder="${tr(guest ? 'dlg.enterHintGuest' : 'dlg.enterHint')}"></textarea>
       <div class="fchips" id="taskChips">${chipRow(taskFiles)}</div>
       <div class="sendrow">
         <button id="asNote">${tr('dlg.onDesk')}</button>
-        ${guest ? '' : `<button id="asSend" ${d.available ? '' : 'disabled'}>${tr('dlg.send')}</button>
-        <label class="modepick">${tr('dlg.mode')}
+        ${guest ? '' : `<button id="asSend" ${canSend ? '' : 'disabled'}>${tr('dlg.send')}</button>
+        ${codex ? '' : `<label class="modepick">${tr('dlg.mode')}
           <select id="sendMode" ${d.available ? '' : 'disabled'}>
             ${Object.entries(MODE_LABEL()).map(([k, v]) => `<option value="${k}" ${k === mode ? 'selected' : ''}>${v}</option>`).join('')}
           </select>
-        </label>`}
+        </label>`}`}
       </div>
-      <p class="hint">${taskHint()}</p>
+      <p class="hint">${taskHint(a)}</p>
       ${(a.outbox || []).length ? `<ul class="notes">${noteList(a)}</ul>` : ''}
       ${(a.outbox || []).some((t) => t.state === 'delivered')
-        ? `<p class="hint dim">${tr('dlg.appendHint')}</p>`
+        ? `<p class="hint dim">${tr(codex ? 'dlg.codexQueued' : 'dlg.appendHint')}</p>`
         : ''}`;
   }
 
@@ -639,7 +658,7 @@ function buildDialog(a) {
   el.dialog.innerHTML = `
     <div class="portrait"><canvas width="48" height="48" id="pf"></canvas></div>
     <div class="content">
-      <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${roleIcon(a.roleKey)}${esc(roleText(a))}</span><span class="model">${esc(modelLabel(a.model, a.effort))}</span>
+      <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${roleIcon(a.roleKey)}${esc(roleText(a))}</span>${providerBadge(a)}<span class="model">${esc(modelLabel(a.model, a.effort))}</span>
         <span class="meta">${metaLine(a)}</span><div class="taskrow">${taskRow(a)}</div></div>
       <div class="act">${actLine(a)}</div>
       <div class="hiredrow">${hiredRow(a)}</div>

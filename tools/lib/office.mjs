@@ -78,13 +78,49 @@ export async function fakeClaudeDir(dir, {
   return { dir: claude, sessionId, cwd, said, asked, file, transcript: path.join(project, `${sessionId}.jsonl`) };
 }
 
+// An invented Codex thread: a rollout under sessions/, a writer lock this
+// process holds open — the office seats a thread only while some process
+// holds its lock, as the Codex app does — and a name in the session index.
+// Shapes as read off Codex Desktop on 13 September 2026 (server/codex.js).
+// Returns { dir, release }; release() lets go of the lock.
+export async function fakeCodexDir(dir, {
+  id = '01a0aaaa-0000-7000-8000-00000000c0de',
+  cwd = '/Users/kolya/Projects/tide-charts',
+  branch = 'fix/timezone-drift',
+  title = 'Timezone on the chart',
+  asked = 'The chart is an hour off after the clocks change',
+  said = 'Found it: the chart was drawn in local time and the data comes in UTC.',
+  file = '/Users/kolya/Projects/tide-charts/src/chart.js',
+} = {}) {
+  const codex = path.join(dir, 'codex');
+  const day = path.join(codex, 'sessions', '2026', '09', '13');
+  await fsp.mkdir(day, { recursive: true });
+  await fsp.mkdir(path.join(codex, 'thread-writer-locks'), { recursive: true });
+  const ts = (back) => new Date(Date.now() - back).toISOString();
+  const line = (back, type, payload) => JSON.stringify({ timestamp: ts(back), type, payload });
+  const lines = [
+    line(60_000, 'session_meta', { id, session_id: id, timestamp: ts(60_000), cwd, originator: 'Codex Desktop', source: 'vscode', git: { branch } }),
+    line(55_000, 'event_msg', { type: 'task_started' }),
+    line(55_000, 'turn_context', { cwd, model: 'gpt-invented' }),
+    line(54_000, 'event_msg', { type: 'item_completed', item: { type: 'UserMessage', content: [{ type: 'text', text: asked }] } }),
+    line(40_000, 'event_msg', { type: 'item_completed', item: { type: 'FileChange', changes: { [file]: { type: 'update' } } } }),
+    line(30_000, 'event_msg', { type: 'item_completed', item: { type: 'AgentMessage', content: [{ type: 'Text', text: said }] } }),
+  ];
+  await fsp.writeFile(path.join(day, `rollout-2026-09-13T10-00-00-${id}.jsonl`), lines.join('\n') + '\n');
+  await fsp.appendFile(path.join(codex, 'session_index.jsonl'), JSON.stringify({ id, thread_name: title }) + '\n');
+  const lock = path.join(codex, 'thread-writer-locks', id + '.lock');
+  await fsp.writeFile(lock, '');
+  const fh = await fsp.open(lock, 'r');
+  return { dir: codex, id, release: () => fh.close() };
+}
+
 /**
  * Raises an office and waits until it answers. Returns { base, port, stop,
  * settingsFile }. settings is what to put in the settings file; claudeDir is the
- * sessions directory, if the stand needs an agent. It is killed by its own child
- * process, not by name and not by port.
+ * sessions directory, if the stand needs an agent; codexDir the same for Codex
+ * threads. It is killed by its own child process, not by name and not by port.
  */
-export async function startOffice({ settings = {}, claudeDir = null, env = {}, root = ROOT } = {}) {
+export async function startOffice({ settings = {}, claudeDir = null, codexDir = null, env = {}, root = ROOT } = {}) {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-stand-'));
   const settingsFile = path.join(dir, 'settings.json');
   await fsp.writeFile(settingsFile, JSON.stringify({
@@ -104,7 +140,11 @@ export async function startOffice({ settings = {}, claudeDir = null, env = {}, r
     cwd: root,
     env: {
       ...process.env, PORT: String(port), HOST: '127.0.0.1', VALEY_SETTINGS: settingsFile,
-      ...(claudeDir ? { VALEY_CLAUDE_DIR: claudeDir } : {}), ...env,
+      ...(claudeDir ? { VALEY_CLAUDE_DIR: claudeDir } : {}),
+      // Always set: a stand without Codex threads must not read the real
+      // ~/.codex of the machine it runs on — its frames may go public.
+      VALEY_CODEX_DIR: codexDir || path.join(dir, 'no-codex'),
+      ...env,
     },
     stdio: 'ignore',
   });

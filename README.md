@@ -77,6 +77,7 @@ npm comes with Node, so there is nothing else to fetch. If `node -v` works and `
 ## What it shows
 
 * **Who is in** — from `~/.claude/sessions/*.json`: pid, working directory, session name. Alive is checked with `process.kill(pid, 0)`.
+* **Codex too** — Codex Desktop and CLI threads sit at the same desks, marked ◇ where Claude sessions are marked ✶. A thread is in while a Codex process holds its lock in `~/.codex/thread-writer-locks`; its state is read from the rollout file in `~/.codex/sessions`. A task goes into a Codex thread through Codex's own queue, `codex queue`, and the thread takes it in when its current turn is over; the permission modes on that page are Claude's alone.
 * **What they are doing** — the transcript is read incrementally: the last tool call, the last thing said, whether the turn ended and they are waiting on you, which files they touched, which git branch they are on.
 * **Their role** — from the tools they reach for. Edits code, so: developer. Opens design files: designer. Searches the web: researcher, etc. 
 * **Their face and name** — a deterministic hash of the session id, so the same session is the same person every time you look.
@@ -113,7 +114,7 @@ Guests never see any of this: a command is paths and branches from your machine.
 
 ## Nothing leaves your machine
 
-The office reads `~/.claude` on your own machine and draws the floor from it. Transcripts, code and project names are never sent anywhere.
+The office reads `~/.claude` — and `~/.codex`, if Codex is installed — on your own machine and draws the floor from it. Which Codex threads are open it asks the operating system, with `lsof` on those lock files. Transcripts, code and project names are never sent anywhere.
 
 Three exceptions, all yours to switch on, all named out loud:
 
@@ -169,9 +170,9 @@ What changed between releases, one line per commit, is in [CHANGELOG.md](CHANGEL
 
 Contributions need a signed agreement; see [CONTRIBUTING.md](CONTRIBUTING.md) for what it says and why.
 
-## Not affiliated with Anthropic
+## Not affiliated with Anthropic or OpenAI
 
-Claude Code is Anthropic's. This is an independent project that reads the session files Claude Code leaves on your disk, and nothing else. It is not endorsed by, and has no connection to, Anthropic.
+Claude Code is Anthropic's. Codex is OpenAI's. This is an independent project that reads the session files Claude Code and Codex leave on your disk, and nothing else. It is not endorsed by, and has no connection to, Anthropic or OpenAI.
 
 Found something that leaves the machine, or runs what you did not ask for? Write to security@valey.dev rather than opening an issue — [SECURITY.md](SECURITY.md) says what counts and what to include.
 
