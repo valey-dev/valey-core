@@ -315,8 +315,10 @@ export const sound = {
     // a room's fans and ballasts wind down, not a switch. The owner asked for
     // it longer on 26 September 2026 — at half a second it read as a click.
     // The filter closes as it goes, so the tail is felt more than heard.
-    // Coming back stays quick: power returning is a jolt, not a slope.
-    const dur = up ? 0.55 : 1.6;
+    // Coming back is the same slope run upwards — it was first left at half a
+    // second as «a jolt», and the owner heard it as cut short next to the
+    // long way down: the two ends of one outage have to match.
+    const dur = 1.6;
     const osc = c.createOscillator();
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(up ? 60 : 190, now);
@@ -328,7 +330,7 @@ export const sound = {
     const g = c.createGain();
     g.gain.setValueAtTime(0.0001, now);
     g.gain.exponentialRampToValueAtTime(0.05, now + 0.04);
-    if (!up) g.gain.setValueAtTime(0.05, now + dur * 0.35);
+    g.gain.setValueAtTime(0.05, now + dur * (up ? 0.75 : 0.35));
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur + 0.07);
     osc.connect(lp); lp.connect(g); g.connect(this.master);
     osc.start(now); osc.stop(now + dur + 0.1);
@@ -352,18 +354,25 @@ export const sound = {
   // «still no power» to somebody who may be reading something else meanwhile.
   // One beep, a sine rather than the piezo's square, and it is tickSound that
   // spaces them (UPS_EVERY below).
+  //
+  // «Пиииип», with the drag at the end: the tone is held for half a second and
+  // then sags a little in pitch as it fades, which is what a piezo does when
+  // its drive lets go. A short blip read as a notification, not as a UPS.
   ups() {
     if (!this.ready || !this.on) return;
     const c = this.ctx, now = c.currentTime;
+    const hold = 0.5, tail = 0.22;
     const osc = c.createOscillator(); osc.type = 'sine';
-    osc.frequency.value = 1860;
+    osc.frequency.setValueAtTime(1860, now);
+    osc.frequency.setValueAtTime(1860, now + hold);
+    osc.frequency.exponentialRampToValueAtTime(1720, now + hold + tail);
     const g = c.createGain();
     g.gain.setValueAtTime(0.0001, now);
-    g.gain.exponentialRampToValueAtTime(0.022, now + 0.01);
-    g.gain.setValueAtTime(0.022, now + 0.11);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+    g.gain.exponentialRampToValueAtTime(0.022, now + 0.015);
+    g.gain.setValueAtTime(0.022, now + hold);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + hold + tail);
     osc.connect(g); g.connect(this.master);
-    osc.start(now); osc.stop(now + 0.2);
+    osc.start(now); osc.stop(now + hold + tail + 0.03);
   },
 
   thunder(strength = 1) {
