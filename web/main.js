@@ -20,6 +20,8 @@ import { readPad, edges as padEdges } from './pad.js';
 import { touchHint } from './touch.js';
 import { initTouch, readTouch, showTouch, sheetOpen, closeSheet, touchOn } from './touchlayer.js';
 import { viewport, stepScale, SCALE_MIN, SCALE_MAX } from './viewport.js';
+// web/report.js is a plain script and cannot import the pass; it borrows it here.
+window.__valey = { owned };
 // ui.scale is the interface size: the HUD and hint strips are stretched by it,
 // and fit() must account for that when it measures their height.
 import { ui, onUiScale } from './theme.js';
