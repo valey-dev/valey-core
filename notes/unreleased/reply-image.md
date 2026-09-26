@@ -4,7 +4,6 @@ scope: office
 shots:
   - id: reply-image
     url: "#room=standup"
-    picture: c
     keys: "Enter,wait:2500,Tab,wait:900,Enter,wait:1200,tap:#readAll,wait:2500,shift-ArrowDown,wait:800"
 ---
 
