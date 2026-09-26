@@ -49,6 +49,21 @@ export const proxied = (req) => PROXIED.some((h) => req.headers && req.headers[h
 // guesser.
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
+// The address an invitation link names. The link was built from the Host the
+// owner's page came in on, so an owner looking at http://localhost:5177 handed
+// out http://localhost:5177/#code=… — a link that opens the guest's own machine,
+// where no office runs. Found on the #guests stand, 26 September 2026; the
+// approved frame shows the office's address on the Wi-Fi. So a loopback Host is
+// swapped for the first LAN address, but only when the office answers the
+// network at all: a private office has no address a guest could reach, and a
+// LAN address in its link would fail just the same, only later.
+const LOOPBACK = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\])$/i;
+export function inviteHost(host, { external = false, lan = [] } = {}) {
+  const m = /^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/.exec(String(host || ''));
+  if (!m || !LOOPBACK.test(m[1]) || !external || !lan.length) return host;
+  return m[2] ? `${lan[0]}:${m[2]}` : lan[0];
+}
+
 export function newToken() {
   let bits = 0, value = 0, out = '';
   for (const byte of crypto.randomBytes(20)) {

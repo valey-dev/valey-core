@@ -21,7 +21,7 @@ import { repoRoot } from './stack.js';
 import { ask as askPermit, answer as answerPermit, permits, forgetGone, retryAll } from './permit.js';
 import { releaseNudge } from './release.js';
 import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset, modulesOff, setOwnerOff, setGuestChoice, moduleGuestRows } from './modules.js';
-import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
+import { check as checkNetwork, newToken, isLocal, proxied, inviteHost } from './network.js';
 import { isLan, deviceOf, shownDevice, deviceName, Pairings, SEEN_EVERY } from './devices.js';
 import { MIME, MAX_VIEW, fileType, fileHeaders } from './files.js';
 import { listenFree } from './port.js';
@@ -899,7 +899,8 @@ async function handle(req, res) {
     await updateSettings((s) => ({
       access: { ...s.access, mode: 'shared', invites: [...(s.access.invites || []), invite] },
     }));
-    const host = req.headers.host || `localhost:${PORT}`;
+    const net = (await getSettings()).network || {};
+    const host = inviteHost(req.headers.host || `localhost:${PORT}`, { external: !!net.external, lan: lanAddresses() });
     // The owner token comes back together with the link — not a relaxation but
     // the condition for an invitation working at all. Going shared kills the
     // "came from this machine" shortcut, and a page that was the owner over
