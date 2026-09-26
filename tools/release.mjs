@@ -20,7 +20,7 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { pickKind, check } from './release-kind.mjs';
-import { readFragments, checkNotes, missingShots, unpictured, assemble } from './notes.mjs';
+import { readFragments, checkNotes, missingShots, unpictured, assemble, fixSections, NOTES_DIR } from './notes.mjs';
 
 // The root comes from this file rather than from the cwd: git and the files have
 // to look at one repository. Until 4 September 2026 git went to the cwd while
@@ -218,6 +218,11 @@ if (bare.length)
     '  A feature you can see gets a shot, rendered against the demo office:\n' +
     '    node tools/notes-shots.mjs\n' +
     '  One with nothing on the screen says why in its fragment:  nopicture: <why>');
+// Fixes go into the note too, so a patch release has one; see fixSections.
+// A repository without notes/ — the Modules — has not opted in and gets none.
+const fixes = existsSync(path.join(ROOT, NOTES_DIR)) ? fixSections([...groups.get('fix'), ...groups.get('perf')]) : [];
+if (fixes.length)
+  console.log(`\nfixes in the note ${tag}.md: ${fixes.length} (${fixes.map((x) => x.scope || '-').join(', ')})`);
 if (fragments.length)
   console.log(`\nfeature note ${tag}.md, from ${fragments.length} fragment${fragments.length > 1 ? 's' : ''}: ` +
     fragments.map((f) => f.slug).join(', '));
@@ -297,7 +302,7 @@ writeFileSync(changelogPath,
   changelog.slice(0, at + 1) + section + changelog.slice(at + 1));
 
 const added = ['package.json', 'CHANGELOG.md'];
-if (fragments.length) { assemble(ROOT, tag, date, fragments, section); added.push('notes'); }
+if (fragments.length || fixes.length) { assemble(ROOT, tag, date, fragments, section, fixes); added.push('notes'); }
 
 git('add', ...added);
 git('commit', '-m', `chore(release): ${tag}`);

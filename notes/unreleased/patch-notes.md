@@ -1,0 +1,9 @@
+---
+title: A patch release has a note too
+scope: notes
+nopicture: a release page and a note file, not a screen of the office
+---
+
+Only a feature used to get a note, so a patch release said nothing to anyone who did not open the changelog — and more than half of the releases are patches. The release strip of the metrics board, which reads the note at the tag, showed a patch day as «no features».
+
+Now every fix and speed-up of the release becomes a section of its note, headed by the commit's own sentence about the outcome, with its scope under it. Fixes that only touch the tooling of this repository — cutting releases, taking screenshots, the tests — are left out: they change nothing in the office. A patch made only of those still has no note.

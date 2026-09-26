@@ -174,7 +174,28 @@ export function readFragments(root) {
     });
 }
 
-export function renderNote(tag, date, fragments, section) {
+// Fixes as sections of the note. A patch release used to have no note at all:
+// notes were assembled from feature fragments only, and 24 of the 41 releases
+// from v0.50.0 to v0.67.0 were patches, silent everywhere except CHANGELOG.md
+// — including the release strip of the metrics board, which reads the note at
+// the tag (the owner, 26 September 2026). Nothing new has to be written for
+// them: by this project's rule a fix subject already states the outcome for a
+// person, «answering an agent's question leaves the card on …», so the subject
+// is the section.
+//
+// A scope that only touches the tooling of this repository is left out: «the
+// release takes its tag back» tells a person in the office nothing about the
+// office. The list was taken from the scopes of every fix since v0.3.0; install
+// and update stay visible, since those run on the person's own machine.
+export const SERVICE_SCOPES = new Set(['release', 'shot', 'notes', 'test', 'tests', 'stand', 'stands', 'tools',
+  'ci', 'build', 'land', 'promote', 'claim', 'demo', 'rulebook']);
+const capital = (s) => s.replace(/^[a-zа-яё]/, (c) => c.toUpperCase());
+export function fixSections(items) {
+  return (items || []).filter((it) => it && it.text && !SERVICE_SCOPES.has(it.scope || ''))
+    .map((it) => ({ title: capital(it.text.trim()), scope: it.scope || '' }));
+}
+
+export function renderNote(tag, date, fragments, section, fixes = []) {
   const out = [`# ${tag} — ${date}`, ''];
   for (const f of fragments) {
     out.push(`## ${f.title}`, '');
@@ -203,6 +224,13 @@ export function renderNote(tag, date, fragments, section) {
       for (const k of f.keys) out.push(`- ${k}`);
       out.push('');
     }
+  }
+  // A fix is its heading and its scope, and a comment that says it is one: the
+  // metrics board lists every `##` of the note under a release mark, and may
+  // one day want to tell a repair from a feature.
+  for (const x of fixes) {
+    out.push(`## ${x.title}`, '', '<!-- fix -->', '');
+    if (x.scope) out.push(`*${x.scope}*`, '');
   }
   // The changelog section verbatim, under the prose: the bullet list stays
   // generated from the commits, and this file never becomes a second source for it.
@@ -276,9 +304,9 @@ export function unpictured(fragments) {
   return fragments.filter((f) => !(f.shots || []).length && !f.nopicture).map((f) => f.slug);
 }
 
-export function assemble(root, tag, date, fragments, section) {
+export function assemble(root, tag, date, fragments, section, fixes = []) {
   const file = path.join(NOTES_DIR, `${tag}.md`);
-  writeFileSync(path.join(root, file), renderNote(tag, date, fragments, section));
+  writeFileSync(path.join(root, file), renderNote(tag, date, fragments, section, fixes));
 
   // The pictures move under the version, and the recipes move with them. The
   // recipe is the half that keeps working: replayed on an older tag it is what
