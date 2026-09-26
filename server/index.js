@@ -20,7 +20,7 @@ import { hire, release as releaseHire, hireList, hiredAt, hireCwd, resumeCommand
 import { repoRoot } from './stack.js';
 import { ask as askPermit, answer as answerPermit, permits, forgetGone, retryAll } from './permit.js';
 import { releaseNudge } from './release.js';
-import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset, modulesOff, setOwnerOff } from './modules.js';
+import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset, modulesOff, setOwnerOff, setGuestChoice, moduleGuestRows } from './modules.js';
 import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
 import { isLan, deviceOf, shownDevice, deviceName, Pairings, SEEN_EVERY } from './devices.js';
 import { MIME, MAX_VIEW, fileType, fileHeaders } from './files.js';
@@ -481,6 +481,7 @@ async function tick() {
     const full = `data: ${JSON.stringify(last)}\n\n`;
     // A stream is only as invited as the settings say right now.
     const acc = (await getSettings()).access;
+    setGuestChoice(acc.guests);
     const invited = new Set((acc.invites || []).map((i) => i.guest).filter(Boolean));
     for (const res of [...clients]) {
       if (res.valeyGuest && (acc.mode !== 'shared' || !invited.has(res.valeyGuest))) dropGuest(res.valeyGuest);
@@ -938,7 +939,29 @@ async function handle(req, res) {
   if (url.pathname === '/api/invites') {
     if (!(await isOwner(req))) return forbidden(res);
     const s = await getSettings();
-    return send(res, 200, { invites: (s.access.invites || []).map(safeInvite) });
+    return send(res, 200, { invites: (s.access.invites || []).map(safeInvite), modules: moduleGuestRows() });
+  }
+
+  // The owner decides what a guest sees, module by module, over the manifest's
+  // default: {id, choice: 'shown' | 'hidden'}. Choosing the default again
+  // forgets the choice, so the row's «not the default» mark goes by itself. One
+  // choice for all guests, not per link — decided 11 September 2026. It takes
+  // effect at once: the routes stop answering (moduleRoute reads the same
+  // choice), and every guest with a page open is told to reload it, so the
+  // client of a hidden module leaves his page without his help.
+  if (url.pathname === '/api/invite/guests' && req.method === 'POST') {
+    if (!(await isOwner(req))) return forbidden(res);
+    const b = await readJson(req);
+    const row = moduleGuestRows().find((m) => m.id === String(b.id || ''));
+    if (!row) return send(res, 404, { error: 'no such module' });
+    const choice = b.choice === 'shown' || b.choice === 'hidden' ? b.choice : null;
+    const s = await getSettings();
+    const guests = { ...((s.access || {}).guests || {}) };
+    if (!choice || choice === row.default) delete guests[row.id]; else guests[row.id] = choice;
+    const saved = await patchSettings({ access: { ...s.access, guests } });
+    setGuestChoice((saved.access || {}).guests);
+    for (const res of [...clients]) if (res.valeyGuest) res.write('event: reload\ndata: {}\n\n');
+    return send(res, 200, { ok: true, modules: moduleGuestRows() });
   }
 
   // Entry by code. One use: it worked, it is spent, and the same link does not
@@ -1271,6 +1294,7 @@ async function handle(req, res) {
         setOwnerOff(saved.modulesOff);
         forgetWeather();
         moduleOnPatch(patch);
+        if (patch.access) setGuestChoice((saved.access || {}).guests);
         last.weather = await realWeather({ force: true });
         return send(res, 200, { ok: true, settings: publicSettings(saved), weather: last.weather, packs: PACK_LIST });
       } catch (e) {
@@ -1473,6 +1497,7 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   const mods = await loadModules(ROOT, { people: livePeople, toPerson, settings: getSettings });
   let boot = await getSettings();
   setOwnerOff(boot.modulesOff);
+  setGuestChoice((boot.access || {}).guests);
   const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
   if (external && !(boot.network || {}).token) {
     // updateSettings: an office started beside this one may save a token first.

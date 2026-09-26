@@ -159,6 +159,37 @@ try {
   ok('nothing at the root of modules/ is served', await raw('/modules/AGENTS.md', 'owner') === 404 && await raw('/modules/.git/HEAD', 'owner') === 404);
   ok('nor a path that climbs out', await raw('/modules/plan/..%2F..%2Fpackage.json', 'owner') === 404);
 
+  // ------------------------------------------- the owner hides a module live
+  // One choice for all guests, over the manifest's default; it takes effect on
+  // the next request, and a guest with a page open is told to reload it.
+  const rowsBefore = await call('/api/invites', { as: 'owner', method: 'GET' });
+  const planRow = (rowsBefore.j.modules || []).find((m) => m.id === 'plan');
+  ok('the invite list carries a row per module, with the default and no choice', planRow && planRow.default === 'shown' && planRow.choice === null && planRow.shown === true, planRow);
+  const guestStream2 = await fetch(base + '/api/stream?guest=' + encodeURIComponent(GUEST));
+  const reloadSeen = (async () => {
+    const reader = guestStream2.body.getReader();
+    const deadline = Date.now() + 8000;
+    let buf = '';
+    while (Date.now() < deadline) {
+      const { value, done } = await Promise.race([reader.read(), new Promise((r) => setTimeout(() => r({ done: null }), 300))]);
+      if (done === true) return false;
+      if (value) { buf += Buffer.from(value).toString('utf8'); if (buf.includes('event: reload')) { reader.cancel().catch(() => {}); return true; } }
+    }
+    reader.cancel().catch(() => {});
+    return false;
+  })();
+  const hid = await call('/api/invite/guests', { as: 'owner', body: { id: 'plan', choice: 'hidden' } });
+  ok('the owner hides the plan from guests', hid.status === 200 && hid.j.modules.find((m) => m.id === 'plan').shown === false, hid.j);
+  ok('and the row is marked as a departure from the default', hid.j.modules.find((m) => m.id === 'plan').choice === 'hidden');
+  const guestList = await call('/api/modules', { as: 'guest', method: 'GET' });
+  ok('the guest list loses it at once', !(guestList.j || []).some((m) => m.id === 'plan'), guestList.j);
+  ok('and its client is no longer served to the guest', await raw('/modules/plan/client.js', 'guest') === 404);
+  ok('a guest cannot choose', (await call('/api/invite/guests', { as: 'guest', body: { id: 'plan', choice: 'shown' } })).status === 403);
+  ok('the guest with a page open is told to reload it', await reloadSeen);
+  const back = await call('/api/invite/guests', { as: 'owner', body: { id: 'plan', choice: 'shown' } });
+  ok('choosing the default again forgets the choice', back.j.modules.find((m) => m.id === 'plan').choice === null && back.j.modules.find((m) => m.id === 'plan').shown === true, back.j);
+  ok('an unknown module is refused', (await call('/api/invite/guests', { as: 'owner', body: { id: 'нет', choice: 'hidden' } })).status === 404);
+
   // ------------------------------------------------------------- evicting
   const out = await call('/api/invite/revoke', { as: 'owner', body: { id: list.j.invites[0].id } });
   revoked = Date.now();

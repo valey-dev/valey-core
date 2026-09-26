@@ -377,6 +377,10 @@ UI.initUI(state, {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({ guestId, agentId }),
   }).then((r) => r.json()).catch((e) => ({ error: e.message })),
+  guestModule: (id, choice) => fetch('/api/invite/guests', {
+    method: 'POST', headers: owned({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ id, choice }),
+  }).then((r) => r.json()).catch((e) => ({ error: e.message })),
   revokeInvite: (id) => fetch('/api/invite/revoke', {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({ id }),
@@ -651,6 +655,10 @@ function openStream() {
     es.close();
     setTimeout(() => location.reload(), 300);
   });
+  // The owner hid a module from guests: the page of a guest carries its client,
+  // and the only way to be rid of it is to load the page again. Owners never
+  // receive this.
+  es.addEventListener('reload', () => location.reload());
   attachStreams(es);
   linkTrying();
   es.onmessage = (e) => {
@@ -915,6 +923,7 @@ function onKey(e) {
   if (UI.skyKey(e.key)) { e.preventDefault(); return; }
   if (UI.skinKey(e.key)) { e.preventDefault(); return; }
   if (UI.langKey(e.key)) { e.preventDefault(); return; }
+  if (UI.inviteKey(e.key)) { e.preventDefault(); return; }
   // What we take from the browser: scrolling on space, moving focus on Tab. Counted by
   // the physical key rather than by the character: under a Russian layout the space bar
   // is still the space bar, while a check by character walked past Cyrillic in silence.
