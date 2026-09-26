@@ -373,6 +373,21 @@ function toPerson(id, event, data) {
   return n;
 }
 
+// The breaker on the wall by the lift (web/office.js): a joke, and a joke for
+// everybody on the floor — the owner's call, 26 September 2026. So the light is
+// the office's state, not a page's: one breaker for the building, pulled by
+// anyone, a guest included, and every open tab goes dark together.
+//
+// It lives in memory and nowhere else. A restart turns the lights back on, on
+// purpose: a breaker left down must not leave an office dark for good, and
+// nobody should have to open settings.json to find out why.
+let lights = { on: true, by: '', at: 0 };
+
+function broadcastLights() {
+  const payload = `event: lights\ndata: ${JSON.stringify(lights)}\n\n`;
+  for (const res of clients) res.write(payload);
+}
+
 // The pager has to ring at once rather than on the snapshot tick: 2.5 seconds
 // is the difference between "I am being called" and "I was called". The event
 // goes to owners only, because a guest's projection holds no requests at all.
@@ -721,6 +736,9 @@ async function handle(req, res) {
     res.write(`data: ${JSON.stringify(who ? project(last, who) : last)}\n\n`);
     // Whoever just came in sees who is already in the office at once, not a presence tick later.
     res.write(`event: people\ndata: ${JSON.stringify(livePeople())}\n\n`);
+    // And whether the breaker is down: somebody walking into a dark office walks
+    // into the dark, not into a lit floor that goes out a tick later.
+    res.write(`event: lights\ndata: ${JSON.stringify(lights)}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
     return;
@@ -1004,6 +1022,27 @@ async function handle(req, res) {
       at: Date.now(),
     });
     return send(res, 200, { ok: true, people: people.size });
+  }
+
+  // The breaker. Anyone admitted may pull it, a guest included — that is the
+  // joke, and it was asked for in so many words. The name comes from the page,
+  // the same third-person name /api/here carries, because the toast says who.
+  if (url.pathname === '/api/lights' && req.method === 'POST') {
+    const raw = await readBody(req);
+    if (raw.length > 2000) return send(res, 413, { error: 'request body is too large' });
+    let b;
+    try { b = JSON.parse(raw); } catch { return send(res, 400, { error: 'invalid JSON' }); }
+    if (!b || typeof b.on !== 'boolean') return send(res, 400, { error: 'on must be true or false' });
+    const known = typeof b.id === 'string' ? people.get(b.id.slice(0, 64)) : null;
+    const by = String(b.name || (known && known.name) || '').slice(0, 24);
+    // A pull that changes nothing is not news: two people reaching for the
+    // breaker at once must not produce two toasts and two hums.
+    if (b.on !== lights.on) {
+      lights = { on: b.on, by, at: Date.now() };
+      console.log(`[lights] ${b.on ? 'on' : 'off'}${by ? ' — ' + by : ''}`);
+      broadcastLights();
+    }
+    return send(res, 200, lights);
   }
 
   // Left properly rather than by timeout: the tab closes, the spot is freed at

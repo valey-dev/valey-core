@@ -114,6 +114,43 @@ export function drawLift(ctx, L, t, st) {
   }
 }
 
+// ------------------------------------------------------------------ breaker
+// The breaker on the wall by the lift: pull it and the office goes dark for
+// everybody on the floor. One per building, so on one floor only — the top
+// inhabited one — against the shaft, just left of the call button (x-7), where
+// stepping out of the cabin puts it in front of you. The first placement, at
+// x-36, stood out on the floor in front of the reception plaque instead of on
+// the shaft like the approved frame, and its hint covered it whole; found on
+// the first real frame, 26 September 2026. Its spot stands beside the box
+// rather than in front of it — at x-26 the player hid it whole — and sixteen
+// pixels left of the lift's own (x-16), so the two do not steal SPACE. Frame: [Breaker on the wall](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2451-9511)
+export function breakerAt(L) {
+  const lf = L && L.lift;
+  if (!lf) return null;
+  const inhabited = lf.floors.filter((f) => !f.tier);
+  if (!inhabited.length) return null;
+  const top = inhabited.reduce((a, b) => (b.y < a.y ? b : a));
+  return { x: lf.x - 24, y: top.y - 32, spot: { x: lf.x - 32, y: top.y - 4 }, floor: top };
+}
+
+// 10×16 of grey metal: lever up with a green lamp is light, lever down with a
+// red one is dark; the yellow sticker says «electricity», so the box does not
+// read as a cupboard. The colours are those of the approved frame.
+// Frame: [Breaker · on / off](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2449-1463)
+export function drawBreaker(ctx, L, on) {
+  const b = breakerAt(L);
+  if (!b) return;
+  const { x, y } = b;
+  px(ctx, x, y + 1, 10, 14, '#6d5a48');        // edge
+  px(ctx, x + 1, y + 2, 8, 12, '#4b433c');     // body
+  px(ctx, x + 1, y + 13, 8, 1, '#2c1e15');     // shade
+  px(ctx, x + 4, y + 4, 2, 7, '#140d08');      // slot
+  px(ctx, x + 3, on ? y + 3 : y + 9, 4, 2, '#c9b391');   // lever
+  px(ctx, x + 4, on ? y + 5 : y + 8, 2, 1, '#b19f8c');   // rod
+  px(ctx, x + 7, y + 3, 1, 1, on ? '#3f5c48' : '#c2795f');
+  px(ctx, x + 2, y + 11, 2, 2, '#ffd166');     // sticker
+}
+
 // ------------------------------------------------------------ the reception desk
 // It stands opposite the lift on every inhabited floor. The receptionist is the only
 // resident of the office who is not from a live session, so his looks are his own
