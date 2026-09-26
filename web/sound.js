@@ -311,21 +311,30 @@ export const sound = {
   power(up = false) {
     if (!this.ready || !this.on) return;
     const c = this.ctx, now = c.currentTime;
+    // Going down is the long one: 1.6 s of a hum sagging off its pitch, the way
+    // a room's fans and ballasts wind down, not a switch. The owner asked for
+    // it longer on 26 September 2026 — at half a second it read as a click.
+    // The filter closes as it goes, so the tail is felt more than heard.
+    // Coming back stays quick: power returning is a jolt, not a slope.
+    const dur = up ? 0.55 : 1.6;
     const osc = c.createOscillator();
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(up ? 60 : 190, now);
-    osc.frequency.exponentialRampToValueAtTime(up ? 190 : 42, now + 0.55);
+    osc.frequency.exponentialRampToValueAtTime(up ? 190 : 34, now + dur);
     const lp = c.createBiquadFilter();
-    lp.type = 'lowpass'; lp.frequency.value = 900; lp.Q.value = 0.6;
+    lp.type = 'lowpass'; lp.Q.value = 0.6;
+    lp.frequency.setValueAtTime(up ? 500 : 900, now);
+    lp.frequency.exponentialRampToValueAtTime(up ? 900 : 220, now + dur);
     const g = c.createGain();
     g.gain.setValueAtTime(0.0001, now);
     g.gain.exponentialRampToValueAtTime(0.05, now + 0.04);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.62);
+    if (!up) g.gain.setValueAtTime(0.05, now + dur * 0.35);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur + 0.07);
     osc.connect(lp); lp.connect(g); g.connect(this.master);
-    osc.start(now); osc.stop(now + 0.65);
+    osc.start(now); osc.stop(now + dur + 0.1);
 
     // the relay: one short knock of filtered noise at the end of the slide
-    const at = now + (up ? 0.02 : 0.5);
+    const at = now + (up ? 0.02 : dur - 0.05);
     const len = Math.floor(c.sampleRate * 0.09);
     const buf = c.createBuffer(1, len, c.sampleRate);
     const d = buf.getChannelData(0);
@@ -336,6 +345,25 @@ export const sound = {
     const kg = c.createGain(); kg.gain.value = 0.05;
     src.connect(bp); bp.connect(kg); kg.connect(this.master);
     src.start(at);
+  },
+
+  // A UPS on battery: one short, soft beep. Real ones beep in fours every
+  // half minute and are built to be hard to ignore; this one only has to say
+  // «still no power» to somebody who may be reading something else meanwhile.
+  // One beep, a sine rather than the piezo's square, and it is tickSound that
+  // spaces them (UPS_EVERY below).
+  ups() {
+    if (!this.ready || !this.on) return;
+    const c = this.ctx, now = c.currentTime;
+    const osc = c.createOscillator(); osc.type = 'sine';
+    osc.frequency.value = 1860;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.022, now + 0.01);
+    g.gain.setValueAtTime(0.022, now + 0.11);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+    osc.connect(g); g.connect(this.master);
+    osc.start(now); osc.stop(now + 0.2);
   },
 
   thunder(strength = 1) {
@@ -367,8 +395,20 @@ export const sound = {
 const RAIN_BED = { rain: 0.24, storm: 0.34, snow: 0.05, fog: 0.02, clouds: 0, clear: 0 };
 
 // Called every frame: keyboards near the player, rain louder by the windows.
+// How often the UPS beeps while the lights are out, and how long after the
+// power-down its first beep waits: past the 1.6 s hum and the relay, so the two
+// do not land on top of each other.
+const UPS_EVERY = 15000;
+const UPS_FIRST = 2600;
+let upsNext = 0;
+
 export function tickSound(state, dt, weather) {
   if (!sound.ready || !sound.on) return;
+  if (state.blackout) {
+    const now = performance.now();
+    if (!upsNext) upsNext = now + UPS_FIRST;
+    else if (now >= upsNext) { sound.ups(); upsNext = now + UPS_EVERY; }
+  } else upsNext = 0;
   const p = state.player;
 
   // A floor whose server is gone is a snapshot, and a snapshot does not type.
