@@ -62,7 +62,17 @@ function selfClosing(box, close) {
   };
 }
 
-export const clean = (s) => (s || '').replace(/```[\s\S]*?```/g, tr('clean.code')).replace(/[*#`]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+// The card types the reply out as plain text, so markdown is stripped rather
+// than rendered. A picture is named instead: «![подпись](</путь/кадр.png>)»
+// read as a path with brackets around it, and the picture itself is in the
+// conversation, where the markup lives (#reply-image, 17 September 2026).
+export const clean = (s) => (s || '')
+  .replace(/```[\s\S]*?```/g, tr('clean.code'))
+  .replace(/!\[([^\]]*)\]\(\s*(?:<([^)]*?)>|([^)\s]+))[^)]*\)/g, (_, alt, angled, bare) => {
+    const src = angled !== undefined ? angled : bare;
+    return `🖼 ${alt || String(src).split('/').pop()}`;
+  })
+  .replace(/[*#`]/g, '').replace(/\n{3,}/g, '\n\n').trim();
 
 // ------------------------------------------------------------------- toasts
 export function toast(text, kind = '') {
@@ -1333,6 +1343,27 @@ const plainText = (t) => esc(t.slice(0, 20000));
 const codeBody = (txt, lang) => (lang
   ? `<pre class="code lang-${lang}">${highlight(txt.slice(0, 60000), lang)}</pre>`
   : `<pre>${plainText(txt)}</pre>`);
+// Pictures inside a rendered reply (#reply-image). Two things the markup
+// cannot do by itself: a click that opens the office viewer, and an honest
+// fallback. /api/file serves only what the agent touched in its work, so a
+// path it never opened — or a file already deleted — answers 403 or 404, and
+// an empty frame with a broken-image glyph would say nothing. The line with
+// the name and the reason says what happened.
+export function bindPictures(root) {
+  if (!root) return;
+  root.querySelectorAll('.mdpic').forEach((box) => {
+    const img = box.querySelector('img');
+    const path = box.dataset.path || '';
+    if (!img) return;
+    img.onerror = () => {
+      const name = box.querySelector('.mdpicname');
+      box.classList.add('gone');
+      box.innerHTML = `<span class="mdimg">🖼 ${esc(name ? name.textContent : path.split('/').pop())}</span>`
+        + `<span class="mdpicwhy">${tr('pic.gone')}</span>`;
+    };
+    box.onclick = () => { if (!box.classList.contains('gone')) openFile(path); };
+  });
+}
 const mdBody = (txt) => (mdRaw
   ? `<pre>${plainText(txt)}</pre>`
   : `<div class="md">${renderMarkdown(txt.slice(0, 120000))}</div>`);
@@ -1365,6 +1396,8 @@ function redrawDoc() {
   if (box) { box.innerHTML = docBody(); box.scrollTop = 0; }
   if (btn) btn.textContent = toggleLabel();
   bindDocControls();
+  // A picture inside a viewed markdown file behaves as one in a reply.
+  bindPictures(el.viewer);
 }
 
 export function toggleMarkdownRaw() {
@@ -2147,27 +2180,54 @@ async function loadUpd() {
   } catch { upd = null; }
 }
 
-const UPD_REASONS = new Set(['dirty', 'diverged', 'noUpstream', 'notGit', 'fetch', 'newServer', 'noSupervisor']);
+const UPD_REASONS = new Set(['dirty', 'diverged', 'noUpstream', 'notGit', 'fetch', 'newServer', 'noSupervisor',
+  // The archive office refuses in ways a checkout cannot: its bytes come over
+  // the wire and are weighed against a published sum before anything moves.
+  'offline', 'noSum', 'badSum', 'badArchive', 'move', 'archive']);
 const updRepo = (key) => tr(key === 'modules' ? 'upd.inModules' : 'upd.inCore');
 
+// Two offices, one row. A checkout pulls with git; an office installed from an
+// archive downloads a new one from valey.dev, and its modules of the Office —
+// the shelf — are a checkout beside it that may have been closed together with
+// the subscription. Every line that differs is a key of its own rather than a
+// sentence built from halves: half-sentences translate into machine output in
+// whichever language was not written first.
 function updRow() {
   const u = upd || { state: 'idle', running: '' };
+  const arch = u.source === 'archive';
+  const hasShelf = arch ? !!u.shelf && u.shelf !== 'none' : (u.repos || []).includes('modules');
   const ver = `v${esc(u.running || '')}`;
-  let desc = tr((u.repos || []).includes('modules') ? 'upd.from' : 'upd.fromCore');
-  let btn = tr('upd.check'), act = 'check', prim = false, off = false, note = tr('upd.idleNote');
+  let desc = arch
+    ? tr(hasShelf ? 'upd.fromArchiveShelf' : 'upd.fromArchive')
+    : tr((u.repos || []).includes('modules') ? 'upd.from' : 'upd.fromCore');
+  let btn = tr('upd.check'), act = 'check', prim = false, off = false;
+  let note = tr(arch ? 'upd.idleNoteArchive' : 'upd.idleNote');
   if (u.state === 'checking') { desc = tr('upd.checking'); btn = tr('upd.checking'); off = true; }
   if (u.state === 'available') {
     const what = [u.feats ? tr('upd.feats', { n: u.feats }) : '', u.fixes ? tr('upd.fixes', { n: u.fixes }) : ''].filter(Boolean).join(', ');
-    desc = tr('upd.available', { v: esc(u.available || '') }) + (what ? ` · ${what}` : '');
-    btn = tr('upd.run'); act = 'run'; prim = true; note = tr('upd.availNote');
+    // With a shelf the row says which halves move rather than how many commits:
+    // the counts are the core's, and printed beside «core and the modules» they
+    // would read as the count for both.
+    const tail = arch && u.shelf === 'ok' ? tr('upd.bothHalves')
+      : arch && u.shelf === 'closed' ? tr('upd.coreOnly')
+        : what;
+    desc = tr('upd.available', { v: esc(u.available || '') }) + (tail ? ` · ${tail}` : '');
+    btn = tr('upd.run'); act = 'run'; prim = true;
+    const key = arch
+      ? (u.shelf === 'ok' ? 'upd.availNoteShelf' : u.shelf === 'closed' ? 'upd.availNoteClosed' : 'upd.availNoteArchive')
+      : 'upd.availNote';
+    note = tr(key, { old: esc(u.aside || '') });
   }
-  if (u.state === 'latest') { desc = tr('upd.latest'); note = tr('upd.latestNote'); }
+  if (u.state === 'latest') { desc = tr('upd.latest'); note = tr(arch ? 'upd.latestNoteArchive' : 'upd.latestNote'); }
   if (u.state === 'updating') {
     const done = new Set(u.steps || []);
-    const steps = [tr('upd.stepCore') + (done.has('core') ? ' ✓' : '')];
-    if ((u.repos || []).includes('modules')) steps.push(tr('upd.stepModules') + (done.has('modules') ? ' ✓' : ''));
+    const mark = (key, label) => tr(label) + (done.has(key) ? ' ✓' : '');
+    const steps = arch
+      ? [mark('archive', 'upd.stepArchive'), mark('sum', 'upd.stepSum')]
+      : [mark('core', 'upd.stepCore')];
+    if (hasShelf) steps.push(mark('modules', arch ? 'upd.stepShelf' : 'upd.stepModules'));
     steps.push(tr('upd.stepServer') + (done.has('server') ? '…' : ''));
-    desc = `git pull · ${steps.join(' · ')}`;
+    desc = arch ? steps.join(' · ') : `git pull · ${steps.join(' · ')}`;
     btn = tr('upd.running'); off = true; note = tr('upd.updNote');
   }
   if (u.state === 'failed') {
@@ -2176,7 +2236,7 @@ function updRow() {
     const key = UPD_REASONS.has(u.reason) ? u.reason : 'other';
     note = tr(`upd.why.${key}`, { repo: updRepo(u.repo), detail: esc(u.detail || '') });
   }
-  return `<p class="dcap">${tr('upd.cap')}</p>
+  return `<p class="dcap">${tr(arch ? 'upd.capArchive' : 'upd.cap')}</p>
       <div class="orow"><b>${tr('upd.name')}</b><span>${desc}</span><i>${ver}</i>
         <button class="obtn${prim ? ' prim' : ''}" data-upd="${act}"${off ? ' disabled' : ''}>${btn}</button></div>
       <p class="hint">${note}</p>`;
@@ -4132,6 +4192,7 @@ function paintChat(msgs, fresh = 0, force = false) {
         + renderNotes(byTs.get(m.ts) || [], false)
         + (ed && !ed.id && ed.ts === m.ts ? noteEditor(m.ts, ed.text) : '')).join('')
     : loose + `<p class="empty">${tr('chat.empty')}</p>`;
+  bindPictures(box);
   chatView.msgs = msgs;
   // The conversation was opened with a snapshot of the agent, while the task is
   // rewritten by every new answer: take the fresh one from the list, or the head

@@ -141,6 +141,26 @@ async function resume(who) {
   await append(who, { type: 'assistant', message: { role: 'assistant', model: 'claude-fable-5', stop_reason: 'end_turn', content: [{ type: 'text', text: who.said }] } });
 }
 
+// `picture: <slot>` — see SHOT_FIELDS in notes.mjs. The frame the agent sends is
+// a picture an earlier release published: invented already, and a real file, so
+// the office has something to serve. The second one never existed, and the
+// conversation shows what it says when the office will not serve a file.
+const PICTURE_FROM = path.join(ROOT, 'notes', 'v0.63.0', 'codex-sessions-codex-floor.png');
+async function picture(slot) {
+  const who = cast.get(slot);
+  if (!who) die(`picture: there is no cast member ${slot}; the cast is ${[...cast.keys()].join(', ')}`);
+  if (!existsSync(PICTURE_FROM)) die(`picture: ${path.relative(ROOT, PICTURE_FROM)} is gone; point PICTURE_FROM at another published picture`);
+  const frame = path.join(tmp, 'frames', 'floor-after-the-fix.png');
+  await fsp.mkdir(path.dirname(frame), { recursive: true });
+  await fsp.copyFile(PICTURE_FROM, frame);
+  const gone = path.join(tmp, 'frames', 'floor-before.png');
+  await append(who, { type: 'user', message: { role: 'user', content: 'Show me how the floor looks now' } });
+  await append(who, { type: 'assistant', message: { role: 'assistant', model: 'claude-fable-5', stop_reason: 'end_turn', content: [{ type: 'text',
+    text: `Here is the frame from the stand:\n\n![the floor after the fix](<${frame}>)\n\nThe one from before is already deleted:\n\n![the floor before](<${gone}>)` }] } });
+  await new Promise((r) => setTimeout(r, 2500));   // the office picks the lines up on its next tick
+  return who;
+}
+
 // The old office is a detached worktree of the tag — its own server, its own
 // web/. It goes outside the checkout: a worktree under it gets walked by every
 // file watcher in the project.
@@ -179,8 +199,10 @@ for (const f of wanted) {
     if (sh.touch) args.push('--touch');
     if (sh.setup) args.push('--setup', sh.setup);
     const cut = sh.interrupt ? await interrupt(sh.interrupt) : null;
+    const drew = sh.picture ? await picture(sh.picture) : null;
     const r = spawnSync(process.execPath, [shotTool, ...args], { cwd: ROOT, stdio: 'inherit' });
     if (cut) await resume(cut);
+    if (drew) await resume(drew);
     if (r.status !== 0) {
       if (!keep) await office.stop();
       die(`${f.slug}/${sh.id} was not taken`);

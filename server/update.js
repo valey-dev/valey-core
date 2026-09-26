@@ -16,6 +16,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fromArchive, checkArchive, pullArchive } from './archive.js';
 
 const run = promisify(execFile);
 const FETCH_MS = 60_000;
@@ -29,11 +30,13 @@ const tryGit = async (cwd, args, timeout) => { try { return await git(cwd, args,
 // The repositories to update: the core always, Modules when `modules/` is the
 // top of a repository of its own rather than a folder inside the core.
 export async function repos(root) {
-  const out = [{ key: 'core', dir: root }];
+  const out = [{ key: 'core', dir: root, from: fromArchive(root) ? 'archive' : 'git' }];
   const mods = path.join(root, 'modules');
   if (fs.existsSync(mods)) {
     const top = await tryGit(mods, ['rev-parse', '--show-toplevel']);
-    if (top && fs.realpathSync(top) === fs.realpathSync(mods)) out.push({ key: 'modules', dir: mods });
+    // realpath, because the shelf and a worktree module are reached through a
+    // symlink: `modules` itself is then a link to the checkout git names.
+    if (top && fs.realpathSync(top) === fs.realpathSync(mods)) out.push({ key: 'modules', dir: mods, from: 'git' });
   }
   return out;
 }
@@ -78,6 +81,7 @@ async function fetchAll(list) {
 // What pressing «check» answers: the version now, the version upstream, and
 // what lies between, counted the way the changelog counts it.
 export async function checkUpdate(root) {
+  if (fromArchive(root)) return checkFromArchive(root);
   const list = await repos(root);
   const current = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
   for (const r of list) {
@@ -103,9 +107,48 @@ export async function checkUpdate(root) {
   return out;
 }
 
+// The shelf: `modules/` as a checkout of valey-office, which the buyer of the
+// Office installed with their read access from Polar. Asked apart from the
+// core, because losing it is ordinary — a subscription ends — and the core has
+// no business standing still for that. Returns 'none' when there is no shelf,
+// 'closed' when it cannot be reached or is not ours to move, 'ok' otherwise,
+// and a refusal object when it is ours and in the way.
+async function askShelf(root) {
+  const shelf = (await repos(root)).find((r) => r.key === 'modules');
+  if (!shelf) return { shelf: 'none' };
+  if (await fetchAll([shelf])) return { shelf: 'closed' };
+  const why = await refusal(shelf.dir);
+  if (why && (why.reason === 'dirty' || why.reason === 'diverged')) return { shelf: 'busy', why };
+  if (why) return { shelf: 'closed' };
+  const n = await tryGit(shelf.dir, ['rev-list', '--count', 'HEAD..@{u}']);
+  return { shelf: 'ok', behind: Number(n) || 0, dir: shelf.dir };
+}
+
+// An office installed from an archive. The core comes from valey.dev; the
+// modules of the Office, when they are a checkout of the shelf, come from git
+// beside it. Both are asked before either is told to move.
+async function checkFromArchive(root) {
+  const a = await checkArchive(root);
+  if (a.error) return { current: a.current, source: 'archive', shelf: 'none', error: a.error };
+  const s = await askShelf(root);
+  const behind = { core: a.available ? 1 : 0 };
+  if (s.shelf === 'ok') behind.modules = s.behind;
+  return {
+    current: a.current,
+    source: 'archive',
+    shelf: s.shelf === 'busy' ? 'ok' : s.shelf,
+    available: a.available,
+    feats: a.feats,
+    fixes: a.fixes,
+    behind,
+    upToDate: !a.available && !(s.shelf === 'ok' && s.behind > 0),
+  };
+}
+
 // Pull both forward, or neither. `step` hears each repository as it lands so
 // the office can show the steps in order.
 export async function pullUpdate(root, { step = () => {} } = {}) {
+  if (fromArchive(root)) return pullFromArchive(root, { step });
   const list = await repos(root);
   const from = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
   const failed = await fetchAll(list);
@@ -123,4 +166,30 @@ export async function pullUpdate(root, { step = () => {} } = {}) {
   }
   const to = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
   return { ok: true, from, to };
+}
+
+// The archive half of «both or neither». The shelf is checked before a byte is
+// downloaded, so a shelf with work in progress stops the update while the
+// office is still untouched; a shelf that simply cannot be reached — the
+// subscription ended — lets the core go on alone, and the row says why.
+async function pullFromArchive(root, { step = () => {} } = {}) {
+  const from = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+  const s = await askShelf(root);
+  if (s.shelf === 'busy') return { ok: false, from, repo: 'modules', ...s.why };
+  const r = await pullArchive(root, { step });
+  if (!r.ok) return r;
+  if (s.shelf === 'ok' && s.behind > 0) {
+    // The shelf is pulled after the folders have been swapped: until then the
+    // checkout the office will actually run sits in the old directory.
+    const dir = path.join(root, 'modules');
+    try {
+      await git(dir, ['merge', '--ff-only', '--quiet', '@{u}'], 60_000);
+      step('modules');
+    } catch (e) {
+      // The core is already replaced, so this cannot be undone into a refusal:
+      // the office says which half moved and leaves the shelf where it was.
+      return { ok: true, from: r.from, to: r.to, shelf: 'failed', detail: String(e.stderr || e.message || '').trim().split('\n')[0] };
+    }
+  }
+  return { ...r, shelf: s.shelf };
 }

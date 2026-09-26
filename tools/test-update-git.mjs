@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { checkUpdate, pullUpdate } from '../server/update.js';
+import { checkUpdate, pullUpdate, repos } from '../server/update.js';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -96,10 +96,13 @@ ok('the untracked backlog is left where it was', fs.existsSync(path.join(office,
 r = await checkUpdate(office);
 ok('and check then says up to date', r.upToDate === true, r);
 
-// an office folder with no git at all — installed from an archive
+// An office folder with no git at all is not a broken checkout: it came from
+// an archive, and since v0.62.0 that is its own way of updating. What is
+// checked here is only that it is read as such — the archive itself has its own
+// stand, tools/test-update-archive.mjs, which does not reach outside either.
 const plain = path.join(tmp, 'plain'); fs.mkdirSync(plain); write(plain, 'package.json', pkg('0.52.3'));
-r = await checkUpdate(plain);
-ok('an office that is not a git checkout says so instead of failing', r.error && r.error.reason === 'notGit', r);
+const kind = await repos(plain);
+ok('an office folder with no git is the archive kind', kind.length === 1 && kind[0].from === 'archive', kind);
 
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(bad ? `\n${bad} failed` : '\nall passed');

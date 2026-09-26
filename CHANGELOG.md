@@ -4,6 +4,59 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.66.1 — 26 September 2026
+
+### Fixed
+
+- **newsstand:** the paper's key hint names Space next to Enter (99af8b7)
+## v0.66.0 — 26 September 2026
+
+### Added
+
+- **release:** a released office publishes a manifest of its version, so the archive office can ask what is out without downloading it (256d53c)
+- **office:** an office installed from an archive updates itself, core from valey.dev and the modules of the Office from the shelf (7f53bbc)
+## v0.65.3 — 26 September 2026
+
+### Fixed
+
+- **install:** an update run from inside the office tells the terminal to cd into the new one (df94598)
+## v0.65.2 — 26 September 2026
+
+### Fixed
+
+- **newsstand:** a name nobody invented is refused in the picture office instead of being dressed in an invented paper (e608c06)
+- **newsstand:** Space opens a post like Enter, and the answer is said on the paper instead of in a corner of the screen (e52ef1f)
+- **newsstand:** the invented papers say so instead of sending the reader to a channel that does not exist, and a photo is halftoned on a finer grid (d4591ee)
+
+### Other
+
+- chore(notes): the v0.65.0 reply-image recipe gets back the line that puts a picture in the frame (05f4335)
+- chore(newsstand): the picture office reads invented papers, so the stand has something a public note may show (ad0e9e3)
+## v0.65.1 — 26 September 2026
+
+### Fixed
+
+- **release:** a picture quoted as an example in a note stays an example on the page (c2881c4)
+## v0.65.0 — 26 September 2026
+
+### Added
+
+- **office:** a picture an agent sends in a reply is drawn in the conversation, not spelled out (2cd4806)
+
+### Fixed
+
+- **office:** a picture an agent names in its reply opens, even when no tool touched it (279bc71)
+
+### Other
+
+- chore(notes): the reply-image fragment declares only fields the release knows (b7a180f)
+- docs(notes): the reply-image picture shows the picture, and the note says what now opens (08a57ec)
+- chore(notes): a picture recipe can have a demo agent answer with a picture (7c0ba5e)
+## v0.64.0 — 26 September 2026
+
+### Added
+
+- **office:** the office keeps a journal of what broke, on this machine (e89d762)
 ## v0.63.1 — 26 September 2026
 
 ### Fixed

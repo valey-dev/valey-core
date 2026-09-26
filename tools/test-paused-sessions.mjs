@@ -8,8 +8,12 @@
 // second and took the desk with it: there was nowhere to leave a note, while the
 // app was still offering to write to that very chat.
 //
-// The sessions, the transcripts and the settings are the stand's own: nothing of
-// this machine's ~/.claude is read.
+// Archiving a chat in the app shuts its CLI down the same way and leaves the
+// transcript as fresh, so an archived chat used to sit there asleep for the rest
+// of the hour. The app's own record says which is which (isArchived).
+//
+// The sessions, the transcripts, the app's records and the settings are the
+// stand's own: nothing of this machine's ~/.claude or the app's data is read.
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -29,7 +33,7 @@ const projects = path.join(claude, 'projects', work.replace(/[^a-zA-Z0-9]/g, '-'
 await fsp.mkdir(projects, { recursive: true });
 
 const ID = (n) => `0000000${n}-1111-2222-3333-44445555666${n}`;
-const LIVE = ID(1), SLEPT = ID(2), OLD = ID(3), MIDTURN = ID(4), ASKED = ID(5), BOTH = ID(6);
+const LIVE = ID(1), SLEPT = ID(2), OLD = ID(3), MIDTURN = ID(4), ASKED = ID(5), BOTH = ID(6), SHELVED = ID(7);
 
 const said = (text, at = new Date()) => JSON.stringify({
   type: 'assistant', timestamp: at.toISOString(), cwd: work,
@@ -66,11 +70,27 @@ await write(BOTH, [said('у меня и процесс, и свежий тран
 await fsp.writeFile(path.join(claude, 'sessions', '999999.json'),
   JSON.stringify({ sessionId: BOTH, pid: process.pid, cwd: work, startedAt: Date.now() }));
 
+await write(SHELVED, [said('меня убрали в архив')]);
+
+// The app's records, laid out as it lays them: <account>/<org>/local_<id>.json.
+// The live one is marked archived too — a process still running wins over the
+// mark, since an archived chat has none.
+const desktop = path.join(dir, 'desktop');
+const org = path.join(desktop, 'account', 'org');
+await fsp.mkdir(org, { recursive: true });
+const record = (n, cli, isArchived) => fsp.writeFile(path.join(org, `local_${n}.json`),
+  JSON.stringify({ sessionId: `local_${n}`, cliSessionId: cli, isArchived, title: 'stand' }));
+await record(1, SHELVED, true);
+await record(2, SLEPT, false);
+await record(3, LIVE, true);
+await fsp.writeFile(path.join(org, 'local_4.json'), '{ half-written');
+
 await fsp.writeFile(path.join(dir, 'settings.json'), JSON.stringify({ weather: { enabled: false } }));
 // The variables come before the import: both are read on it.
 process.env.VALEY_SETTINGS = path.join(dir, 'settings.json');
 process.env.VALEY_CONFIG_DIR = dir;
 process.env.VALEY_CLAUDE_DIR = claude;
+process.env.VALEY_DESKTOP_DIR = desktop;
 
 const { pausedSessions, liveSessions, snapshot } = await import('../server/agents.js');
 
@@ -86,6 +106,8 @@ ok('one touched three hours ago is not', !ids.includes(OLD), ids);
 ok('one that has a process is not listed twice', !ids.includes(LIVE) && !ids.includes(BOTH), ids);
 ok('the sleeping one knows where it sat', (slept.find((s) => s.sessionId === SLEPT) || {}).cwd === work, slept[0]);
 ok('and carries no pid, because there is no process', (slept.find((s) => s.sessionId === SLEPT) || {}).pid === 0, slept[0]);
+ok('one the person archived in the app is gone, not asleep', !ids.includes(SHELVED), ids);
+ok('one the app keeps unarchived stays asleep', ids.includes(SLEPT), ids);
 
 // The scan is a stat per transcript and a tick is a second, so it is cached;
 // a later clock goes past the cache rather than around it.
@@ -106,6 +128,15 @@ ok('one asleep mid-step is resting, not working', by(MIDTURN) && by(MIDTURN).sta
 // The question it asked is still the person's to answer, so the plate stays up.
 ok('one that asked still waits for you', by(ASKED) && by(ASKED).status === 'awaiting', by(ASKED));
 ok('the one with a process and a fresh transcript is one person', snap.agents.filter((a) => a.id === BOTH).length === 1, snap.agents.map((a) => a.id));
+ok('the archived one has no desk', !by(SHELVED), snap.agents.map((a) => a.id.slice(0, 8)));
+ok('an archived mark does not evict a running process', by(LIVE) && by(LIVE).paused === false, by(LIVE));
+
+// Taken out of the archive, the chat is back: the mark is read again when the
+// app rewrites the record, and the cache is past its ten seconds.
+await record(1, SHELVED, false);
+await fsp.utimes(path.join(org, 'local_1.json'), (now + 5_000) / 1000, (now + 5_000) / 1000);
+const back = await pausedSessions(live, now + 120_000);
+ok('unarchived, it sits down again', back.some((s) => s.sessionId === SHELVED), back.map((s) => s.sessionId));
 
 await fsp.rm(dir, { recursive: true, force: true });
 console.log(bad ? `\n${bad} failed` : '\nall green');

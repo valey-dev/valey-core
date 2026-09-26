@@ -262,12 +262,13 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .pkeys kbd{font:inherit; font-size:9px; color:var(--ink-dim); border:0; background:none}
 .pmore{margin-left:auto; font-size:9px; color:var(--ink-dim)}
 
-/* ---- toasts ---- */
 /* ---- the office is gone ---- */
 /* The plaque of a lost office. It stands above the panels: whatever is open,
    the news that the office is not there outranks it — and a panel showing stale
    data is exactly what this explains. It does not cover the whole screen on
-   purpose: the dark floor behind it is half of the message.
+   purpose: the dark floor behind it is half of the message. It shares layer
+   29 with the toasts and comes after them in the markup, so it wins a tie —
+   they do not meet anyway: the plaque is central, the toasts sit in a corner.
    Design: [Plaque · office unreachable](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2408-2675) */
 #offline{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:29;
   width:min(560px, 92vw); background:var(--wood-dark); border:3px solid var(--frame);
@@ -280,7 +281,13 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .ocount{margin:6px 0 0; color:var(--muted); font-size:12px}
 .obody .acts button.primary{border-color:var(--warn); color:var(--warn)}
 
-#toasts{position:fixed; left:14px; bottom:52px; z-index:25; display:flex; flex-direction:column; gap:6px;
+/* ---- toasts ---- */
+/* Above the panels (28): a panel that fills the screen — the inventory, the
+   standup — dimmed the toast out of sight at 25, so an answer to a key pressed
+   inside it was read as nothing happening. Found on 17 September 2026 on the
+   newsstand. Still below the transcript (30), which answers a copied block on
+   the button itself, and below the key card and the stand's plaque. */
+#toasts{position:fixed; left:14px; bottom:52px; z-index:29; display:flex; flex-direction:column; gap:6px;
   pointer-events:none}
 /* On touch the toasts stand where the stick rests. A finger landing on one had
    the toast as its target and never reached the floor, so the stick went deaf
