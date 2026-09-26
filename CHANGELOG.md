@@ -4,6 +4,18 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.65.2 — 26 September 2026
+
+### Fixed
+
+- **newsstand:** a name nobody invented is refused in the picture office instead of being dressed in an invented paper (e608c06)
+- **newsstand:** Space opens a post like Enter, and the answer is said on the paper instead of in a corner of the screen (e52ef1f)
+- **newsstand:** the invented papers say so instead of sending the reader to a channel that does not exist, and a photo is halftoned on a finer grid (d4591ee)
+
+### Other
+
+- chore(notes): the v0.65.0 reply-image recipe gets back the line that puts a picture in the frame (05f4335)
+- chore(newsstand): the picture office reads invented papers, so the stand has something a public note may show (ad0e9e3)
 ## v0.65.1 — 26 September 2026
 
 ### Fixed
