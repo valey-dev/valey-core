@@ -4,6 +4,39 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.63.0 — 23 September 2026
+
+### Added
+
+- **office:** Codex threads sit at desks next to Claude sessions, marked ◇ where Claude is ✶ (b74c819)
+
+### Fixed
+
+- **office:** a file dropped into a task for a Codex thread goes with it, instead of being left behind (4a4c997)
+- **office:** a Codex agent takes a task from the office — it goes into the thread's own queue (2f411ef)
+
+### Other
+
+- docs(notes): the Codex pictures re-rendered after main caught up (89a5a3a)
+- docs(notes): the Codex note says tasks go into the thread's queue, with the Task page (0b88de8)
+- docs(notes): the Codex sessions note, with the floor and the card (8485473)
+- chore(notes): the demo office for release pictures seats one invented Codex thread (cde65bf)
+- refactor(agents): one function records a tool call, whoever made it (de054f6)
+## v0.62.3 — 21 September 2026
+
+### Other
+
+- docs(readme): drop the note about a landing page the public repo never had (46d733d)
+## v0.62.2 — 19 September 2026
+
+### Fixed
+
+- **office:** an agent the app put to sleep stays at the desk for an hour instead of vanishing mid-conversation (246e7f8)
+## v0.62.1 — 19 September 2026
+
+### Fixed
+
+- **office:** a card reads the report tail in English too, so an English-speaking project stops showing the chat title instead of the task (82af9a9)
 ## v0.62.0 — 17 September 2026
 
 ### Added

@@ -10,6 +10,7 @@ import { getSettings, patchSettings } from './settings.js';
 import { projectInfo, repoRoot, repoRootCached } from './stack.js';
 import { present } from './files.js';
 import { trinketTier } from '../web/trinkets.js';
+import { liveCodexSessions, applyCodexLine } from './codex.js';
 
 // Where the office reads sessions from. The variable is for the stands: until
 // 4 September 2026 the directory was pinned to the home one, and transcript
@@ -63,6 +64,62 @@ export async function liveSessions() {
     } catch { /* session file rotated mid-read */ }
   }
   return dedupeSessions(out);
+}
+
+// A conversation the desktop app has put to sleep. The app shuts the CLI of an
+// idle session down by itself — «[CliGovernor] pressure evicting … (idle 747s)»
+// in its own log, fourteen times on 19 September 2026, sometimes after ninety
+// seconds of silence — and the chat stays in its list, resumable. The office saw
+// only processes, so the agent left the floor the same second and took with it
+// the desk one could leave a note on, while the app still offered to write to it.
+//
+// So a session whose transcript was touched within the hour stays in the office,
+// asleep. An hour, because that is how long a conversation stays worth resuming
+// by hand; after it the agent goes for good. Waking one needs no process: the
+// office resumes it exactly as the app does, with `claude --resume`.
+const PAUSED_MS = 60 * 60_000;
+const PAUSED_TTL = 10_000;          // the scan is a stat per transcript; a tick is a second
+let pausedAt = 0;
+let pausedList = [];
+
+// Every record carries the session's cwd, so the tail is enough to learn where
+// the agent sat. Read as text: a 64 KB tail crosses no record boundary that
+// matters, and a half-line at its head simply does not match.
+const CWD_RE = /"cwd"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+async function cwdOf(file, size) {
+  const len = Math.min(size, 64 * 1024);
+  const fh = await fsp.open(file, 'r');
+  try {
+    const buf = Buffer.alloc(len);
+    await fh.read(buf, 0, len, size - len);
+    const text = buf.toString('utf8');
+    let last = null, m;
+    CWD_RE.lastIndex = 0;
+    while ((m = CWD_RE.exec(text))) last = m[1];
+    return last ? JSON.parse('"' + last + '"') : '';
+  } finally { await fh.close(); }
+}
+
+export async function pausedSessions(live = [], now = Date.now()) {
+  if (now - pausedAt < PAUSED_TTL) return pausedList.filter((s) => !live.some((l) => l.sessionId === s.sessionId));
+  const index = await indexTranscripts();
+  const out = [];
+  for (const [id, paths] of index) {
+    for (const file of paths) {
+      let st;
+      try { st = await fsp.stat(file); } catch { continue; }
+      if (now - st.mtimeMs > PAUSED_MS || !st.size) continue;
+      let cwd = '';
+      try { cwd = await cwdOf(file, st.size); } catch { /* rotated under us */ }
+      if (!cwd) continue;
+      // startedAt belongs to the session rather than to the file's last write:
+      // the trinkets on a veteran's desk are counted from it.
+      out.push({ sessionId: id, cwd, pid: 0, paused: true, startedAt: Math.round(st.birthtimeMs || st.mtimeMs) });
+      break;
+    }
+  }
+  pausedList = out; pausedAt = now;
+  return out.filter((s) => !live.some((l) => l.sessionId === s.sessionId));
 }
 
 const projectDirOf = (cwd) => (cwd || '').replace(/[^a-zA-Z0-9]/g, '-');
@@ -227,13 +284,13 @@ async function readRange(file, start, length) {
   }
 }
 
-async function follow(sessionId, file, apply, fresh, deep) {
+async function follow(sessionId, file, apply, fresh, deep, firstRead = FIRST_READ_BYTES) {
   let c = cache.get(sessionId);
   let size = 0;
   try { size = (await fsp.stat(file)).size; } catch { return c?.st; }
 
   if (!c || c.file !== file || size < c.offset) {
-    const start = Math.max(0, size - FIRST_READ_BYTES);
+    const start = Math.max(0, size - firstRead);
     const text = await readRange(file, start, size - start);
     const lines = text.split('\n');
     if (start > 0) lines.shift();
@@ -366,14 +423,24 @@ function tailField(tail, label) {
   return last[1].replace(/[*_`]/g, '').trim().slice(0, TAIL_VALUE);
 }
 
+// Both languages, because the tail belongs to the project rather than to the
+// office: a repository whose AGENTS.md is written in English closes its answers
+// in English, and until 19 September 2026 the office saw none of it — the card
+// fell back to the chat title, dim, in a room where the agents were reporting
+// properly all along. The English labels are the ones the rulebook template
+// ships: «Current task», «Status», «Needed from you».
+const L_WHAT = 'Текущая (?:фича\\/задача|задача|фича)|Current (?:feature\\/task|task|feature)';
+const L_STATUS = 'Статус|Status';
+const L_NEED = 'Что нужно от меня|Needed from you';
+
 export function reportTail(text) {
   const tail = String(text || '').slice(-TAIL_MAX);
-  const what = tailField(tail, 'Текущая (?:фича\\/задача|задача|фича)');
+  const what = tailField(tail, L_WHAT);
   if (!what) return null;
-  const need = tailField(tail, 'Что нужно от меня');
+  const need = tailField(tail, L_NEED);
   return {
     what,
-    status: tailField(tail, 'Статус'),
+    status: tailField(tail, L_STATUS),
     // "Ничего" is a full answer, and it has no business in the head: the ⚑ plate
     // must mean "you are needed", not "the line was filled in".
     need: NOTHING.test(need) ? '' : need,
@@ -554,6 +621,28 @@ function emptyState() {
   };
 }
 
+// One tool call, whoever made it. Claude names its tools itself; the Codex
+// parser (server/codex.js) translates its items into the same names, so the
+// act, the role, the grade and the files are counted one way for both.
+function useTool(st, name, input = {}) {
+  const d = describeTool(name, input);
+  const mood = (IMAGE_RE.test(input?.file_path || '') && /Write|Edit/.test(name)) ? 'design' : d.mood;
+  st.acts.push({ mood, ts: st.lastTs || Date.now() });
+  if (st.acts.length > 60) st.acts.splice(0, st.acts.length - 60);
+  // The grade counts the same mood — but before the trim and with no window.
+  if (SKILL_OF[mood]) st.skills[SKILL_OF[mood]]++;
+  st.lastTool = name;
+  st.lastToolInput = input;
+  const fp = input?.file_path;
+  if (fp) {
+    st.files.set(fp, {
+      path: fp, name: base(fp), image: IMAGE_RE.test(fp), ts: st.lastTs,
+      made: /Write|Edit|Artifact/.test(name),
+    });
+    if (st.files.size > 60) st.files.delete(st.files.keys().next().value);
+  }
+}
+
 function applyLine(st, line) {
   if (!line) return;
   let r;
@@ -625,23 +714,11 @@ function applyLine(st, line) {
     else st.ended = r.message.stop_reason === 'end_turn' ? endOf(said) : '';
     for (const b of Array.isArray(content) ? content : []) {
       if (b?.type !== 'tool_use') continue;
-      const d = describeTool(b.name, b.input);
-      const mood = (IMAGE_RE.test(b.input?.file_path || '') && /Write|Edit/.test(b.name)) ? 'design' : d.mood;
-      st.acts.push({ mood, ts: st.lastTs || Date.now() });
-      if (st.acts.length > 60) st.acts.splice(0, st.acts.length - 60);
-      // The grade counts the same mood — but before the trim and with no window.
-      if (SKILL_OF[mood]) st.skills[SKILL_OF[mood]]++;
-      st.lastTool = b.name;
-      st.lastToolInput = b.input;
+      useTool(st, b.name, b.input);
+      // Asking is Claude's own: the two tools that end a turn on a question
+      // have no counterpart in a Codex rollout, so it stays with this parser
+      // rather than moving into useTool().
       if (ASKING.has(b.name)) st.ended = 'asked';
-      const fp = b.input?.file_path;
-      if (fp) {
-        st.files.set(fp, {
-          path: fp, name: base(fp), image: IMAGE_RE.test(fp), ts: st.lastTs,
-          made: /Write|Edit|Artifact/.test(b.name),
-        });
-        if (st.files.size > 60) st.files.delete(st.files.keys().next().value);
-      }
     }
   } else if (r.type === 'user' && r.message && !r.isSidechain && r.isCompactSummary) {
     // A compaction writes its summary as a user line — «This session is being
@@ -1024,26 +1101,42 @@ export function statusOf(t, now = Date.now()) {
   return idleFor < STEP_MS ? 'working' : 'idle';
 }
 
+// A Codex rollout is read whole rather than by its last megabyte: it has no
+// deep pass of its own, and its files run to a few megabytes here. The cap is
+// for the thread that has been fed screenshots.
+const CODEX_FIRST_READ = 16 * 1024 * 1024;
+
 export async function snapshot() {
-  const sessions = await liveSessions();
+  const live = await liveSessions();
+  await indexTranscripts();
+  // The ones the app put to sleep join the live ones: same desks, same names,
+  // same notes — see pausedSessions above for why they are here at all. Codex
+  // threads take desks in the same list too, with one registry of names and
+  // seats for everybody; the provider travels with the agent.
+  const sessions = [...live, ...await pausedSessions(live), ...await liveCodexSessions()];
   // Warm the roots cache before the seats are computed: projectOf is
   // synchronous while git is asynchronous, and without the warm-up the first
   // snapshot would seat everyone by directory.
   await Promise.all(sessions.map((s) => repoRoot(s.cwd)));
-  await indexTranscripts();
   const names = await nameRegistry(sessions);
   const namesPack = effectivePack(await getSettings());
   const seats = await seatRegistry(sessions);
   const agents = [];
 
   for (const s of sessions) {
-    const file = await transcriptFor(s.sessionId, s.cwd);
-    const t = (file ? await follow(s.sessionId, file, applyLine, emptyState, deepSkills) : null) || emptyState();
+    const codex = s.provider === 'codex';
+    const file = codex ? s.file : await transcriptFor(s.sessionId, s.cwd);
+    const t = (file ? await (codex
+      ? follow(s.sessionId, file, applyCodexLine, emptyState, null, CODEX_FIRST_READ)
+      : follow(s.sessionId, file, applyLine, emptyState, deepSkills)) : null) || emptyState();
     // Only what can still be opened: see present() in files.js.
     const files = await present([...t.files.values()].sort((a, b) => b.ts - a.ts), 16);
     const artifacts = files.filter((f) => f.made || f.image);
     const idleFor = t.lastTs ? Date.now() - t.lastTs : Infinity;
-    const status = statusOf(t);
+    // A paused session has no process to be working in: whatever the tail was
+    // in the middle of, it is not happening now. «Awaiting» stays — the question
+    // it asked is still the person's to answer.
+    const status = s.paused && statusOf(t) === 'working' ? 'idle' : statusOf(t);
     const busy = status === 'working';
     const act = t.lastTool ? describeTool(t.lastTool, t.lastToolInput) : { key: 'thinking', mood: 'plan' };
     const roleInfo = inferRole(t);
@@ -1054,7 +1147,13 @@ export async function snapshot() {
 
     agents.push({
       id: s.sessionId,
-      pid: s.pid,
+      // Codex threads have no process of their own: the pid that holds their
+      // lock is the whole app, and nothing should ever be sent to it per agent.
+      pid: codex ? null : s.pid,
+      paused: !!s.paused,
+      // 'claude' | 'codex': the badge on the floor and in the card, and what
+      // the office can do for the agent — delivery is Claude's alone.
+      provider: codex ? 'codex' : 'claude',
       handle: s.name || s.sessionId.slice(0, 8),
       name: names[s.sessionId] || s.sessionId.slice(0, 6),
       // gender travels with the snapshot: on the page the name is one line,
@@ -1070,7 +1169,8 @@ export async function snapshot() {
       model: t.model,
       // A one-turn boost is the level only while that turn is open.
       effort: (status === 'working' && t.turnEffort) || t.effort,
-      title: t.title || t.aiTitle || '',
+      // A Codex thread carries the name the app shows on the session itself.
+      title: t.title || t.aiTitle || s.title || '',
       role: roleInfo.role,
       roleKey: roleInfo.short,
       status,
@@ -1133,4 +1233,6 @@ export {
   fs, inferRole, describeTool, ROLES, ROLE_WINDOW_MS, ROLE_STALE_MS,
   // exported for the stand alone: it runs the parser on real transcript lines
   applyLine, emptyState, SKILL_OF, SKILL_BRANCHES, follow, deepSkills,
+  // shared with the Codex parser, server/codex.js
+  useTool, remember, born, gap, endOf,
 };

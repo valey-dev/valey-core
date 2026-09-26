@@ -12,6 +12,7 @@ import {
   getSettings, patchSettings, updateSettings, publicSettings, ownerToken, warnIfSharedSettingsWorktree,
 } from './settings.js';
 import { deliver, deliveryStatus, forgetCli, isBusy, MODES, adopt, releaseRuns } from './deliver.js';
+import { queueToThread, codexDelivery } from './codex.js';
 import { saveFile, prune as pruneInbox, inboxDir, MAX_BYTES as INBOX_MAX, MAX_FILES } from './inbox.js';
 import { hire, release as releaseHire, hireList, hiredAt, hireCwd, resumeCommand, pruneHires } from './hire.js';
 import { repoRoot } from './stack.js';
@@ -34,6 +35,10 @@ const PORT = Number(process.env.PORT || 5177);
 // updates a repository of its own rather than the branch it runs from.
 const UPDATE_ROOT = process.env.VALEY_UPDATE_ROOT || ROOT;
 const POLL_MS = 2500;
+
+// What the page is told about sending into chats: Claude's CLI as before, and
+// under `codex` whether the Codex CLI is there for Codex threads.
+const deliveryAll = async () => ({ ...(await deliveryStatus()), codex: await codexDelivery() });
 
 // The office version comes from its own package.json rather than a string in
 // the interface: the sign on the title screen shows it, and in a release video
@@ -440,7 +445,7 @@ async function rebuild({ observe = true } = {}) {
     next.hires = hireList();
     next.weather = await realWeather();
     next.settings = publicSettings(settings);
-    next.delivery = await deliveryStatus();
+    next.delivery = await deliveryAll();
     next.people = livePeople();
     next.access = accessForOwner(settings);
     // A question asked by a session the office no longer has is released: there
@@ -1064,11 +1069,19 @@ async function handle(req, res) {
 
       if (!wantsDelivery && !lying) {
         console.log(`[note] ${agentId}: ${task.text.slice(0, 80)}`);
-        return send(res, 200, { ok: true, task, delivery: await deliveryStatus() });
+        return send(res, 200, { ok: true, task, delivery: await deliveryAll() });
       }
 
       const agent = last.agents.find((a) => a.id === agentId);
       if (!agent) { task.state = 'failed'; task.error = 'the agent is no longer in the office'; task.errorKey = 'err.agentGone'; return send(res, 200, { ok: true, task }); }
+      // A Codex thread takes its task through Codex's own queue (server/codex.js),
+      // never through `claude --resume`, which given a Codex thread id would start
+      // a Claude session nobody asked for. No permission mode: that is Claude's.
+      if (agent.provider === 'codex') {
+        console.log(`[deliver] -> ${agent.name} (codex): ${task.text.slice(0, 80)}`);
+        await queueToThread(task, agent);
+        return send(res, 200, { ok: true, task, delivery: await deliveryAll() });
+      }
       const status = await deliveryStatus();
       if (!status.available) { task.state = 'failed'; task.error = status.hint; task.errorKey = status.hintKey; return send(res, 200, { ok: true, task, delivery: status }); }
       if (isBusy(agentId)) { task.state = 'failed'; task.error = 'another message is already being sent to this agent'; task.errorKey = 'err.busy'; return send(res, 200, { ok: true, task }); }
@@ -1114,7 +1127,7 @@ async function handle(req, res) {
   // to the terminal and pressed «check now» should not have to wait it out.
   if (url.pathname === '/api/delivery') {
     if (url.searchParams.get('fresh') === '1') forgetCli();
-    return send(res, 200, await deliveryStatus());
+    return send(res, 200, await deliveryAll());
   }
   // A permission request from Claude Code. It comes from the hook on this same
   // machine and HANGS here until the owner answers: while it hangs there is no
