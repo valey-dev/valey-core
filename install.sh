@@ -339,8 +339,15 @@ case "$MODE" in
     # and the next npm start died on ENOENT uv_cwd. A script cannot move the
     # shell that ran it, so it says where to go. Physical paths on both sides:
     # $PWD keeps the name, and only the folder itself is the old one.
-    HERE=$(pwd -P 2>/dev/null || true)
-    OLDP=$(cd "$OLD" && pwd -P)
+    #
+    # The path is asked of the kernel — the external pwd, which calls getcwd().
+    # A builtin answers out of $PWD, and by now that name belongs to the new
+    # office: `pwd -P` in dash printed the old name, so CI, where sh is dash,
+    # never warned and went red on every branch for a day; and `cd -P .` in
+    # bash walked into the NEW folder, which reads as «not inside» just the
+    # same. Checked in sh, dash, bash and zsh on 26 September 2026.
+    HERE=$(env pwd -P 2>/dev/null || pwd -P 2>/dev/null || true)
+    OLDP=$(CDPATH= cd "$OLD" 2>/dev/null && { env pwd -P 2>/dev/null || pwd -P; })
     case "$HERE" in "$OLDP"|"$OLDP"/*) say "$(msg stale_cwd "$(pretty "$OLD")" "$(pretty "$DEST")")" ;; esac
     ;;
   *)
