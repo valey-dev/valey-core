@@ -61,7 +61,17 @@ function selfClosing(box, close) {
   };
 }
 
-export const clean = (s) => (s || '').replace(/```[\s\S]*?```/g, tr('clean.code')).replace(/[*#`]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+// The card types the reply out as plain text, so markdown is stripped rather
+// than rendered. A picture is named instead: «![подпись](</путь/кадр.png>)»
+// read as a path with brackets around it, and the picture itself is in the
+// conversation, where the markup lives (#reply-image, 17 September 2026).
+export const clean = (s) => (s || '')
+  .replace(/```[\s\S]*?```/g, tr('clean.code'))
+  .replace(/!\[([^\]]*)\]\(\s*(?:<([^)]*?)>|([^)\s]+))[^)]*\)/g, (_, alt, angled, bare) => {
+    const src = angled !== undefined ? angled : bare;
+    return `🖼 ${alt || String(src).split('/').pop()}`;
+  })
+  .replace(/[*#`]/g, '').replace(/\n{3,}/g, '\n\n').trim();
 
 // ------------------------------------------------------------------- toasts
 export function toast(text, kind = '') {
@@ -1307,6 +1317,27 @@ const plainText = (t) => esc(t.slice(0, 20000));
 const codeBody = (txt, lang) => (lang
   ? `<pre class="code lang-${lang}">${highlight(txt.slice(0, 60000), lang)}</pre>`
   : `<pre>${plainText(txt)}</pre>`);
+// Pictures inside a rendered reply (#reply-image). Two things the markup
+// cannot do by itself: a click that opens the office viewer, and an honest
+// fallback. /api/file serves only what the agent touched in its work, so a
+// path it never opened — or a file already deleted — answers 403 or 404, and
+// an empty frame with a broken-image glyph would say nothing. The line with
+// the name and the reason says what happened.
+export function bindPictures(root) {
+  if (!root) return;
+  root.querySelectorAll('.mdpic').forEach((box) => {
+    const img = box.querySelector('img');
+    const path = box.dataset.path || '';
+    if (!img) return;
+    img.onerror = () => {
+      const name = box.querySelector('.mdpicname');
+      box.classList.add('gone');
+      box.innerHTML = `<span class="mdimg">🖼 ${esc(name ? name.textContent : path.split('/').pop())}</span>`
+        + `<span class="mdpicwhy">${tr('pic.gone')}</span>`;
+    };
+    box.onclick = () => { if (!box.classList.contains('gone')) openFile(path); };
+  });
+}
 const mdBody = (txt) => (mdRaw
   ? `<pre>${plainText(txt)}</pre>`
   : `<div class="md">${renderMarkdown(txt.slice(0, 120000))}</div>`);
@@ -1339,6 +1370,8 @@ function redrawDoc() {
   if (box) { box.innerHTML = docBody(); box.scrollTop = 0; }
   if (btn) btn.textContent = toggleLabel();
   bindDocControls();
+  // A picture inside a viewed markdown file behaves as one in a reply.
+  bindPictures(el.viewer);
 }
 
 export function toggleMarkdownRaw() {
@@ -4106,6 +4139,7 @@ function paintChat(msgs, fresh = 0, force = false) {
         + renderNotes(byTs.get(m.ts) || [], false)
         + (ed && !ed.id && ed.ts === m.ts ? noteEditor(m.ts, ed.text) : '')).join('')
     : loose + `<p class="empty">${tr('chat.empty')}</p>`;
+  bindPictures(box);
   chatView.msgs = msgs;
   // The conversation was opened with a snapshot of the agent, while the task is
   // rewritten by every new answer: take the fresh one from the list, or the head

@@ -98,3 +98,17 @@
 .md tr:nth-child(even) td{background:rgba(74,51,37,.25)}
 .md b{color:#fff3d8}
 .md s{color:var(--muted)}
+
+/* A picture an agent sent in a reply (#reply-image). The file comes through
+   /api/file, so nothing here reaches outside the office. Both sides are capped:
+   a phone screenshot came back 1126 px tall on the stand and would have
+   swallowed the conversation, and a 4K one would push it sideways. The click
+   opens the viewer, where the file is whole and zoomable. Scaling is left to
+   the browser — an agent's screenshot is not pixel art, and pixelated
+   downscaling makes a mess of it. */
+.md .mdpic{display:inline-block; max-width:320px; cursor:zoom-in}
+.md .mdpic img{display:block; width:100%; max-height:240px; height:auto; object-fit:contain;
+  object-position:left top; border:2px solid var(--frame); background:var(--bg-deep)}
+.md .mdpic .mdpicname{display:block; margin-top:4px; font-size:11px; color:var(--muted)}
+.md .mdpic.gone{cursor:default}
+.md .mdpic.gone .mdpicwhy{margin-left:6px; font-size:11px; color:var(--muted)}
