@@ -4,6 +4,26 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.65.1 — 26 September 2026
+
+### Fixed
+
+- **release:** a picture quoted as an example in a note stays an example on the page (c2881c4)
+## v0.65.0 — 26 September 2026
+
+### Added
+
+- **office:** a picture an agent sends in a reply is drawn in the conversation, not spelled out (2cd4806)
+
+### Fixed
+
+- **office:** a picture an agent names in its reply opens, even when no tool touched it (279bc71)
+
+### Other
+
+- chore(notes): the reply-image fragment declares only fields the release knows (b7a180f)
+- docs(notes): the reply-image picture shows the picture, and the note says what now opens (08a57ec)
+- chore(notes): a picture recipe can have a demo agent answer with a picture (7c0ba5e)
 ## v0.64.0 — 26 September 2026
 
 ### Added

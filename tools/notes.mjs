@@ -91,7 +91,15 @@ const MAPS = new Set(['shots']);
 // so the next shot finds the floor as it was. `setup` cannot do this — it runs
 // in the page, and an agent's state is read off its transcript on the server.
 // Added 13 September 2026 for the «stopped» state, which only an interrupt makes.
-const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport', 'touch', 'setup', 'interrupt']);
+//
+// `picture` names a cast member the same way: before the camera that agent is
+// asked for a frame and answers with one — a real PNG on disk, copied from a
+// picture an earlier release already published, so it is invented at the
+// source — and with a second picture that is gone, so the fallback is in the
+// frame too. `setup` cannot do this either: whether the office serves the file
+// is decided on the server, from the transcript. Added 26 September 2026 for
+// #reply-image, whose first picture drew both files refused and showed nothing.
+const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport', 'touch', 'setup', 'interrupt', 'picture']);
 
 // A three-line parser instead of a YAML dependency. The project has none, and a
 // front matter of three keys is not a reason for the first one.
@@ -214,11 +222,25 @@ export function renderNote(tag, date, fragments, section) {
 // the tag — a note written after its release is not at that tag at all (every
 // backfilled one is like this), and a branch moves, so a picture renamed next
 // month would quietly break a page nobody re-reads.
+// A picture inside code is not a picture, it is the markdown a person types —
+// and a note about pictures is full of it. On 26 September 2026 v0.65.0 went out
+// to the public page with its own first sentence rewritten: the example it
+// quotes, `![подпись](/путь/кадр.png)`, came back as a raw URL under notes/ that
+// cannot exist. Code spans and fences are copied through untouched.
 export function releaseBody(md, { repo, sha }) {
   const base = `https://github.com/${repo}/raw/${sha}/${NOTES_DIR}/`;
-  return md
+  const CODE = /```[\s\S]*?```|`[^`\n]*`/g;
+  const pictures = (s) => s.replace(/!\[([^\]]*)\]\((?![a-z]+:)([^)\s]+)\)/gi,
+    (_, alt, rel) => `![${alt}](${base}${rel})`);
+  let body = '';
+  let last = 0;
+  for (let m = CODE.exec(md); m; m = CODE.exec(md)) {
+    body += pictures(md.slice(last, m.index)) + m[0];
+    last = m.index + m[0].length;
+  }
+  body += pictures(md.slice(last));
+  return body
     .replace(/^# .*\n+/, '')
-    .replace(/!\[([^\]]*)\]\((?![a-z]+:)([^)\s]+)\)/gi, (_, alt, rel) => `![${alt}](${base}${rel})`)
     .trim() + '\n';
 }
 
