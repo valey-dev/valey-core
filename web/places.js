@@ -128,17 +128,24 @@ const PLACES = [
   {
     // The standup: cards stand in columns, so the arrows mean different
     // things — down walks your own team, sideways carries you to the next.
-    // G leads you to whoever you are standing on, and it is the only key of
-    // this panel's own.
+    // G leads you to whoever you are standing on; Shift with ↑ or ↓ moves the
+    // focused card's team a step up or down (put away ↔ normal ↔ pinned).
     id: 'standup',
     title: 'place.standup',
-    registry: true,
+    // The one panel that does not let the floor through (26 September 2026):
+    // it is for reading, and R starting the radio or B the skateboard from under
+    // it was an accident, not an intent — so is the zoom. rosterKey in web/ui.js
+    // swallows everything but these; the sound and the shot are named here
+    // because without the registry nothing else would light them.
+    registry: false,
     caps: {
       Escape: 'place.close', Tab: 'place.close',
       Enter: 'place.standup.open', Space: 'place.standup.open',
       KeyG: 'place.standup.go',
-      ArrowUp: 'place.standup.card', ArrowDown: 'place.standup.card',
+      ArrowUp: 'place.standup.cardUp', ArrowDown: 'place.standup.cardDown',
       ArrowLeft: 'place.standup.team', ArrowRight: 'place.standup.team',
+      ShiftLeft: 'place.standup.shift', ShiftRight: 'place.standup.shift',
+      KeyM: 'hint.sound', F9: 'hint.shot',
     },
   },
   {
