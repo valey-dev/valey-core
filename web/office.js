@@ -115,40 +115,47 @@ export function drawLift(ctx, L, t, st) {
 }
 
 // ------------------------------------------------------------------ breaker
-// The breaker on the wall by the lift: pull it and the office goes dark for
-// everybody on the floor. One per building, so on one floor only — the top
-// inhabited one — against the shaft, just left of the call button (x-7), where
-// stepping out of the cabin puts it in front of you. The first placement, at
-// x-36, stood out on the floor in front of the reception plaque instead of on
-// the shaft like the approved frame, and its hint covered it whole; found on
-// the first real frame, 26 September 2026. Its spot stands beside the box
-// rather than in front of it — at x-26 the player hid it whole — and sixteen
-// pixels left of the lift's own (x-16), so the two do not steal SPACE. Frame: [Breaker on the wall](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2451-9511)
+// The breaker: pull it and the office goes dark for everybody on the floor.
+// One per building, on an electrical panel bolted to the OUTSIDE of the control
+// room's bottom wall — the room itself opens only to a card, the panel does not,
+// and anyone walking the corridor below can reach it.
+//
+// It first hung on the lift shaft by the call button, as the first frame had
+// it; the owner tried it on the stand on 26 September 2026 and moved it here:
+// by the lift it crowded the reception and the doors, and a breaker belongs on
+// the building's service room anyway. Right of the middle, clear of the door
+// line above and of the meeting room's wall.
 export function breakerAt(L) {
-  const lf = L && L.lift;
-  if (!lf) return null;
-  const inhabited = lf.floors.filter((f) => !f.tier);
-  if (!inhabited.length) return null;
-  const top = inhabited.reduce((a, b) => (b.y < a.y ? b : a));
-  return { x: lf.x - 24, y: top.y - 32, spot: { x: lf.x - 32, y: top.y - 4 }, floor: top };
+  const s = L && L.security;
+  if (!s) return null;
+  const x = Math.round(s.x + s.w - 96);
+  const y = s.y + s.h - 4;
+  // The spot is beside the panel, not in front of it: below there are only
+  // forty pixels of floor before the edge of the world, and a player standing
+  // under the panel hid it whole and pushed the hint off the screen.
+  return { x, y, w: 28, h: 20, spot: { x: x + 40, y: y + 22 } };
 }
 
-// 10×16 of grey metal: lever up with a green lamp is light, lever down with a
-// red one is dark; the yellow sticker says «electricity», so the box does not
-// read as a cupboard. The colours are those of the approved frame.
-// Frame: [Breaker · on / off](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2449-1463)
+// A panel of grey metal, 28×20: a row of small fuses on the left, the big
+// breaker on the right — lever up with a green lamp is light, down with a red
+// one is dark — and the yellow sticker, so it does not read as a letterbox.
 export function drawBreaker(ctx, L, on) {
   const b = breakerAt(L);
   if (!b) return;
-  const { x, y } = b;
-  px(ctx, x, y + 1, 10, 14, '#6d5a48');        // edge
-  px(ctx, x + 1, y + 2, 8, 12, '#4b433c');     // body
-  px(ctx, x + 1, y + 13, 8, 1, '#2c1e15');     // shade
-  px(ctx, x + 4, y + 4, 2, 7, '#140d08');      // slot
-  px(ctx, x + 3, on ? y + 3 : y + 9, 4, 2, '#c9b391');   // lever
-  px(ctx, x + 4, on ? y + 5 : y + 8, 2, 1, '#b19f8c');   // rod
-  px(ctx, x + 7, y + 3, 1, 1, on ? '#3f5c48' : '#c2795f');
-  px(ctx, x + 2, y + 11, 2, 2, '#ffd166');     // sticker
+  const { x, y, w, h } = b;
+  px(ctx, x, y, w, h, '#6d5a48');                    // edge
+  px(ctx, x + 1, y + 1, w - 2, h - 2, '#4b433c');    // body
+  px(ctx, x + 1, y + h - 2, w - 2, 1, '#2c1e15');    // shade
+  for (let i = 0; i < 3; i++) {                      // the fuses: always up
+    px(ctx, x + 3 + i * 4, y + 4, 2, 6, '#140d08');
+    px(ctx, x + 3 + i * 4, y + 4, 2, 2, '#b19f8c');
+  }
+  px(ctx, x + 3, y + 13, 3, 3, '#ffd166');           // sticker
+  const bx = x + 16;                                  // the breaker itself
+  px(ctx, bx + 3, y + 3, 3, 12, '#140d08');           // slot
+  px(ctx, bx + 1, on ? y + 2 : y + 11, 7, 3, '#c9b391');   // lever
+  px(ctx, bx + 4, on ? y + 5 : y + 9, 1, 2, '#b19f8c');    // rod
+  px(ctx, bx + 8, y + 2, 2, 2, on ? '#3f5c48' : '#c2795f');
 }
 
 // ------------------------------------------------------------ the reception desk

@@ -1323,8 +1323,8 @@ function nearest() {
     }
   }
 
-  // The breaker is checked before the lift, and its spot sits left of the
-  // lift's, so standing between them picks whichever is actually nearer.
+  // The breaker on the panel below the control room: nearest wins, as for
+  // everything else.
   const br = breakerAt(state.layout);
   if (br) {
     const d = Math.hypot(br.spot.x - p.x, br.spot.y - p.y);
@@ -2430,8 +2430,9 @@ function draw(t) {
 
   if (near && near.kind === 'breaker') {
     const b = near.breaker;
-    // Under the feet, like the reception's hint: above, it covered the breaker itself.
-    draws.push({ y: 1e9, fn: () => label(b.spot.x, b.spot.y + 22, tr('hint.breaker'), '#9fe0a8') });
+    // Above the panel: below it the world ends in forty pixels and the hint
+    // fell off the screen.
+    draws.push({ y: 1e9, fn: () => label(b.x + b.w / 2, b.y - 8, tr('hint.breaker'), '#9fe0a8') });
   }
 
   if (near && near.kind === 'lift' && state.lift.phase === 'idle') {
