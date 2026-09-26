@@ -1,0 +1,12 @@
+{
+  "tag": "v0.65.0",
+  "shots": [
+    {
+      "file": "reply-image-reply-image.png",
+      "slug": "reply-image",
+      "id": "reply-image",
+      "url": "#room=standup",
+      "keys": "Enter,wait:2500,Tab,wait:900,Enter,wait:1200,tap:#readAll,wait:2500,shift-ArrowDown,wait:800"
+    }
+  ]
+}
