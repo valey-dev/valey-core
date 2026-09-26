@@ -75,6 +75,9 @@ const DICT = {
     'news.loading': 'Выпуск печатается…',
     'news.failed': 'Выпуск не пришёл: {err}',
     'news.photo': 'Фото',
+    'news.invented': 'Это выдуманные газеты — офис поднят для кадров и ролика. Таких каналов в Telegram нет, открывать нечего. Настоящие каналы читает обычный офис, запущенный без VALEY_PICTURE.',
+    'news.inventedOnly': 'Офис поднят для кадров: он читает только свои выдуманные газеты и в Telegram не ходит вовсе. Чтобы добавить {name}, запусти обычный офис — без VALEY_PICTURE.',
+    'news.stateInvented': 'выдуманная',
     'news.video': 'Видео',
     'news.yesterday': 'вчера',
     'news.stateLatest': 'выпуск {time}',
@@ -137,6 +140,9 @@ const DICT = {
     'news.loading': 'The issue is being printed…',
     'news.failed': 'The issue did not arrive: {err}',
     'news.photo': 'Photo',
+    'news.invented': 'These papers are invented — this office was raised for pictures and the video. No such channels exist in Telegram, so there is nothing to open. Real channels are read by an ordinary office, started without VALEY_PICTURE.',
+    'news.inventedOnly': 'This office was raised for pictures: it reads only its own invented papers and does not go to Telegram at all. To add {name}, start an ordinary office — without VALEY_PICTURE.',
+    'news.stateInvented': 'invented',
     'news.video': 'Video',
     'news.yesterday': 'yesterday',
     'news.stateLatest': 'issue {time}',
@@ -167,6 +173,8 @@ const stand = {
   view: 'paper',          // 'paper' | 'channels'
   issues: new Map(),      // name → { stack: [before…], data, error, loading }
   msg: '',                // the error line under the add field
+  invented: false,        // the papers came from demo.js: nothing to open in Telegram
+  said: '',               // a line answered on the sheet itself, under the columns
 };
 
 // What the owner has already read, per channel: the newest post id seen. Kept
@@ -187,6 +195,7 @@ async function loadStand() {
     const r = await fetch('/api/newsstand', { headers: owned() });
     const j = await r.json();
     stand.channels = Array.isArray(j.channels) ? j.channels : [];
+    stand.invented = !!j.invented;
   } catch { /* the stand keeps what it had; the next poll tries again */ }
   paint();
 }
@@ -401,6 +410,12 @@ function paintMast(cv, title, maxScale) {
 // A photo becomes two colours of the paper: an ordered 4×4 Bayer dither with a
 // cell of `cell` CSS pixels. A colour photograph on the cream sheet fell out of
 // the office; dots are both the newspaper and the pixel.
+//
+// The cell is 2 px everywhere since 17 September 2026. It was 4 in the lead
+// picture and 3 in a column, and at that size a face or a lamp arrived as
+// squares: the owner read the first invented paper as «too pixelated». Two is
+// still a dot grid — the paper has not become a photograph — but the shape
+// inside it survives.
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 const pictures = new Map();   // src → HTMLImageElement (loaded) | 'fail'
 
@@ -465,7 +480,7 @@ function noteHtml(p, cls, issueDay) {
   const { head, body } = splitHeadline(p.text);
   const title = head || (p.kind === 'video' ? tr('news.video') : tr('news.photo'));
   const meta = [fmtWhen(p.date, issueDay), p.views ? tr('news.circulation', { n: esc(fmtViews(p.views)) }) : ''].filter(Boolean).join(' · ');
-  const photo = p.photo ? `<canvas class="nsphoto" data-src="${esc(p.photo)}" data-cell="${cls === 'nslead' ? 4 : 3}"></canvas>` : '';
+  const photo = p.photo ? `<canvas class="nsphoto" data-src="${esc(p.photo)}" data-cell="2"></canvas>` : '';
   const text = body ? `<p class="nstext">${esc(body).replace(/\n/g, '<br>')}</p>` : '';
   if (cls === 'nslead') {
     return `<section class="nsnote nslead" tabindex="-1" data-id="${p.id}">
@@ -481,7 +496,7 @@ function paperHtml(c) {
   const nav = navOf(c.name);
   const d = nav.data;
   if (!d) {
-    const line = nav.error ? tr('news.failed', { err: esc(nav.error === 'nofeed' ? tr('news.stateNoFeed') : nav.error) }) : tr('news.loading');
+    const line = nav.error ? tr('news.failed', { err: esc(nav.error === 'invented' ? tr('news.inventedOnly', { name: '@' + c.name }) : nav.error === 'nofeed' ? tr('news.stateNoFeed') : nav.error) }) : tr('news.loading');
     return `<div class="nspaper nswait"><p>${line}</p></div>`;
   }
   const [lead, ...rest] = d.posts;
@@ -521,7 +536,8 @@ function channelsHtml() {
   const list = has ? `<p class="nscap">${esc(tr('news.onStand'))}</p><div class="nslist">${stand.channels.map((c, i) => {
     const n = unread(c);
     const nav = stand.issues.get(c.name);
-    const state = c.error === 'nofeed' ? tr('news.stateNoFeed')
+    const state = c.error === 'invented' ? tr('news.stateInvented')
+      : c.error === 'nofeed' ? tr('news.stateNoFeed')
       : n ? tr('news.newN', { n })
         : nav && nav.data && nav.data.posts[0] ? tr('news.stateLatest', { time: fmtWhen(nav.data.posts[0].date, new Date()) }) : '';
     return `<div class="nsrow"><span class="nsname">${esc(c.title || c.name)}</span><span class="nsaddr">t.me/${esc(c.name)}</span>
@@ -554,6 +570,7 @@ function paint() {
       <span class="nshead"><span class="nskeys">${esc(tr(keysHint))}</span><button id="nsx">✕</button></span></div>
     ${stand.channels.length ? `<div class="nstabs">${tabsHtml()}</div>` : ''}
     <div class="nsbody">${listView ? channelsHtml() : paperHtml(c)}</div>
+    ${listView || !stand.said ? '' : `<p class="nssaid">${esc(stand.said)}</p>`}
     ${listView ? '' : footHtml(c)}
   </div>`;
   const body = $('.nsbody', el.root);
@@ -607,6 +624,15 @@ function focusedPostId() {
 function openPost(id) {
   const c = curChannel();
   if (!c || !id) return;
+  // The picture office reads papers invented in demo.js, and `t.me/quiet_build`
+  // is nobody's address: opening it would send the reader to Telegram's «this
+  // channel does not exist». Asked for by the owner on 17 September 2026, on
+  // the first stand where the invented papers were shown.
+  // Said on the paper, not in a toast: the toasts live in the bottom left
+  // corner, and the answer to a key pressed inside the panel was read as
+  // nothing happening — the owner said so on 17 September 2026, looking at the
+  // open paper while the line sat under it.
+  if (stand.invented) { stand.said = tr('news.invented'); paint(); return; }
   window.open(`https://t.me/${encodeURIComponent(c.name)}/${id}`, '_blank', 'noopener,noreferrer');
 }
 
@@ -627,7 +653,9 @@ async function addChannel() {
     probe = await r.json();
   } catch { probe = { error: 'network' }; }
   if (probe.error) {
-    stand.msg = probe.error === 'nofeed' ? tr('news.noFeed', { name: '@' + name }) : probe.error === 'badname' ? tr('news.badName') : tr('news.netFail');
+    stand.msg = probe.error === 'invented' ? tr('news.inventedOnly', { name: '@' + name })
+      : probe.error === 'nofeed' ? tr('news.noFeed', { name: '@' + name })
+        : probe.error === 'badname' ? tr('news.badName') : tr('news.netFail');
     return paint();
   }
   // A new paper arrives whole and unread: every post in it is news.
@@ -689,6 +717,7 @@ function onKey(raw, shift) {
   const k = String(raw).toLowerCase();
   const c = curChannel();
   const listView = stand.view === 'channels' || !c;
+  if (k !== 'enter' && k !== ' ') stand.said = '';
   if (k === 'tab') { cycle(shift ? -1 : 1); return true; }
   const n = Number(k);
   if (Number.isInteger(n) && n >= 1 && n <= 9) {
@@ -696,7 +725,10 @@ function onKey(raw, shift) {
     return true;
   }
   if (!listView && (k === 'arrowleft' || k === 'arrowright')) { turn(k === 'arrowleft' ? -1 : 1); return true; }
-  if (!listView && k === 'enter') { openPost(focusedPostId()); return true; }
+  // Space opens the post too. In the office Space is «do the thing in front of
+  // you», and a reader who has just walked to the stand with it keeps pressing
+  // it inside the paper; asked for by the owner on 17 September 2026.
+  if (!listView && (k === 'enter' || k === ' ')) { openPost(focusedPostId()); return true; }
   if (listView && (k === 'delete' || k === 'backspace')) {
     const f = el.root && $('.nsrm.focus', el.root);
     if (f) removeChannel(Number(f.dataset.i));
