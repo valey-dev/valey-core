@@ -116,7 +116,9 @@ export async function initStand() {
   pb.append(pn, ps);
   const paint = () => {
     const held = !!(window.__link && window.__link.held);
-    pb.classList.toggle('off', held);
+    // className rather than classList, like the module buttons above: the
+    // stand's own test runs this on a fake DOM that has no classList.
+    pb.className = 'stand-mod' + (held ? ' off' : '');
     ps.textContent = held ? 'OFF · this tab' : 'on';
     pb.title = held ? 'lift the breaker: the tab reconnects' : 'pull the breaker: this tab plays a lost office';
   };
@@ -125,8 +127,10 @@ export async function initStand() {
     window.__link.power(!!window.__link.held);
     paint();
   };
-  // «Try now» on the office's own plaque lifts the breaker too; this hears it.
-  window.addEventListener('valey:power', paint);
+  // «Try now» on the office's own plaque lifts the breaker too, and calls this
+  // to repaint it. A hook rather than a window event: the stand's test keeps
+  // count of what hangs on window, and there is meant to be one key listener.
+  if (window.__link) window.__link.onPower = paint;
   paint();
   power.appendChild(pb);
   box.appendChild(power);

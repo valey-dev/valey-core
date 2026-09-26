@@ -696,7 +696,7 @@ function retryStream() {
   // «Try now» with the stand's breaker down lifts the breaker: the person asked
   // for the office back, and a button that silently did nothing would be the
   // one lie this whole state exists to avoid. The plaque hears about it.
-  if (powerHeld) { powerHeld = false; window.dispatchEvent(new Event('valey:power')); }
+  if (powerHeld) { powerHeld = false; if (window.__link.onPower) window.__link.onPower(); }
   streamRetry = 2000;
   linkTrying();
   openStream();
