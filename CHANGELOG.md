@@ -4,6 +4,75 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.63.1 — 26 September 2026
+
+### Fixed
+
+- **office:** an empty office no longer freezes a few seconds after walking in (1383166)
+## v0.63.0 — 23 September 2026
+
+### Added
+
+- **office:** Codex threads sit at desks next to Claude sessions, marked ◇ where Claude is ✶ (b74c819)
+
+### Fixed
+
+- **office:** a file dropped into a task for a Codex thread goes with it, instead of being left behind (4a4c997)
+- **office:** a Codex agent takes a task from the office — it goes into the thread's own queue (2f411ef)
+
+### Other
+
+- docs(notes): the Codex pictures re-rendered after main caught up (89a5a3a)
+- docs(notes): the Codex note says tasks go into the thread's queue, with the Task page (0b88de8)
+- docs(notes): the Codex sessions note, with the floor and the card (8485473)
+- chore(notes): the demo office for release pictures seats one invented Codex thread (cde65bf)
+- refactor(agents): one function records a tool call, whoever made it (de054f6)
+## v0.62.3 — 21 September 2026
+
+### Other
+
+- docs(readme): drop the note about a landing page the public repo never had (46d733d)
+## v0.62.2 — 19 September 2026
+
+### Fixed
+
+- **office:** an agent the app put to sleep stays at the desk for an hour instead of vanishing mid-conversation (246e7f8)
+## v0.62.1 — 19 September 2026
+
+### Fixed
+
+- **office:** a card reads the report tail in English too, so an English-speaking project stops showing the chat title instead of the task (82af9a9)
+## v0.62.0 — 17 September 2026
+
+### Added
+
+- **office:** a file dropped onto a task goes to the agent with it (2d69c46)
+## v0.61.4 — 17 September 2026
+
+### Fixed
+
+- **release:** a package.json version that is not X.Y.Z stops the release instead of cutting vNaN.undefined.NaN (31a7b46)
+
+### Other
+
+- chore(demo): the product demo, 20–30 seconds, shot from an invented office (b077996)
+- docs(keys): the office walks on arrows only — WASD leaves the Russian README and the W examples of the picture recipes (31da8c5)
+- docs(readme): a one-page Russian instruction for the first cohort — install, first screen, keys, the hook (293d986)
+- ci(tests): main no longer goes red after every release — the release dry run step reads «nothing to cut» as green (5768b0c)
+## v0.61.3 — 17 September 2026
+
+### Fixed
+
+- **tree:** the PR board's card says what the board shows — main, the agents' branches and today's merges (19c3eb4)
+## v0.61.2 — 17 September 2026
+
+### Fixed
+
+- **office:** answering an agent's question leaves the card on «what are you working on», not on «this question is already closed» (83bf59b)
+
+### Other
+
+- test(ui): a page module may only call the callbacks it was handed (2567670)
 ## v0.61.1 — 16 September 2026
 
 ### Fixed

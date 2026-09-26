@@ -1,0 +1,29 @@
+{
+  "tag": "v0.63.0",
+  "shots": [
+    {
+      "file": "codex-sessions-codex-floor.png",
+      "slug": "codex-sessions",
+      "id": "codex-floor",
+      "url": "#room=tide-charts",
+      "setup": "(() => { let n = 0; const t = setInterval(() => { const g = window.__game; const a = g && g.actors && g.actors.get('01a0aaaa-0000-7000-8000-00000000c0de'); if (a && g.player && g.currentRoom) { if (++n < 6) return; g.player.x = a.x; g.player.y = a.y + 22; clearInterval(t); } }, 250); return 'armed'; })()",
+      "keys": "Enter,wait:4000"
+    },
+    {
+      "file": "codex-sessions-codex-card.png",
+      "slug": "codex-sessions",
+      "id": "codex-card",
+      "url": "#room=tide-charts",
+      "setup": "(() => { let n = 0; const t = setInterval(() => { const g = window.__game; const a = g && g.actors && g.actors.get('01a0aaaa-0000-7000-8000-00000000c0de'); if (a && g.player && g.currentRoom) { if (++n < 6) return; g.player.x = a.x; g.player.y = a.y + 22; clearInterval(t); } }, 250); return 'armed'; })()",
+      "keys": "Enter,wait:4000,Space,wait:1500"
+    },
+    {
+      "file": "codex-sessions-codex-task.png",
+      "slug": "codex-sessions",
+      "id": "codex-task",
+      "url": "#room=tide-charts",
+      "setup": "(() => { let n = 0; const t = setInterval(() => { const g = window.__game; const a = g && g.actors && g.actors.get('01a0aaaa-0000-7000-8000-00000000c0de'); if (a && g.player && g.currentRoom) { if (++n < 6) return; g.player.x = a.x; g.player.y = a.y + 22; clearInterval(t); } }, 250); return 'armed'; })()",
+      "keys": "Enter,wait:4000,Space,wait:1500,3,wait:800"
+    }
+  ]
+}
