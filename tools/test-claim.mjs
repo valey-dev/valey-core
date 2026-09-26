@@ -3,9 +3,9 @@
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parse, take, drop, fields, dateOf, EMPTY } from './claim.mjs';
+import { parse, take, drop, fields, dateOf, EMPTY, vitality, probe, parseDate, repoDir, QUIET_DAYS } from './claim.mjs';
 
 let failed = 0;
 const check = (name, ok, detail = '') => {
@@ -98,6 +98,45 @@ console.log('claim');
   check('drop from the command line', gone.code === 0 && !readFileSync(file, 'utf8').includes('radio-stream'));
   const none = await run('drop', 'nothing-like-this');
   check('dropping what is not there exits 1', none.code === 1);
+}
+
+// ------------------------------------------------------------ is it alive
+// 26 September 2026: ten claims, 9 to 14 days old, one of them a finished
+// feature lying uncommitted. The list has to say which claims move.
+{
+  const now = new Date(2026, 8, 26, 12).getTime();
+  const day = 86400_000;
+  const claim = (date) => ({ repo: 'ядро', item: 'x', branch: 'b', date });
+  check('the section\'s date reads back', parseDate('12 сентября 2026')?.getMonth() === 8 && parseDate('вчера') === null);
+  const fresh = vitality(claim('26 сентября 2026'), { exists: true, ahead: 0, dirty: 0 }, now);
+  check('a claim taken today with nothing in it yet is a start, not silence', !fresh.stale, fresh.text);
+  const lying = vitality(claim('17 сентября 2026'), { exists: true, ahead: 0, dirty: 8, editAt: now - 5 * day, tree: '~/x' }, now);
+  check('uncommitted edits count as movement', !lying.stale && lying.text.includes('не закоммичено 8 файлов') && lying.text.includes('5 дней назад'), lying.text);
+  const quiet = vitality(claim('17 сентября 2026'), { exists: true, ahead: 0, dirty: 8, editAt: now - 9 * day, tree: '~/x' }, now);
+  check(`${QUIET_DAYS} days of nothing is said out loud`, quiet.stale && quiet.days === 9 && quiet.text.includes('9 дней без движения'), quiet.text);
+  const busy = vitality(claim('12 сентября 2026'), { exists: true, ahead: 3, commitAt: now - day, dirty: 0 }, now);
+  check('an old claim with a commit yesterday is alive', !busy.stale && busy.text.startsWith('3 коммита, последний вчера'), busy.text);
+  const gone = vitality(claim('12 сентября 2026'), { exists: false }, now);
+  check('a claim whose branch is gone asks to be dropped', gone.gone && gone.stale && gone.text.includes('снять'), gone.text);
+  check('a repository not on this machine is not guessed about', vitality(claim('1 сентября 2026'), null, now).known === false);
+  check('the old name of the core still finds it', repoDir('valey-core', '/a/BACKLOG.md') === '/a' && repoDir('Модули', '/a/BACKLOG.md') === '/a/modules'
+    && repoDir('budget-app', '/a/BACKLOG.md') === null);
+
+  // probe() on a real repository: a branch with a commit, a tree with an edit.
+  const dir = mkdtempSync(path.join(tmpdir(), 'valey-claim-repo-'));
+  const g = (cwd, ...a) => execFileSync('git', ['-C', cwd, ...a], { stdio: 'ignore' });
+  g(dir, 'init', '-q', '-b', 'main');
+  g(dir, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'root');
+  g(dir, 'branch', 'feature');
+  const tree = dir + '-feature';
+  g(dir, 'worktree', 'add', '-q', tree, 'feature');
+  g(tree, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'work');
+  writeFileSync(path.join(tree, 'half-done.js'), '// lying here');
+  const p = probe(dir, 'feature');
+  check('probe: the branch, its commit, its tree and the edit lying in it',
+    p.exists && p.ahead === 1 && p.commitAt > 0 && p.dirty === 1 && p.editAt > 0 && p.tree.endsWith('-feature'), JSON.stringify(p));
+  check('probe: a branch that is not there', probe(dir, 'nothing-here').exists === false);
+  check('probe: not a repository', probe(path.join(dir, 'nope'), 'feature') === null);
 }
 
 console.log(failed ? `\n${failed} failed` : '\nall passed');
