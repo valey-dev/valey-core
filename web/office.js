@@ -784,58 +784,76 @@ function drawFicus(ctx, x, y, seed, t) {
 // `glows` are the phones in the hands of the agents: small, cold, and standing
 // still. They are drawn as their own holes rather than as light, for the same
 // reason — and because a phone that lit the room would say somebody is working.
-export function drawBlackout(ctx, w, h, beam, glows = []) {
-  const dark = (x, y, r0, r1, alpha) => {
-    const g = ctx.createRadialGradient(x, y, r0, x, y, r1);
-    g.addColorStop(0, 'rgba(20,13,8,0)');
-    g.addColorStop(0.55, `rgba(20,13,8,${alpha * 0.6})`);
-    g.addColorStop(1, `rgba(20,13,8,${alpha})`);
-    return g;
+// In the breaker's darkness the same glows are the monitors of the agents who
+// are working: there somebody is, and the light says so.
+//
+// The darkness is laid on a canvas of its own and the holes are cut there.
+// Cutting them on the main canvas — the first version, shipped in v0.67.0 —
+// erased the floor along with the dark: `destination-out` does not know which
+// layer it is meant for, so a phone opened a window onto the page behind the
+// canvas instead of onto the agent holding it. That is why the first real
+// frame showed a lone blue dot, and why widening the hole only widened the void.
+let shade = null;
+function shadeFor(w, h) {
+  if (!shade) shade = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : document.createElement('canvas');
+  if (shade.width !== w) shade.width = w;
+  if (shade.height !== h) shade.height = h;
+  return shade;
+}
+
+// `others` are the torches of the other people on the floor. In a real outage
+// there are none — the only live thing is you — but the breaker is a joke with
+// everyone still in the room, and each of them keeps a light of their own.
+export function drawBlackout(ctx, w, h, beam, glows = [], others = []) {
+  const sh = shadeFor(w, h);
+  const s = sh.getContext('2d');
+  s.clearRect(0, 0, w, h);
+  const g0 = s.createRadialGradient(beam.x, beam.y, 10, beam.x, beam.y, 74);
+  g0.addColorStop(0, 'rgba(20,13,8,0)');
+  g0.addColorStop(0.55, 'rgba(20,13,8,0.56)');
+  g0.addColorStop(1, 'rgba(20,13,8,0.93)');
+  s.fillStyle = g0;
+  s.fillRect(0, 0, w, h);
+
+  // Every other light lifts its own patch out of the dark on this layer only.
+  const cut = (x, y, r, alpha) => {
+    const g = s.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(0,0,0,${alpha})`);
+    g.addColorStop(0.5, `rgba(0,0,0,${alpha * 0.5})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    s.fillStyle = g;
+    s.fillRect(x - r, y - r, r * 2, r * 2);
   };
-  ctx.fillStyle = dark(beam.x, beam.y, 10, 74, 0.93);
-  ctx.fillRect(0, 0, w, h);
+  s.save();
+  s.globalCompositeOperation = 'destination-out';
+  for (const p of glows) cut(p.x, p.y, 20, 0.72);
+  for (const p of others) cut(p.x, p.y, 44, 0.9);
+  s.restore();
+  ctx.drawImage(sh, 0, 0);
 
-  // Each phone lifts its own small patch out of the dark that was just laid
-  // down; `destination-out` cuts, so the fill colour here is only its alpha.
-  if (glows.length) {
-    ctx.save();
-    ctx.globalCompositeOperation = 'destination-out';
-    // 20 px and 0.72, not less: the first real frame at 13 px and half strength
-    // left a lone blue dot, and the agent holding the phone could not be seen
-    // at all — the frame asked for a figure picked out of the dark.
-    for (const p of glows) {
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 20);
-      g.addColorStop(0, 'rgba(0,0,0,0.72)');
-      g.addColorStop(0.5, 'rgba(0,0,0,0.35)');
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(p.x - 20, p.y - 20, 40, 40);
-    }
-    ctx.restore();
-    // A cold sliver on top: a screen in a hand, not a candle.
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    for (const p of glows) {
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 9);
-      g.addColorStop(0, 'rgba(96,134,176,0.32)');
-      g.addColorStop(1, 'rgba(96,134,176,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(p.x - 9, p.y - 9, 18, 18);
-      ctx.fillStyle = 'rgba(143,200,255,0.55)';
-      ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 2, 2);
-    }
-    ctx.restore();
-  }
-
-  // The beam itself keeps a little warmth, so the lit patch is a torch rather
-  // than a window into daylight.
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  const warm = ctx.createRadialGradient(beam.x, beam.y, 4, beam.x, beam.y, 52);
-  warm.addColorStop(0, 'rgba(255,209,102,0.16)');
-  warm.addColorStop(1, 'rgba(255,209,102,0)');
-  ctx.fillStyle = warm;
-  ctx.fillRect(beam.x - 52, beam.y - 52, 104, 104);
+  const warmAt = (x, y, r) => {
+    const g = ctx.createRadialGradient(x, y, 4, x, y, r);
+    g.addColorStop(0, 'rgba(255,209,102,0.16)');
+    g.addColorStop(1, 'rgba(255,209,102,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  };
+  // The beam keeps a little warmth, so the lit patch is a torch rather than a
+  // window into daylight; the other torches get the same.
+  warmAt(beam.x, beam.y, 52);
+  for (const p of others) warmAt(p.x, p.y, 34);
+  // A screen in a hand, or on a desk: a cold sliver, not a candle.
+  for (const p of glows) {
+    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 9);
+    g.addColorStop(0, 'rgba(96,134,176,0.32)');
+    g.addColorStop(1, 'rgba(96,134,176,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(p.x - 9, p.y - 9, 18, 18);
+    ctx.fillStyle = 'rgba(143,200,255,0.55)';
+    ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 2, 2);
+  }
   ctx.restore();
 }
 
