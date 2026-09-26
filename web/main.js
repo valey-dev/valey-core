@@ -1885,8 +1885,11 @@ function update(dt, now) {
 
   const c = state.cat;
   if (Math.hypot(c.tx - c.x, c.ty - c.y) < 3) {
-    if (Math.random() < 0.008) {
-      const target = state.currentRoom || L.projectRooms[0];
+    // An empty office has no project rooms, so a player in the corridor leaves the cat
+    // nowhere to go: it stays put. Reading target.x there threw inside the frame loop and
+    // froze the floor for every first-time user with no sessions yet.
+    const target = state.currentRoom || L.projectRooms[0];
+    if (target && Math.random() < 0.008) {
       c.tx = target.x + 30 + Math.random() * (target.w - 60);
       c.ty = target.y + target.h - 40 - Math.random() * 30;
     }
