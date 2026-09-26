@@ -1,7 +1,7 @@
 import { lookOf, drawPerson, drawCat, normalizeLook, isSelfLabel, dressOf, dressMe } from './sprites.js';
 import { potState, water as waterPot, tally, CAN_FULL } from './garden.js';
 import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, pickRoom, WALL } from './layout.js';
-import { loadModules, collect, first, attachStreams } from './modules.js';
+import { loadModules, collect, first, attachStreams, guestModules } from './modules.js';
 import { owned, passQuery, setTokens } from './owned.js';
 import { initStand } from './stand.js';
 import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawBlackout, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, drawPortal, pxText, kickerBusy, RUGS, rugIndex, rugRect } from './office.js';
@@ -655,10 +655,11 @@ function openStream() {
     es.close();
     setTimeout(() => location.reload(), 300);
   });
-  // The owner hid a module from guests: the page of a guest carries its client,
-  // and the only way to be rid of it is to load the page again. Owners never
-  // receive this.
-  es.addEventListener('reload', () => location.reload());
+  // The modules a guest should have, sent on every connect and whenever the
+  // owner changes them (web/modules.js, guestModules). Owners never receive it.
+  es.addEventListener('modules', (e) => {
+    try { guestModules(JSON.parse(e.data)); } catch { /* junk in the frame — we skip it */ }
+  });
   attachStreams(es);
   linkTrying();
   es.onmessage = (e) => {

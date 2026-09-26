@@ -722,6 +722,9 @@ async function handle(req, res) {
     res.write(`data: ${JSON.stringify(who ? project(last, who) : last)}\n\n`);
     // Whoever just came in sees who is already in the office at once, not a presence tick later.
     res.write(`event: people\ndata: ${JSON.stringify(livePeople())}\n\n`);
+    // A guest learns on every connect which modules are his, so a page that
+    // slept through the owner's switch catches up (web/modules.js, guestModules).
+    if (who) res.write(`event: modules\ndata: ${JSON.stringify(moduleList(false).map((m) => m.id))}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
     return;
@@ -961,7 +964,8 @@ async function handle(req, res) {
     if (!choice || choice === row.default) delete guests[row.id]; else guests[row.id] = choice;
     const saved = await patchSettings({ access: { ...s.access, guests } });
     setGuestChoice((saved.access || {}).guests);
-    for (const res of [...clients]) if (res.valeyGuest) res.write('event: reload\ndata: {}\n\n');
+    const shown = `event: modules\ndata: ${JSON.stringify(moduleList(false).map((m) => m.id))}\n\n`;
+    for (const res of [...clients]) if (res.valeyGuest) res.write(shown);
     return send(res, 200, { ok: true, modules: moduleGuestRows() });
   }
 

@@ -54,6 +54,25 @@ let failed = [];
 // becomes half of the office.
 let core = {};
 
+// What this page was served, against what the office says a guest should have.
+// A guest's page carries the clients it loaded at boot, and the only way to
+// change that set is to load the page again. The office used to shout «reload»
+// once, when the owner flipped a module — and a phone whose stream was down at
+// that moment (screen off, tab in the background) reconnected later without
+// reloading, and kept the old set: the owner opened the radio to a guest on
+// 26 September 2026 and the guest never got it. So the office now sends the
+// set on every connect, and the page compares. The comparison waits for the
+// boot: the stream opens before the modules load, and comparing against an
+// empty list would reload forever.
+let served = null;
+let expected = null;
+const settle = () => { if (served !== null && expected !== null && served !== expected) location.reload(); };
+export function guestModules(list) {
+  if (!Array.isArray(list)) return;
+  expected = [...list].sort().join(',');
+  settle();
+}
+
 export async function loadModules(callbacks = {}) {
   core = callbacks;
   let list = [];
@@ -69,6 +88,7 @@ export async function loadModules(callbacks = {}) {
   // needed" instead of the rooms: found on 1 September 2026 by the very first
   // frame in shared mode.
   if (!Array.isArray(list)) return [];
+  served = list.filter((m) => !m.off).map((m) => m.id).sort().join(',');
   // The styles go before the clients, and with a wait. A link added to head holds
   // nothing up: the page lives on, and the style arrives when it arrives. While it
   // is on its way, a module's markup can already be on the screen and can already
@@ -101,6 +121,7 @@ export async function loadModules(callbacks = {}) {
       failed.push({ id: m.id, error: String((err && err.message) || err) });
     }
   }
+  settle();
   return ids;
 }
 
