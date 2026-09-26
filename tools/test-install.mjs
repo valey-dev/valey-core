@@ -58,13 +58,13 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const BASE = `http://127.0.0.1:${server.address().port}`;
 
 // `dir` null leaves --dir out, which is what makes the script ask where to go.
-const run = (dir, extra = [], env = {}) => new Promise((resolve) => {
+const run = (dir, extra = [], env = {}, cwd = undefined) => new Promise((resolve) => {
   execFile('sh', [SCRIPT, ...(dir ? [`--dir=${dir}`] : []), '--version=9.9.9', ...extra],
     // Pinned, not inherited: the stand must not pass or fail on whoever's
     // machine it runs on having a Russian locale. And no terminal by default —
     // run from a shell, the script would otherwise ask the person at it.
     { env: { ...process.env, VALEY_BASE: BASE, LC_ALL: 'ru_RU.UTF-8', LANG: 'ru_RU.UTF-8',
-      VALEY_TTY: path.join(work, 'no-terminal'), ...env }, encoding: 'utf8' },
+      VALEY_TTY: path.join(work, 'no-terminal'), ...env }, encoding: 'utf8', cwd },
     (err, stdout, stderr) => resolve({ code: err ? err.code ?? 1 : 0, out: stdout + stderr }));
 });
 // A terminal that answers: one line per question, in order.
@@ -122,6 +122,15 @@ try {
   assert.ok(existsSync(path.join(upd, 'modules', 'easel', 'module.json')), 'the paid module was lost');
   assert.match(r.out, /Офис обновлён: v1\.0\.0 → v9\.9\.9/);
   assert.match(r.out, /Перенёс модули: easel/);
+  assert.doesNotMatch(r.out, /терминал остался/, 'it warned a terminal that was never in the office');
+
+  // Run from inside the office, the terminal ends up in the old copy: it is
+  // told where the new one is, not left to start the old version.
+  const inside = office(path.join(work, 'inside'), '1.0.0', ['easel']);
+  r = await run(inside, ['--update'], {}, path.join(inside, 'modules'));
+  assert.equal(r.code, 0, `the update from inside failed: ${r.out}`);
+  assert.match(r.out, /терминал остался в прежнем офисе, .*inside\.v1\.0\.0.*cd .*inside$/m,
+    `a terminal inside the old office was not told to move: ${r.out}`);
 
   // The same version is left alone: nothing to update, nothing moved aside.
   r = await run(upd, ['--update']);
