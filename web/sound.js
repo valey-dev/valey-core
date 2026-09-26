@@ -413,7 +413,9 @@ let upsNext = 0;
 
 export function tickSound(state, dt, weather) {
   if (!sound.ready || !sound.on) return;
-  if (state.blackout) {
+  // The UPS beeps in both darks: the breaker's joke is a power cut too, only
+  // not one that stops anybody working — the keyboards below carry on there.
+  if (state.blackout || state.dark) {
     const now = performance.now();
     if (!upsNext) upsNext = now + UPS_FIRST;
     else if (now >= upsNext) { sound.ups(); upsNext = now + UPS_EVERY; }

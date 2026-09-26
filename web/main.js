@@ -4,7 +4,7 @@ import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, pic
 import { loadModules, collect, first, attachStreams, guestModules } from './modules.js';
 import { owned, passQuery, setTokens } from './owned.js';
 import { initStand } from './stand.js';
-import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawBlackout, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, drawPortal, pxText, kickerBusy, RUGS, rugIndex, rugRect } from './office.js';
+import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawBlackout, drawBreaker, breakerAt, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, drawPortal, pxText, kickerBusy, RUGS, rugIndex, rugRect } from './office.js';
 import { LINK, initLink, linkSeen, linkLost, linkTrying, linkDown, paintLink } from './link.js';
 import { drawCamera, buildCameras } from './cctv.js';
 import { syncActors, tickActors } from './actors.js';
@@ -646,6 +646,10 @@ function openStream() {
   es.addEventListener('people', (e) => {
     try { seePeople(JSON.parse(e.data)); } catch { /* junk in the frame — we skip it */ }
   });
+  // The breaker by the lift: the office's light, the same for every tab.
+  es.addEventListener('lights', (e) => {
+    try { takeLights(JSON.parse(e.data)); } catch { /* junk in the frame — we skip it */ }
+  });
   // The office was updated and is handing over to a newer one (server/swap.js).
   // This page reloads onto it — the new office may bring new page code too —
   // and says so once it is back, so the blink is not a mystery. Guests too:
@@ -698,6 +702,31 @@ function openStream() {
     // holds the office away until it is lifted, whatever the backoff says.
     setTimeout(() => { if (es === mine && !powerHeld) openStream(); }, wait);
   };
+}
+
+// The breaker's state as the server tells it. The first word on a stream only
+// sets the state: somebody walking into a dark office gets the dark, not a hum
+// and a toast about a pull that happened before they arrived.
+function takeLights(l) {
+  if (!l || typeof l.on !== 'boolean') return;
+  const was = state.lights;
+  state.lights = l;
+  if (!was || was.on === l.on) return;
+  sound.power(l.on);
+  const name = l.by || tr('lights.someone');
+  UI.toast(tr(l.on ? 'lights.on' : 'lights.off', { name }), 'news');
+}
+
+function pullBreaker() {
+  const on = !(state.lights && state.lights.on === false);
+  fetch('/api/lights', {
+    method: 'POST',
+    headers: owned({ 'content-type': 'application/json' }),
+    body: JSON.stringify({
+      on: !on, id: MY_ID,
+      name: state.me.name || tr(state.owner === false ? 'label.guest' : 'label.host'),
+    }),
+  }).catch(() => { /* the office is gone — the blackout already says so */ });
 }
 
 // «Попробовать сейчас» on the plaque: the waiting is what is being skipped, so
@@ -1304,6 +1333,13 @@ function nearest() {
     }
   }
 
+  // The breaker on the panel below the control room: nearest wins, as for
+  // everything else.
+  const br = breakerAt(state.layout);
+  if (br) {
+    const d = Math.hypot(br.spot.x - p.x, br.spot.y - p.y);
+    if (d < bestD) { bestD = d; best = { kind: 'breaker', breaker: br }; }
+  }
   const lf = state.layout.lift;
   if (lf) {
     for (const f of lf.floors) {
@@ -1598,6 +1634,8 @@ function interact() {
     UI.openReception(n.desk, (id) => { state.waypoint = id; UI.toast(tr('toast.guideHim')); });
   } else if (n.kind === 'lift') {
     callLift(n.floor);
+  } else if (n.kind === 'breaker') {
+    pullBreaker();
   } else {
     UI.openGallery(boardItems(n.room), tr('board.title', { room: n.room.title }));
   }
@@ -1975,6 +2013,9 @@ function update(dt, now) {
   // Leaving them walking is the whole bug this state exists to kill — a picture
   // that looks alive while the data under it is a minute old.
   state.blackout = linkDown();
+  // The breaker's dark is not the outage's: nobody freezes in it. It only
+  // decides the lights, the torches and the UPS (sound.js).
+  state.dark = !state.blackout && !!state.lights && state.lights.on === false;
   if (!state.blackout) {
     tickActors(state.actors, state.agents, L, dt, now, (ev) => {
       if (ev.kind === 'news') { UI.toast(ev.text, 'news'); sound.chime(); }
@@ -2133,6 +2174,7 @@ function draw(t) {
     if (r.micro) drawMicro(ctx, r.micro, t, state.micro && state.micro.key === r.key ? state.micro : null);
   }
   drawLift(ctx, L, t, state.lift);
+  drawBreaker(ctx, L, !(state.lights && state.lights.on === false));
   drawReception(ctx, L, t);
 
   const near = nearest();
@@ -2396,6 +2438,13 @@ function draw(t) {
     draws.push({ y: 1e9, fn: () => label(r.x + r.w / 2, r.y + 26, tr(state.owner === false ? 'hint.reception' : 'hint.receptionOwner'), '#9fe0a8') });
   }
 
+  if (near && near.kind === 'breaker') {
+    const b = near.breaker;
+    // Above the panel: below it the world ends in forty pixels and the hint
+    // fell off the screen.
+    draws.push({ y: 1e9, fn: () => label(b.x + b.w / 2, b.y - 8, tr('hint.breaker'), '#9fe0a8') });
+  }
+
   if (near && near.kind === 'lift' && state.lift.phase === 'idle') {
     const f = near.floor;
     const here = state.lift.floor === f.n;
@@ -2459,6 +2508,26 @@ function draw(t) {
       .map((act) => ({ x: act.x - camX + 6, y: act.y - camY - 6 }))
       .filter((p) => p.x > -20 && p.x < VW + 20 && p.y > -20 && p.y < VH + 20);
     drawBlackout(ctx, VW, VH, { x: p.x - camX, y: p.y - camY - 8 }, phones);
+  } else if (state.dark) {
+    // The breaker's dark. The office is alive in it, so the monitors of the
+    // agents at work stay lit, everybody else on the floor keeps a torch, and
+    // the bubbles are drawn again over the dark: what an agent is doing is
+    // still true, and a joke must not hide it.
+    const inView = (q) => q.x > -40 && q.x < VW + 40 && q.y > -40 && q.y < VH + 40;
+    const screens = [];
+    for (const act of state.actors.values()) {
+      const a = state.agents.find((x) => x.id === act.id);
+      if (a && a.status === 'working' && act.state === 'sit') screens.push({ x: act.x - camX + 8, y: act.y - camY - 8 });
+    }
+    const torches = [...state.people.values()].map((q) => ({ x: q.x - camX, y: q.y - camY - 8 }));
+    drawBlackout(ctx, VW, VH, { x: p.x - camX, y: p.y - camY - 8 }, screens.filter(inView), torches.filter(inView));
+    ctx.save();
+    ctx.translate(-camX, -camY);
+    for (const act of state.actors.values()) {
+      const a = state.agents.find((x) => x.id === act.id);
+      if (a) drawBubble(ctx, act.x + 14, act.y - 26, a, t);
+    }
+    ctx.restore();
   }
 }
 

@@ -86,6 +86,11 @@ const DICT = {
     'link.retry': 'Попробовать сейчас',
     'link.reload': 'Перезагрузить страницу',
     'link.back': 'Офис вернулся',
+    // The breaker by the lift. No gender in the verb: a guest's name comes with
+    // no gender at all, so «вырубил» or «включила» cannot be chosen honestly.
+    'lights.off': 'Свет вырубили — {name}',
+    'lights.on': 'Свет включили — {name}',
+    'lights.someone': 'кто-то',
 
     // -------------------------------------------------------------- the weather
     'sky.clear': 'ясно',
@@ -134,6 +139,7 @@ const DICT = {
     'hint.reception': '[ ПРОБЕЛ ] спросить',
     'hint.liftIn': '[ ПРОБЕЛ ] войти в лифт',
     'hint.liftCall': '[ ПРОБЕЛ ] вызвать лифт',
+    'hint.breaker': '[ ПРОБЕЛ ] дёрнуть рубильник',
     'hint.board': '[ ПРОБЕЛ ] посмотреть доску',
     // the little switch figure is labelled with what it will switch to, not with what it is
     'hint.lang': '[ ПРОБЕЛ ] язык и имена',
@@ -952,6 +958,9 @@ const DICT = {
     'link.retry': 'Try now',
     'link.reload': 'Reload the page',
     'link.back': 'The office is back',
+    'lights.off': 'Lights out — {name}',
+    'lights.on': 'Lights on — {name}',
+    'lights.someone': 'someone',
 
     'sky.clear': 'clear',
     'sky.clouds': 'cloudy',
@@ -998,6 +1007,7 @@ const DICT = {
     'hint.reception': '[ SPACE ] ask',
     'hint.liftIn': '[ SPACE ] step into the lift',
     'hint.liftCall': '[ SPACE ] call the lift',
+    'hint.breaker': '[ SPACE ] pull the breaker',
     'hint.board': '[ SPACE ] look at the board',
     'hint.lang': '[ SPACE ] language and names',
     'hint.rug': '[ SPACE ] recolour the rug',
