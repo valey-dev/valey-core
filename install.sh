@@ -69,6 +69,7 @@ msg() {
       bye)       echo "Ничего не менял." ;;
       updated)   echo "Офис обновлён: v$2 → v$3. Прежний лежит в $4" ;;
       kept)      echo "Перенёс модули: $2" ;;
+      stale_cwd) echo "Этот терминал остался в прежнем офисе, $2 — npm start отсюда запустит старую версию, а если эту папку удалить, упадёт с ENOENT uv_cwd. Перейди в новый: cd $3" ;;
       fetching)  echo "Качаю офис ($2)…" ;;
       no_archive) echo "Не скачалось: $2" ;;
       no_sum)    echo "Нет контрольной суммы рядом с архивом — установка остановлена." ;;
@@ -104,6 +105,7 @@ msg() {
       bye)       echo "Nothing was changed." ;;
       updated)   echo "Office updated: v$2 → v$3. The previous one is in $4" ;;
       kept)      echo "Modules carried over: $2" ;;
+      stale_cwd) echo "This terminal is still in the previous office, $2 — npm start here runs the old version, and once that folder is deleted it fails with ENOENT uv_cwd. Move to the new one: cd $3" ;;
       fetching)  echo "Downloading the office ($2)…" ;;
       no_archive) echo "Download failed: $2" ;;
       no_sum)    echo "No checksum published beside the archive — stopping." ;;
@@ -268,6 +270,15 @@ case "$MODE" in
     done
     say "$(msg updated "$OLDVER" "$NEWVER" "$(pretty "$OLD")")"
     [ -z "$KEPT" ] || say "$(msg kept "${KEPT# }")"
+    # A terminal standing in the office goes with the folder, not the name: the
+    # shell still prints ~/valey, but it is in the old copy now. On 26 September
+    # 2026 a tester updated from inside the office, the old copy was deleted,
+    # and the next npm start died on ENOENT uv_cwd. A script cannot move the
+    # shell that ran it, so it says where to go. Physical paths on both sides:
+    # $PWD keeps the name, and only the folder itself is the old one.
+    HERE=$(pwd -P 2>/dev/null || true)
+    OLDP=$(cd "$OLD" && pwd -P)
+    case "$HERE" in "$OLDP"|"$OLDP"/*) say "$(msg stale_cwd "$(pretty "$OLD")" "$(pretty "$DEST")")" ;; esac
     ;;
   *)
     mkdir -p "$(dirname "$DEST")"
