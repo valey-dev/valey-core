@@ -34,7 +34,12 @@ const pending = () => run(process.execPath, [PENDING, '--repo', repo], tmp);
 const has = (ref) => run('git', ['show-ref', '--verify', '--quiet', ref]).status === 0;
 
 try {
-  run('git', ['init', '--bare', remote], tmp);
+  // `-b main` on the bare one too, not only on the working copy. Without it the
+  // bare HEAD takes the machine's init.defaultBranch, and a clone of a
+  // repository whose HEAD names a branch that does not exist comes out with an
+  // empty head: «Non-fast-forward commit does not make sense into an empty
+  // head», on the CI runner only, where that default is still master.
+  run('git', ['init', '--bare', '-b', 'main', remote], tmp);
   run('git', ['init', '-b', 'main', repo], tmp);
   git('config', 'user.name', 'Branch Stand');
   git('config', 'user.email', 'branch@example.invalid');
