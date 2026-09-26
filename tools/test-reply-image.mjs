@@ -7,6 +7,8 @@
 // and its path, and that is what a person saw instead of a picture.
 import { installDom } from './lib/dom.mjs';
 import { renderMarkdown } from '../web/markdown.js';
+import { applyLine, emptyState } from '../server/agents.js';
+import { applyCodexLine } from '../server/codex.js';
 
 installDom();
 const { clean } = await import('../web/ui.js');
@@ -34,6 +36,27 @@ ok('the path rides along for the click', html.includes('data-path="/tmp/shot.png
 ok('and the name is under it', html.includes('<span class="mdpicname">кадр</span>'), html);
 const outside = renderMarkdown('![кот](https://x/cat.png)');
 ok('a picture from the internet is not fetched', !outside.includes('<img'), outside);
+
+// ------------------------------------------------------- the file served
+// /api/file opens only the agent's files, and a picture reaches the transcript
+// by a reply, often not by a tool (26 September 2026: 4 of 9 real ones had
+// never been touched by one). So a picture named in a reply counts.
+const said = (text) => JSON.stringify({ type: 'assistant', timestamp: '2026-09-26T10:00:00Z',
+  message: { role: 'assistant', content: [{ type: 'text', text }] } });
+const feed = (...lines) => { const st = emptyState(); for (const l of lines) applyLine(st, l); return st; };
+const claude = feed(said('Вот кадр:\n![каталог](</Users/k/shots/каталог 2.png>) и ещё ![](/tmp/b.jpg)'));
+ok('a picture in a reply is among the agent\'s files', claude.files.has('/Users/k/shots/каталог 2.png'), [...claude.files.keys()]);
+ok('both of them', claude.files.has('/tmp/b.jpg'), [...claude.files.keys()]);
+ok('and it is marked as a picture', claude.files.get('/tmp/b.jpg')?.image === true, claude.files.get('/tmp/b.jpg'));
+const narrow = feed(said('![a](/tmp/x.svg) ![b](shots/rel.png) ![c](https://e.com/c.png) ![d](/etc/passwd)'));
+ok('svg, relative, remote and non-pictures do not count', narrow.files.size === 0, [...narrow.files.keys()]);
+const prompt = feed(JSON.stringify({ type: 'user', timestamp: '2026-09-26T10:00:00Z',
+  message: { role: 'user', content: 'покажи ![x](/Users/k/secret.png)' } }));
+ok('a picture named in a prompt does not count — only the agent\'s own reply', prompt.files.size === 0, [...prompt.files.keys()]);
+const cx = emptyState();
+applyCodexLine(cx, JSON.stringify({ timestamp: '2026-09-26T10:00:00Z', type: 'event_msg', payload: { type: 'item_completed',
+  item: { type: 'AgentMessage', content: [{ type: 'text', text: 'Готово ![портрет](</Users/k/out/queen.png>)' }] } } }));
+ok('a Codex reply counts the same way', cx.files.has('/Users/k/out/queen.png'), [...cx.files.keys()]);
 
 console.log(bad ? `\n${bad} failed` : '\nall passed');
 process.exit(bad ? 1 : 0);

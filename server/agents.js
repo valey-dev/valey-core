@@ -604,6 +604,36 @@ function born(st, ts) {
 function remember(st, role, text, ts) {
   st.recent.push({ role, text: text.slice(0, MSG_MAX), ts: ts ? Date.parse(ts) : Date.now() });
   if (st.recent.length > RECENT_MAX) st.recent.splice(0, st.recent.length - RECENT_MAX);
+  if (role === 'assistant') pictured(st, text, ts);
+}
+
+/*
+ * A picture the agent shows in its own reply is part of its work (#reply-image).
+ * The conversation draws `![caption](</path/frame.png>)` through /api/file, and
+ * that serves only paths in the agent's files — which used to mean paths a tool
+ * took as `file_path`. Pictures often do not arrive that way: a generated one
+ * reaches the transcript with no path, a rendered one as a shell command. Run
+ * over the owner's transcripts on 26 September 2026: of the 9 pictures replies
+ * showed that were still on disk, 4 had never been touched by a tool and would
+ * have been refused; with this, all 9 are served.
+ *
+ * Kept narrow on purpose, because this widens what /api/file hands out: a
+ * picture type (no svg — that one is served as an attachment and runs scripts
+ * when opened), an absolute path, written by the agent in a reply rather than
+ * by anybody in a prompt. A guest still sees it only while the conversation is
+ * open. What a guest could not see before is a picture the agent named without
+ * opening it — the owner's call, made that day.
+ */
+const PICTURE_RE = /!\[[^\]]*\]\(\s*(?:<([^>)]*)>|([^)\s]+))[^)]*\)/g;
+const SHOWN_RE = /\.(png|jpe?g|gif|webp)$/i;
+function pictured(st, text, ts) {
+  if (!text.includes('![')) return;
+  for (const m of text.matchAll(PICTURE_RE)) {
+    const fp = (m[1] !== undefined ? m[1] : m[2]).trim();
+    if (!fp.startsWith('/') || !SHOWN_RE.test(fp) || st.files.has(fp)) continue;
+    st.files.set(fp, { path: fp, name: base(fp), image: true, ts: (ts && Date.parse(ts)) || st.lastTs, made: false });
+    if (st.files.size > 60) st.files.delete(st.files.keys().next().value);
+  }
 }
 
 function emptyState() {
