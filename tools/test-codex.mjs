@@ -121,7 +121,11 @@ delete process.env.CODEX_BIN;
 // or the thread is queued an empty line and the file is simply lost.
 const recording = path.join(dir, 'codex-recording');
 const argvOut = path.join(dir, 'argv.json');
-await fsp.writeFile(recording, `#!${process.execPath}\nimport fs from 'node:fs';\nfs.writeFileSync(${JSON.stringify(argvOut)}, JSON.stringify(process.argv.slice(2)));\n`, { mode: 0o755 });
+// `require`, not `import`: a file with no extension is CommonJS to Node, and
+// only Node 22 guesses otherwise. On 18 and 20 the import line is a syntax
+// error, the recording is never written, and the case below died on a missing
+// argv.json — on the CI runner's older legs only.
+await fsp.writeFile(recording, `#!${process.execPath}\nconst fs = require('node:fs');\nfs.writeFileSync(${JSON.stringify(argvOut)}, JSON.stringify(process.argv.slice(2)));\n`, { mode: 0o755 });
 process.env.CODEX_BIN = recording;
 const shot = '/Users/kolya/.config/valey/inbox/2026-09-17/screen.png';
 const withFile = await queueToThread({ text: '', files: [{ path: shot }] }, { id: 'live', name: 'x' });
