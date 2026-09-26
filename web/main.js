@@ -632,15 +632,28 @@ function openStream() {
     }
     onSnapshot(e);
   };
+  // Every error counts, whatever state the stream is left in. A server that
+  // dies does not close the stream: a refused connection is a network error,
+  // so the browser moves it to CONNECTING and keeps retrying on its own, quietly
+  // and forever. This handler used to return early on exactly that — «the
+  // network blinked, the browser will come back by itself» — and so a dead
+  // office never counted a single failure. On 26 September 2026 the first real
+  // outage on the stand went by with the lights on: the frames had been taken
+  // through a debug hook that closed the stream itself, the one path the real
+  // outage never takes. So the page closes the stream and retries on its own
+  // timer, which is also the only way the countdown can tell the truth.
+  const mine = es;
   es.onerror = () => {
-    if (es.readyState !== EventSource.CLOSED) return;   // the network blinked — the browser will come back by itself
+    if (es !== mine) return;                 // a stream already replaced
+    mine.onerror = null;
+    mine.close();
     const wait = streamRetry;
     streamRetry = Math.min(streamRetry * 2, 30000);
     // The plaque counts down to this very timer rather than to a guess of its
     // own: a countdown that does not match what the page is actually doing is
     // the second thing a person stops believing, right after a frozen floor.
     if (linkLost(wait)) sound.power(false);
-    setTimeout(() => { if (es.readyState === EventSource.CLOSED) openStream(); }, wait);
+    setTimeout(() => { if (es === mine) openStream(); }, wait);
   };
 }
 

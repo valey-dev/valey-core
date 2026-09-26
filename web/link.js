@@ -11,8 +11,9 @@
 // Three phases, and the middle one is the reason this is a machine and not a
 // flag. A blink of the network must not black out the floor: the first failed
 // reconnect only lights a chip in the HUD, and the lights go out on the third —
-// about fourteen seconds with the backoff main.js uses, which is longer than
-// restarting a terminal costs.
+// about six seconds after the drop with the backoff main.js uses (2 s, then 4).
+// An earlier version of this comment said fourteen: that is when the fourth
+// attempt fires, not the third, and the arithmetic went into a report as fact.
 import { t as tr, onLang, fmtClock } from './i18n.js';
 
 // How many failed reconnects in a row mean the office is gone rather than blinking.
