@@ -262,6 +262,25 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .pkeys kbd{font:inherit; font-size:9px; color:var(--ink-dim); border:0; background:none}
 .pmore{margin-left:auto; font-size:9px; color:var(--ink-dim)}
 
+/* ---- the office is gone ---- */
+/* The plaque of a lost office. It stands above the panels: whatever is open,
+   the news that the office is not there outranks it — and a panel showing stale
+   data is exactly what this explains. It does not cover the whole screen on
+   purpose: the dark floor behind it is half of the message. It shares layer
+   29 with the toasts and comes after them in the markup, so it wins a tie —
+   they do not meet anyway: the plaque is central, the toasts sit in a corner.
+   Design: [Plaque · office unreachable](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2408-2675) */
+#offline{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:29;
+  width:min(560px, 92vw); background:var(--wood-dark); border:3px solid var(--frame);
+  box-shadow:0 0 0 3px var(--bg), 0 14px 40px rgba(0,0,0,.7)}
+#offline[hidden]{display:none}
+.ohead{background:var(--wood-hi); color:var(--warn); font-size:13px; padding:8px 12px;
+  letter-spacing:.05em}
+.obody{padding:12px 14px}
+.oline{margin:0; color:var(--ink); font-size:13px}
+.ocount{margin:6px 0 0; color:var(--muted); font-size:12px}
+.obody .acts button.primary{border-color:var(--warn); color:var(--warn)}
+
 /* ---- toasts ---- */
 /* Above the panels (28): a panel that fills the screen — the inventory, the
    standup — dimmed the toast out of sight at 25, so an answer to a key pressed

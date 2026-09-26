@@ -12,6 +12,7 @@ import { esc } from './esc.js';
 import { modelLabel } from './model-name.js';
 import { roleIcon } from './roleicon.js';
 import { owned } from './owned.js';
+import { linkDown, linkRetrying } from './link.js';
 // The standup catches its own key by the physical code rather than by the
 // letter — see rosterKey below.
 import { codeOf } from './keymap.js';
@@ -124,7 +125,13 @@ export function renderHud() {
     <span class="chip zoom${z.tight ? ' wait' : ''}" title="${tr('hud.zoomTitle')}${
       z.tight ? tr('hud.zoomTitleTight') : ''
     }">⛶ ×${z.dev}${z.auto ? tr('hud.zoomAuto') : ''}${z.tight ? tr('hud.zoomTight') : ''}</span>
-    ${S.pagerWaiting ? `<button id="pagerChip" class="chip wait" title="${tr('hud.pagerTitle')}">📟 ${S.pagerWaiting}</button>` : ''}
+    ${S.pagerWaiting ? `<button id="pagerChip" class="chip wait" title="${tr('hud.pagerTitle')}">📟 ${S.pagerWaiting}</button>` : ''}${
+      // The first failed reconnect shows here and nowhere else: the floor stays
+      // lit, nothing beeps. A blink of the network is not worth a black screen,
+      // and this chip is what tells the difference between a blink and a loss.
+      linkRetrying() || linkDown()
+        ? `<span class="chip wait" title="${tr('hud.linkTitle')}">⚡ ${tr(linkDown() ? 'hud.linkDown' : 'hud.linkRetry')}</span>`
+        : ''}
     <span class="chip dim">${S.soundOn ? '🔊' : '🔇'} M</span>
     ${collect('hud', S).map((c) => `<span class="chip ${esc(c.kind || 'dim')}" title="${esc(c.title || '')}">${esc(c.text || '')}</span>`).join('')}
     <span class="chip dim">${tr('hud.round')}</span>`;
@@ -4123,7 +4130,7 @@ export async function openTranscript(a, focusTs = null) {
         <span class="zhint" id="chatst">${esc(a.title || '')}</span><button id="vx">✕</button></span>
       <span class="vrow vtask" id="chattask">${chatTask(a)}</span></div>
     <div class="single chatlog" id="chatlog"><p class="hint">${tr('chat.reading')}</p></div>
-    <div class="vpath">${tr('chat.keys')}<span class="ncount" id="ncount"></span></div></div>`;
+    <div class="vpath">${tr(linkDown() ? 'chat.keysOffline' : 'chat.keys')}<span class="ncount" id="ncount"></span></div></div>`;
   $('#vx').onclick = closeViewer;
   await loadChat(0);
 }
@@ -4317,8 +4324,14 @@ async function loadChat(fresh) {
   const box = $('#chatlog');
   if (!box) return;
   if (r.error) {
-    if (chatView.msgs.length) chatStatus(tr('chat.rereadFailed', { err: esc(r.error) }));
-    else box.innerHTML = `<p class="empty">${esc(r.error)}</p>`;
+    // `Failed to fetch` is the browser saying the request never left, and it is
+    // addressed to nobody: on 16 September 2026 a dead office turned every
+    // re-read into that line and it read as a broken agent. When the office is
+    // known to be gone, the panel says that instead — and what is on the screen
+    // is named for what it is.
+    const gone = linkDown();
+    if (chatView.msgs.length) chatStatus(gone ? tr('chat.offline') : tr('chat.rereadFailed', { err: esc(r.error) }));
+    else box.innerHTML = `<p class="empty">${esc(gone ? tr('chat.offlineEmpty') : r.error)}</p>`;
     return;
   }
   const msgs = r.messages || [];
