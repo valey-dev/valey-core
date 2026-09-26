@@ -276,11 +276,32 @@ async function deviceFrom(req, s) {
 
 // A guest is whoever came in by an invitation and holds the token issued to
 // them. Different from the owner in everything: may watch, may not command.
+// The guest's pass as a cookie too. A module's code is loaded with import(),
+// which sends no headers of its own, and the module's own files follow by
+// relative path — so a guest page asked for /modules/<id>/client.js with no
+// pass at all and got 403 for every module the owner had left shown. Found on
+// the #guests stand, 26 September 2026: the guest's list said plan, polaroid,
+// radio and the page had loaded none of them. It had been so since guests came
+// in, v0.27.0; the stands send the header themselves and never saw it. The
+// cookie is set whenever a request names a real guest by header, and read here
+// alongside it; a guest shown out is not found in the invites, cookie or not.
+const GUEST_COOKIE = 'valey_guest';
+const guestCookie = (id) => `${GUEST_COOKIE}=${encodeURIComponent(id)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${60 * 60 * 24 * 30}`;
+function cookieGuest(req) {
+  for (const part of String(req.headers.cookie || '').split(';')) {
+    const [k, ...v] = part.trim().split('=');
+    if (k === GUEST_COOKIE) { try { return decodeURIComponent(v.join('=')); } catch { return ''; } }
+  }
+  return '';
+}
+
 async function guestOf(req) {
   // A header for ordinary requests, a parameter for the stream: EventSource
-  // cannot set headers, and the stream is the first thing a guest needs.
+  // cannot set headers, and the stream is the first thing a guest needs. The
+  // cookie for what can send neither: a module's code, see guestCookie.
   const given = req.headers['x-valey-guest']
-    || new URL(req.url, 'http://localhost').searchParams.get('guest');
+    || new URL(req.url, 'http://localhost').searchParams.get('guest')
+    || cookieGuest(req);
   if (!given) return null;
   const s = await getSettings();
   return (s.access.invites || []).find((i) => i.guest && i.guest === given) || null;
@@ -1402,7 +1423,14 @@ async function handle(req, res) {
   // module that does not say `"guests": "shown"` is left out of a guest's list,
   // so its client never reaches the page: no key of its own gets registered, no
   // object of its own gets drawn, and its panel cannot be opened.
-  if (url.pathname === '/api/modules') return send(res, 200, moduleList(await isOwner(req)));
+  if (url.pathname === '/api/modules') {
+    const owner = await isOwner(req);
+    // The page asks for this list right before importing the modules, with the
+    // guest's header: the moment to hand it the cookie the imports will carry.
+    const g = owner ? null : await guestOf(req);
+    const extra = g && cookieGuest(req) !== g.guest ? { 'set-cookie': guestCookie(g.guest) } : {};
+    return send(res, 200, moduleList(owner), undefined, extra);
+  }
 
   // The test stand. An empty text means "this is an ordinary office" and the
   // client draws nothing. git is asked for the branch only here: in a normal run

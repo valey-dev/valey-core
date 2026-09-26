@@ -158,6 +158,17 @@ try {
   ok('the manifest and the server are not files of the page', await raw('/modules/plan/module.json', 'owner') === 404 && await raw('/modules/plan/server.js', 'owner') === 404);
   ok('nothing at the root of modules/ is served', await raw('/modules/AGENTS.md', 'owner') === 404 && await raw('/modules/.git/HEAD', 'owner') === 404);
   ok('nor a path that climbs out', await raw('/modules/plan/..%2F..%2Fpackage.json', 'owner') === 404);
+  // A page imports a module's code with import(), which sends no header of its
+  // own: a guest's page loaded none of the modules shown to him until the pass
+  // rode in a cookie too (26 September 2026). The list hands the cookie out,
+  // and the cookie alone opens the files.
+  const listRes = await fetch(base + '/api/modules', { headers: { 'x-valey-guest': GUEST } });
+  const jar = (listRes.headers.get('set-cookie') || '').split(';')[0];
+  ok('the module list hands a guest his pass as a cookie', /^valey_guest=/.test(jar), jar);
+  const byCookie = await fetch(base + '/modules/plan/client.js', { headers: { cookie: jar } }).then((r) => r.status);
+  ok('and with the cookie alone, as import() sends it, the module\'s code loads', byCookie === 200, byCookie);
+  const forged = await fetch(base + '/modules/plan/client.js', { headers: { cookie: 'valey_guest=nobody' } }).then((r) => r.status);
+  ok('a cookie naming nobody opens nothing', forged === 403, forged);
 
   // ------------------------------------------- the owner hides a module live
   // One choice for all guests, over the manifest's default; it takes effect on
