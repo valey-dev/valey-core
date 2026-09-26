@@ -5,7 +5,7 @@
 // always our own, a closed office is not visible from outside at all, a token
 // from the address moves into a cookie, and a token that merely looks alike is
 // somebody else's token.
-import { check, isLocal, newToken, inviteHost } from '../server/network.js';
+import { check, isLocal, newToken, inviteHost, inviteUrl } from '../server/network.js';
 import { publicSettings } from '../server/settings.js';
 
 let bad = 0;
@@ -99,6 +99,19 @@ ok('so does one made from 127.0.0.1 and from [::1]', inviteHost('127.0.0.1:5194'
 ok('an address the owner already came in on is kept', inviteHost('192.168.10.17:5177', lan) === '192.168.10.17:5177' && inviteHost('office.example:443', lan) === 'office.example:443');
 ok('a private office keeps localhost: no Wi-Fi address would reach it either', inviteHost('localhost:5177', { external: false, lan: ['192.168.10.17'] }) === 'localhost:5177');
 ok('no network card, nothing to swap in', inviteHost('localhost:5177', { external: true, lan: [] }) === 'localhost:5177');
+
+// The link carries the network token: the code sits after #, which never
+// reaches the server, and from the Wi-Fi nothing answers without the token.
+const link = inviteUrl('localhost:5177', 'abc123', { ...lan, token: 'TOKEN7' });
+ok('an invitation to an open office carries the pass through the door', link === 'http://192.168.10.17:5177/?token=TOKEN7#code=abc123', link);
+const home = inviteUrl('localhost:5177', 'abc123', { external: false, lan: ['192.168.10.17'], token: 'TOKEN7' });
+ok('a private office puts no token into a link', home === 'http://localhost:5177/#code=abc123', home);
+{
+  // And the door lets that link through: token in the address, a cookie back.
+  const u = new URL(link);
+  const r = check({ headers: { host: u.host }, socket: { remoteAddress: '192.168.10.44' } }, u, { external: true, token: 'TOKEN7' });
+  ok('the door lets the invited link in and keeps the pass in a cookie', r.ok && /valey|token/i.test(r.setCookie || ''), r);
+}
 
 console.log(bad ? `\nfailed: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

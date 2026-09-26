@@ -64,6 +64,23 @@ export function inviteHost(host, { external = false, lan = [] } = {}) {
   return m[2] ? `${lan[0]}:${m[2]}` : lan[0];
 }
 
+// The whole invitation link. Seen from the Wi-Fi, the office answers nothing
+// without the network token (check() below), and the code rides after the #,
+// which never reaches the server: an invited phone was refused with «a token is
+// required» before its page could send the code. Found on the #guests stand,
+// 26 September 2026. So the link carries the network token, and check() moves
+// it from the address into a cookie on the first request, as it does for the
+// owner. The owner chose this knowing the cost: the token is a pass through the
+// door and nothing more — everything behind it still asks for an invitation
+// (measured that day: the page 200, every /api/* 403 «an invitation is
+// required») — but a guest who was shown out keeps that pass until the token
+// is changed.
+export function inviteUrl(host, code, { external = false, lan = [], token = '' } = {}) {
+  const at = inviteHost(host, { external, lan });
+  const pass = external && token ? `?token=${encodeURIComponent(token)}` : '';
+  return `http://${at}/${pass}#code=${code}`;
+}
+
 export function newToken() {
   let bits = 0, value = 0, out = '';
   for (const byte of crypto.randomBytes(20)) {
