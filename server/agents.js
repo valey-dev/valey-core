@@ -82,6 +82,55 @@ const PAUSED_TTL = 10_000;          // the scan is a stat per transcript; a tick
 let pausedAt = 0;
 let pausedList = [];
 
+// Conversations the person archived in the desktop app. Archiving shuts the CLI
+// down the same way the app's own eviction does and leaves the transcript just
+// as fresh, so the office could not tell the two apart: an archived chat stayed
+// at its desk, asleep, for the rest of the hour, as if it could still be written
+// to. Noticed on 26 September 2026 by the very conversation that was archived.
+//
+// The app keeps one record per chat under claude-code-sessions/<account>/<org>/,
+// and two of its fields are read here: cliSessionId, the id the office knows the
+// agent by, and isArchived. Nothing else in the record is looked at. A stand that
+// points the office at invented sessions reads none of it, as with Codex.
+const DESKTOP_DIR = process.env.VALEY_DESKTOP_DIR
+  || (process.env.VALEY_CLAUDE_DIR ? null
+    : path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude-code-sessions'));
+// file -> { mtimeMs, id, archived }: a record is re-read only when it changes,
+// since the app writes one on every turn and there are hundreds of them.
+const desktopRecords = new Map();
+
+async function archivedIds() {
+  const out = new Set();
+  if (!DESKTOP_DIR) return out;
+  const seen = new Set();
+  async function walk(dir, depth) {
+    let entries = [];
+    try { entries = await fsp.readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const file = path.join(dir, e.name);
+      if (e.isDirectory() && depth < 2) { await walk(file, depth + 1); continue; }
+      if (!e.isFile() || !e.name.endsWith('.json')) continue;
+      seen.add(file);
+      let st;
+      try { st = await fsp.stat(file); } catch { continue; }
+      let rec = desktopRecords.get(file);
+      if (!rec || rec.mtimeMs !== st.mtimeMs) {
+        rec = { mtimeMs: st.mtimeMs, id: '', archived: false };
+        try {
+          const j = JSON.parse(await fsp.readFile(file, 'utf8'));
+          rec.id = typeof j.cliSessionId === 'string' ? j.cliSessionId : '';
+          rec.archived = j.isArchived === true;
+        } catch { /* half-written by the app; the next scan reads it whole */ }
+        desktopRecords.set(file, rec);
+      }
+      if (rec.archived && rec.id) out.add(rec.id);
+    }
+  }
+  await walk(DESKTOP_DIR, 0);
+  for (const file of desktopRecords.keys()) if (!seen.has(file)) desktopRecords.delete(file);
+  return out;
+}
+
 // Every record carries the session's cwd, so the tail is enough to learn where
 // the agent sat. Read as text: a 64 KB tail crosses no record boundary that
 // matters, and a half-line at its head simply does not match.
@@ -103,8 +152,11 @@ async function cwdOf(file, size) {
 export async function pausedSessions(live = [], now = Date.now()) {
   if (now - pausedAt < PAUSED_TTL) return pausedList.filter((s) => !live.some((l) => l.sessionId === s.sessionId));
   const index = await indexTranscripts();
+  const archived = await archivedIds();
   const out = [];
   for (const [id, paths] of index) {
+    // archived by the person, not put to sleep by the app: it has left
+    if (archived.has(id)) continue;
     for (const file of paths) {
       let st;
       try { st = await fsp.stat(file); } catch { continue; }
