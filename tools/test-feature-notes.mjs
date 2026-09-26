@@ -126,6 +126,17 @@ ok('no relative picture survives', !/!\[[^\]]*\]\((?!https:)/.test(page), page);
 ok('the changelog section rides along unchanged', page.includes('- **office:** the arrows stop (abc1234)'), page);
 ok('a picture that is already absolute is left alone',
   releaseBody('# v1\n\n![x](https://example.com/a.png)\n', { repo: 'r/r', sha: 's' }).includes('](https://example.com/a.png)'));
+// v0.65.0 published its own first sentence as a broken raw URL: the note quoted
+// `![подпись](/путь/кадр.png)` as the markdown an agent types, and the rewrite
+// could not tell an example from a picture.
+const quoted = releaseBody('# v1\n\nan agent writes `![подпись](/путь/кадр.png)` and\n\n'
+  + '```\n![fenced](shot.png)\n```\n\n![real](v1/shot.png)\n', { repo: 'r/r', sha: 's' });
+ok('a picture quoted in a code span stays an example',
+  quoted.includes('`![подпись](/путь/кадр.png)`'), quoted);
+ok('a picture inside a fence stays an example',
+  quoted.includes('![fenced](shot.png)'), quoted);
+ok('the picture outside code still becomes absolute',
+  quoted.includes('![real](https://github.com/r/r/raw/s/notes/v1/shot.png)'), quoted);
 
 // --- the guard -----------------------------------------------------------
 const feats = [{ hash: 'abc1234', subject: 'feat(office): the arrows stop' }];
