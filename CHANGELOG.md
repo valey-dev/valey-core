@@ -4,6 +4,20 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.67.0 — 26 September 2026
+
+### Added
+
+- **office:** when the server is gone the lights go out, instead of the floor pretending to be alive (3c16604)
+
+### Other
+
+- chore(office): the power comes back over the same 1.6 s, and the UPS beep is held with a drag (114184e)
+- chore(office): a longer power-down, and a quiet UPS beep while the lights are out (8c59fe1)
+- chore(stand): the breaker repaints through a hook, so the stand's fake DOM still holds one key listener (79f80e4)
+- chore(stand): a breaker on the stand plaque that plays a lost office in this tab (99e3c00)
+- chore(office): count a dead server's errors, which the stream never reported as closed (a4f0e0f)
+- docs(notes): the picture of the lights going out, rendered from the demo office (ee5d714)
 ## v0.66.2 — 26 September 2026
 
 ### Fixed
