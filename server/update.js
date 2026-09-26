@@ -58,7 +58,14 @@ async function refusal(dir) {
   if (!(await tryGit(dir, ['rev-parse', '--git-dir']))) return { reason: 'notGit' };
   if (!(await tryGit(dir, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']))) return { reason: 'noUpstream' };
   const ahead = await tryGit(dir, ['merge-base', '--is-ancestor', 'HEAD', '@{u}']);
-  if (ahead === null) return { reason: 'diverged' };
+  if (ahead === null) {
+    // Commits of its own with nothing incoming: the merge has nothing to do
+    // here and `--ff-only` answers «Already up to date». On 26 September 2026 a
+    // session's unpushed commit to the Modules' backlog read as diverged and
+    // held the core with it, though not one commit was coming into the Modules.
+    const onlyOurs = await tryGit(dir, ['merge-base', '--is-ancestor', '@{u}', 'HEAD']);
+    return onlyOurs === null ? { reason: 'diverged' } : null;
+  }
   const touched = new Set(((await tryGit(dir, ['diff', '--name-only', '--no-renames', '-z', 'HEAD', '@{u}'])) || '').split('\0').filter(Boolean));
   // Not through git(): porcelain lines begin with a space (« M file»), and the
   // trim there ate it — the first name came out as «ackage.json».
