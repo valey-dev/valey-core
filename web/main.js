@@ -128,7 +128,37 @@ window.__link = {
     for (let i = 0; i < 3; i++) linkLost(wait);
     setTimeout(() => openStream(), wait);
   },
+  // The stand's breaker (stand.js). Unlike `cut` it holds: the page does not
+  // reconnect until the breaker goes up again, because the person testing is
+  // the one who decides when the office comes back, not the backoff.
+  power: (on) => breaker(on),
+  get held() { return powerHeld; },
 };
+
+// Down, the breaker plays the office going away the way a real outage does —
+// the stream is closed, three failures counted, the hum and the relay. It only
+// ever touches this tab: the server keeps running and every other tab stays lit,
+// which is the whole difference between a test of the blackout and a blackout.
+let powerHeld = false;
+const HELD_WAIT = 30000;
+function breaker(on) {
+  if (on) {
+    if (!powerHeld) return;
+    powerHeld = false;
+    retryStream();
+    return;
+  }
+  if (powerHeld) return;
+  powerHeld = true;
+  if (es) { es.onerror = null; es.close(); }
+  let crossed = false;
+  while (!linkDown()) crossed = linkLost(HELD_WAIT) || crossed;
+  if (crossed) sound.power(false);
+  // While held, the countdown is renewed rather than left at zero: an attempt
+  // that is due and never made would read as the page being stuck.
+  const hold = () => { if (!powerHeld) return; linkLost(HELD_WAIT); setTimeout(hold, HELD_WAIT); };
+  setTimeout(hold, HELD_WAIT);
+}
 
 // ------------------------------------------------------------------- the owner
 // The right to command arrives once as a link from the terminal and stays in this
@@ -653,7 +683,9 @@ function openStream() {
     // own: a countdown that does not match what the page is actually doing is
     // the second thing a person stops believing, right after a frozen floor.
     if (linkLost(wait)) sound.power(false);
-    setTimeout(() => { if (es === mine) openStream(); }, wait);
+    // A retry that comes due under a lowered breaker is not made: the breaker
+    // holds the office away until it is lifted, whatever the backoff says.
+    setTimeout(() => { if (es === mine && !powerHeld) openStream(); }, wait);
   };
 }
 
@@ -661,6 +693,10 @@ function openStream() {
 // the backoff goes back to the start — a person who asks is a person who knows
 // something changed, usually that he has just started the office again.
 function retryStream() {
+  // «Try now» with the stand's breaker down lifts the breaker: the person asked
+  // for the office back, and a button that silently did nothing would be the
+  // one lie this whole state exists to avoid. The plaque hears about it.
+  if (powerHeld) { powerHeld = false; window.dispatchEvent(new Event('valey:power')); }
   streamRetry = 2000;
   linkTrying();
   openStream();

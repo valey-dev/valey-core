@@ -99,6 +99,38 @@ export async function initStand() {
     // disk, and this is a check of how the office behaves, not of a build without it.
     line('stand-fine', 'disabling is simulated; files remain on disk');
   }
+  // The breaker: the blackout of a lost office, on demand. Testing it the honest
+  // way meant killing the stand under an open page and waiting out the backoff,
+  // and on 26 September 2026 the owner asked for a switch he could pull himself
+  // instead. It lives here, on the scaffolding, because it lies: the office is
+  // perfectly alive while the plaque in the middle says it is not. Only this
+  // tab goes dark; the server and every other tab carry on.
+  const power = document.createElement('div');
+  power.className = 'stand-mods';
+  const pb = document.createElement('button');
+  pb.className = 'stand-mod';
+  pb.id = 'standpower';
+  const pn = document.createElement('b');
+  pn.textContent = 'power';
+  const ps = document.createElement('i');
+  pb.append(pn, ps);
+  const paint = () => {
+    const held = !!(window.__link && window.__link.held);
+    pb.classList.toggle('off', held);
+    ps.textContent = held ? 'OFF · this tab' : 'on';
+    pb.title = held ? 'lift the breaker: the tab reconnects' : 'pull the breaker: this tab plays a lost office';
+  };
+  pb.onclick = () => {
+    if (!window.__link) return;
+    window.__link.power(!!window.__link.held);
+    paint();
+  };
+  // «Try now» on the office's own plaque lifts the breaker too; this hears it.
+  window.addEventListener('valey:power', paint);
+  paint();
+  power.appendChild(pb);
+  box.appendChild(power);
+
   // The tab that is left when the plaque is folded. It says the same first thing
   // the plaque says — this is a stand — and nothing else; everything else is one
   // key or one click away.
