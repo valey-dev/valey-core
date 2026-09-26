@@ -2,7 +2,7 @@
 // Taking a backlog item and giving it back — the «В работе» section of the
 // core's BACKLOG.md, from any working tree.
 //
-//   node tools/claim.mjs                         # what is taken, and by which branch
+//   node tools/claim.mjs                         # what is taken, by which branch, and whether it moves
 //   node tools/claim.mjs take "radio: stations"  # claim it for the current branch
 //   node tools/claim.mjs take "…" --branch <b> --repo <name>
 //   node tools/claim.mjs drop radio              # give back what matches (item or branch)
@@ -26,6 +26,13 @@
 //   on disk is always one version or the other.
 // - The repository, the branch and the date are filled in, not typed: they are
 //   the part people get wrong («ядро» and «valey-core» both stood in the list).
+// - A claim says whether it is alive. The list reads the branch behind every
+//   line — its own commits, the tree it is checked out in, edits nobody has
+//   committed — and names a claim that has not moved for a week. On
+//   26 September 2026 all ten claims in the section were 9 to 14 days old, and
+//   one of them, reply-image, was a finished feature lying uncommitted in a tree
+//   whose session had ended on the 21st. Nothing said so: a claim looked the same
+//   on its first day and its ninth, so an abandoned one kept the item locked.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, openSync, closeSync, readFileSync, renameSync, unlinkSync, writeFileSync, statSync } from 'node:fs';
@@ -110,6 +117,54 @@ export function drop(text, what, { all = false } = {}) {
   return { ok: true, dropped: hits, text: lines.join('\n') };
 }
 
+// ----------------------------------------------------------------- is it alive
+// A week without a commit or an edit. Long enough for a feature waiting on a
+// frame or a word from the owner; short enough that the ninth day of silence is
+// said out loud.
+export const QUIET_DAYS = 7;
+const DAY = 86400_000;
+
+// "12 сентября 2026" back into a date; null for anything else.
+export function parseDate(s) {
+  const m = /^(\d{1,2}) ([а-я]+) (\d{4})$/.exec(String(s || '').trim());
+  const month = m ? MONTHS.indexOf(m[2]) : -1;
+  return month < 0 ? null : new Date(Number(m[3]), month, Number(m[1]));
+}
+
+// What the branch behind a claim is doing, from facts gathered by probe():
+//   exists   the branch is there, locally or on origin
+//   ahead    commits of its own, not in main
+//   commitAt when the last of them was made (ms), 0 if none
+//   tree     the working tree it is checked out in, if any
+//   dirty    files changed there and not committed
+//   editAt   when the newest of those was last written (ms)
+// The claim's own date counts as movement too: a claim taken yesterday on a
+// branch with nothing in it yet is a start, not an abandonment.
+export function vitality(claim, facts, now = Date.now()) {
+  const taken = parseDate(claim.date)?.getTime() || 0;
+  if (!facts) return { known: false, text: 'ветку не проверить: репозиторий не на этой машине' };
+  if (!facts.exists) return { known: true, gone: true, stale: true, text: 'ветки нет — влита или брошена; заявку пора снять' };
+  const moved = Math.max(taken, facts.commitAt || 0, facts.editAt || 0);
+  const days = moved ? Math.floor((now - moved) / DAY) : null;
+  const parts = [];
+  parts.push(facts.ahead ? `${facts.ahead} ${plural(facts.ahead, 'коммит', 'коммита', 'коммитов')}, последний ${ago(facts.commitAt, now)}` : 'своих коммитов нет');
+  if (facts.dirty) parts.push(`не закоммичено ${facts.dirty} ${plural(facts.dirty, 'файл', 'файла', 'файлов')}, правка ${ago(facts.editAt, now)}`);
+  if (facts.tree) parts.push(facts.tree);
+  const stale = days !== null && days >= QUIET_DAYS;
+  return { known: true, stale, days, text: parts.join(' · ') + (stale ? ` · ⚠ ${days} ${plural(days, 'день', 'дня', 'дней')} без движения — похоже, ничья` : '') };
+}
+
+const plural = (n, one, few, many) => {
+  const t = n % 100, u = n % 10;
+  if (t >= 11 && t <= 14) return many;
+  return u === 1 ? one : u >= 2 && u <= 4 ? few : many;
+};
+function ago(at, now) {
+  if (!at) return 'неизвестно когда';
+  const d = Math.floor((now - at) / DAY);
+  return d <= 0 ? 'сегодня' : d === 1 ? 'вчера' : `${d} ${plural(d, 'день', 'дня', 'дней')} назад`;
+}
+
 // ------------------------------------------------------------- the machine
 const git = (cwd, ...a) => { try { return execFileSync('git', ['-C', cwd, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return ''; } };
 
@@ -122,6 +177,46 @@ export function backlogPath() {
   const common = git(here, 'rev-parse', '--path-format=absolute', '--git-common-dir');
   if (!common) throw new Error('not inside a git checkout of the core');
   return path.join(path.dirname(common), 'BACKLOG.md');
+}
+
+// The checkout a claim's repository lives in, from its name in the section:
+// the core is the main checkout this backlog sits in, the Modules are its
+// modules/. Any other name is a repository this tool cannot find, and says so.
+export function repoDir(repo, backlog) {
+  const core = path.dirname(backlog);
+  // «valey-core» is how the section named the core before take() filled the name in.
+  if (repo === 'ядро' || repo === 'valey-core') return core;
+  if (repo === 'Модули') return path.join(core, 'modules');
+  return null;
+}
+
+// The facts vitality() reads, gathered with git. Read-only: nothing is fetched,
+// so a branch pushed from another machine and not fetched here reads as absent
+// locally but is still found on origin if it was fetched once.
+export function probe(dir, branch) {
+  if (!dir || !existsSync(dir) || !git(dir, 'rev-parse', '--git-dir')) return null;
+  const local = git(dir, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`);
+  const remote = local ? '' : git(dir, 'rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`);
+  const ref = local ? branch : remote ? `origin/${branch}` : '';
+  if (!ref) return { exists: false };
+  const main = git(dir, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/main') ? 'origin/main' : 'main';
+  const ahead = Number(git(dir, 'rev-list', '--count', `${main}..${ref}`)) || 0;
+  const commitAt = ahead ? Number(git(dir, 'log', '-1', '--format=%ct', ref)) * 1000 : 0;
+  // The tree the branch is checked out in, and what is lying there uncommitted.
+  let tree = '', dirty = 0, editAt = 0;
+  for (const block of git(dir, 'worktree', 'list', '--porcelain').split('\n\n')) {
+    if (!block.includes(`branch refs/heads/${branch}`)) continue;
+    tree = /^worktree (.+)$/m.exec(block)?.[1] || '';
+    const changed = git(tree, 'status', '--porcelain', '--untracked-files=all').split('\n').filter(Boolean);
+    dirty = changed.length;
+    // git() trims the output, which eats the leading space of the first status
+    // code — so the path is what follows the code and its spaces, not column 3.
+    for (const l of changed) {
+      const file = l.replace(/^\s*\S+\s+/, '').replace(/^.* -> /, '').replace(/^"(.*)"$/, '$1');
+      try { editAt = Math.max(editAt, statSync(path.join(tree, file)).mtimeMs); } catch { /* deleted */ }
+    }
+  }
+  return { exists: true, ahead, commitAt, tree: tree ? tree.replace(process.env.HOME || '\0', '~') : '', dirty, editAt };
 }
 
 // Which repository the work is in, named the way the section names it.
@@ -175,7 +270,13 @@ function main(argv) {
   if (!cmd || cmd === 'list') {
     const { claims } = parse(readFileSync(file, 'utf8'));
     if (!claims.length) { console.log('ничего не взято'); return 0; }
-    claims.forEach((c, i) => console.log(`${i + 1}. ${c.repo} · ${c.item}\n   ${c.branch} · ${c.date}`));
+    let quiet = 0;
+    claims.forEach((c, i) => {
+      const v = vitality(c, probe(repoDir(c.repo, file), c.branch));
+      if (v.stale) quiet++;
+      console.log(`${i + 1}. ${c.repo} · ${c.item}\n   ${c.branch} · ${c.date}\n   ${v.text}`);
+    });
+    if (quiet) console.log(`\n${quiet} из ${claims.length} молчат неделю и дольше: спроси владельца ветки, а брошенную заявку сними — drop <ветка>`);
     return 0;
   }
 
@@ -187,7 +288,11 @@ function main(argv) {
     if (!item) { console.error('take: скажи, какой пункт — его первыми словами'); return 2; }
     if (!branch) { console.error('take: ветки нет (HEAD отсоединён) — назови её: --branch <имя>'); return 2; }
     const r = rewrite(file, (text) => take(text, { repo, item, branch, date: dateOf() }));
-    if (!r.ok) { console.error(`уже взято:\n  ${r.taken.line}\nспроси владельца этой ветки или возьми другой пункт`); return 1; }
+    if (!r.ok) {
+      const v = vitality(r.taken, probe(repoDir(r.taken.repo, file), r.taken.branch));
+      console.error(`уже взято:\n  ${r.taken.line}\n  ${v.text}\n${v.stale ? 'заявка молчит — спроси владельца; если бросил, сними её: drop ' + r.taken.branch : 'спроси владельца этой ветки или возьми другой пункт'}`);
+      return 1;
+    }
     console.log(`взято:\n  ${r.line}`);
     return 0;
   }
