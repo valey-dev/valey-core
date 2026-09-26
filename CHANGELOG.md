@@ -4,6 +4,20 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.71.0 — 26 September 2026
+
+### Added
+
+- **office:** a breaker by the lift puts the whole office in the dark, for everyone (905cdfa)
+
+### Fixed
+
+- **office:** in a lost office the phones light the agents holding them, instead of punching holes through the floor (203aac1)
+
+### Other
+
+- docs(notes): the picture of the breaker's dark, rendered from the demo office (2324a76)
+- chore(office): the breaker moves to a panel under the security room, reachable by anyone (a9527b0)
 ## v0.70.0 — 26 September 2026
 
 ### Added
