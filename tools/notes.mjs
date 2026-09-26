@@ -222,11 +222,25 @@ export function renderNote(tag, date, fragments, section) {
 // the tag — a note written after its release is not at that tag at all (every
 // backfilled one is like this), and a branch moves, so a picture renamed next
 // month would quietly break a page nobody re-reads.
+// A picture inside code is not a picture, it is the markdown a person types —
+// and a note about pictures is full of it. On 26 September 2026 v0.65.0 went out
+// to the public page with its own first sentence rewritten: the example it
+// quotes, `![подпись](/путь/кадр.png)`, came back as a raw URL under notes/ that
+// cannot exist. Code spans and fences are copied through untouched.
 export function releaseBody(md, { repo, sha }) {
   const base = `https://github.com/${repo}/raw/${sha}/${NOTES_DIR}/`;
-  return md
+  const CODE = /```[\s\S]*?```|`[^`\n]*`/g;
+  const pictures = (s) => s.replace(/!\[([^\]]*)\]\((?![a-z]+:)([^)\s]+)\)/gi,
+    (_, alt, rel) => `![${alt}](${base}${rel})`);
+  let body = '';
+  let last = 0;
+  for (let m = CODE.exec(md); m; m = CODE.exec(md)) {
+    body += pictures(md.slice(last, m.index)) + m[0];
+    last = m.index + m[0].length;
+  }
+  body += pictures(md.slice(last));
+  return body
     .replace(/^# .*\n+/, '')
-    .replace(/!\[([^\]]*)\]\((?![a-z]+:)([^)\s]+)\)/gi, (_, alt, rel) => `![${alt}](${base}${rel})`)
     .trim() + '\n';
 }
 
