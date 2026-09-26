@@ -20,6 +20,8 @@ import { readPad, edges as padEdges } from './pad.js';
 import { touchHint } from './touch.js';
 import { initTouch, readTouch, showTouch, sheetOpen, closeSheet, touchOn } from './touchlayer.js';
 import { viewport, stepScale, SCALE_MIN, SCALE_MAX } from './viewport.js';
+// web/report.js is a plain script and cannot import the pass; it borrows it here.
+window.__valey = { owned };
 // ui.scale is the interface size: the HUD and hint strips are stretched by it,
 // and fit() must account for that when it measures their height.
 import { ui, onUiScale } from './theme.js';
@@ -1885,8 +1887,11 @@ function update(dt, now) {
 
   const c = state.cat;
   if (Math.hypot(c.tx - c.x, c.ty - c.y) < 3) {
-    if (Math.random() < 0.008) {
-      const target = state.currentRoom || L.projectRooms[0];
+    // An empty office has no project rooms, so a player in the corridor leaves the cat
+    // nowhere to go: it stays put. Reading target.x there threw inside the frame loop and
+    // froze the floor for every first-time user with no sessions yet.
+    const target = state.currentRoom || L.projectRooms[0];
+    if (target && Math.random() < 0.008) {
       c.tx = target.x + 30 + Math.random() * (target.w - 60);
       c.ty = target.y + target.h - 40 - Math.random() * 30;
     }

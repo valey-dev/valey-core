@@ -11,7 +11,8 @@ import { realWeather, forgetWeather, geocode } from './weather.js';
 import {
   getSettings, patchSettings, updateSettings, publicSettings, ownerToken, warnIfSharedSettingsWorktree,
 } from './settings.js';
-import { deliver, deliveryStatus, forgetCli, isBusy, MODES, adopt, releaseRuns } from './deliver.js';
+import { deliver, deliveryStatus, findCli, forgetCli, isBusy, MODES, adopt, releaseRuns } from './deliver.js';
+import { recordError, readErrors, cliVersion, environment } from './errors.js';
 import { queueToThread, codexDelivery } from './codex.js';
 import { saveFile, prune as pruneInbox, inboxDir, MAX_BYTES as INBOX_MAX, MAX_FILES } from './inbox.js';
 import { hire, release as releaseHire, hireList, hiredAt, hireCwd, resumeCommand, pruneHires } from './hire.js';
@@ -68,6 +69,7 @@ const PACK_LIST = PACK_IDS.map((id) => ({ id, size: namePool(id).length, sample:
 // disappears.
 process.on('unhandledRejection', (err) => {
   console.error('[unhandled]', (err && err.stack) || err);
+  recordError({ source: 'server', message: String((err && err.message) || err), stack: err && err.stack, version: VERSION });
 });
 // Room -> directory on disk. The only way to name a directory for /api/git: the
 // client sends the room key that the office already shows on the door.
@@ -79,6 +81,19 @@ const clients = new Set();
 // Notes the player left, plus whatever was actually sent into a live chat.
 const outbox = [];
 let taskSeq = 0;
+
+// A task that did not reach its chat goes into the error journal with what is
+// needed to explain it later: the CLI's answer, which CLI and which version.
+// Never the text of the task — that is the owner's message, not a symptom.
+async function journalFailure(task, agent) {
+  if (task.state !== 'failed') return;
+  const c = agent.provider === 'codex' ? null : await findCli().catch(() => null);
+  recordError({
+    source: 'deliver', message: task.error || 'failed', key: task.errorKey,
+    provider: agent.provider, agent: String(agent.id || '').slice(0, 8),
+    cli: c && c.path, cliVersion: c && c.path ? await cliVersion(c.path) : null, version: VERSION,
+  });
+}
 
 // ------------------------------------------------------------- the projection
 // What a guest sees about an agent. Exactly what is visible to anyone standing
@@ -622,6 +637,8 @@ export function createHandler() {
         return;
       }
       console.error('[http]', req.method, req.url, (e && e.stack) || e);
+      recordError({ source: 'server', message: String((e && e.message) || e), stack: e && e.stack,
+        where: `${req.method} ${String(req.url).split('?')[0]}`, version: VERSION });
       try {
         if (!res.headersSent) send(res, 500, { error: 'internal error', errorKey: 'err.internal' });
         else res.end();
@@ -1032,6 +1049,35 @@ async function handle(req, res) {
     return send(res, 200, { agent: { id, name: agent.name, title: agent.title }, messages: conversation(id) });
   }
 
+  // An uncaught error of the page, sent by web/report.js. A guest's browser may
+  // report too — the journal is capped, and its lines are marked as a guest's.
+  if (url.pathname === '/api/error' && req.method === 'POST') {
+    let e = {};
+    try { e = await readJson(req, 16 * 1024); } catch (err) {
+      if (err instanceof BodyError) throw err;
+      return send(res, 400, { error: 'bad json' });
+    }
+    const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : undefined);
+    const message = str(e.message, 500);
+    if (!message) return send(res, 400, { error: 'message required' });
+    await recordError({
+      source: 'page', message, stack: str(e.stack, 2000), where: str(e.where, 200),
+      browser: str(e.browser, 200), guest: (await guestOf(req)) ? true : undefined, version: VERSION,
+    });
+    return send(res, 200, { ok: true });
+  }
+
+  // The journal with the machine it came from, for the owner to read and pass on.
+  if (url.pathname === '/api/errors') {
+    if (!(await isOwner(req))) return forbidden(res);
+    const c = await findCli().catch(() => null);
+    const cliPath = c && c.path;
+    return send(res, 200, {
+      env: environment({ version: VERSION, cliPath, cliVer: cliPath ? await cliVersion(cliPath) : null }),
+      errors: await readErrors(),
+    });
+  }
+
   // Leave a note on the desk, or actually send it into the agent's chat.
   if (url.pathname === '/api/task' && req.method === 'POST') {
     try {
@@ -1080,17 +1126,24 @@ async function handle(req, res) {
       if (agent.provider === 'codex') {
         console.log(`[deliver] -> ${agent.name} (codex): ${task.text.slice(0, 80)}`);
         await queueToThread(task, agent);
+        journalFailure(task, agent);
         return send(res, 200, { ok: true, task, delivery: await deliveryAll() });
       }
       const status = await deliveryStatus();
-      if (!status.available) { task.state = 'failed'; task.error = status.hint; task.errorKey = status.hintKey; return send(res, 200, { ok: true, task, delivery: status }); }
+      if (!status.available) {
+        task.state = 'failed'; task.error = status.hint; task.errorKey = status.hintKey;
+        journalFailure(task, agent);
+        return send(res, 200, { ok: true, task, delivery: status });
+      }
       if (isBusy(agentId)) { task.state = 'failed'; task.error = 'another message is already being sent to this agent'; task.errorKey = 'err.busy'; return send(res, 200, { ok: true, task }); }
 
       const { delivery } = await getSettings();
       const mode = MODES.has(wantedMode) ? wantedMode : delivery.mode;
       task.state = 'sending';
       console.log(`[deliver] -> ${agent.name}: ${task.text.slice(0, 80)}`);
-      deliver(task, agent, mode).catch((e) => { task.state = 'failed'; task.error = e.message; });
+      deliver(task, agent, mode)
+        .catch((e) => { task.state = 'failed'; task.error = e.message; })
+        .then(() => journalFailure(task, agent));
       return send(res, 200, { ok: true, task, delivery: status });
     } catch (e) {
       if (e instanceof BodyError) throw e;
