@@ -300,6 +300,44 @@ export const sound = {
     }
   },
 
+  // The power going out, and coming back: a hum sliding down off its pitch and
+  // the clunk of a relay behind it. `up` runs the same thing the other way.
+  //
+  // The sound that actually carries the message is not this one, though — it is
+  // everything that stops. The keyboards go quiet the moment the office is
+  // declared gone (tickSound below), and a floor nobody is typing on is the
+  // honest half of the news. The rain keeps going: it is outside the window and
+  // owes the server nothing.
+  power(up = false) {
+    if (!this.ready || !this.on) return;
+    const c = this.ctx, now = c.currentTime;
+    const osc = c.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(up ? 60 : 190, now);
+    osc.frequency.exponentialRampToValueAtTime(up ? 190 : 42, now + 0.55);
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 900; lp.Q.value = 0.6;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.05, now + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.62);
+    osc.connect(lp); lp.connect(g); g.connect(this.master);
+    osc.start(now); osc.stop(now + 0.65);
+
+    // the relay: one short knock of filtered noise at the end of the slide
+    const at = now + (up ? 0.02 : 0.5);
+    const len = Math.floor(c.sampleRate * 0.09);
+    const buf = c.createBuffer(1, len, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) { const k = i / len; d[i] = (Math.random() * 2 - 1) * (1 - k) ** 2.2; }
+    const src = c.createBufferSource(); src.buffer = buf;
+    const bp = c.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 320; bp.Q.value = 1.6;
+    const kg = c.createGain(); kg.gain.value = 0.05;
+    src.connect(bp); bp.connect(kg); kg.connect(this.master);
+    src.start(at);
+  },
+
   thunder(strength = 1) {
     if (!this.ready || !this.on) return;
     const c = this.ctx, now = c.currentTime;
@@ -333,7 +371,10 @@ export function tickSound(state, dt, weather) {
   if (!sound.ready || !sound.on) return;
   const p = state.player;
 
-  for (const act of state.actors.values()) {
+  // A floor whose server is gone is a snapshot, and a snapshot does not type.
+  // Silence is the honest half of the power cut: the rain below survives it
+  // because it is outside the window.
+  for (const act of state.blackout ? [] : state.actors.values()) {
     const a = state.agents.find((x) => x.id === act.id);
     if (!a) continue;
     const dist = Math.hypot(act.x - p.x, act.y - p.y);

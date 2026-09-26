@@ -4,7 +4,8 @@ import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, pic
 import { loadModules, collect, first, attachStreams } from './modules.js';
 import { owned, passQuery, setTokens } from './owned.js';
 import { initStand } from './stand.js';
-import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, drawPortal, pxText, kickerBusy, RUGS, rugIndex, rugRect } from './office.js';
+import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawBlackout, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, drawPortal, pxText, kickerBusy, RUGS, rugIndex, rugRect } from './office.js';
+import { LINK, initLink, linkSeen, linkLost, linkTrying, linkDown, paintLink } from './link.js';
 import { drawCamera, buildCameras } from './cctv.js';
 import { syncActors, tickActors } from './actors.js';
 import * as UI from './ui.js';
@@ -110,6 +111,24 @@ const held = (id) => codesOf(id).some((c) => keys.has(c));
 // hangs and takes the whole channel with it, so reaching the module is only possible
 // this way.
 window.__game = state; window.__keys = keys; window.__ui = UI;
+// The power cut, on demand. A screenshot of a lost office cannot be staged from
+// outside the page — the tool would have to kill the server it is talking to —
+// so the state a recipe needs is reachable from here. It is the real path: the
+// same calls the stream makes when it gives up.
+//
+// `cut` closes the live stream too. Marking the link lost is not enough on a
+// healthy server: the next snapshot arrives within seconds and turns the lights
+// back on — which is how the first attempt at this picture came back lit, with
+// «the office is back» in the corner. The retry is scheduled the same way the
+// stream schedules its own, so the page comes back by itself afterwards.
+window.__link = {
+  LINK,
+  cut: (wait = 30000) => {
+    if (es) { es.onerror = null; es.close(); }
+    for (let i = 0; i < 3; i++) linkLost(wait);
+    setTimeout(() => openStream(), wait);
+  },
+};
 
 // ------------------------------------------------------------------- the owner
 // The right to command arrives once as a link from the terminal and stays in this
@@ -211,6 +230,9 @@ function takePermits(list) {
   const n = waitingCount();
   if (n !== state.pagerWaiting) { state.pagerWaiting = n; UI.renderHud(); }
 }
+
+// The plaque of a lost office, and the button on it that stops the waiting.
+initLink({ onRetry: () => retryStream(), onPhase: () => UI.renderHud() });
 
 initPager(state, {
   openPermit: (p) => { UI.openPermit(p.agentId); },
@@ -593,13 +615,37 @@ function openStream() {
     setTimeout(() => location.reload(), 300);
   });
   attachStreams(es);
-  es.onmessage = (e) => { streamRetry = 2000; onSnapshot(e); };
+  linkTrying();
+  es.onmessage = (e) => {
+    streamRetry = 2000;
+    // The office answered. If it had been declared gone, this is the moment the
+    // lights come back — and the page does not reload: the person keeps where
+    // he was standing and whatever panel he had open.
+    if (linkSeen()) {
+      sound.power(true);
+      UI.toast(tr('link.back'), 'news');
+    }
+    onSnapshot(e);
+  };
   es.onerror = () => {
     if (es.readyState !== EventSource.CLOSED) return;   // the network blinked — the browser will come back by itself
     const wait = streamRetry;
     streamRetry = Math.min(streamRetry * 2, 30000);
+    // The plaque counts down to this very timer rather than to a guess of its
+    // own: a countdown that does not match what the page is actually doing is
+    // the second thing a person stops believing, right after a frozen floor.
+    if (linkLost(wait)) sound.power(false);
     setTimeout(() => { if (es.readyState === EventSource.CLOSED) openStream(); }, wait);
   };
+}
+
+// «Попробовать сейчас» on the plaque: the waiting is what is being skipped, so
+// the backoff goes back to the start — a person who asks is a person who knows
+// something changed, usually that he has just started the office again.
+function retryStream() {
+  streamRetry = 2000;
+  linkTrying();
+  openStream();
 }
 
 // A module can affect the composition of the plan — the easel does not stand in every
@@ -1858,9 +1904,16 @@ function update(dt, now) {
     if (state.cctv.on && state.cctv.auto && now - state.cctv.since > CAM_DWELL) switchCam(1, true);
   }
 
-  tickActors(state.actors, state.agents, L, dt, now, (ev) => {
-    if (ev.kind === 'news') { UI.toast(ev.text, 'news'); sound.chime(); }
-  });
+  // Everyone on this floor except the player came from the server, and the
+  // server is gone: what is on the screen is a snapshot, so it stops moving.
+  // Leaving them walking is the whole bug this state exists to kill — a picture
+  // that looks alive while the data under it is a minute old.
+  state.blackout = linkDown();
+  if (!state.blackout) {
+    tickActors(state.actors, state.agents, L, dt, now, (ev) => {
+      if (ev.kind === 'news') { UI.toast(ev.text, 'news'); sound.chime(); }
+    });
+  }
 
   if (!state.realWeather && now - state.weatherAt > 60_000) {
     state.weatherAt = now;
@@ -2030,7 +2083,10 @@ function draw(t) {
         pose: sitting ? 'sit' : act.state === 'walk' ? 'walk' : 'stand',
         frame, dir: act.dir, bob: !sitting && act.state !== 'walk' ? Math.floor(t / 700) % 2 : 0,
       });
-      drawBubble(ctx, act.x + 14, act.y - 26, a, t);
+      // A bubble says what somebody is doing right now, and in a blackout
+      // nobody knows that: the office has not heard from the server since the
+      // lights went out. So the bubbles go out with them.
+      if (!state.blackout) drawBubble(ctx, act.x + 14, act.y - 26, a, t);
       if (state.waypoint === a.id) {
         const jump = Math.abs(Math.sin(t / 300)) * 3;
         ctx.fillStyle = '#ffd166';
@@ -2041,7 +2097,11 @@ function draw(t) {
     if (near && near.kind === 'agent' && near.id === a.id) {
       draws.push({ y: 1e9, fn: () => {
         label(act.x, act.y - 34, `${a.name} · ${UI.roleText(a)}`);
-        label(act.x, act.y + 30, a.limited ? tr('label.limited') : UI.actText(a).slice(0, 34), a.limited ? '#ffd166' : '#ffdf9e');
+        // The name is still true in the dark; what he is doing is not, and the
+        // line says so instead of quoting a minute-old answer.
+        label(act.x, act.y + 30,
+          state.blackout ? tr('label.dark') : a.limited ? tr('label.limited') : UI.actText(a).slice(0, 34),
+          state.blackout ? '#8fa6bd' : a.limited ? '#ffd166' : '#ffdf9e');
         label(act.x, act.y + 40, tr('hint.talk'), '#9fe0a8');
       } });
     }
@@ -2304,6 +2364,16 @@ function draw(t) {
   const g = ctx.createRadialGradient(VW / 2, VH / 2, VH / 3, VW / 2, VH / 2, VH);
   g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(30,14,4,${0.45 + night * 0.15})`);
   ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
+
+  // The power cut goes over everything, night and lamps included: the lights are
+  // out, and the only thing left burning is the torch in the player's hand and
+  // the phones of the people standing still around him.
+  if (state.blackout) {
+    const phones = [...state.actors.values()]
+      .map((act) => ({ x: act.x - camX + 6, y: act.y - camY - 6 }))
+      .filter((p) => p.x > -20 && p.x < VW + 20 && p.y > -20 && p.y < VH + 20);
+    drawBlackout(ctx, VW, VH, { x: p.x - camX, y: p.y - camY - 8 }, phones);
+  }
 }
 
 let lastT = performance.now();
@@ -2314,6 +2384,9 @@ function loop(now) {
   // The layer is there while the floor, or the free entrance screen, is what
   // is in front of the person; a panel takes the screen and the layer steps aside.
   showTouch(titleOpen() ? titleFree() : !panelsOpen());
+  // The countdown on the plaque is redrawn from the frame loop rather than from
+  // a timer of its own: it only rewrites the text when the second changes.
+  paintLink(Date.now());
   tickPad();
   update(dt, now); draw(now);
   if (!document.hidden) { cancelAnimationFrame(rafId); rafId = requestAnimationFrame(loop); }

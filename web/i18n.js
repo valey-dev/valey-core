@@ -73,6 +73,19 @@ const DICT = {
     'hud.skyTitle': 'погода {source} · P — настроить',
     'hud.zoomTitle': 'масштаб игры: + увеличить, 0 — считать по ширине окна, Ctrl+колесо',
     'hud.zoomTitleTight': ' · окно узкое: мира видно меньше 400 пикселей',
+    'hud.linkTitle': 'офис не отвечает — страница переподключается сама',
+    'hud.linkRetry': 'связь',
+    'hud.linkDown': 'офиса нет',
+
+    // ------------------------------------------------------ office unreachable
+    'link.title': 'Офис недоступен',
+    'link.line': 'Сервер офиса не отвечает. На экране — снимок, сделанный в {at}.',
+    'link.lineCold': 'Сервер офиса не отвечает. Показывать пока нечего: ни одного снимка не дошло.',
+    'link.count': 'Переподключаюсь через {sec} с · попытка {n}',
+    'link.trying': 'Пробую сейчас… · попытка {n}',
+    'link.retry': 'Попробовать сейчас',
+    'link.reload': 'Перезагрузить страницу',
+    'link.back': 'Офис вернулся',
 
     // -------------------------------------------------------------- the weather
     'sky.clear': 'ясно',
@@ -140,6 +153,9 @@ const DICT = {
     'label.gulp': 'буль',
     'label.ah': 'ах',
     'label.limited': 'лимит кончился — дремлет',
+    // Not «idle»: nobody knows what he is doing — the office has not heard
+    // from the server since the lights went out.
+    'label.dark': 'офиса нет — снимок',
     'label.searching': 'ищу агентов…',
 
     // --------------------------------------------------------------- the toasts
@@ -528,6 +544,9 @@ const DICT = {
     'chat.newToast': '{name}: {n} новых реплик{a}',
     'chat.appendedToast': '{name} дописал ответ',
     'chat.keys': 'R — обновить · ↑↓ листать, с SHIFT — страницами · N — заметка · ESC — назад',
+    'chat.keysOffline': 'R — офиса нет, перечитать нечем · ↑↓ листать, с SHIFT — страницами · ESC — назад',
+    'chat.offline': 'офис недоступен · это последнее, что успело загрузиться',
+    'chat.offlineEmpty': 'Офис недоступен, и этот разговор загрузиться не успел.',
 
     // ------------------------------------------------------------- the notes
     'note.label': 'заметка · {when}',
@@ -882,6 +901,19 @@ const DICT = {
     'hud.skyTitle': 'weather {source} · P to set up',
     'hud.zoomTitle': 'game scale: + to zoom in, 0 to count it from the width, Ctrl+wheel',
     'hud.zoomTitleTight': ' · a narrow window: less than 400 pixels of world',
+    'hud.linkTitle': 'the office is not answering — the page is reconnecting by itself',
+    'hud.linkRetry': 'link',
+    'hud.linkDown': 'office gone',
+
+    // --------------------------------------------------- office unreachable
+    'link.title': 'Office unreachable',
+    'link.line': 'The office server is not answering. What you see is a snapshot taken at {at}.',
+    'link.lineCold': 'The office server is not answering. There is nothing to show: no snapshot ever arrived.',
+    'link.count': 'Reconnecting in {sec}s · attempt {n}',
+    'link.trying': 'Trying now… · attempt {n}',
+    'link.retry': 'Try now',
+    'link.reload': 'Reload the page',
+    'link.back': 'The office is back',
 
     'sky.clear': 'clear',
     'sky.clouds': 'cloudy',
@@ -943,6 +975,7 @@ const DICT = {
     'label.gulp': 'glug',
     'label.ah': 'ah',
     'label.limited': 'out of quota — dozing',
+    'label.dark': 'office gone — a snapshot',
     'label.searching': 'looking for agents…',
 
     'toast.waterDone': 'A glass of water. {n} today.',
@@ -1323,6 +1356,9 @@ const DICT = {
     'chat.newToast': '{name}: {n} new messages',
     'chat.appendedToast': '{name} added to the answer',
     'chat.keys': 'R to refresh · ↑↓ to scroll, with SHIFT by pages · N for a note · ESC back',
+    'chat.keysOffline': 'R — the office is gone, nothing to re-read with · ↑↓ to scroll, with SHIFT by pages · ESC back',
+    'chat.offline': 'office unreachable · this is the last that got through',
+    'chat.offlineEmpty': 'The office is unreachable, and this conversation never loaded.',
 
     // --------------------------------------------------------------- notes
     'note.label': 'note · {when}',
