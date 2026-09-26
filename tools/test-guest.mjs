@@ -161,7 +161,8 @@ try {
 
   // ------------------------------------------- the owner hides a module live
   // One choice for all guests, over the manifest's default; it takes effect on
-  // the next request, and a guest with a page open is told to reload it.
+  // the next request, and a guest with a page open is sent his new set of
+  // modules, which his page compares with what it loaded (web/modules.js).
   const rowsBefore = await call('/api/invites', { as: 'owner', method: 'GET' });
   const planRow = (rowsBefore.j.modules || []).find((m) => m.id === 'plan');
   ok('the invite list carries a row per module, with the default and no choice', planRow && planRow.default === 'shown' && planRow.choice === null && planRow.shown === true, planRow);
@@ -173,7 +174,7 @@ try {
     while (Date.now() < deadline) {
       const { value, done } = await Promise.race([reader.read(), new Promise((r) => setTimeout(() => r({ done: null }), 300))]);
       if (done === true) return false;
-      if (value) { buf += Buffer.from(value).toString('utf8'); if (buf.includes('event: reload')) { reader.cancel().catch(() => {}); return true; } }
+      if (value) { buf += Buffer.from(value).toString('utf8'); if ([...buf.matchAll(/event: modules\ndata: (\[[^\n]*\])/g)].some((m) => !JSON.parse(m[1]).includes('plan'))) { reader.cancel().catch(() => {}); return true; } }
     }
     reader.cancel().catch(() => {});
     return false;
@@ -185,7 +186,7 @@ try {
   ok('the guest list loses it at once', !(guestList.j || []).some((m) => m.id === 'plan'), guestList.j);
   ok('and its client is no longer served to the guest', await raw('/modules/plan/client.js', 'guest') === 404);
   ok('a guest cannot choose', (await call('/api/invite/guests', { as: 'guest', body: { id: 'plan', choice: 'shown' } })).status === 403);
-  ok('the guest with a page open is told to reload it', await reloadSeen);
+  ok('the guest with a page open is sent his modules without the hidden one', await reloadSeen);
   const back = await call('/api/invite/guests', { as: 'owner', body: { id: 'plan', choice: 'shown' } });
   ok('choosing the default again forgets the choice', back.j.modules.find((m) => m.id === 'plan').choice === null && back.j.modules.find((m) => m.id === 'plan').shown === true, back.j);
   ok('an unknown module is refused', (await call('/api/invite/guests', { as: 'owner', body: { id: 'нет', choice: 'hidden' } })).status === 404);
