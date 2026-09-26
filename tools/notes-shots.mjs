@@ -45,7 +45,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFragments, shotSource, beforeSource, cmpTag, UNRELEASED } from './notes.mjs';
-import { startOffice, fakeClaudeDir, waitForAgent, PICTURE_ENV } from './lib/office.mjs';
+import { startOffice, fakeClaudeDir, fakeCodexDir, waitForAgent, PICTURE_ENV } from './lib/office.mjs';
 
 const ROOT = process.env.VALEY_REPO
   ? path.resolve(process.env.VALEY_REPO)
@@ -111,6 +111,10 @@ const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-notes-shots-'));
 let claudeDir = null;
 const cast = new Map();
 for (const who of CAST) { const made = await fakeClaudeDir(tmp, who); cast.set(who.slot, made); claudeDir = made.dir; }
+// And one Codex thread in the tide-charts room, next to the Claude session
+// there: the office seats Codex too, so a picture of the floor shows it as it
+// is. Its lock is held by this process, as the Codex app holds it, until exit.
+const codex = await fakeCodexDir(tmp);
 
 // A line into a cast member's transcript, stamped now — the office follows the
 // file and picks it up on its next tick.
@@ -153,7 +157,7 @@ if (before) {
 // September 2026). A --before run raises an older server, and one cut before
 // 12 September 2026 does not know VALEY_NUDGE — an entrance frame from it is
 // looked at for the nudge like any «before» frame is looked at for the place.
-const office = await startOffice({ claudeDir, root: worktree || ROOT, env: PICTURE_ENV });
+const office = await startOffice({ claudeDir, codexDir: codex.dir, root: worktree || ROOT, env: PICTURE_ENV });
 console.log(`demo office on ${office.base}`);
 try {
   await waitForAgent(async () => (await fetch(office.base + '/api/state')).json());

@@ -20,6 +20,8 @@ import { readPad, edges as padEdges } from './pad.js';
 import { touchHint } from './touch.js';
 import { initTouch, readTouch, showTouch, sheetOpen, closeSheet, touchOn } from './touchlayer.js';
 import { viewport, stepScale, SCALE_MIN, SCALE_MAX } from './viewport.js';
+// web/report.js is a plain script and cannot import the pass; it borrows it here.
+window.__valey = { owned };
 // ui.scale is the interface size: the HUD and hint strips are stretched by it,
 // and fit() must account for that when it measures their height.
 import { ui, onUiScale } from './theme.js';
@@ -242,9 +244,14 @@ UI.initUI(state, {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({ sessionId }),
   }).then((r) => r.json()).catch((e) => ({ error: e.message })),
-  sendTask: (agentId, text, deliver = false, mode = null, resend = null) => fetch('/api/task', {
+  sendTask: (agentId, text, deliver = false, mode = null, resend = null, files = []) => fetch('/api/task', {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
-    body: JSON.stringify({ agentId, text, deliver, mode, resend }),
+    body: JSON.stringify({ agentId, text, deliver, mode, resend, files }),
+  }).then((r) => r.json()).catch((e) => ({ error: e.message })),
+  // A dropped file: the bytes go up, a path comes back. The name rides in the
+  // query — a header would have to be ascii, and these names are not.
+  putFile: (file) => fetch('/api/inbox?name=' + encodeURIComponent(file.name || 'file'), {
+    method: 'POST', headers: owned({ 'content-type': file.type || 'application/octet-stream' }), body: file,
   }).then((r) => r.json()).catch((e) => ({ error: e.message })),
   guideTo: (id) => { state.waypoint = id; UI.toast(tr('toast.guide')); },
   // The standup opens a card without walking to the desk: the panel is
@@ -1880,8 +1887,11 @@ function update(dt, now) {
 
   const c = state.cat;
   if (Math.hypot(c.tx - c.x, c.ty - c.y) < 3) {
-    if (Math.random() < 0.008) {
-      const target = state.currentRoom || L.projectRooms[0];
+    // An empty office has no project rooms, so a player in the corridor leaves the cat
+    // nowhere to go: it stays put. Reading target.x there threw inside the frame loop and
+    // froze the floor for every first-time user with no sessions yet.
+    const target = state.currentRoom || L.projectRooms[0];
+    if (target && Math.random() < 0.008) {
       c.tx = target.x + 30 + Math.random() * (target.w - 60);
       c.ty = target.y + target.h - 40 - Math.random() * 30;
     }
@@ -1906,13 +1916,30 @@ function nightAmount() {
 }
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
-function label(x, y, text, color = '#f6e3c0') {
+// Which source an agent came from, drawn before its name: ✶ Claude, ◇ Codex.
+// The font has neither glyph at 7px, so they are pixels — 5×5 in a cell of 8×9
+// at the left of the plate, copied off the approved frames (WIP «Codex
+// sessions in the office», v3, floor frames ×4). [column, row] in the cell.
+const PROVIDER_PX = {
+  claude: [[3, 2], [1, 3], [3, 3], [5, 3], [2, 4], [3, 4], [4, 4], [1, 5], [3, 5], [5, 5], [3, 6]],
+  codex: [[3, 2], [2, 3], [4, 3], [1, 4], [5, 4], [2, 5], [4, 5], [3, 6]],
+};
+
+function label(x, y, text, color = '#f6e3c0', mark = null) {
   if (touchOn()) text = touchHint(text);
   ctx.font = '7px "JetBrains Mono", "Courier New", monospace';
   const w = ctx.measureText(text).width;
+  const px = mark && PROVIDER_PX[mark];
+  // without a mark: two pixels of plate either side, exactly as before
+  const lead = px ? 8 : 2;
+  const left = x - (w + lead + 2) / 2;
   ctx.fillStyle = 'rgba(24,18,14,0.75)';
-  ctx.fillRect(x - w / 2 - 2, y - 7, w + 4, 9);
-  pxText(ctx, text, x - w / 2, y, color);
+  ctx.fillRect(left, y - 7, w + lead + 2, 9);
+  if (px) {
+    ctx.fillStyle = color;
+    for (const [i, j] of px) ctx.fillRect(Math.round(left) + i, y - 7 + j, 1, 1);
+  }
+  pxText(ctx, text, left + lead, y, color);
 }
 
 // Hire id -> when this page first saw its portal, and when it failed or got
@@ -2040,7 +2067,7 @@ function draw(t) {
     } });
     if (near && near.kind === 'agent' && near.id === a.id) {
       draws.push({ y: 1e9, fn: () => {
-        label(act.x, act.y - 34, `${a.name} · ${UI.roleText(a)}`);
+        label(act.x, act.y - 34, `${a.name} · ${UI.roleText(a)}`, undefined, a.provider);
         label(act.x, act.y + 30, a.limited ? tr('label.limited') : UI.actText(a).slice(0, 34), a.limited ? '#ffd166' : '#ffdf9e');
         label(act.x, act.y + 40, tr('hint.talk'), '#9fe0a8');
       } });

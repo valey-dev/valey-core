@@ -1388,3 +1388,20 @@ body.touch .tmeta.center{visibility:hidden}
 .touchzoom{display:flex; align-items:center; gap:14px; color:var(--ink-dim); font-size:12px}
 .touchzoom .obtn{min-width:56px; font-size:18px}
 .touchzoom b{color:var(--ink); font-weight:normal; min-width:36px; text-align:center}
+
+/* Files dropped onto a task (#drop-files). The field says what will happen
+   while something is held over the card: a dashed accent border and the line
+   from the dictionary, drawn over the field rather than into it, so a
+   half-typed task is not touched. */
+.dropping{border-color:var(--accent) !important; border-style:dashed !important}
+.fchips{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 0}
+.fchips:empty{display:none}
+.fchip{display:inline-flex; align-items:baseline; gap:6px; padding:2px 4px 2px 6px; font-size:11px;
+  background:var(--field); border:1px solid var(--frame-dim); color:var(--ink)}
+.fchip .csize{color:var(--muted)}
+.fchip .cdel{background:none; border:0; padding:0 2px; color:var(--muted); font:inherit; cursor:pointer}
+.fchip .cdel:hover{color:var(--ink)}
+.fchip.wait{border-style:dashed}
+.fchip.bad{border-color:var(--bad); color:var(--bad)}
+.fchip.bad .csize{color:var(--bad)}
+.notes .nclip{color:var(--muted)}
