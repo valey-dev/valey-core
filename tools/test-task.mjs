@@ -38,6 +38,29 @@ ok('undefined doesn\'t crash', reportTail(undefined) === null);
 ok('just mentioning a rule is not considered a task',
    reportTail('Каждый ответ кончается строкой «Текущая фича/задача».') === null);
 
+// ------------------------------------------------------------ in English
+//
+// The tail belongs to the project, not to the office: a repository whose
+// AGENTS.md is written in English closes its answers in English, and until
+// 19 September 2026 the office read none of it — the card in such a room fell
+// back to the chat title while the agents were reporting all along. The labels
+// are the rulebook template's own.
+const enTail = (what, status, need) =>
+  `Built it, checked it, pushed it.\n\n**Current task** — ${what}\n**Status** — ${status}\n**Needed from you** — ${need}\n`;
+
+const en = reportTail(enTail('Chips out of Message / Bubble', 'built, on the stand', 'Nothing'));
+ok('an English tail is read too', en && en.what === 'Chips out of Message / Bubble', en);
+ok('its status is read', en && en.status === 'built, on the stand', en);
+ok('"Nothing" is an answer in English as well', en && en.need === '', en);
+ok('an English request reaches the plate',
+   (reportTail(enTail('Pricing page', 'drawn, waiting', 'pick v4 or v5')) || {}).need === 'pick v4 or v5');
+ok('«Current feature/task» is the same line', (reportTail('**Current feature/task**: the lift') || {}).what === 'the lift');
+ok('an English mention of the rule is not a task', reportTail('Every answer ends with a Current task line.') === null);
+// One office, two projects: the Russian tail must not stop being read because
+// the English one now is.
+const mixed = reportTail(tail('Русское дело', 'в работе', 'Ничего') + '\n' + enTail('English one', 'done', 'Nothing'));
+ok('the last tail wins whichever language it is in', mixed && mixed.what === 'English one', mixed);
+
 // -------------------------------------------- the last tail, not the first
 //
 // The whole conversation does not travel in the snapshot, but one answer can

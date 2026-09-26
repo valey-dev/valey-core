@@ -13,7 +13,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { parseFragment, readFragments, renderNote, checkNotes, missingShots, unpictured, assemble, shotSource, beforeSource, findBefore, cmpTag, releaseBody } from './notes.mjs';
+import { parseFragment, readFragments, renderNote, checkNotes, missingShots, unpictured, assemble, shotSource, beforeSource, findBefore, cmpTag, releaseBody, fixSections } from './notes.mjs';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -21,6 +21,22 @@ const ok = (name, cond, got) => {
   else { bad += 1; console.log('FAIL  |', name, '→', String(got).slice(0, 300)); }
 };
 const fails = (fn) => { try { fn(); return ''; } catch (e) { return e.message; } };
+
+// --- fixes in the note ---------------------------------------------------
+// A patch had no note before 26 September 2026; its fixes are its sections now.
+{
+  const fx = fixSections([
+    { scope: 'office', text: 'answering a question leaves the card on «what are you working on»' },
+    { scope: 'release', text: 'a release that loses the race takes its tag back' },
+    { scope: '', text: '`promote` names the version' },
+  ]);
+  ok('a service scope stays out of the note, a visible one gets a capital',
+    fx.length === 2 && fx[0].title.startsWith('Answering') && fx[0].scope === 'office', JSON.stringify(fx));
+  ok('a subject that starts with code keeps it as written', fx[1].title === '`promote` names the version', fx[1].title);
+  const md = renderNote('v0.61.5', '17 September 2026', [], '## v0.61.5\n\n### Fixed\n\n- **office:** x\n', fx);
+  ok('a patch note has a section per fix, marked, above the changelog',
+    /## Answering[^\n]*\n\n<!-- fix -->\n\n\*office\*/.test(md) && md.indexOf('## Answering') < md.indexOf('### What changed'), md);
+}
 
 // --- the front matter ----------------------------------------------------
 const good = `---
@@ -126,6 +142,17 @@ ok('no relative picture survives', !/!\[[^\]]*\]\((?!https:)/.test(page), page);
 ok('the changelog section rides along unchanged', page.includes('- **office:** the arrows stop (abc1234)'), page);
 ok('a picture that is already absolute is left alone',
   releaseBody('# v1\n\n![x](https://example.com/a.png)\n', { repo: 'r/r', sha: 's' }).includes('](https://example.com/a.png)'));
+// v0.65.0 published its own first sentence as a broken raw URL: the note quoted
+// `![подпись](/путь/кадр.png)` as the markdown an agent types, and the rewrite
+// could not tell an example from a picture.
+const quoted = releaseBody('# v1\n\nan agent writes `![подпись](/путь/кадр.png)` and\n\n'
+  + '```\n![fenced](shot.png)\n```\n\n![real](v1/shot.png)\n', { repo: 'r/r', sha: 's' });
+ok('a picture quoted in a code span stays an example',
+  quoted.includes('`![подпись](/путь/кадр.png)`'), quoted);
+ok('a picture inside a fence stays an example',
+  quoted.includes('![fenced](shot.png)'), quoted);
+ok('the picture outside code still becomes absolute',
+  quoted.includes('![real](https://github.com/r/r/raw/s/notes/v1/shot.png)'), quoted);
 
 // --- the guard -----------------------------------------------------------
 const feats = [{ hash: 'abc1234', subject: 'feat(office): the arrows stop' }];

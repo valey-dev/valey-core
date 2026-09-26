@@ -66,12 +66,15 @@ export async function initStand() {
       const name = document.createElement('b');
       name.textContent = m.id;
       const state = document.createElement('i');
-      state.textContent = m.broken ? 'BROKEN' : m.inactive ? 'OFF · manifest' : m.off ? 'OFF' : 'on';
+      state.textContent = m.broken ? 'BROKEN' : m.inactive ? 'OFF · manifest' : m.owner ? 'OFF · owner' : m.off ? 'OFF' : 'on';
       b.append(name, state);
       b.title = m.off ? `enable ${m.id}` : `disable ${m.id}`;
       // Off in its manifest is the owner's decision, not the stand's: the switch
-      // would only be refused, so it is not offered.
+      // would only be refused, so it is not offered. The same for the owner's
+      // switch in the module tree: the stand's would flip a different set and
+      // change nothing on screen.
       if (m.inactive) { b.disabled = true; b.title = `${m.id}: "active": false in module.json`; }
+      else if (m.owner) { b.disabled = true; b.title = `${m.id}: switched off in the module tree (modulesOff)`; }
       b.onclick = async () => {
         if (b.disabled) return;
         b.disabled = true;
@@ -96,6 +99,42 @@ export async function initStand() {
     // disk, and this is a check of how the office behaves, not of a build without it.
     line('stand-fine', 'disabling is simulated; files remain on disk');
   }
+  // The breaker: the blackout of a lost office, on demand. Testing it the honest
+  // way meant killing the stand under an open page and waiting out the backoff,
+  // and on 26 September 2026 the owner asked for a switch he could pull himself
+  // instead. It lives here, on the scaffolding, because it lies: the office is
+  // perfectly alive while the plaque in the middle says it is not. Only this
+  // tab goes dark; the server and every other tab carry on.
+  const power = document.createElement('div');
+  power.className = 'stand-mods';
+  const pb = document.createElement('button');
+  pb.className = 'stand-mod';
+  pb.id = 'standpower';
+  const pn = document.createElement('b');
+  pn.textContent = 'power';
+  const ps = document.createElement('i');
+  pb.append(pn, ps);
+  const paint = () => {
+    const held = !!(window.__link && window.__link.held);
+    // className rather than classList, like the module buttons above: the
+    // stand's own test runs this on a fake DOM that has no classList.
+    pb.className = 'stand-mod' + (held ? ' off' : '');
+    ps.textContent = held ? 'OFF · this tab' : 'on';
+    pb.title = held ? 'lift the breaker: the tab reconnects' : 'pull the breaker: this tab plays a lost office';
+  };
+  pb.onclick = () => {
+    if (!window.__link) return;
+    window.__link.power(!!window.__link.held);
+    paint();
+  };
+  // «Try now» on the office's own plaque lifts the breaker too, and calls this
+  // to repaint it. A hook rather than a window event: the stand's test keeps
+  // count of what hangs on window, and there is meant to be one key listener.
+  if (window.__link) window.__link.onPower = paint;
+  paint();
+  power.appendChild(pb);
+  box.appendChild(power);
+
   // The tab that is left when the plaque is folded. It says the same first thing
   // the plaque says — this is a stand — and nothing else; everything else is one
   // key or one click away.

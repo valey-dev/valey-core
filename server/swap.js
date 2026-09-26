@@ -10,9 +10,8 @@
 // worker that fails to start leaves the old one running.
 //
 // An update is not a restart. Guests, what they were granted, the notes on the
-// desks all move across; a Ctrl-C is still a restart and still forgets them —
-// all but the notes, which are kept on disk as well (desk.js). Decided
-// 13 September 2026.
+// desks all move across; a Ctrl-C is still a restart and still forgets them.
+// Decided 13 September 2026.
 //
 // Frames: [WIP section #office-update](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2169-6969)
 import cluster from 'node:cluster';
@@ -21,13 +20,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { checkUpdate, pullUpdate } from './update.js';
 
-// What the supervisor told this worker, read once and then taken out of the
-// environment. Everything the office spawns inherits process.env — a `claude
-// -p` run into a live session above all — and until 13 September 2026 an agent
-// session driven from an updated office carried VALEY_PORT_FIXED=5177 in its
-// own: every stand it started went for the office's port instead of its own
-// and fell over on EADDRINUSE, and a stand run from `npm start` would also
-// have held its requests for thirty seconds waiting for a handover.
+// What the supervisor tells a worker, read once and taken out of the
+// environment. Everything the office starts inherits process.env — a delivered
+// `claude --resume`, and whatever that agent runs in turn — and until v0.55.1
+// these went along. On 13 September 2026 an agent resumed by an updated office
+// ran the stands, and every `node server/index.js` it started took itself for
+// the next worker: it went for port 5177 and would have waited for a handover
+// nobody was going to send. Only a worker of the supervisor may act on them.
 export const SWAP_ENV = ['VALEY_WORKER', 'VALEY_PORT_FIXED', 'VALEY_HOST_FIXED', 'VALEY_HANDOFF_WAIT'];
 const told = Object.fromEntries(SWAP_ENV.map((k) => [k, process.env[k]]));
 for (const k of SWAP_ENV) delete process.env[k];
@@ -37,10 +36,8 @@ export const isWorker = cluster.isWorker && told.VALEY_WORKER === '1';
 // Where the previous worker listened. The next one takes exactly that address:
 // asked to find a free port it would walk the same road again and could land
 // elsewhere, and «office already running» would stop it at its own port.
-// Honoured only in a worker: a plain `node server/index.js` has no supervisor
-// holding the port for it, whatever its environment says.
 export function fixedAddress() {
-  const port = isWorker && Number(told.VALEY_PORT_FIXED);
+  const port = isWorker ? Number(told.VALEY_PORT_FIXED) : 0;
   return port ? { port, host: told.VALEY_HOST_FIXED || '127.0.0.1' } : null;
 }
 
@@ -78,7 +75,11 @@ export const gated = (handler) => async (req, res) => {
 // ------------------------------------------------------------- the update state
 // What the version row in the office tab shows. One office, one update at a
 // time: a second press while one runs gets the same state back.
-export const upd = { state: 'idle', current: null, available: null, feats: 0, fixes: 0, steps: [], reason: null, repo: null, detail: null, at: 0 };
+// `source` is where the office came from — a checkout or an archive from
+// valey.dev — and `shelf` whether the modules of the Office are a checkout that
+// can still be reached. Both are answers to «what will the button do», so they
+// are part of the state the row reads, not a second request.
+export const upd = { state: 'idle', source: 'git', shelf: 'none', current: null, available: null, feats: 0, fixes: 0, steps: [], reason: null, repo: null, detail: null, at: 0 };
 const readVersion = (root) => JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 
 export async function runCheck(root, running) {
@@ -86,6 +87,8 @@ export async function runCheck(root, running) {
   Object.assign(upd, { state: 'checking', current: running, reason: null, repo: null, detail: null, steps: [] });
   const r = await checkUpdate(root);
   upd.at = Date.now();
+  upd.source = r.source || 'git';
+  upd.shelf = r.shelf || 'none';
   if (r.error) return Object.assign(upd, { state: 'failed', reason: r.error.reason, repo: r.error.repo || null, detail: r.error.detail || null });
   // The code on disk can already be ahead of the running office: a previous
   // update pulled it and the new server did not come up. Then there is still
@@ -105,6 +108,9 @@ export async function runUpdate(root, running) {
   Object.assign(upd, { state: 'updating', current: running, reason: null, repo: null, detail: null, steps: [] });
   const r = await pullUpdate(root, { step: (k) => upd.steps.push(k) });
   if (!r.ok) return Object.assign(upd, { state: 'failed', reason: r.reason, repo: r.repo || null, detail: r.detail || null, at: Date.now() });
+  // The core moved and the shelf did not: not a refusal — the office runs the
+  // new core — but the row has to say it rather than report a clean update.
+  if (r.shelf === 'failed') Object.assign(upd, { shelf: 'failed', detail: r.detail || null });
   // Nothing came in and the running office is what is on disk: there is no
   // newer office to hand over to, and a swap for nothing still blinks every page.
   if (r.from === r.to && r.to === running) return Object.assign(upd, { state: 'latest', available: null, at: Date.now() });

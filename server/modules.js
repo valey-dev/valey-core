@@ -24,7 +24,19 @@ const off = new Set();
 // server file is never imported, its client never reaches the page, and the
 // stand's switch cannot turn it back on. Only an edit to module.json can.
 const inactive = (m) => m.manifest.active === false;
-const live = () => loaded.filter((m) => !m.error && !off.has(m.id) && !inactive(m));
+// Switched off by the owner, from the module tree: `modulesOff` in the settings.
+// The third switch, and the only one that is both persistent and nobody's code
+// edit — a paid module the owner has no use for today (the PR board without
+// GitHub) goes quiet without being deleted. Unlike the stand's it survives a
+// restart; unlike the manifest's it is one click back. Added 13 September 2026
+// with the PR and CI board, which was the first module designed to be switched
+// off on purpose.
+const ownerOff = new Set();
+export function setOwnerOff(list) {
+  ownerOff.clear();
+  for (const id of Array.isArray(list) ? list : []) if (typeof id === 'string') ownerOff.add(id);
+}
+const live = () => loaded.filter((m) => !m.error && !off.has(m.id) && !ownerOff.has(m.id) && !inactive(m));
 
 // What the stand's switches turned off, for the office that replaces this one
 // on an update: an update is not a restart, and a switch must survive it.
@@ -104,7 +116,7 @@ const shownToGuests = (m) => m.manifest.guests === 'shown';
 // nobody can read is a rule nobody trusts.
 export function moduleAll() {
   return loaded.map((m) => ({
-    id: m.id, off: off.has(m.id) || inactive(m), inactive: inactive(m),
+    id: m.id, off: off.has(m.id) || inactive(m) || ownerOff.has(m.id), inactive: inactive(m), owner: ownerOff.has(m.id),
     broken: !!m.error, guests: shownToGuests(m) ? 'shown' : 'hidden',
   }));
 }
@@ -174,13 +186,19 @@ export async function loadModules(root, ctx = null) {
  * gets the guest's view — narrower than the truth, never wider.
  */
 export function moduleList(forOwner = false) {
-  return live().filter((m) => forOwner || shownToGuests(m)).map(m => ({
+  const on = live().filter((m) => forOwner || shownToGuests(m)).map(m => ({
     id: m.id,
     name: m.manifest.name || {},
     tier: m.manifest.tier || 'office',
     client: m.manifest.client || null,
     style: m.manifest.style || null
   }));
+  if (!forOwner) return on;
+  // The owner also learns what is installed and switched off, with no client to
+  // load: the module tree shows such a node dimmed and offers to switch it back.
+  const offList = loaded.filter((m) => !m.error && !inactive(m) && ownerOff.has(m.id))
+    .map((m) => ({ id: m.id, name: m.manifest.name || {}, tier: m.manifest.tier || 'office', off: true }));
+  return [...on, ...offList];
 }
 
 // The pieces of settings a module adds to the shared file.
@@ -208,9 +226,15 @@ export function moduleMerge(prev, patch) {
 // What of a module's settings may be shown to the page. The answer is a
 // fragment over the shared one: the module cuts its own secrets out, because it
 // is the only one that knows where they are.
+// Every loaded module strips its secrets, running or not. A switched-off module
+// still has its section in the settings — the easel's Figma token, the mail's
+// keys — and publicView is the only thing that keeps it off the page. Until
+// 13 September 2026 this walked live() only, so switching the easel off on the
+// stand sent its token down the SSE stream to the browser; the owner's switch
+// in the module tree would have made that an everyday click.
 export function modulePublic(s) {
   const out = {};
-  for (const m of live()) {
+  for (const m of loaded.filter((x) => !x.error)) {
     if (typeof m.server?.publicView !== 'function') continue;
     Object.assign(out, m.server.publicView(s));
   }

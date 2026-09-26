@@ -59,6 +59,7 @@ const PLACES = [
   // The piranha tank: SPACE throws in a piece of meat. Added on a live demo on
   // 11 September 2026 without the board's frame, on the owner's word.
   { id: 'aquarium', title: 'place.aquarium', registry: true, caps: { Space: 'place.aquarium.space' } },
+  { id: 'pole', title: 'place.pole', registry: true, caps: { Space: 'place.pole.space' } },
 
   // ------------------------------------------------------- panels of the core
   //
@@ -178,6 +179,29 @@ const PLACES = [
       // All four: liftRing steps on left and right as well as up and down.
       ArrowUp: 'place.lift.floor', ArrowDown: 'place.lift.floor',
       ArrowLeft: 'place.lift.floor', ArrowRight: 'place.lift.floor',
+    },
+  },
+  {
+    // The reception desk shares the lift's panel node and not its keys: ↑↓
+    // walk the projects, ←→ the buttons of a row, ENTER presses, «+» hires.
+    id: 'reception',
+    title: 'place.reception',
+    registry: true,
+    caps: {
+      Escape: 'place.close', Enter: 'place.press', Space: 'place.press',
+      ArrowUp: 'place.rec.project', ArrowDown: 'place.rec.project',
+      ArrowLeft: 'place.rec.button', ArrowRight: 'place.rec.button',
+      Equal: 'place.rec.hire', NumpadAdd: 'place.rec.hire',
+    },
+  },
+  {
+    // Hiring: the task field holds the letters, so the board is what is left
+    // around it — Tab between fields, ←→ on the room and the model, ENTER hires.
+    id: 'hire',
+    title: 'place.hire',
+    caps: {
+      Escape: 'place.close', Enter: 'place.hire.go', Tab: 'place.hire.field',
+      ArrowLeft: 'place.hire.pick', ArrowRight: 'place.hire.pick',
     },
   },
 ];

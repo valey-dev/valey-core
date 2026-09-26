@@ -45,7 +45,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFragments, shotSource, beforeSource, cmpTag, UNRELEASED } from './notes.mjs';
-import { startOffice, fakeClaudeDir, waitForAgent, PICTURE_ENV } from './lib/office.mjs';
+import { startOffice, fakeClaudeDir, fakeCodexDir, waitForAgent, PICTURE_ENV } from './lib/office.mjs';
 
 const ROOT = process.env.VALEY_REPO
   ? path.resolve(process.env.VALEY_REPO)
@@ -75,8 +75,8 @@ if (only) fragments = fragments.filter((f) => f.slug === only);
 const wanted = fragments.filter((f) => (f.shots || []).length);
 if (!wanted.length) die(only ? `${only} declares no shots` : 'no fragment waiting for the release declares a shot');
 
-// The cast. Invented people, invented projects, invented branches — and three of
-// them, because an office with one person in it looks broken rather than quiet.
+// The cast. Invented people, invented projects, invented branches — and more than
+// one, because an office with one person in it looks broken rather than quiet.
 const CAST = [
   { slot: 'a', sessionId: 'aaaaaaaa-0000-4000-8000-00000000000a', cwd: '/Users/kolya/Projects/rocket-shop',
     branch: 'feature/cart-discount', asked: 'Calculate the discount in the cart',
@@ -90,12 +90,31 @@ const CAST = [
     branch: 'feature/sleep-timer', asked: 'Add a sleep timer',
     said: 'The timer is in. It fades the volume out over the last minute.',
     file: '/Users/kolya/Projects/paper-radio/src/timer.js' },
+  // Three more in rocket-shop, since 13 September 2026: the standup gives a project
+  // the whole width, and with one person a project nothing in the picture showed
+  // it — a row of three and one below does.
+  { slot: 'd', sessionId: 'aaaaaaaa-0000-4000-8000-00000000000d', cwd: '/Users/kolya/Projects/rocket-shop',
+    branch: 'feature/checkout-address', asked: 'Check the delivery address before payment',
+    said: 'The address form checks the postcode before it lets you pay.',
+    file: '/Users/kolya/Projects/rocket-shop/src/checkout.js' },
+  { slot: 'e', sessionId: 'aaaaaaaa-0000-4000-8000-00000000000e', cwd: '/Users/kolya/Projects/rocket-shop',
+    branch: 'feature/lazy-photos', asked: 'Load product photos as the page scrolls',
+    said: 'Photos load as you scroll; the first screen is 40% lighter.',
+    file: '/Users/kolya/Projects/rocket-shop/src/gallery.js' },
+  { slot: 'f', sessionId: 'aaaaaaaa-0000-4000-8000-00000000000f', cwd: '/Users/kolya/Projects/rocket-shop',
+    branch: 'fix/stock-after-refund', asked: 'Stock goes negative after a refund',
+    said: 'A refund puts the item back once now, not twice.',
+    file: '/Users/kolya/Projects/rocket-shop/src/stock.js' },
 ];
 
 const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'valey-notes-shots-'));
 let claudeDir = null;
 const cast = new Map();
 for (const who of CAST) { const made = await fakeClaudeDir(tmp, who); cast.set(who.slot, made); claudeDir = made.dir; }
+// And one Codex thread in the tide-charts room, next to the Claude session
+// there: the office seats Codex too, so a picture of the floor shows it as it
+// is. Its lock is held by this process, as the Codex app holds it, until exit.
+const codex = await fakeCodexDir(tmp);
 
 // A line into a cast member's transcript, stamped now — the office follows the
 // file and picks it up on its next tick.
@@ -122,6 +141,26 @@ async function resume(who) {
   await append(who, { type: 'assistant', message: { role: 'assistant', model: 'claude-fable-5', stop_reason: 'end_turn', content: [{ type: 'text', text: who.said }] } });
 }
 
+// `picture: <slot>` — see SHOT_FIELDS in notes.mjs. The frame the agent sends is
+// a picture an earlier release published: invented already, and a real file, so
+// the office has something to serve. The second one never existed, and the
+// conversation shows what it says when the office will not serve a file.
+const PICTURE_FROM = path.join(ROOT, 'notes', 'v0.63.0', 'codex-sessions-codex-floor.png');
+async function picture(slot) {
+  const who = cast.get(slot);
+  if (!who) die(`picture: there is no cast member ${slot}; the cast is ${[...cast.keys()].join(', ')}`);
+  if (!existsSync(PICTURE_FROM)) die(`picture: ${path.relative(ROOT, PICTURE_FROM)} is gone; point PICTURE_FROM at another published picture`);
+  const frame = path.join(tmp, 'frames', 'floor-after-the-fix.png');
+  await fsp.mkdir(path.dirname(frame), { recursive: true });
+  await fsp.copyFile(PICTURE_FROM, frame);
+  const gone = path.join(tmp, 'frames', 'floor-before.png');
+  await append(who, { type: 'user', message: { role: 'user', content: 'Show me how the floor looks now' } });
+  await append(who, { type: 'assistant', message: { role: 'assistant', model: 'claude-fable-5', stop_reason: 'end_turn', content: [{ type: 'text',
+    text: `Here is the frame from the stand:\n\n![the floor after the fix](<${frame}>)\n\nThe one from before is already deleted:\n\n![the floor before](<${gone}>)` }] } });
+  await new Promise((r) => setTimeout(r, 2500));   // the office picks the lines up on its next tick
+  return who;
+}
+
 // The old office is a detached worktree of the tag — its own server, its own
 // web/. It goes outside the checkout: a worktree under it gets walked by every
 // file watcher in the project.
@@ -138,7 +177,7 @@ if (before) {
 // September 2026). A --before run raises an older server, and one cut before
 // 12 September 2026 does not know VALEY_NUDGE — an entrance frame from it is
 // looked at for the nudge like any «before» frame is looked at for the place.
-const office = await startOffice({ claudeDir, root: worktree || ROOT, env: PICTURE_ENV });
+const office = await startOffice({ claudeDir, codexDir: codex.dir, root: worktree || ROOT, env: PICTURE_ENV });
 console.log(`demo office on ${office.base}`);
 try {
   await waitForAgent(async () => (await fetch(office.base + '/api/state')).json());
@@ -160,8 +199,10 @@ for (const f of wanted) {
     if (sh.touch) args.push('--touch');
     if (sh.setup) args.push('--setup', sh.setup);
     const cut = sh.interrupt ? await interrupt(sh.interrupt) : null;
+    const drew = sh.picture ? await picture(sh.picture) : null;
     const r = spawnSync(process.execPath, [shotTool, ...args], { cwd: ROOT, stdio: 'inherit' });
     if (cut) await resume(cut);
+    if (drew) await resume(drew);
     if (r.status !== 0) {
       if (!keep) await office.stop();
       die(`${f.slug}/${sh.id} was not taken`);

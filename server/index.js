@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { snapshot, fileOwners, conversation, PACK_IDS, namePool, nameSample, effectivePack, previewPack } from './agents.js';
@@ -11,10 +12,15 @@ import { realWeather, forgetWeather, geocode } from './weather.js';
 import {
   getSettings, patchSettings, updateSettings, publicSettings, ownerToken, warnIfSharedSettingsWorktree, PATHS,
 } from './settings.js';
-import { deliver, deliveryStatus, forgetCli, isBusy, MODES, adopt, releaseRuns } from './deliver.js';
+import { deliver, deliveryStatus, findCli, forgetCli, isBusy, MODES, adopt, releaseRuns } from './deliver.js';
+import { recordError, readErrors, cliVersion, environment } from './errors.js';
+import { queueToThread, codexDelivery } from './codex.js';
+import { saveFile, prune as pruneInbox, inboxDir, MAX_BYTES as INBOX_MAX, MAX_FILES } from './inbox.js';
+import { hire, release as releaseHire, hireList, hiredAt, hireCwd, resumeCommand, pruneHires } from './hire.js';
+import { repoRoot } from './stack.js';
 import { ask as askPermit, answer as answerPermit, permits, forgetGone, retryAll } from './permit.js';
 import { releaseNudge } from './release.js';
-import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset, modulesOff } from './modules.js';
+import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset, modulesOff, setOwnerOff } from './modules.js';
 import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
 import { isLan, deviceOf, shownDevice, deviceName, Pairings, SEEN_EVERY } from './devices.js';
 import { deskFile, loadDesk, deskWriter } from './desk.js';
@@ -32,6 +38,10 @@ const PORT = Number(process.env.PORT || 5177);
 // updates a repository of its own rather than the branch it runs from.
 const UPDATE_ROOT = process.env.VALEY_UPDATE_ROOT || ROOT;
 const POLL_MS = 2500;
+
+// What the page is told about sending into chats: Claude's CLI as before, and
+// under `codex` whether the Codex CLI is there for Codex threads.
+const deliveryAll = async () => ({ ...(await deliveryStatus()), codex: await codexDelivery() });
 
 // The office version comes from its own package.json rather than a string in
 // the interface: the sign on the title screen shows it, and in a release video
@@ -61,6 +71,7 @@ const PACK_LIST = PACK_IDS.map((id) => ({ id, size: namePool(id).length, sample:
 // disappears.
 process.on('unhandledRejection', (err) => {
   console.error('[unhandled]', (err && err.stack) || err);
+  recordError({ source: 'server', message: String((err && err.message) || err), stack: err && err.stack, version: VERSION });
 });
 // Room -> directory on disk. The only way to name a directory for /api/git: the
 // client sends the room key that the office already shows on the door.
@@ -77,6 +88,19 @@ let taskSeq = 0;
 // memory.
 let keepDesk = () => {};
 
+// A task that did not reach its chat goes into the error journal with what is
+// needed to explain it later: the CLI's answer, which CLI and which version.
+// Never the text of the task — that is the owner's message, not a symptom.
+async function journalFailure(task, agent) {
+  if (task.state !== 'failed') return;
+  const c = agent.provider === 'codex' ? null : await findCli().catch(() => null);
+  recordError({
+    source: 'deliver', message: task.error || 'failed', key: task.errorKey,
+    provider: agent.provider, agent: String(agent.id || '').slice(0, 8),
+    cli: c && c.path, cliVersion: c && c.path ? await cliVersion(c.path) : null, version: VERSION,
+  });
+}
+
 // ------------------------------------------------------------- the projection
 // What a guest sees about an agent. Exactly what is visible to anyone standing
 // by his desk: the name, the trade, the room, the state, how long ago. And
@@ -90,7 +114,10 @@ let keepDesk = () => {};
 const SHOWN = [
   'id', 'name', 'gender', 'project', 'seat', 'role', 'roleKey',
   'status', 'act', 'activity', 'mood', 'idleFor', 'startedAt',
-  'limited', 'version', 'stack', 'trinkets',
+  'limited', 'version', 'stack', 'trinkets', 'hired',
+  // What the agent answers with is a fact about the desk, like the trade — not
+  // about the work. Decided with the frame on 15 September 2026 (#model-card).
+  'model', 'effort',
 ];
 
 // Who was granted what: guest id -> Set of agent ids. Lives in memory and only
@@ -169,6 +196,9 @@ function project(snapshot, guestId) {
     // and all. The page hides it from anyone who is not the owner as well —
     // in private mode a viewer on the Wi-Fi is not projected at all.
     release: null,
+    // The portal is on the floor for everyone; why a hire failed is the
+    // owner's — the reason can quote a path or the CLI's own words.
+    hires: (snapshot.hires || []).map((h) => ({ id: h.id, project: h.project, state: h.state, sessionId: h.sessionId, source: h.source, spot: h.spot, at: h.at, changedAt: h.changedAt })),
     agents: (snapshot.agents || []).map((a) => {
       if (granted(guestId, a.id)) return a;
       const out = {};
@@ -390,8 +420,8 @@ async function importState(state) {
   audienceUntil = now + 20_000;
   // A note that was still being delivered: its run lives on in its own process
   // group, and this office reads how it ended. These two lines sat after the
-  // return below from 13 September 2026 and never ran: a note in flight during
-  // an update stayed «sending» for good.
+  // return below and never ran, so a note in flight during an update stayed
+  // «sending» for good.
   adoptSending();
   console.log(`[update] took over from v${state.from}: ${outbox.length} notes, ${grants.size} guests with access`);
   // The snapshot built at start knows nothing of this, and the next tick is
@@ -406,8 +436,8 @@ function adoptSending() {
   for (const t of outbox) if (t.state === 'sending') adopt(t).catch((e) => { t.state = 'failed'; t.error = e.message; });
 }
 
-// The desk as the previous run of this office left it on disk. Only on a cold
-// start: an office taking over from an older one gets the notes in the
+// The desk as the previous run of this office left it on disk. Loaded only on a
+// cold start: an office taking over from an older one gets the notes in the
 // handover, fresher than the file by up to one tick.
 async function restoreDesk(port, { load = true } = {}) {
   const file = deskFile({ settingsFile: PATHS.file, port });
@@ -451,13 +481,19 @@ async function rebuild({ observe = true } = {}) {
     // The owner can put the video nudge away (releaseNudge: false) while videos
     // are not what the work is about; the drafts keep being written at release.
     next.release = settings.releaseNudge === false ? null : await releaseNudge(ROOT);
-    for (const a of next.agents) a.outbox = outbox.filter((t) => t.agentId === a.id).slice(-5);
     // A delivery changes its note's state on its own time; the tick is where
     // that reaches the disk. Written only when something did change.
     keepDesk(outbox, taskSeq);
+    for (const a of next.agents) {
+      a.outbox = outbox.filter((t) => t.agentId === a.id).slice(-5);
+      const hiredWhen = hiredAt(a.id);
+      if (hiredWhen) a.hired = hiredWhen;
+    }
+    pruneHires();
+    next.hires = hireList();
     next.weather = await realWeather();
     next.settings = publicSettings(settings);
-    next.delivery = await deliveryStatus();
+    next.delivery = await deliveryAll();
     next.people = livePeople();
     next.access = accessForOwner(settings);
     // A question asked by a session the office no longer has is released: there
@@ -499,6 +535,18 @@ function send(res, code, body, type = 'application/json; charset=utf-8', extra =
 // A body error is an answer, not a crash: the code and the key go to the client
 // from the handler wrapper, and it closes the connection so an unread body does
 // not hang in the socket.
+// The files a task may carry: the owner's, and only ones this office wrote
+// into its inbox. Everything else is dropped in silence — a task is not the
+// place to discover that somebody tried.
+function ownFiles(owner, list) {
+  if (!owner || !Array.isArray(list)) return [];
+  const root = inboxDir() + path.sep;
+  return list
+    .filter((f) => f && typeof f.path === 'string' && path.resolve(f.path).startsWith(root) && fs.existsSync(f.path))
+    .slice(0, MAX_FILES)
+    .map((f) => ({ path: path.resolve(f.path), name: String(f.name || path.basename(f.path)).slice(0, 80), size: Number(f.size) || 0 }));
+}
+
 class BodyError extends Error {
   constructor(code, key, message) { super(message); this.code = code; this.key = key; }
 }
@@ -525,6 +573,19 @@ async function readBody(req, max = BODY_MAX) {
 // browser will not send a request with that header from another site without a
 // preflight, and the office does not answer preflights. An empty body is an
 // empty object, as before.
+// The same ceiling, without the utf8: a dropped file is bytes, and decoding
+// them as text would corrupt every picture on the way in.
+async function readBuffer(req, max = BODY_MAX) {
+  const chunks = [];
+  let size = 0;
+  for await (const c of req) {
+    size += c.length;
+    if (size > max) throw new BodyError(413, 'err.tooBig', 'request body is too large');
+    chunks.push(c);
+  }
+  return Buffer.concat(chunks);
+}
+
 async function readJson(req, max = BODY_MAX) {
   const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
   if (type !== 'application/json') throw new BodyError(415, 'err.notJson', 'application/json is required');
@@ -609,6 +670,8 @@ export function createHandler() {
         return;
       }
       console.error('[http]', req.method, req.url, (e && e.stack) || e);
+      recordError({ source: 'server', message: String((e && e.message) || e), stack: e && e.stack,
+        where: `${req.method} ${String(req.url).split('?')[0]}`, version: VERSION });
       try {
         if (!res.headersSent) send(res, 500, { error: 'internal error', errorKey: 'err.internal' });
         else res.end();
@@ -1019,15 +1082,45 @@ async function handle(req, res) {
     return send(res, 200, { agent: { id, name: agent.name, title: agent.title }, messages: conversation(id) });
   }
 
+  // An uncaught error of the page, sent by web/report.js. A guest's browser may
+  // report too — the journal is capped, and its lines are marked as a guest's.
+  if (url.pathname === '/api/error' && req.method === 'POST') {
+    let e = {};
+    try { e = await readJson(req, 16 * 1024); } catch (err) {
+      if (err instanceof BodyError) throw err;
+      return send(res, 400, { error: 'bad json' });
+    }
+    const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : undefined);
+    const message = str(e.message, 500);
+    if (!message) return send(res, 400, { error: 'message required' });
+    await recordError({
+      source: 'page', message, stack: str(e.stack, 2000), where: str(e.where, 200),
+      browser: str(e.browser, 200), guest: (await guestOf(req)) ? true : undefined, version: VERSION,
+    });
+    return send(res, 200, { ok: true });
+  }
+
+  // The journal with the machine it came from, for the owner to read and pass on.
+  if (url.pathname === '/api/errors') {
+    if (!(await isOwner(req))) return forbidden(res);
+    const c = await findCli().catch(() => null);
+    const cliPath = c && c.path;
+    return send(res, 200, {
+      env: environment({ version: VERSION, cliPath, cliVer: cliPath ? await cliVersion(cliPath) : null }),
+      errors: await readErrors(),
+    });
+  }
+
   // Leave a note on the desk, or actually send it into the agent's chat.
   if (url.pathname === '/api/task' && req.method === 'POST') {
     try {
-      const { agentId, text, deliver: wantsDelivery, mode: wantedMode, resend } = await readJson(req);
+      const { agentId, text, files: sent, deliver: wantsDelivery, mode: wantedMode, resend } = await readJson(req);
+      const owner = await isOwner(req);
       // Anyone may leave a note on the desk: the owner sees it when he comes
       // back and decides himself. Sending into the chat is another matter: it
       // starts claude --resume in a live session, and with bypassPermissions
       // that is the terminal. Watching is allowed, commanding is not.
-      if ((wantsDelivery || resend) && !(await isOwner(req))) return forbidden(res);
+      if ((wantsDelivery || resend) && !owner) return forbidden(res);
       // A note already lying on the desk can be handed over to the chat as it is:
       // it moves rather than multiplies, so the desk does not keep a stale twin.
       const lying = resend
@@ -1035,40 +1128,89 @@ async function handle(req, res) {
         : null;
       if (resend && !lying) return send(res, 400, { error: 'this note is no longer on the desk', errorKey: 'err.noteGone' });
       const body = lying ? lying.text : text;
-      if (!agentId || !body) return send(res, 400, { error: 'agentId and text required' });
+      // Files are the owner's alone, and only the ones this office wrote down.
+      // A note may be left by a guest, and the owner hands notes to the chat
+      // later: a path named by somebody else would be read by the agent as the
+      // owner, out of any folder on the machine.
+      const files = lying ? (lying.files || []) : ownFiles(owner, sent);
+      // A file with no words is a message too — «here, look» — so the text
+      // may be empty when something is attached. Until 17 September 2026 only
+      // the browser knew that: the field let a lone screenshot through and the
+      // server answered «agentId and text required», which reads as if the
+      // agent were gone.
+      if (!agentId || (!body && !files.length)) return send(res, 400, { error: 'a task needs an agent and either words or a file', errorKey: 'err.taskEmpty' });
       if (lying) outbox.splice(outbox.indexOf(lying), 1);
       const task = {
-        id: ++taskSeq, agentId, text: String(body).slice(0, 4000),
+        id: ++taskSeq, agentId, text: String(body).slice(0, 4000), files,
         at: Date.now(), state: 'note', reply: null, error: null,
       };
       outbox.push(task);
 
       if (!wantsDelivery && !lying) {
         console.log(`[note] ${agentId}: ${task.text.slice(0, 80)}`);
-        return send(res, 200, { ok: true, task, delivery: await deliveryStatus() });
+        return send(res, 200, { ok: true, task, delivery: await deliveryAll() });
       }
 
       const agent = last.agents.find((a) => a.id === agentId);
       if (!agent) { task.state = 'failed'; task.error = 'the agent is no longer in the office'; task.errorKey = 'err.agentGone'; return send(res, 200, { ok: true, task }); }
+      // A Codex thread takes its task through Codex's own queue (server/codex.js),
+      // never through `claude --resume`, which given a Codex thread id would start
+      // a Claude session nobody asked for. No permission mode: that is Claude's.
+      if (agent.provider === 'codex') {
+        console.log(`[deliver] -> ${agent.name} (codex): ${task.text.slice(0, 80)}`);
+        await queueToThread(task, agent);
+        journalFailure(task, agent);
+        return send(res, 200, { ok: true, task, delivery: await deliveryAll() });
+      }
       const status = await deliveryStatus();
-      if (!status.available) { task.state = 'failed'; task.error = status.hint; task.errorKey = status.hintKey; return send(res, 200, { ok: true, task, delivery: status }); }
+      if (!status.available) {
+        task.state = 'failed'; task.error = status.hint; task.errorKey = status.hintKey;
+        journalFailure(task, agent);
+        return send(res, 200, { ok: true, task, delivery: status });
+      }
       if (isBusy(agentId)) { task.state = 'failed'; task.error = 'another message is already being sent to this agent'; task.errorKey = 'err.busy'; return send(res, 200, { ok: true, task }); }
 
       const { delivery } = await getSettings();
       const mode = MODES.has(wantedMode) ? wantedMode : delivery.mode;
       task.state = 'sending';
       console.log(`[deliver] -> ${agent.name}: ${task.text.slice(0, 80)}`);
-      deliver(task, agent, mode).catch((e) => { task.state = 'failed'; task.error = e.message; });
+      deliver(task, agent, mode)
+        .catch((e) => { task.state = 'failed'; task.error = e.message; })
+        .then(() => journalFailure(task, agent));
       return send(res, 200, { ok: true, task, delivery: status });
     } catch (e) {
       if (e instanceof BodyError) throw e;
       return send(res, 400, { error: e.message });
     } finally {
       // At once rather than on the tick: a note left a second before a restart
-      // is still a note, and one handed to the chat must not come back as
-      // lying on the desk, ready to be sent a second time.
+      // is still a note, and one handed to the chat must not come back as lying
+      // on the desk, ready to be sent a second time.
       keepDesk(outbox, taskSeq);
     }
+  }
+
+  // Hire an agent: a new session, started by the office in a project's folder.
+  // Owner only — it starts a process on the owner's machine. The page names a
+  // room, never a path: the folder is the one the room's live agents work in.
+  if (url.pathname === '/api/hire' && req.method === 'POST') {
+    if (!(await isOwner(req))) return forbidden(res);
+    const { project: room, task, files: sent, model, quote, source, spot } = await readJson(req);
+    const cwd = cwdOfProject(room);
+    if (!cwd) return send(res, 400, { error: 'there is no such room on the floor', errorKey: 'hire.errRoom' });
+    const status = await deliveryStatus();
+    if (!status.available) return send(res, 200, { ok: false, error: status.hint, errorKey: status.hintKey });
+    const h = await hire({ project: room, cwd: await repoRoot(cwd) || cwd, task, files: ownFiles(true, sent), model, quote, source, spot });
+    return send(res, 200, { ok: h.state !== 'failed', hire: h });
+  }
+  // Let a hired agent go before it is continued in a terminal: two processes
+  // must not write one transcript. The answer carries the command to copy.
+  if (url.pathname === '/api/hire/release' && req.method === 'POST') {
+    if (!(await isOwner(req))) return forbidden(res);
+    const { sessionId } = await readJson(req);
+    const h = hireList().find((x) => x.sessionId === sessionId);
+    if (!h) return send(res, 404, { error: 'this agent was not hired here', errorKey: 'hire.errNotHired' });
+    releaseHire(sessionId);
+    return send(res, 200, { ok: true, command: resumeCommand(hireCwd(sessionId), sessionId) });
   }
 
   // fresh=1 — forget the cached CLI answer and ask again. The cache lives a
@@ -1076,7 +1218,7 @@ async function handle(req, res) {
   // to the terminal and pressed «check now» should not have to wait it out.
   if (url.pathname === '/api/delivery') {
     if (url.searchParams.get('fresh') === '1') forgetCli();
-    return send(res, 200, await deliveryStatus());
+    return send(res, 200, await deliveryAll());
   }
   // A permission request from Claude Code. It comes from the hook on this same
   // machine and HANGS here until the owner answers: while it hangs there is no
@@ -1088,7 +1230,20 @@ async function handle(req, res) {
   // fetch — so they happen only on these requests, never on a timer.
   // Which repositories «update» moves — the row says «core and Modules» only
   // when there is a Modules checkout to move.
-  const updView = async () => ({ ...upd, running: UPDATE_VERSION, repos: (await updateRepos(UPDATE_ROOT)).map((r) => r.key) });
+  // Where the office came from is read off the directory every time rather
+  // than taken from the last check: the row says «from the archive» before
+  // anything has been pressed, and that is the state it is opened in.
+  const updView = async () => {
+    const list = await updateRepos(UPDATE_ROOT);
+    // Where the previous office will be left. The row promises it by name, so
+    // the path is computed here, where the office's own directory is known,
+    // and written the way a person writes it.
+    const aside = `${UPDATE_ROOT}.v${UPDATE_VERSION}`.replace(os.homedir(), '~');
+    // `root` is for install.sh: run with --update against a folder whose office
+    // is up, it has to know that the folder is that office's own before it
+    // decides to leave the replacing to it rather than doing it underneath.
+    return { ...upd, running: UPDATE_VERSION, repos: list.map((r) => r.key), source: list[0].from, aside, root: UPDATE_ROOT };
+  };
   if (url.pathname === '/api/update' && req.method === 'GET') {
     if (!(await isOwner(req))) return forbidden(res);
     return send(res, 200, await updView());
@@ -1150,6 +1305,7 @@ async function handle(req, res) {
       try {
         const patch = await readJson(req);
         const saved = await patchSettings(patch);
+        setOwnerOff(saved.modulesOff);
         forgetWeather();
         moduleOnPatch(patch);
         last.weather = await realWeather({ force: true });
@@ -1173,6 +1329,24 @@ async function handle(req, res) {
     }
   }
 
+
+  // A file dropped onto a task for an agent. The browser has no path to give —
+  // only bytes — so the office writes them beside its settings and hands the
+  // agent «@<path>» in the text of the task.
+  if (url.pathname === '/api/inbox' && req.method === 'POST') {
+    // A guest may drag a file around his own screen; writing it to the owner's
+    // disk is not his to do, and neither is naming a path in a task — see
+    // ownFiles() below.
+    if (!(await isOwner(req))) return forbidden(res);
+    const buf = await readBuffer(req, INBOX_MAX);
+    try {
+      const file = await saveFile(buf, url.searchParams.get('name') || 'file');
+      console.log(`[inbox] ${file.name}, ${file.size} bytes`);
+      return send(res, 200, { ok: true, file });
+    } catch (e) {
+      return send(res, 400, { error: e.message, errorKey: e.key || 'inbox.failed' });
+    }
+  }
 
   // Dev helper: the game posts a rendered frame, we drop it on disk to look at.
   if (url.pathname === '/api/shot' && req.method === 'POST') {
@@ -1335,6 +1509,7 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   // request and must never be written into the page.
   const mods = await loadModules(ROOT, { people: livePeople, toPerson, settings: getSettings });
   let boot = await getSettings();
+  setOwnerOff(boot.modulesOff);
   const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
   if (external && !(boot.network || {}).token) {
     // updateSettings: an office started beside this one may save a token first.
@@ -1359,7 +1534,7 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
     : await listenFree(server, port, HOST, { log: console.log, own: VERSION });
   if (bound === null) return null;
   port = bound;
-  // Before the first tick, so the first snapshot already has the notes on it.
+  // Before the first tick, so the first snapshot already carries the notes.
   const notes = await restoreDesk(port, { load: !fixed });
   exposure = createExposure({ handler, port, host: HOST });
   // Straight after binding: a message that arrives before anybody listens for
@@ -1378,6 +1553,11 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
     console.log(`[update] v${VERSION} is serving http://localhost:${port}`);
     return server;
   }
+  // Dropped files outlive their task by a fortnight and no longer; the sweep
+  // runs here rather than on a timer — an office that is not running is not
+  // filling up.
+  pruneInbox().then((r) => { if (r.files) console.log(`[inbox] swept ${r.files} file(s)`); })
+    .catch(() => { /* no inbox yet, or it is not ours to clean */ });
   const token = await ownerToken();
   const s = await getSettings();
   console.log(`Valey office at http://localhost:${port}`);

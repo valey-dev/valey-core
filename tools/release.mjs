@@ -20,7 +20,7 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { pickKind, check } from './release-kind.mjs';
-import { readFragments, checkNotes, missingShots, unpictured, assemble } from './notes.mjs';
+import { readFragments, checkNotes, missingShots, unpictured, assemble, fixSections, NOTES_DIR } from './notes.mjs';
 
 // The root comes from this file rather than from the cwd: git and the files have
 // to look at one repository. Until 4 September 2026 git went to the cwd while
@@ -86,6 +86,9 @@ if (!dry && git('status', '--porcelain')) die('the working tree is dirty; commit
 
 const pkgPath = path.join(ROOT, 'package.json');
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+// The CI step says it catches an unreadable version, and until 15 September 2026
+// nothing did: «nope» went through the dry run as «vNaN.undefined.NaN».
+if (!/^\d+\.\d+\.\d+$/.test(String(pkg.version || ''))) die(`package.json version "${pkg.version}" is not X.Y.Z`);
 const [maj, min, pat] = pkg.version.split('.').map(Number);
 
 // The previous tag can only be missing before the very first release.
@@ -215,6 +218,11 @@ if (bare.length)
     '  A feature you can see gets a shot, rendered against the demo office:\n' +
     '    node tools/notes-shots.mjs\n' +
     '  One with nothing on the screen says why in its fragment:  nopicture: <why>');
+// Fixes go into the note too, so a patch release has one; see fixSections.
+// A repository without notes/ — the Modules — has not opted in and gets none.
+const fixes = existsSync(path.join(ROOT, NOTES_DIR)) ? fixSections([...groups.get('fix'), ...groups.get('perf')]) : [];
+if (fixes.length)
+  console.log(`\nfixes in the note ${tag}.md: ${fixes.length} (${fixes.map((x) => x.scope || '-').join(', ')})`);
 if (fragments.length)
   console.log(`\nfeature note ${tag}.md, from ${fragments.length} fragment${fragments.length > 1 ? 's' : ''}: ` +
     fragments.map((f) => f.slug).join(', '));
@@ -294,7 +302,7 @@ writeFileSync(changelogPath,
   changelog.slice(0, at + 1) + section + changelog.slice(at + 1));
 
 const added = ['package.json', 'CHANGELOG.md'];
-if (fragments.length) { assemble(ROOT, tag, date, fragments, section); added.push('notes'); }
+if (fragments.length || fixes.length) { assemble(ROOT, tag, date, fragments, section, fixes); added.push('notes'); }
 
 git('add', ...added);
 git('commit', '-m', `chore(release): ${tag}`);
@@ -349,7 +357,27 @@ if (ship) {
   const remote = (() => { try { return git('remote', 'get-url', 'origin'); } catch { return ''; } })();
   if (!remote) die(`tag ${tag} exists locally, but origin is not configured; there is nowhere to push`);
   console.log(`\npushing to origin (${remote}):`);
-  git('push', 'origin', 'HEAD:main', tag);
+  // --atomic or nothing: two refspecs in one push land independently, so a main
+  // rejected as non-fast-forward still lets the tag through. On 6 September 2026
+  // v0.18.0 spent an hour as a tag no branch could see, and --atomic went in
+  // (ff4c3d7). The rewrite of this tail on 11 September dropped it without a
+  // word, and on 15 September two landings ran at once: v0.58.3 reached staging
+  // while main refused it, and the fix it carried shipped in the neighbour's
+  // v0.59.0. test-release-atomic plays that race against this script, so the
+  // flag cannot go quietly a second time.
+  //
+  // A refusal leaves nothing on origin, and the tag made here is taken back:
+  // left in the shared refs it would collide with the neighbour's tag of the
+  // same number, and the rerun has to count from what main really holds.
+  try {
+    git('push', '--atomic', 'origin', 'HEAD:main', tag);
+  } catch (err) {
+    git('tag', '-d', tag);
+    const why = String(err.stderr || err.message || '').trim().split('\n').filter(Boolean).slice(-2).join('\n  ');
+    die(`origin refused the push, and nothing was pushed — main moved while this release was cut:\n  ${why}\n` +
+      `  the local tag ${tag} is removed. Rerun the landing (\`npm run land -- <PR>\` resumes at the release),\n` +
+      '  and the version is counted from what main holds now.');
+  }
   console.log(`  main and ${tag} pushed`);
 
   // The released repository can borrow this release suite without carrying a

@@ -160,5 +160,30 @@ radio.remove(0);
 ok('the last wave stays', radio.stations.length === 1);
 radio.playing = false;
 
+// ---------------------------------------------------------------- pressing a wave
+// Enter and Space on a wave press it, and a pressed wave has to sound. Until
+// 14 September 2026 the press only moved the needle.
+{
+  const plays = [];
+  const streams = [];
+  const realStreamPlay = radio.streamPlay;
+  radio.streamPlay = () => streams.push(radio.station().uri);
+  ctl.play = () => plays.push(radio.station().uri);
+  Object.assign(radio, { stations: [spotify(1), nts], current: 0, playing: false, sdk: false, controller: ctl });
+
+  radio.start(0);
+  ok('the current wave, stopped, starts', plays.length === 1 && loads.at(-1) !== undefined, plays);
+  radio.start(1);
+  ok('another wave, stopped, is tuned and starts', radio.current === 1 && streams.length === 1, streams);
+
+  radio.playing = true;
+  radio.start(1);
+  ok('the playing wave is left playing', streams.length === 1 && plays.length === 1, { streams, plays });
+
+  radio.streamPlay = realStreamPlay;
+  ctl.play = () => {};
+  radio.playing = false;
+}
+
 console.log(bad ? `\n${bad} failed` : '\nall good');
 process.exit(bad ? 1 : 0);

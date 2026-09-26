@@ -40,10 +40,16 @@ button.chip:focus-visible{outline:2px solid var(--warn); outline-offset:2px}
 .portrait canvas{width:72px; height:72px; image-rendering:pixelated; border:2px solid var(--frame)}
 .content{flex:1; min-width:0; container-type:inline-size}
 .who b{color:var(--warn); font-size:15px; letter-spacing:.05em}
-.role{font-size:10px; padding:1px 6px; border:1px solid var(--frame-dim); margin-left:6px; color:var(--ink-dim)}
-.role.r-design{color:var(--lilac);border-color:var(--lilac-edge)} .role.r-research{color:var(--info);border-color:var(--info-edge)}
-.role.r-plan{color:var(--warn);border-color:var(--warn-edge)} .role.r-code{color:var(--accent);border-color:var(--accent-edge)}
-.role.r-qa{color:var(--role-qa);border-color:var(--role-qa-edge)} .role.r-release{color:var(--role-rel);border-color:var(--role-rel-edge)}
+/* The trade is a pixel icon and its name in the role colour, no border: a box
+   around the text could not share the baseline with the name beside it. The
+   icon is inline SVG, so it stands on that baseline by itself (web/roleicon.js). */
+.role{font-size:10px; margin-left:6px; color:var(--ink-dim); white-space:nowrap}
+.role .ricon{fill:currentColor; shape-rendering:crispEdges; margin-right:4px}
+.role.r-design{color:var(--lilac)} .role.r-research{color:var(--info)} .role.r-plan{color:var(--warn)}
+.role.r-code{color:var(--accent)} .role.r-qa{color:var(--role-qa)} .role.r-release{color:var(--role-rel)}
+/* The model beside the trade, as dim as the meta line: who is answering, not where. */
+.who .model{font-size:11px; color:var(--muted); margin-left:6px}
+.who .model:empty{display:none}
 .meta{display:block; color:var(--muted); font-size:11px; margin-top:2px}
 .act{color:var(--ink-dim); font-size:12px; margin:6px 0 4px; border-left:3px solid var(--frame); padding-left:8px}
 .body{min-height:64px; max-height:min(300px,40vh); overflow:auto; padding-right:6px}
@@ -256,8 +262,32 @@ figcaption span{display:block; color:var(--muted); font-size:10px; margin-top:2p
 .pkeys kbd{font:inherit; font-size:9px; color:var(--ink-dim); border:0; background:none}
 .pmore{margin-left:auto; font-size:9px; color:var(--ink-dim)}
 
+/* ---- the office is gone ---- */
+/* The plaque of a lost office. It stands above the panels: whatever is open,
+   the news that the office is not there outranks it — and a panel showing stale
+   data is exactly what this explains. It does not cover the whole screen on
+   purpose: the dark floor behind it is half of the message. It shares layer
+   29 with the toasts and comes after them in the markup, so it wins a tie —
+   they do not meet anyway: the plaque is central, the toasts sit in a corner.
+   Design: [Plaque · office unreachable](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2408-2675) */
+#offline{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:29;
+  width:min(560px, 92vw); background:var(--wood-dark); border:3px solid var(--frame);
+  box-shadow:0 0 0 3px var(--bg), 0 14px 40px rgba(0,0,0,.7)}
+#offline[hidden]{display:none}
+.ohead{background:var(--wood-hi); color:var(--warn); font-size:13px; padding:8px 12px;
+  letter-spacing:.05em}
+.obody{padding:12px 14px}
+.oline{margin:0; color:var(--ink); font-size:13px}
+.ocount{margin:6px 0 0; color:var(--muted); font-size:12px}
+.obody .acts button.primary{border-color:var(--warn); color:var(--warn)}
+
 /* ---- toasts ---- */
-#toasts{position:fixed; left:14px; bottom:52px; z-index:25; display:flex; flex-direction:column; gap:6px;
+/* Above the panels (28): a panel that fills the screen — the inventory, the
+   standup — dimmed the toast out of sight at 25, so an answer to a key pressed
+   inside it was read as nothing happening. Found on 17 September 2026 on the
+   newsstand. Still below the transcript (30), which answers a copied block on
+   the button itself, and below the key card and the stand's plaque. */
+#toasts{position:fixed; left:14px; bottom:52px; z-index:29; display:flex; flex-direction:column; gap:6px;
   pointer-events:none}
 /* On touch the toasts stand where the stick rests. A finger landing on one had
    the toast as its target and never reached the floor, so the stick went deaf
@@ -284,9 +314,9 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
    the page and falls below the viewport, as invitations did on 30 August 2026.
    The same list carries [hidden]: without it display:flex overrides the
    attribute and a hidden panel remains visible. */
-#roster,#bag,#sky,#skin,#lift,#notes,#invite,#lang{position:fixed; inset:0; z-index:28; background:rgba(12,8,5,.8); display:flex;
+#roster,#bag,#sky,#skin,#lift,#notes,#invite,#lang,#hire{position:fixed; inset:0; z-index:28; background:rgba(12,8,5,.8); display:flex;
   align-items:center; justify-content:center}
-#roster[hidden],#bag[hidden],#sky[hidden],#skin[hidden],#lift[hidden],#notes[hidden],#invite[hidden],#lang[hidden]{display:none}
+#roster[hidden],#bag[hidden],#sky[hidden],#skin[hidden],#lift[hidden],#notes[hidden],#invite[hidden],#lang[hidden],#hire[hidden]{display:none}
 .rwrap{width:min(680px, calc(92vw / var(--ui, 1))); max-height:84vh; display:flex; flex-direction:column;
   background:var(--wood-dark); border:3px solid var(--frame); box-shadow:0 0 0 3px var(--bg-deep)}
 .rbody{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:10px 14px}
@@ -309,7 +339,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .rbody{scroll-padding:10px 14px}
 .bbody, .dbody{scroll-padding:14px}
 .skybody, .recbody, .liftbody, .invbody, .skinbody{scroll-padding:14px}
-/* ---- standup: team columns, one card per person ----
+/* ---- the standup's frame, worn by the feature board too ----
    It shares .rwrap and .rbody with the round it replaced, but has its own width:
    three 300 px columns ask for 1000. Dividing by scale is mandatory, not merely
    cautious—the third recurrence of vw inside zoom measuring the window and
@@ -323,6 +353,30 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
   margin:2px 0 6px; padding-bottom:4px; border-bottom:1px solid var(--wood-hi);
   color:var(--lilac); font-size:12px; letter-spacing:.08em; font-weight:normal}
 .pcol h4 i{flex:none; font-style:normal; font-size:10px; letter-spacing:0; color:var(--muted)}
+/* The standup since 13 September 2026: a project across every column, its cards
+   one after another in a grid, projects one under another. .pcols and .pcol stay
+   above for the feature board, which wears these clothes on purpose.
+   Owner's words: one project matters at a time, and as many of its people as
+   possible should be in sight at once — a project of seven was a column of seven
+   with the rest of the width empty. The grid decides the columns, the markup
+   does not: 290 px each, so three fit in the 972 of 100% and two in the 724 of
+   175%, with no second layout in code.
+   The name stays pinned while its cards scroll under it. It used to ride away
+   with the first card, and from the middle of a column nobody could say whose
+   people these were. top:-10px with 10px of its own padding lets the pinned
+   name cover the body's padding strip as well: cards slid through it above the
+   name. Frames: WIP «Standup: a project across all columns». */
+.pteam + .pteam{margin-top:4px}
+.pteam h4{position:sticky; top:-10px; z-index:1; display:flex; justify-content:space-between; align-items:baseline; gap:8px;
+  margin:0 0 6px; padding:10px 0 4px; background:var(--wood-dark); border-bottom:1px solid var(--wood-hi);
+  color:var(--lilac); font-size:12px; letter-spacing:.08em; font-weight:normal}
+.pteam:first-child h4{margin-top:-10px}
+.pteam h4 i{flex:none; font-style:normal; font-size:10px; letter-spacing:0; color:var(--muted)}
+.pgrid{display:grid; grid-template-columns:repeat(auto-fill, minmax(290px, 1fr)); gap:8px 12px; align-items:start}
+.pgrid .pcard{margin-bottom:0}
+/* scrollIntoView parks a card on the top edge, and the pinned name sits there:
+   the card arrived at by ↑ would be under it. */
+#roster .rbody{scroll-padding-top:44px}
 /* A card is one object, not a button row: the focus ring moves over the whole
    card, ⏎ opens, and G leads. The inner ⇢ offers the same lead action to a mouse. */
 .pcard{position:relative; display:grid; width:100%; margin-bottom:8px; padding:8px 8px 8px 12px;
@@ -416,7 +470,6 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 :where(body:not(.bykeys)) .btab:hover{background:var(--wood); color:var(--ink)}
 .btab.on{background:var(--wood); color:var(--warn); border:2px solid var(--accent); padding:2px 9px}
 .btab kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted)}
-.rst kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted)}
 .btab.on kbd{color:var(--ink-dim)}
 .bhint{margin-left:auto; font-size:11px; color:var(--muted)}
 
@@ -450,6 +503,13 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 
 /* The "tree" tab: three tier columns on one grid, with SVG edges drawn from the
    buttons' real geometry. A dim node names a tier; it does not say "buy."
+
+   Lines and borders are --frame, as on the Prod frame «Панель · Инвентарь ·
+   Дерево» (checked 13 September 2026: every node border and the dashed ghost
+   #8a6247). The code had drifted to --frame-dim, a step darker, and a tier
+   read as faded rather than named. The text tone stays --muted: the frame
+   says --ink-dim there, and the one-tone decision for service text
+   (muted-contrast, the same day) is the later word.
  */
 .tbody{gap:10px}
 .tcols,.tree{display:grid; grid-template-columns:1fr 36px 1fr 36px 1fr}
@@ -459,7 +519,7 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .tcol span{font-size:9px; color:var(--muted)}
 .tree{position:relative; grid-auto-rows:28px; row-gap:6px}
 .tedges{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
-.tedges path{fill:none; stroke:var(--frame-dim); stroke-width:2}
+.tedges path{fill:none; stroke:var(--frame); stroke-width:2}
 .tedges path.lit{stroke:var(--accent)}
 .tnode{position:relative; display:flex; align-items:center; gap:6px; padding:0 6px; height:28px; min-width:0;
   background:var(--bg-deep); border:1px solid var(--frame); color:var(--ink); cursor:pointer; text-align:left;
@@ -467,9 +527,18 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .tnode span{flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis}
 .tnode em{font-style:normal; font-size:9px; color:var(--warn)}
 .tnode.floor em, .tnode.room em{color:var(--muted)}
-.tnode.office, .tnode.floor, .tnode.room{border-color:var(--frame-dim); color:var(--muted)}
+.tnode.office, .tnode.floor, .tnode.room{border-color:var(--frame); color:var(--muted)}
 .tnode.office .tico, .tnode.floor .tico, .tnode.room .tico{opacity:.4}
-.tnode.ghost{background:none; border:1px dashed var(--frame-dim); color:var(--muted)}
+.tnode.ghost{background:none; border:1px dashed var(--frame); color:var(--muted)}
+/* Installed and switched off by the owner: dimmed like a missing node, with its
+   own tag. A node grown out of a node of its own column is indented under it,
+   the edge hangs from the parent's left end (frame 2239:9724). */
+.tnode.off{border-color:var(--frame); color:var(--muted)}
+.tnode.off .tico{opacity:.4}
+.tnode.off em{color:var(--muted)}
+.tnode.sub{margin-left:16px}
+.wsubrow{justify-content:flex-start}
+.tswitch{margin-top:4px}
 :where(body:not(.bykeys)) .tnode:hover{background:var(--wood)}
 .tnode.on{background:var(--wood); border:2px solid var(--accent); padding:0 5px; color:var(--ink); font-weight:bold}
 .tico{width:16px; height:16px; flex:none;
@@ -683,7 +752,10 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 
 /* ---- office colour ---- */
 /* ---- reception ---- */
-.recwrap{width:min(520px,92vw)}
+/* 580, not 520: with «нанять» the header carries five keys, and at 520 the
+   title wrapped and the keys ended in «E…». */
+.recwrap{width:min(580px, calc(92vw / var(--ui, 1)))}
+.recwrap .vhead > span:first-child{flex:none; white-space:nowrap}
 .recbody{padding:14px; display:flex; flex-direction:column; gap:10px}
 .recgreet{margin:0; color:var(--ink); font-size:13px; line-height:1.5}
 .recrow{display:flex; align-items:center; gap:10px; padding:6px 8px;
@@ -698,6 +770,58 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .recgo{flex:none; background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:11px "JetBrains Mono", "Courier New",monospace; padding:3px 8px; cursor:pointer}
 :where(body:not(.bykeys)) .recgo:hover{background:var(--wood-lit); color:var(--warn)}
+/* «нанять» is the desk's new offer, so it is the lit one of the two: the
+   frame gives it the amber edge a primary button has everywhere else. */
+.rechire{flex:none; background:var(--wood-lit); color:var(--warn); border:2px solid var(--warn);
+  font:11px "JetBrains Mono", "Courier New",monospace; padding:3px 8px; cursor:pointer}
+.rechire kbd{color:var(--muted); font-size:10px}
+:where(body:not(.bykeys)) .rechire:hover{background:var(--wood)}
+/* The keys ride in the header, as on the newspaper's: the panel is keyboard
+   first, and the line under it is for what the keys do not say. */
+.rechead{display:flex; align-items:center; gap:12px; min-width:0}
+.reckeys{color:var(--accent); font-size:11px; letter-spacing:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+
+/* ---- hiring ----
+   [Hire panel](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2090-747)
+   560 CSS px, as drawn. At 175% the header and the buttons stay and the body
+   scrolls: [175%](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2090-814) */
+.hirewrap{width:min(560px, calc(92vw / var(--ui, 1)))}
+.hirebody{padding:12px 14px 4px; display:flex; flex-direction:column; gap:8px}
+.hirebody .hlabel{margin:4px 0 0; color:var(--muted); font-size:11px}
+.hirebody textarea{min-height:64px}
+.hirefrom{display:flex; flex-direction:column; gap:4px; padding:8px 10px; border:2px solid var(--frame-dim); background:var(--field)}
+.hirefrom i{font-style:normal; color:var(--muted); font-size:11px}
+.hirefrom b{color:var(--ink); font-size:12px}
+.hirefrom span{color:var(--ink-dim); font-size:11px; line-height:1.5}
+.hchips, .hmodels{display:flex; gap:8px; flex-wrap:wrap}
+.hchip, .hmodel{background:var(--field); color:var(--ink-dim); border:2px solid var(--frame-dim);
+  font:12px "JetBrains Mono", "Courier New",monospace; padding:3px 10px; cursor:pointer}
+.hchip.on{background:var(--on); border-color:var(--accent); color:var(--ink)}
+.hmodels .hmodel{flex:1; max-width:150px}
+.hmodel.on{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
+:where(body:not(.bykeys)) .hchip:hover, :where(body:not(.bykeys)) .hmodel:hover{border-color:var(--frame); color:var(--ink)}
+.hwhere{margin:0; color:var(--ink-dim); font-size:11px}
+.hirebody .hint.warn{color:var(--warn)}
+.hirefoot{flex:none; display:flex; justify-content:flex-end; gap:10px; padding:10px 14px 12px}
+.hirefoot button{background:var(--wood); color:var(--ink-dim); border:2px solid var(--frame-dim);
+  font:12px "JetBrains Mono", "Courier New",monospace; padding:4px 10px; cursor:pointer}
+.hirefoot button.primary{background:var(--wood-lit); border-color:var(--warn); color:var(--warn)}
+.hirefoot button:disabled{opacity:.45; cursor:not-allowed}
+.hirefoot kbd{color:var(--muted); font-size:10px}
+.hchip:focus-visible, .hmodel:focus-visible, .hirefoot button:focus-visible{outline:2px solid var(--warn); outline-offset:-2px}
+/* A chosen switch and a «нанять» already wear the amber edge, so the focus
+   ring drawn inside it was the same line twice and nothing moved under the
+   arrows. On these it stands outside, a second ring. */
+.hchip.on:focus-visible, .hmodel.on:focus-visible, .hirefoot button.primary:focus-visible,
+.rechire.focus{outline:2px solid var(--warn); outline-offset:2px}
+
+/* The card of an agent the office hired: when, from what, and — once its turn
+   is over — the command that continues it in a terminal. */
+.hiredrow:empty{display:none}
+.hiredline{margin:4px 0 0; color:var(--accent); font-size:11px}
+.hiredrow .sendrow{margin-top:4px}
+.hirecmd{flex:1; min-width:0; font:12px "JetBrains Mono", "Courier New",monospace; color:var(--ink);
+  background:var(--field); border:2px solid var(--frame); padding:3px 8px}
 
 /* ---- lift ---- */
 .liftwrap{width:min(420px,92vw)}
@@ -956,8 +1080,8 @@ body.titling #hud{visibility:hidden}
    scroller would otherwise be squashed to nothing, which is how the radio's
    list of waves disappeared. The self card (.dbody) is a wrapping row whose
    columns need their width, so it gets the scroll and keeps its children. */
-.skybody,.recbody,.liftbody,.invbody,.skinbody,.dbody{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain}
-.skybody > *,.recbody > *,.liftbody > *,.invbody > *,.skinbody > *{flex:none}
+.skybody,.recbody,.liftbody,.invbody,.skinbody,.hirebody,.dbody{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain}
+.skybody > *,.recbody > *,.liftbody > *,.invbody > *,.skinbody > *,.hirebody > *{flex:none}
 .dbody{align-content:flex-start}
 .chatlog{max-height:calc(72vh / var(--ui, 1))}
 .zoomwrap{max-height:calc(70vh / var(--ui, 1))}
@@ -1080,21 +1204,10 @@ body.titling #hud{visibility:hidden}
 :where(body:not(.bykeys)) #standtab:hover{background:var(--warn); color:var(--bg-deep)}
 body.stand-folded #stand{display:none}
 body.stand-folded #standtab{display:block}
-/* ---- diff ---- */
-.gitbody.diff .gfiles{flex:0 0 240px; overflow:auto; padding:6px 0}
-.gfile{display:flex; gap:8px; padding:4px 10px; font-size:11px; color:var(--ink-dim); cursor:pointer}
-.gfile span{flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left}
-:where(body:not(.bykeys)) .gfile:hover{background:var(--wood-hi)}
-.gfile.sel{background:var(--wood); color:var(--ink); box-shadow:inset 2px 0 0 var(--accent)}
-.gcode{flex:1 1 auto; overflow:auto; border-left:2px solid var(--wood-hi); padding:4px 0 12px}
-.dl{display:flex; align-items:baseline; gap:0; font-size:11px; line-height:16px; white-space:pre}
-.dl code{padding-right:14px}
-.dl.add{background:rgba(159,224,168,.10)}
-.dl.del{background:rgba(255,159,143,.10)}
-.dl.hunk{background:var(--field); color:var(--muted); font-size:10px; line-height:20px; padding-left:10px}
-.dn{flex:0 0 34px; text-align:right; padding-right:6px; color:var(--muted); font-size:9px}
-.dp{flex:0 0 16px; text-align:center; color:var(--muted)}
-.dl.add .dp{color:var(--accent)} .dl.del .dp{color:var(--bad)}
+/* ---- diff ----
+   Lives in the gittree module since 13 September 2026 (gittree/style.css, under
+   .gitwrap). It stayed here when the panel became a module on 3 September: no
+   core markup uses these classes, and the free build shipped them for nothing. */
 
 /* ---- office language and agent names ---- */
 .langwrap{width:min(480px,92vw)}
@@ -1294,3 +1407,20 @@ body.touch .tmeta.center{visibility:hidden}
 .touchzoom{display:flex; align-items:center; gap:14px; color:var(--ink-dim); font-size:12px}
 .touchzoom .obtn{min-width:56px; font-size:18px}
 .touchzoom b{color:var(--ink); font-weight:normal; min-width:36px; text-align:center}
+
+/* Files dropped onto a task (#drop-files). The field says what will happen
+   while something is held over the card: a dashed accent border and the line
+   from the dictionary, drawn over the field rather than into it, so a
+   half-typed task is not touched. */
+.dropping{border-color:var(--accent) !important; border-style:dashed !important}
+.fchips{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 0}
+.fchips:empty{display:none}
+.fchip{display:inline-flex; align-items:baseline; gap:6px; padding:2px 4px 2px 6px; font-size:11px;
+  background:var(--field); border:1px solid var(--frame-dim); color:var(--ink)}
+.fchip .csize{color:var(--muted)}
+.fchip .cdel{background:none; border:0; padding:0 2px; color:var(--muted); font:inherit; cursor:pointer}
+.fchip .cdel:hover{color:var(--ink)}
+.fchip.wait{border-style:dashed}
+.fchip.bad{border-color:var(--bad); color:var(--bad)}
+.fchip.bad .csize{color:var(--bad)}
+.notes .nclip{color:var(--muted)}

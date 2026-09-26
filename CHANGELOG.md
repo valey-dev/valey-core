@@ -4,6 +4,280 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.69.1 — 26 September 2026
+
+### Fixed
+
+- **install:** an update run from inside the office warns the terminal on Linux too, not only on a mac (0725724)
+## v0.69.0 — 26 September 2026
+
+### Added
+
+- **notes:** a patch release gets a note — each fix a section in its own words, tooling fixes left out (627cffa)
+## v0.68.2 — 26 September 2026
+
+### Fixed
+
+- **deliver:** a task to a chat whose folder is gone says so instead of «exited with code -2» (093837f)
+## v0.68.1 — 26 September 2026
+
+### Fixed
+
+- **update:** an unpushed commit in the Modules no longer holds the office back when nothing is coming into them (081e464)
+## v0.68.0 — 26 September 2026
+
+### Added
+
+- **claim:** a claimed backlog item says whether anybody is still working on it (f0f2723)
+## v0.67.0 — 26 September 2026
+
+### Added
+
+- **office:** when the server is gone the lights go out, instead of the floor pretending to be alive (3c16604)
+
+### Other
+
+- chore(office): the power comes back over the same 1.6 s, and the UPS beep is held with a drag (114184e)
+- chore(office): a longer power-down, and a quiet UPS beep while the lights are out (8c59fe1)
+- chore(stand): the breaker repaints through a hook, so the stand's fake DOM still holds one key listener (79f80e4)
+- chore(stand): a breaker on the stand plaque that plays a lost office in this tab (99e3c00)
+- chore(office): count a dead server's errors, which the stream never reported as closed (a4f0e0f)
+- docs(notes): the picture of the lights going out, rendered from the demo office (ee5d714)
+## v0.66.2 — 26 September 2026
+
+### Fixed
+
+- **office:** a chat archived in the desktop app leaves its desk instead of sleeping there for an hour (47f5854)
+## v0.66.1 — 26 September 2026
+
+### Fixed
+
+- **newsstand:** the paper's key hint names Space next to Enter (99af8b7)
+## v0.66.0 — 26 September 2026
+
+### Added
+
+- **release:** a released office publishes a manifest of its version, so the archive office can ask what is out without downloading it (256d53c)
+- **office:** an office installed from an archive updates itself, core from valey.dev and the modules of the Office from the shelf (7f53bbc)
+## v0.65.3 — 26 September 2026
+
+### Fixed
+
+- **install:** an update run from inside the office tells the terminal to cd into the new one (df94598)
+## v0.65.2 — 26 September 2026
+
+### Fixed
+
+- **newsstand:** a name nobody invented is refused in the picture office instead of being dressed in an invented paper (e608c06)
+- **newsstand:** Space opens a post like Enter, and the answer is said on the paper instead of in a corner of the screen (e52ef1f)
+- **newsstand:** the invented papers say so instead of sending the reader to a channel that does not exist, and a photo is halftoned on a finer grid (d4591ee)
+
+### Other
+
+- chore(notes): the v0.65.0 reply-image recipe gets back the line that puts a picture in the frame (05f4335)
+- chore(newsstand): the picture office reads invented papers, so the stand has something a public note may show (ad0e9e3)
+## v0.65.1 — 26 September 2026
+
+### Fixed
+
+- **release:** a picture quoted as an example in a note stays an example on the page (c2881c4)
+## v0.65.0 — 26 September 2026
+
+### Added
+
+- **office:** a picture an agent sends in a reply is drawn in the conversation, not spelled out (2cd4806)
+
+### Fixed
+
+- **office:** a picture an agent names in its reply opens, even when no tool touched it (279bc71)
+
+### Other
+
+- chore(notes): the reply-image fragment declares only fields the release knows (b7a180f)
+- docs(notes): the reply-image picture shows the picture, and the note says what now opens (08a57ec)
+- chore(notes): a picture recipe can have a demo agent answer with a picture (7c0ba5e)
+## v0.64.0 — 26 September 2026
+
+### Added
+
+- **office:** the office keeps a journal of what broke, on this machine (e89d762)
+## v0.63.1 — 26 September 2026
+
+### Fixed
+
+- **office:** an empty office no longer freezes a few seconds after walking in (1383166)
+## v0.63.0 — 23 September 2026
+
+### Added
+
+- **office:** Codex threads sit at desks next to Claude sessions, marked ◇ where Claude is ✶ (b74c819)
+
+### Fixed
+
+- **office:** a file dropped into a task for a Codex thread goes with it, instead of being left behind (4a4c997)
+- **office:** a Codex agent takes a task from the office — it goes into the thread's own queue (2f411ef)
+
+### Other
+
+- docs(notes): the Codex pictures re-rendered after main caught up (89a5a3a)
+- docs(notes): the Codex note says tasks go into the thread's queue, with the Task page (0b88de8)
+- docs(notes): the Codex sessions note, with the floor and the card (8485473)
+- chore(notes): the demo office for release pictures seats one invented Codex thread (cde65bf)
+- refactor(agents): one function records a tool call, whoever made it (de054f6)
+## v0.62.3 — 21 September 2026
+
+### Other
+
+- docs(readme): drop the note about a landing page the public repo never had (46d733d)
+## v0.62.2 — 19 September 2026
+
+### Fixed
+
+- **office:** an agent the app put to sleep stays at the desk for an hour instead of vanishing mid-conversation (246e7f8)
+## v0.62.1 — 19 September 2026
+
+### Fixed
+
+- **office:** a card reads the report tail in English too, so an English-speaking project stops showing the chat title instead of the task (82af9a9)
+## v0.62.0 — 17 September 2026
+
+### Added
+
+- **office:** a file dropped onto a task goes to the agent with it (2d69c46)
+## v0.61.4 — 17 September 2026
+
+### Fixed
+
+- **release:** a package.json version that is not X.Y.Z stops the release instead of cutting vNaN.undefined.NaN (31a7b46)
+
+### Other
+
+- chore(demo): the product demo, 20–30 seconds, shot from an invented office (b077996)
+- docs(keys): the office walks on arrows only — WASD leaves the Russian README and the W examples of the picture recipes (31da8c5)
+- docs(readme): a one-page Russian instruction for the first cohort — install, first screen, keys, the hook (293d986)
+- ci(tests): main no longer goes red after every release — the release dry run step reads «nothing to cut» as green (5768b0c)
+## v0.61.3 — 17 September 2026
+
+### Fixed
+
+- **tree:** the PR board's card says what the board shows — main, the agents' branches and today's merges (19c3eb4)
+## v0.61.2 — 17 September 2026
+
+### Fixed
+
+- **office:** answering an agent's question leaves the card on «what are you working on», not on «this question is already closed» (83bf59b)
+
+### Other
+
+- test(ui): a page module may only call the callbacks it was handed (2567670)
+## v0.61.1 — 16 September 2026
+
+### Fixed
+
+- **release:** a release that loses the race for main pushes nothing and takes its tag back, instead of leaving a tag no branch can see (4efafb5)
+## v0.61.0 — 15 September 2026
+
+### Added
+
+- **office:** each room's rug takes its own colour — SPACE on the rug walks six colourways (151e7c7)
+## v0.60.0 — 15 September 2026
+
+### Added
+
+- **office:** the agent card names its model and reasoning level, and a trade wears a pixel icon instead of a border (cf77577)
+
+### Fixed
+
+- **dossier:** the model no longer reads «<synthetic>» after an API error or a resume (f368269)
+
+### Other
+
+- test(language): the guard reads what a stand prints, not only its label — failure details, assert messages, summaries (a054abf)
+- chore(stand-stop): the stand stopper reports in English (ab2da9c)
+- test(stands): failure details, assert messages and summaries print in English, as the rule has said since 9 September (3406dc2)
+## v0.59.1 — 15 September 2026
+
+### Fixed
+
+- **release:** a release page is built from its tag's changelog, so `promote` from a tree behind the tag no longer publishes a version without one (e432ebe)
+## v0.59.0 — 15 September 2026
+
+### Added
+
+- **tree:** an installed module is switched off and back on from its card in the module tree, and the PR board has its node (6473101)
+
+### Fixed
+
+- **office:** a delivered or hired session no longer inherits the office's settings, port and stand plaque (1cb25eb)
+
+### Other
+
+- refactor(tree): the module switch is the office's segmented control, as its frame is (a8fb9a4)
+## v0.58.2 — 15 September 2026
+
+### Fixed
+
+- **update:** «update» no longer refuses over an uncommitted change the update does not touch, and catches an untracked file in its way before the core moves (9f3b43f)
+## v0.58.1 — 15 September 2026
+
+### Fixed
+
+- **radio:** the down arrow walks wave to wave instead of through every ✕ (9849513)
+- **radio:** Enter and Space on a wave in the list start it playing (aaee62a)
+
+### Other
+
+- ci(runners): keep private checks off hosted minute quota (c27234a)
+## v0.58.0 — 13 September 2026
+
+### Added
+
+- **office:** the standup gives a project the whole width, and its name stays pinned while you arrow down (ceb0a6a)
+
+### Other
+
+- chore(notes): the demo cast puts four people in rocket-shop, so a project's row shows in the pictures (71b32bf)
+## v0.57.1 — 13 September 2026
+
+### Fixed
+
+- **update:** an agent the updated office resumes no longer raises every office it starts on port 5177 (8e4af43)
+
+### Other
+
+- docs(readme): updating without stopping needs npm start, one restart after an office older than v0.55.0, and Ctrl-C is still a restart (9d8955d)
+## v0.57.0 — 13 September 2026
+
+### Added
+
+- **office:** a pole in the lounge, and Bolty, a tin robot who dances on it badly — SPACE tips him (de82074)
+
+### Other
+
+- docs(notes): the note for the pole and its robot, with the head coming off (3b54dab)
+- docs(readme): SPACE tips the robot on the pole in the lounge (13a6146)
+## v0.56.0 — 13 September 2026
+
+### Added
+
+- **office:** the office hires agents — a new session starts at the reception and walks out of a portal at the room's door (6dbc0b3)
+
+### Fixed
+
+- **office:** a hire into a far room is seen — the portal opens beside the owner and the agent walks to its room (def73d9)
+- **tree:** the module tree's lines and borders are the frame's tone, not a step darker (4e5d735)
+- **radio:** the receiver scales its own panel only, and keeps the digit on its stations (ba48cdb)
+- **office:** the reception's arrows reach «нанять», and the hiring panel picks its room with arrows instead of digits that typed into the task (507197d)
+
+### Other
+
+- docs(notes): hiring opens the portal beside you — the note, the README line and the pictures (640ff44)
+- test(styles): a module's stylesheet cannot repaint the office (856dbdf)
+- refactor(style): the core stops carrying the git tree's diff styles (81ba78a)
+- docs(notes): the hiring note says the arrows, not digits, and its pictures are retaken (f1f3188)
+- docs(notes): the note for hiring, with the reception, the panel and the portal (5e27642)
+- docs(readme): + at the reception desk hires, and what a hire runs (4cbb14e)
+- test(hire): a stand for hiring — the first message, refusals, a run that starts, stays and is let go, and one that never starts (7551ccb)
 ## v0.55.0 — 13 September 2026
 
 ### Added

@@ -84,7 +84,15 @@
 #radiovol.focus, #radiouri.focus, .radioauth button.focus,
 #radiowave.focus, .radioaddbtns button.focus, .rpick.focus{
   outline:2px solid var(--warn); outline-offset:-2px}
-#dialog, #toasts, .vwrap, .rwrap, .radiowrap{zoom:var(--ui, 1)}
+/* The office scale for the receiver's own panel only. This line used to be a
+   copy of the core's (#dialog, #toasts, .vwrap, .rwrap), so the radio set zoom
+   on panels that are not its, and a change to the core's line would have been
+   overruled by a module loaded after it. The root is also .rwrap, which the
+   core scales itself; saying it once more here costs nothing. */
+.radiowrap{zoom:var(--ui, 1)}
+/* The digit on a station, from the core's stylesheet, where it stayed behind
+   when the radio became a module. */
+.radiowrap .rst kbd{background:none; border:none; font:10px "JetBrains Mono", monospace; color:var(--muted)}
 
 /* The receiver no longer explains how to connect: it says why the music breaks
    off and points the way. Frame 572:2. Everything else moved to the key shelf —

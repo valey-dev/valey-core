@@ -3,10 +3,12 @@
 // the session transcript, so the office sees it. The open desktop window will not
 // redraw itself; the exchange shows up in the history (and in the game).
 import { spawn, execFile } from 'node:child_process';
+import { withMentions } from './inbox.js';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { agentEnv } from './agent-env.js';
 
 const run = promisify(execFile);
 const TIMEOUT_MS = 10 * 60 * 1000;
@@ -171,8 +173,20 @@ export async function deliver(task, agent, mode = 'default', { timeout = TIMEOUT
   const c = await findCli();
   if (!c.path) { task.state = 'failed'; task.error = 'claude CLI is not installed'; task.errorKey = 'err.notInstalled'; return task; }
   if (busy.has(agent.id)) { task.state = 'failed'; task.error = 'another message is already being sent to this agent'; task.errorKey = 'err.busy'; return task; }
+  // A chat whose folder was moved or deleted. spawn in a missing cwd fails
+  // with ENOENT, which reads as "claude not found", and then closes with -2 —
+  // on 26 September 2026 the person saw only «claude exited with code -2».
+  const cwd = agent.cwd || process.cwd();
+  if (!fs.existsSync(cwd)) {
+    task.state = 'failed'; task.error = `the agent's folder is gone: ${cwd}`;
+    task.errorKey = 'err.noCwd'; task.errorVars = { path: cwd };
+    return task;
+  }
 
-  const args = ['--resume', agent.id, '-p', task.text];
+  // The files ride in the text: «@<path>» per line, and the CLI opens them
+  // itself — no permission is asked and no --add-dir is needed (checked on
+  // 2.1.263, 16 September 2026). See server/inbox.js.
+  const args = ['--resume', agent.id, '-p', withMentions(task.text, task.files)];
   if (MODES.has(mode) && mode !== 'default') args.push('--permission-mode', mode);
 
   busy.add(agent.id);
@@ -203,8 +217,8 @@ export async function deliver(task, agent, mode = 'default', { timeout = TIMEOUT
   let child;
   try {
     child = spawn(c.path, args, {
-      cwd: agent.cwd || process.cwd(),
-      env: process.env,
+      cwd,
+      env: agentEnv(),
       stdio: ['ignore', outFd, errFd],
       detached: true,
     });
@@ -223,7 +237,11 @@ export async function deliver(task, agent, mode = 'default', { timeout = TIMEOUT
   const stop = () => { clearTimeout(timer); clearTimeout(kill); busy.delete(agent.id); };
 
   return new Promise((resolve) => {
+    // A failed spawn emits 'error' and then 'close' with a negative code; the
+    // close must not overwrite the reason with that code.
+    let spawnFailed = false;
     child.on('error', (e) => {
+      spawnFailed = true;
       stop();
       forgetRun(agent.id);
       task.state = 'failed'; task.error = e.message; task.finishedAt = Date.now();
@@ -231,6 +249,7 @@ export async function deliver(task, agent, mode = 'default', { timeout = TIMEOUT
       resolve(task);
     });
     child.on('close', (code) => {
+      if (spawnFailed) return;
       stop();
       // Handed to the next office: its files are the next office's to read.
       if (released) { resolve(task); return; }

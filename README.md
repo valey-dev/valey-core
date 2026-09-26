@@ -2,6 +2,8 @@
 
 A pixel-art office for the agents you already run.
 
+По-русски — [README.ru.md](README.ru.md).
+
 Your Claude Code sessions become people in rooms — one room per project, one person per session. They type, get up for coffee and pin finished work on the board. Instead of a list of chats that all look the same, you glance at a floor and see who needs you.
 
 ![The office](docs/office.png)
@@ -24,7 +26,7 @@ Then open <http://localhost:5177>.
 
 Run it twice and the second one says where the first is and exits: two offices on one port would be two offices, not one. If something that is not Valey holds 5177, the office takes the next free port and says so — with the reminder that Claude Code sends its questions to 5177, so a hook set up later needs the port freed or `network.port` in the settings changed.
 
-To update a running office from its repository, press **update** in the office tab of the inventory (C), or run `npm run update` in another terminal: the core and the Modules are pulled and the office is swapped for the new version without stopping — guests, notes and questions it holds for agents come along, and open pages reload onto it. It never checks on its own: a `git fetch` happens only when you ask. An office installed from an archive is updated by running the install command again.
+To update a running office from its repository, press **update** in the office tab of the inventory (C), or run `npm run update` in another terminal: the core and the Modules are pulled and the office is swapped for the new version without stopping — guests, notes and questions it holds for agents come along, and open pages reload onto it. It never checks on its own: a `git fetch` happens only when you ask. The swap needs the office started with `npm start`, which runs a small supervisor holding the port; `npm run dev` runs the office alone, and the button says so. An office started before v0.55.0 has no supervisor yet, so restart it once with Ctrl-C and `npm start`. Ctrl-C stays a restart: guests lose their access. An office installed from an archive is updated by running the install command again.
 
 The server binds `127.0.0.1`, so the office answers this machine and nothing
 else. 
@@ -56,8 +58,6 @@ It can also be opened and closed while the office runs, without a restart: `POST
 
 **There is no install step.** Not a missing instruction — the project has no dependencies, so there is no `npm install` to run and no `node_modules` to appear. The only foreign thing the office itself carries is the JetBrains Mono font in `web/fonts/`, shipped as files under the OFL, because the office works without internet.
 
-Everything in here is the office. The public page used to sit next to it — `web/landing.html`, which reached out to Google Fonts and to a form — and it moved to the site's own repository on 5 September 2026, along with the holding page for the domain. The office reaches out to nothing, and that is the point of the section below; the exception that blurred it is gone.
-
 ### If you do not have Node
 
 Node is the one thing you need. Check with:
@@ -77,6 +77,7 @@ npm comes with Node, so there is nothing else to fetch. If `node -v` works and `
 ## What it shows
 
 * **Who is in** — from `~/.claude/sessions/*.json`: pid, working directory, session name. Alive is checked with `process.kill(pid, 0)`.
+* **Codex too** — Codex Desktop and CLI threads sit at the same desks, marked ◇ where Claude sessions are marked ✶. A thread is in while a Codex process holds its lock in `~/.codex/thread-writer-locks`; its state is read from the rollout file in `~/.codex/sessions`. A task goes into a Codex thread through Codex's own queue, `codex queue`, and the thread takes it in when its current turn is over; the permission modes on that page are Claude's alone.
 * **What they are doing** — the transcript is read incrementally: the last tool call, the last thing said, whether the turn ended and they are waiting on you, which files they touched, which git branch they are on.
 * **Their role** — from the tools they reach for. Edits code, so: developer. Opens design files: designer. Searches the web: researcher, etc. 
 * **Their face and name** — a deterministic hash of the session id, so the same session is the same person every time you look.
@@ -113,7 +114,7 @@ Guests never see any of this: a command is paths and branches from your machine.
 
 ## Nothing leaves your machine
 
-The office reads `~/.claude` on your own machine and draws the floor from it. Transcripts, code and project names are never sent anywhere.
+The office reads `~/.claude` — and `~/.codex`, if Codex is installed — on your own machine and draws the floor from it. Which Codex threads are open it asks the operating system, with `lsof` on those lock files. Transcripts, code and project names are never sent anywhere.
 
 Three exceptions, all yours to switch on, all named out loud:
 
@@ -135,7 +136,9 @@ The repository is called `valey-core` because that is what it is. The office is 
 
 ## Keys
 
-Arrow keys walk · `SHIFT` runs · `SPACE` is the action — talk, drink at the cooler, feed the piranhas, sit on a bench · `TAB` the standup — who is on what · `N` notes · `C` clothes · `P` window on the world · `U` office colour · `M` sound · `R` radio · `S` starts and stops the music wherever you are · `K` the office plan · `G` the newspaper stand · `H` the pager you put off · `F9` a 1:1 frame · `+` `0` scale · `ESC` back. The security room is below the floor and has the cameras. Press `?` in the office for the whole keyboard, which is generated from the same list the office answers to and cannot drift from this one.
+Arrow keys walk · `SHIFT` runs · `SPACE` is the action — talk, drink at the cooler, feed the piranhas, tip the robot on the pole in the lounge, sit on a bench · `+` at the reception desk hires a new agent · `TAB` the standup — who is on what · `N` notes · `C` clothes · `P` window on the world · `U` office colour · `M` sound · `R` radio · `S` starts and stops the music wherever you are · `K` the office plan · `G` the newspaper stand · `H` the pager you put off · `F9` a 1:1 frame · `+` `0` scale · `ESC` back. The security room is below the floor and has the cameras. Press `?` in the office for the whole keyboard, which is generated from the same list the office answers to and cannot drift from this one.
+
+Hiring starts a new Claude Code session in a project's folder: `claude -p` in the default permission mode, so anything risky still reaches you on the pager. The office takes the folder from the room the agent is hired into — the page never sends a path — and the agent steps out of a portal beside you and walks to its room. When it has finished, its card copies `claude --resume <id>` to carry the conversation on in a terminal; the office lets it go first, so two processes never write one transcript.
 
 The office fills the window. The scale is a whole number of screen dots per game pixel and is counted from the width — it promises at least 400 pixels of world across, and everything else the window gives goes into showing more of the floor, so a tall or a vertical monitor shows more of it rather than black bars. `+` and `−` pick the step by hand between ×2 and ×8, `0` hands the count back to the window.
 
@@ -167,9 +170,9 @@ What changed between releases, one line per commit, is in [CHANGELOG.md](CHANGEL
 
 Contributions need a signed agreement; see [CONTRIBUTING.md](CONTRIBUTING.md) for what it says and why.
 
-## Not affiliated with Anthropic
+## Not affiliated with Anthropic or OpenAI
 
-Claude Code is Anthropic's. This is an independent project that reads the session files Claude Code leaves on your disk, and nothing else. It is not endorsed by, and has no connection to, Anthropic.
+Claude Code is Anthropic's. Codex is OpenAI's. This is an independent project that reads the session files Claude Code and Codex leave on your disk, and nothing else. It is not endorsed by, and has no connection to, Anthropic or OpenAI.
 
 Found something that leaves the machine, or runs what you did not ask for? Write to security@valey.dev rather than opening an issue — [SECURITY.md](SECURITY.md) says what counts and what to include.
 

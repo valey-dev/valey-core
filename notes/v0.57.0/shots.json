@@ -1,0 +1,12 @@
+{
+  "tag": "v0.57.0",
+  "shots": [
+    {
+      "file": "pole-pole.png",
+      "slug": "pole",
+      "id": "pole",
+      "setup": "setTimeout(() => { const g = window.__game; const p = g.layout.props.find((x) => x.kind === 'pole'); g.player.x = p.x - 16; g.player.y = p.y + 22; }, 2500)",
+      "keys": "Enter,wait:4000,Space,wait:2700"
+    }
+  ]
+}

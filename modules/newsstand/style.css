@@ -90,3 +90,8 @@
 .nsout{display:flex; gap:10px; font-size:12px}
 .nsout span{width:90px; flex:none; color:var(--muted)}
 .nsout b{font-weight:normal; color:var(--ink)}
+
+/* The paper answers on the sheet: a toast lives in the far corner of the
+   screen, and a line about the open paper belongs under it. */
+.nssaid{margin:0; padding:8px 14px; background:var(--field); color:var(--ink-dim);
+  border-top:1px solid var(--frame-dim); font-size:11px; line-height:1.5}

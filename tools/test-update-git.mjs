@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { checkUpdate, pullUpdate } from '../server/update.js';
+import { checkUpdate, pullUpdate, repos } from '../server/update.js';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -30,7 +30,9 @@ const author = path.join(tmp, 'author'), authorMods = path.join(tmp, 'author-mod
 g(tmp, 'clone', '-q', path.join(tmp, 'core.git'), author);
 write(author, 'package.json', pkg('0.52.3')); write(author, '.gitignore', '/modules/\n'); commit(author, 'chore(release): v0.52.3'); g(author, 'push', '-q', 'origin', 'HEAD:main');
 g(tmp, 'clone', '-q', path.join(tmp, 'mods.git'), authorMods);
-write(authorMods, 'package.json', pkg('0.15.2')); commit(authorMods, 'chore(release): v0.15.2'); g(authorMods, 'push', '-q', 'origin', 'HEAD:main');
+// Modules track their backlog, and every session edits it in place
+write(authorMods, 'package.json', pkg('0.15.2')); write(authorMods, 'BACKLOG.md', 'tracked, like the real one\n');
+commit(authorMods, 'chore(release): v0.15.2'); g(authorMods, 'push', '-q', 'origin', 'HEAD:main');
 
 // the office: the core, with Modules cloned into modules/
 const office = path.join(tmp, 'office');
@@ -47,7 +49,8 @@ write(author, 'b.js', '1'); commit(author, 'fix(deliver): b');
 write(author, 'c.js', '1'); commit(author, 'feat(radio): c');
 write(author, 'package.json', pkg('0.54.0')); commit(author, 'chore(release): v0.54.0');
 g(author, 'push', '-q', 'origin', 'HEAD:main');
-write(authorMods, 'm.js', '1'); commit(authorMods, 'fix(feed): m'); g(authorMods, 'push', '-q', 'origin', 'HEAD:main');
+write(authorMods, 'm.js', '1'); write(authorMods, 'package.json', pkg('0.15.3'));
+commit(authorMods, 'fix(feed): m'); g(authorMods, 'push', '-q', 'origin', 'HEAD:main');
 
 r = await checkUpdate(office);
 ok('check names the version upstream', r.available === '0.54.0' && r.current === '0.52.3', r);
@@ -55,13 +58,22 @@ ok('and counts features and fixes the way the changelog does', r.feats === 2 && 
 ok('and sees both repositories behind', r.behind.core === 4 && r.behind.modules === 1 && r.upToDate === false, r.behind);
 ok('check moves nothing', JSON.parse(fs.readFileSync(path.join(office, 'package.json'), 'utf8')).version === '0.52.3');
 
-// Modules with a tracked change: neither repository moves
+// Modules with a change in a file the update rewrites: neither repository moves
 const coreHead = g(office, 'rev-parse', 'HEAD');
-write(path.join(office, 'modules'), 'package.json', pkg('0.15.2-local'));
+const mods = path.join(office, 'modules');
+write(mods, 'package.json', pkg('0.15.2-local'));
 r = await pullUpdate(office);
-ok('a tracked change in Modules refuses the update and names it', !r.ok && r.repo === 'modules' && r.reason === 'dirty' && /package\.json/.test(r.detail), r);
+ok('a change in a file the update rewrites refuses it and names the file', !r.ok && r.repo === 'modules' && r.reason === 'dirty' && r.detail === 'package.json', r);
 ok('and the core was not pulled either — both or neither', g(office, 'rev-parse', 'HEAD') === coreHead);
-g(path.join(office, 'modules'), 'checkout', '-q', '--', 'package.json');
+g(mods, 'checkout', '-q', '--', 'package.json');
+
+// an untracked file where the update adds one: git would stop on it after the
+// core had moved, so it is found before anything does
+write(mods, 'm.js', 'local');
+r = await pullUpdate(office);
+ok('an untracked file the update would overwrite refuses it too', !r.ok && r.repo === 'modules' && r.reason === 'dirty' && r.detail === 'm.js', r);
+ok('and again nothing moved', g(office, 'rev-parse', 'HEAD') === coreHead);
+fs.rmSync(path.join(mods, 'm.js'));
 
 // a local commit in the core: it cannot be fast-forwarded
 // only this file: `add -A` would sweep the untracked backlog into the commit
@@ -70,20 +82,51 @@ r = await pullUpdate(office);
 ok('a core that went its own way is refused as diverged', !r.ok && r.repo === 'core' && r.reason === 'diverged', r);
 g(office, 'reset', '-q', '--hard', 'HEAD~1');
 
-// the real thing
+// the real thing, with a note in the Modules' backlog that nobody has committed:
+// the update does not touch that file, so it is not in the way. Until v0.58.1
+// it refused, and held the owner's office on 15 September 2026.
+write(mods, 'BACKLOG.md', 'tracked, like the real one\n- a note in passing\n');
 const steps = [];
 r = await pullUpdate(office, { step: (k) => steps.push(k) });
-ok('a clean office is pulled forward', r.ok && r.from === '0.52.3' && r.to === '0.54.0', r);
+ok('an office with a change the update does not touch is pulled forward', r.ok && r.from === '0.52.3' && r.to === '0.54.0', r);
+ok('and the change rides across untouched', fs.readFileSync(path.join(mods, 'BACKLOG.md'), 'utf8').includes('a note in passing'));
 ok('core first, then Modules, each reported', steps.join(',') === 'core,modules', steps);
 ok('both repositories now match upstream', g(office, 'rev-parse', 'HEAD') === g(office, 'rev-parse', '@{u}') && g(path.join(office, 'modules'), 'rev-parse', 'HEAD') === g(path.join(office, 'modules'), 'rev-parse', '@{u}'));
 ok('the untracked backlog is left where it was', fs.existsSync(path.join(office, 'BACKLOG.md')));
 r = await checkUpdate(office);
 ok('and check then says up to date', r.upToDate === true, r);
 
-// an office folder with no git at all — installed from an archive
+// A session commits to the Modules' backlog and does not push — on
+// 26 September 2026 that one commit held the owner's office: nothing was coming
+// into the Modules at all, yet «HEAD is not on the way to upstream» read as
+// diverged and refused the core with it. Commits of one's own with nothing
+// incoming are not in the way: there is nothing to merge there.
+write(mods, 'BACKLOG.md', 'tracked, like the real one\n- a note, committed\n');
+g(mods, 'commit', '-q', '-am', 'docs(backlog): a note, committed and not pushed');
+const localNote = g(mods, 'rev-parse', 'HEAD');
+write(author, 'd.js', '1'); write(author, 'package.json', pkg('0.55.0'));
+commit(author, 'chore(release): v0.55.0'); g(author, 'push', '-q', 'origin', 'HEAD:main');
+r = await pullUpdate(office);
+ok('Modules ahead with nothing incoming do not hold the core', r.ok && r.to === '0.55.0', r);
+ok('and their own commit stays exactly where it was', g(mods, 'rev-parse', 'HEAD') === localNote);
+
+// Truly diverged — their own commit and one upstream: a fast-forward is
+// impossible, so this still refuses, and nothing moves.
+write(authorMods, 'n.js', '1'); commit(authorMods, 'fix(feed): n'); g(authorMods, 'push', '-q', 'origin', 'HEAD:main');
+write(author, 'e.js', '1'); write(author, 'package.json', pkg('0.56.0'));
+commit(author, 'chore(release): v0.56.0'); g(author, 'push', '-q', 'origin', 'HEAD:main');
+const coreBefore = g(office, 'rev-parse', 'HEAD');
+r = await pullUpdate(office);
+ok('Modules with commits on both sides are still refused as diverged', !r.ok && r.repo === 'modules' && r.reason === 'diverged', r);
+ok('and the core did not move without them', g(office, 'rev-parse', 'HEAD') === coreBefore);
+
+// An office folder with no git at all is not a broken checkout: it came from
+// an archive, and since v0.62.0 that is its own way of updating. What is
+// checked here is only that it is read as such — the archive itself has its own
+// stand, tools/test-update-archive.mjs, which does not reach outside either.
 const plain = path.join(tmp, 'plain'); fs.mkdirSync(plain); write(plain, 'package.json', pkg('0.52.3'));
-r = await checkUpdate(plain);
-ok('an office that is not a git checkout says so instead of failing', r.error && r.error.reason === 'notGit', r);
+const kind = await repos(plain);
+ok('an office folder with no git is the archive kind', kind.length === 1 && kind[0].from === 'archive', kind);
 
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(bad ? `\n${bad} failed` : '\nall passed');

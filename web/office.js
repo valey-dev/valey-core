@@ -158,7 +158,82 @@ export function drawReception(ctx, L, t) {
     px(ctx, x + 5, y - 4, 10, 1, '#f0e7d2');
     px(ctx, x + w - 18, y - 7, 12, 7, '#3b4650');     // the monitor
     px(ctx, x + w - 17, y - 6, 10, 5, '#5f8ea8');
+    // «НАЙМ» on the front of the desk: this is where the office hires. On every
+    // floor and for everyone — a guest learns in the panel that it is the
+    // owner's; the plate is the desk's, not the owner's.
+    // [Reception · floor](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2122-2130)
+    px(ctx, x + 3, y + 3, 22, 7, '#ffd166');
+    px(ctx, x + 4, y + 4, 20, 5, '#2a1d15');
+    pxText(ctx, tr('sign.hire'), x + 6, y + 8, '#ffd166', 5);
   }
+}
+
+// ------------------------------------------------------------------ the portal
+// The door a hired agent comes in by. It follows the process, not a timer:
+// open while claude starts, the figure printing itself line by line until the
+// session exists, then closing behind the agent as it walks to its desk. A
+// run that failed to start leaves a red ring and nobody in it.
+// [Portal · storyboard](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2092-810)
+//
+// x, y are the feet of whoever stands in it — the room's doorPoint.
+// phase: { kind: 'open' | 'ready', age } | { kind: 'close' | 'fail', k: 0..1 }
+const RING = { edge: '#9fe0a8', fill: '#3f6a48', spark: '#d6f5d9' };
+const RING_BAD = { edge: '#ff9f8f', fill: '#7a3a2e', spark: '#ffd9c0' };
+
+function ring(ctx, cx, cy, rx, ry, c) {
+  if (rx < 1 || ry < 1) return;
+  for (let dy = -ry; dy <= ry; dy++) {
+    const half = Math.round(rx * Math.sqrt(Math.max(0, 1 - (dy / ry) ** 2)));
+    const cap = Math.abs(dy) === ry;
+    px(ctx, cx - half, cy + dy, half * 2, 1, cap ? c.edge : c.fill);
+    if (!cap) {
+      px(ctx, cx - half - 1, cy + dy, 2, 1, c.edge);
+      px(ctx, cx + half - 1, cy + dy, 2, 1, c.edge);
+    }
+  }
+}
+
+// The stranger inside: no clothes of its own yet, the same for everybody —
+// who it is becomes known when the session does.
+function stranger(ctx, x, y, rows) {
+  const top = y - 24;
+  ctx.save();
+  // only the rows printed so far
+  ctx.beginPath(); ctx.rect(x - 8, top, 16, rows); ctx.clip();
+  px(ctx, x - 4, top, 8, 8, '#c9ad88');                                   // head
+  px(ctx, x - 2, top + 3, 1, 1, '#1f150f'); px(ctx, x + 1, top + 3, 1, 1, '#1f150f');
+  px(ctx, x - 6, top + 8, 12, 1, '#a58a6a'); px(ctx, x - 6, top + 9, 12, 7, '#8fc8ff');   // shirt
+  px(ctx, x - 4, top + 16, 3, 8, '#3a2a20'); px(ctx, x + 1, top + 16, 3, 8, '#3a2a20');   // legs
+  ctx.restore();
+}
+
+export function drawPortal(ctx, x, y, phase, t) {
+  const cy = y - 12;
+  const bad = phase.kind === 'fail';
+  const c = bad ? RING_BAD : RING;
+  let s = 1;
+  if (phase.kind === 'open' || phase.kind === 'ready') s = Math.min(1, 0.35 + phase.age / 700);
+  if (phase.kind === 'close') s = 1 - phase.k;
+  if (bad && phase.k > 0.7) ctx.globalAlpha = Math.max(0, (1 - phase.k) / 0.3);
+  ring(ctx, x, cy, Math.round(9 * s), Math.round(14 * s), c);
+  if (!bad && phase.kind !== 'close') {
+    // sparks drift round the ring while it is open
+    for (let i = 0; i < 3; i++) {
+      const a = t / 500 + i * 2.1;
+      px(ctx, x + Math.cos(a) * 13 * s, cy + Math.sin(a) * 17 * s, 1, 1, c.spark);
+    }
+  }
+  if (phase.kind === 'open' && s >= 1) {
+    // printed a line at a time, and it holds at the shoulders until the
+    // session answers: the rest is not up to the office
+    const rows = Math.min(20, Math.floor((phase.age - 500) / 120));
+    if (rows > 0) {
+      stranger(ctx, x, y, rows);
+      if (Math.floor(t / 200) % 2) px(ctx, x - 7, y - 24 + rows, 14, 1, c.spark);
+    }
+  }
+  if (phase.kind === 'ready') stranger(ctx, x, y, 24);
+  ctx.globalAlpha = 1;
 }
 
 // The projects on the plaque: the forms come from the dictionary, because English
@@ -408,7 +483,23 @@ function drawCorridorProp(ctx, p, t) {
 // tuning scale and the equaliser, which breathes only when the music is really playing.
 
 // ---------------------------------------------------------------------- room
-export function drawRoom(ctx, r, t) {
+// The rug colourways, in the order SPACE walks them: border, field, medallion.
+// The first is the terracotta every room had before the rug could change, so an
+// office where nobody has pressed anything looks as it did.
+export const RUGS = [
+  { id: 'terracotta', tones: ['#8c4038', '#a54c40', '#c06a4a'] },
+  { id: 'indigo', tones: ['#34406e', '#45558c', '#6a7fb4'] },
+  { id: 'emerald', tones: ['#2f5a44', '#3d7456', '#5e9a6e'] },
+  { id: 'mustard', tones: ['#7a5a1e', '#a07a2a', '#c9a043'] },
+  { id: 'plum', tones: ['#5a3456', '#74446c', '#9a6490'] },
+  { id: 'graphite', tones: ['#3e3a38', '#524c48', '#78706a'] },
+];
+export const rugIndex = (id) => Math.max(0, RUGS.findIndex((c) => c.id === id));
+
+// Where the rug lies: one place for the brush and for "standing on it".
+export const rugRect = (r) => ({ x: r.x + r.w / 2 - 54, y: r.y + r.h - 46, w: 108, h: 26 });
+
+export function drawRoom(ctx, r, t, rug) {
   const T = r.tone;
   for (let y = r.y + WALL; y < r.y + r.h; y += 16) {
     for (let x = r.x; x < r.x + r.w; x += 16) {
@@ -419,10 +510,11 @@ export function drawRoom(ctx, r, t) {
     }
   }
   // rug in the middle of the room
-  const rx = r.x + r.w / 2 - 54, ry = r.y + r.h - 46;
-  px(ctx, rx, ry, 108, 26, '#8c4038');
-  px(ctx, rx + 5, ry + 4, 98, 18, '#a54c40');
-  px(ctx, rx + 18, ry + 9, 72, 8, '#c06a4a');
+  const { x: rx, y: ry } = rugRect(r);
+  const [border, field, medallion] = RUGS[rugIndex(rug)].tones;
+  px(ctx, rx, ry, 108, 26, border);
+  px(ctx, rx + 5, ry + 4, 98, 18, field);
+  px(ctx, rx + 18, ry + 9, 72, 8, medallion);
 
   // walls
   px(ctx, r.x, r.y, r.w, WALL, T.wall);
@@ -674,6 +766,77 @@ function drawFicus(ctx, x, y, seed, t) {
     px(ctx, x + rx + sway, y + ry, 5, 4, ring ? '#3f6633' : '#4d7a3e');
     if (i % 3 === 0) px(ctx, x + rx + sway, y + ry, 5, 1, '#6a9c54');
   }
+}
+
+// ------------------------------------------------------------------ blackout
+// The floor after the power cut, drawn in screen coordinates over everything
+// else: one radial gradient, transparent where the player stands and opaque
+// past the beam. A radial gradient keeps its last stop beyond the outer radius,
+// so a single fill of the whole screen darkens the office and leaves the pool
+// of light in it.
+//
+// The order matters and cost a redraw to find out. The first version put the
+// light on top of the darkness with `lighter`, the way the lamps are done above
+// — and a flashlight that adds light instead of taking away darkness reads as
+// fog: the beam whitened the screen and the floor under it stayed hidden. The
+// hole has to be in the darkness itself.
+//
+// `glows` are the phones in the hands of the agents: small, cold, and standing
+// still. They are drawn as their own holes rather than as light, for the same
+// reason — and because a phone that lit the room would say somebody is working.
+export function drawBlackout(ctx, w, h, beam, glows = []) {
+  const dark = (x, y, r0, r1, alpha) => {
+    const g = ctx.createRadialGradient(x, y, r0, x, y, r1);
+    g.addColorStop(0, 'rgba(20,13,8,0)');
+    g.addColorStop(0.55, `rgba(20,13,8,${alpha * 0.6})`);
+    g.addColorStop(1, `rgba(20,13,8,${alpha})`);
+    return g;
+  };
+  ctx.fillStyle = dark(beam.x, beam.y, 10, 74, 0.93);
+  ctx.fillRect(0, 0, w, h);
+
+  // Each phone lifts its own small patch out of the dark that was just laid
+  // down; `destination-out` cuts, so the fill colour here is only its alpha.
+  if (glows.length) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    // 20 px and 0.72, not less: the first real frame at 13 px and half strength
+    // left a lone blue dot, and the agent holding the phone could not be seen
+    // at all — the frame asked for a figure picked out of the dark.
+    for (const p of glows) {
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 20);
+      g.addColorStop(0, 'rgba(0,0,0,0.72)');
+      g.addColorStop(0.5, 'rgba(0,0,0,0.35)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(p.x - 20, p.y - 20, 40, 40);
+    }
+    ctx.restore();
+    // A cold sliver on top: a screen in a hand, not a candle.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const p of glows) {
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 9);
+      g.addColorStop(0, 'rgba(96,134,176,0.32)');
+      g.addColorStop(1, 'rgba(96,134,176,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(p.x - 9, p.y - 9, 18, 18);
+      ctx.fillStyle = 'rgba(143,200,255,0.55)';
+      ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 2, 2);
+    }
+    ctx.restore();
+  }
+
+  // The beam itself keeps a little warmth, so the lit patch is a torch rather
+  // than a window into daylight.
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const warm = ctx.createRadialGradient(beam.x, beam.y, 4, beam.x, beam.y, 52);
+  warm.addColorStop(0, 'rgba(255,209,102,0.16)');
+  warm.addColorStop(1, 'rgba(255,209,102,0)');
+  ctx.fillStyle = warm;
+  ctx.fillRect(beam.x - 52, beam.y - 52, 104, 104);
+  ctx.restore();
 }
 
 // --------------------------------------------------------------------- light

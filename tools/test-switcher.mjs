@@ -120,5 +120,5 @@ const steam = (list) => has(list, '#e4dfd4');
   ok('no flags · no cigarettes, no smoke, no steam', !stick(r) && smoke(r).length === 0 && steam(r).length === 0);
 }
 
-console.log(bad ? `\nупало: ${bad}` : '\nall passed');
+console.log(bad ? `\nfailed: ${bad}` : '\nall passed');
 process.exit(bad ? 1 : 0);
