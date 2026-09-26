@@ -10,8 +10,9 @@
 // worker that fails to start leaves the old one running.
 //
 // An update is not a restart. Guests, what they were granted, the notes on the
-// desks all move across; a Ctrl-C is still a restart and still forgets them.
-// Decided 13 September 2026.
+// desks all move across; a Ctrl-C is still a restart and still forgets them —
+// all but the notes, which are kept on disk as well (desk.js). Decided
+// 13 September 2026.
 //
 // Frames: [WIP section #office-update](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2169-6969)
 import cluster from 'node:cluster';
@@ -20,14 +21,27 @@ import os from 'node:os';
 import path from 'node:path';
 import { checkUpdate, pullUpdate } from './update.js';
 
-export const isWorker = cluster.isWorker && process.env.VALEY_WORKER === '1';
+// What the supervisor told this worker, read once and then taken out of the
+// environment. Everything the office spawns inherits process.env — a `claude
+// -p` run into a live session above all — and until 13 September 2026 an agent
+// session driven from an updated office carried VALEY_PORT_FIXED=5177 in its
+// own: every stand it started went for the office's port instead of its own
+// and fell over on EADDRINUSE, and a stand run from `npm start` would also
+// have held its requests for thirty seconds waiting for a handover.
+export const SWAP_ENV = ['VALEY_WORKER', 'VALEY_PORT_FIXED', 'VALEY_HOST_FIXED', 'VALEY_HANDOFF_WAIT'];
+const told = Object.fromEntries(SWAP_ENV.map((k) => [k, process.env[k]]));
+for (const k of SWAP_ENV) delete process.env[k];
+
+export const isWorker = cluster.isWorker && told.VALEY_WORKER === '1';
 
 // Where the previous worker listened. The next one takes exactly that address:
 // asked to find a free port it would walk the same road again and could land
 // elsewhere, and «office already running» would stop it at its own port.
+// Honoured only in a worker: a plain `node server/index.js` has no supervisor
+// holding the port for it, whatever its environment says.
 export function fixedAddress() {
-  const port = Number(process.env.VALEY_PORT_FIXED);
-  return port ? { port, host: process.env.VALEY_HOST_FIXED || '127.0.0.1' } : null;
+  const port = isWorker && Number(told.VALEY_PORT_FIXED);
+  return port ? { port, host: told.VALEY_HOST_FIXED || '127.0.0.1' } : null;
 }
 
 // ------------------------------------------------------------------- the gate
@@ -40,7 +54,7 @@ let onOpen = null;
 // stopped accepting — and that request would die with it. Found by the stand
 // on its second run: one probe of thirty-eight refused.
 let closing = false;
-if (process.env.VALEY_HANDOFF_WAIT === '1') {
+if (isWorker && told.VALEY_HANDOFF_WAIT === '1') {
   gate = new Promise((resolve) => { openGate = resolve; });
   // A handoff that never comes must not hold the office forever: after half a
   // minute the new worker serves with what it has.

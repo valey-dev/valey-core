@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { snapshot, fileOwners, conversation, PACK_IDS, namePool, nameSample, effectivePack, previewPack } from './agents.js';
 import { realWeather, forgetWeather, geocode } from './weather.js';
 import {
-  getSettings, patchSettings, updateSettings, publicSettings, ownerToken, warnIfSharedSettingsWorktree,
+  getSettings, patchSettings, updateSettings, publicSettings, ownerToken, warnIfSharedSettingsWorktree, PATHS,
 } from './settings.js';
 import { deliver, deliveryStatus, forgetCli, isBusy, MODES, adopt, releaseRuns } from './deliver.js';
 import { ask as askPermit, answer as answerPermit, permits, forgetGone, retryAll } from './permit.js';
@@ -17,6 +17,7 @@ import { releaseNudge } from './release.js';
 import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset, modulesOff } from './modules.js';
 import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
 import { isLan, deviceOf, shownDevice, deviceName, Pairings, SEEN_EVERY } from './devices.js';
+import { deskFile, loadDesk, deskWriter } from './desk.js';
 import { MIME, MAX_VIEW, fileType, fileHeaders } from './files.js';
 import { listenFree } from './port.js';
 import { createExposure, lanAddresses } from './expose.js';
@@ -71,6 +72,10 @@ const clients = new Set();
 // Notes the player left, plus whatever was actually sent into a live chat.
 const outbox = [];
 let taskSeq = 0;
+// Writes the desk to disk (desk.js). Set by start() once the port is known; an
+// office built only as a handler, as the stands build it, keeps its desk in
+// memory.
+let keepDesk = () => {};
 
 // ------------------------------------------------------------- the projection
 // What a guest sees about an agent. Exactly what is visible to anyone standing
@@ -357,8 +362,9 @@ function broadcastPermits() {
 // What moves to the office that replaces this one on an update (server/swap.js).
 // Everything that lives only in memory and that a person would miss: the notes
 // on the desks, what guests asked for and were granted, who is standing where,
-// the stand's module switches. A restart forgets all of it on purpose; an
-// update is not a restart.
+// the stand's module switches. A restart forgets all of it but the notes, which
+// are also kept on disk (desk.js); the rest it forgets on purpose. An update is
+// not a restart.
 function exportState() {
   return {
     v: 1,
@@ -382,16 +388,39 @@ async function importState(state) {
   for (const [id, p] of state.people || []) people.set(id, { ...p, at: now });
   for (const id of state.modulesOff || []) setModuleOff(id, true);
   audienceUntil = now + 20_000;
+  // A note that was still being delivered: its run lives on in its own process
+  // group, and this office reads how it ended. These two lines sat after the
+  // return below from 13 September 2026 and never ran: a note in flight during
+  // an update stayed «sending» for good.
+  adoptSending();
+  console.log(`[update] took over from v${state.from}: ${outbox.length} notes, ${grants.size} guests with access`);
   // The snapshot built at start knows nothing of this, and the next tick is
   // 2.5 s away: the pages reloading onto this office would find the desks
   // bare. The gate is still shut while this runs, so no page ever sees the
   // snapshot without what came across. Not observed: nothing happened, the
   // office only changed hands.
   return rebuild({ observe: false }).catch((e) => console.error('[update] snapshot after the handover:', e.message));
-  // A note that was still being delivered: its run lives on in its own process
-  // group, and this office reads how it ended.
+}
+
+function adoptSending() {
   for (const t of outbox) if (t.state === 'sending') adopt(t).catch((e) => { t.state = 'failed'; t.error = e.message; });
-  console.log(`[update] took over from v${state.from}: ${outbox.length} notes, ${grants.size} guests with access`);
+}
+
+// The desk as the previous run of this office left it on disk. Only on a cold
+// start: an office taking over from an older one gets the notes in the
+// handover, fresher than the file by up to one tick.
+async function restoreDesk(port, { load = true } = {}) {
+  const file = deskFile({ settingsFile: PATHS.file, port });
+  keepDesk = deskWriter(file);
+  if (!load) return 0;
+  const kept = await loadDesk(file);
+  outbox.push(...kept.outbox);
+  taskSeq = Math.max(taskSeq, kept.taskSeq);
+  // A run sent before the restart may still be answering — it is in a process
+  // group of its own and outlived the office (deliver.js); its files are read
+  // the same way as after an update.
+  adoptSending();
+  return kept.outbox.length;
 }
 
 // Every page is told the office was updated, and to reload onto the new one.
@@ -423,6 +452,9 @@ async function rebuild({ observe = true } = {}) {
     // are not what the work is about; the drafts keep being written at release.
     next.release = settings.releaseNudge === false ? null : await releaseNudge(ROOT);
     for (const a of next.agents) a.outbox = outbox.filter((t) => t.agentId === a.id).slice(-5);
+    // A delivery changes its note's state on its own time; the tick is where
+    // that reaches the disk. Written only when something did change.
+    keepDesk(outbox, taskSeq);
     next.weather = await realWeather();
     next.settings = publicSettings(settings);
     next.delivery = await deliveryStatus();
@@ -1031,6 +1063,11 @@ async function handle(req, res) {
     } catch (e) {
       if (e instanceof BodyError) throw e;
       return send(res, 400, { error: e.message });
+    } finally {
+      // At once rather than on the tick: a note left a second before a restart
+      // is still a note, and one handed to the chat must not come back as
+      // lying on the desk, ready to be sent a second time.
+      keepDesk(outbox, taskSeq);
     }
   }
 
@@ -1322,6 +1359,8 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
     : await listenFree(server, port, HOST, { log: console.log, own: VERSION });
   if (bound === null) return null;
   port = bound;
+  // Before the first tick, so the first snapshot already has the notes on it.
+  const notes = await restoreDesk(port, { load: !fixed });
   exposure = createExposure({ handler, port, host: HOST });
   // Straight after binding: a message that arrives before anybody listens for
   // it is lost, and the handover is exactly such a message. An office taking
@@ -1357,6 +1396,7 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
     console.log(`  http://<this-machine-address>:${port}/?token=${t || '<see settings>'}`);
   }
   if (mods.length) console.log(`  modules: ${mods.map(m => m.id).join(', ')}`);
+  if (notes) console.log(`  notes on the desks: ${notes}, kept from the last run`);
   // A module that failed to load must say so here: otherwise a missing feature
   // gets investigated by eye instead of by one line in the log.
   for (const e of moduleErrors()) console.log(`  module failed to start: ${e.id} — ${e.error}`);

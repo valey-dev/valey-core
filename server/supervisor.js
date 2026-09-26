@@ -18,6 +18,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+// A supervisor started from a shell that itself came out of an office — an
+// agent session the office sent a message into — may carry the variables it
+// hands its own workers. The first worker must not read them as its own: it
+// would take the other office's port and wait for a handover nobody sends.
+for (const k of ['VALEY_WORKER', 'VALEY_PORT_FIXED', 'VALEY_HOST_FIXED', 'VALEY_HANDOFF_WAIT']) delete process.env[k];
 // silent: the workers' output is passed through by hand, so the last lines of a
 // worker that failed to start can be told to the office that asked for it.
 // VALEY_WORKER_EXEC is for the stand alone: a worker of its own that can be told
