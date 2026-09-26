@@ -4,6 +4,22 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.70.0 — 26 September 2026
+
+### Added
+
+- **access:** the owner decides what a guest sees, module by module (623f4ee)
+
+### Fixed
+
+- **access:** a guest's page loads the modules shown to him, not none of them (1464f0a)
+- **access:** a guest whose phone slept through the owner's switch still gets the module (cb39571)
+- **access:** a guest invited over the Wi-Fi gets in, instead of «a token is required» (0be5799)
+- **access:** an invitation made from localhost names the office's address on the Wi-Fi (96178d7)
+
+### Other
+
+- test(access): the guest stand listens for the set of modules, not for «reload» (3ccbe68)
 ## v0.69.5 — 26 September 2026
 
 ### Fixed
