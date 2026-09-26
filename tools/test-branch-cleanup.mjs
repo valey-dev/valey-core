@@ -67,6 +67,29 @@ try {
   ok('an unmerged branch is refused', r.status === 1 && /not fully merged/.test(r.stderr), r.stderr);
   ok('the refused branch remains', has('refs/heads/feature/unmerged'));
 
+  // What land does: the merge and the release happen in another tree, so
+  // origin/main moves while the local main stays behind. `git branch -d` asks
+  // «merged into HEAD?» — the stale local main — and refused three landings in
+  // a row (#125, #136, #139, 23–26 September 2026), each fully in origin/main.
+  const other = path.join(tmp, 'other');
+  git('switch', '-c', 'feature/elsewhere');
+  fs.writeFileSync(path.join(repo, 'elsewhere.txt'), 'elsewhere\n');
+  git('add', 'elsewhere.txt'); git('commit', '-m', 'feat: elsewhere');
+  git('push', '-u', 'origin', 'feature/elsewhere'); git('switch', 'main');
+  run('git', ['clone', '-q', remote, other], tmp);
+  const og = (...args) => { const x = run('git', ['-C', other, '-c', 'user.name=o', '-c', 'user.email=o@example.invalid', ...args], tmp); if (x.status) throw new Error(x.stderr); };
+  og('merge', '--no-ff', 'origin/feature/elsewhere', '-m', 'merge elsewhere'); og('push', 'origin', 'main');
+  // and the host deletes the merged head, so the branch's upstream is gone and
+  // `-d` falls back to HEAD — without this the stand passes on the broken code
+  og('push', 'origin', '--delete', 'feature/elsewhere');
+  git('fetch', '--prune', 'origin');
+  const localMain = git('rev-parse', 'main');
+  r = cleanup('feature/elsewhere', '--apply');
+  ok('a branch merged into origin/main is cleaned while the local main lags behind', r.status === 0, r.stderr);
+  ok('its local branch is gone', !has('refs/heads/feature/elsewhere'));
+  ok('the local main was not moved to get there', git('rev-parse', 'main') === localMain);
+  git('merge', '--ff-only', 'origin/main');
+
   r = cleanup('main', '--apply');
   ok('main is protected', r.status === 1 && /protected branch/.test(r.stderr), r.stderr);
 
