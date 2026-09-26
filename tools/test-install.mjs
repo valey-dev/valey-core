@@ -58,8 +58,8 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const BASE = `http://127.0.0.1:${server.address().port}`;
 
 // `dir` null leaves --dir out, which is what makes the script ask where to go.
-const run = (dir, extra = [], env = {}, cwd = undefined) => new Promise((resolve) => {
-  execFile('sh', [SCRIPT, ...(dir ? [`--dir=${dir}`] : []), '--version=9.9.9', ...extra],
+const run = (dir, extra = [], env = {}, cwd = undefined, shell = 'sh') => new Promise((resolve) => {
+  execFile(shell, [SCRIPT, ...(dir ? [`--dir=${dir}`] : []), '--version=9.9.9', ...extra],
     // Pinned, not inherited: the stand must not pass or fail on whoever's
     // machine it runs on having a Russian locale. And no terminal by default —
     // run from a shell, the script would otherwise ask the person at it.
@@ -131,6 +131,27 @@ try {
   assert.equal(r.code, 0, `the update from inside failed: ${r.out}`);
   assert.match(r.out, /терминал остался в прежнем офисе, .*inside\.v1\.0\.0.*cd .*inside$/m,
     `a terminal inside the old office was not told to move: ${r.out}`);
+
+  // And under every other shell on this machine, because that warning is the
+  // one thing here that depends on how the shell answers `pwd` after the folder
+  // it stands in has been renamed: dash answers out of the PWD it inherited,
+  // bash and zsh ask the kernel. On 26 September 2026 the difference painted CI
+  // red on every branch for a day while this stand was green on a mac — `sh` is
+  // bash there and dash on the runner.
+  // zsh is left out on purpose: it aborts on a pattern that matches nothing,
+  // which the module sweep above relies on, so it cannot run this script at all
+  // — a separate bug, in BACKLOG.md.
+  const shells = ['dash', 'bash'].filter((sh) => {
+    try { execFileSync(sh, ['-c', 'exit 0'], { stdio: 'ignore' }); return true; } catch { return false; }
+  });
+  for (const sh of shells) {
+    const one = office(path.join(work, `inside-${sh}`), '1.0.0');
+    r = await run(one, ['--update'], {}, one, sh);
+    assert.equal(r.code, 0, `${sh}: the update from inside failed: ${r.out}`);
+    assert.match(r.out, /терминал остался в прежнем офисе/,
+      `${sh}: a terminal inside the old office was not told to move: ${r.out}`);
+  }
+  console.log(`ok    | the terminal inside the office is told to move, in sh${shells.map((s) => `, ${s}`).join('')}`);
 
   // The same version is left alone: nothing to update, nothing moved aside.
   r = await run(upd, ['--update']);

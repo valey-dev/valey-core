@@ -4,6 +4,41 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.69.5 — 26 September 2026
+
+### Fixed
+
+- **test:** the Codex stand writes its recording script as CommonJS, so Node 18 and 20 can run it (7c31fd1)
+## v0.69.4 — 26 September 2026
+
+### Fixed
+
+- **test:** the branch-cleanup stand builds its bare repository on main, so a machine that still defaults to master can run it (5d03f48)
+## v0.69.3 — 26 September 2026
+
+### Fixed
+
+- **test:** the archive-update stand runs on Node 18, and a copy of the tree without git skips the manifest instead of throwing (9af8ce9)
+## v0.69.2 — 26 September 2026
+
+### Fixed
+
+- **release:** land stops reporting «branch cleanup failed» for a branch that is fully merged (e7a98d0)
+## v0.69.1 — 26 September 2026
+
+### Fixed
+
+- **install:** an update run from inside the office warns the terminal on Linux too, not only on a mac (0725724)
+## v0.69.0 — 26 September 2026
+
+### Added
+
+- **notes:** a patch release gets a note — each fix a section in its own words, tooling fixes left out (627cffa)
+## v0.68.2 — 26 September 2026
+
+### Fixed
+
+- **deliver:** a task to a chat whose folder is gone says so instead of «exited with code -2» (093837f)
 ## v0.68.1 — 26 September 2026
 
 ### Fixed

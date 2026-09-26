@@ -160,7 +160,7 @@ let denying = false;
 const said = (o, field = 'error') => {
   if (!o) return '';
   const key = field === 'hint' ? o.hintKey : o.errorKey;
-  return key ? tr(key) : (o[field] || '');
+  return key ? tr(key, field === 'hint' ? undefined : o.errorVars) : (o[field] || '');
 };
 
 const STATUS_WORDS = ['awaiting', 'stopped', 'idle'];
