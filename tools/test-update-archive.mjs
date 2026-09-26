@@ -12,6 +12,12 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Not `import.meta.dirname`: it arrived in Node 20.11, this project runs on
+// Node 18 and up, and CI is where that difference showed — the stand threw
+// «path must be of type string» there while passing on every machine here.
+const TOOLS = path.dirname(fileURLToPath(import.meta.url));
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -159,13 +165,20 @@ ok('and the core updates alone', r.ok && r.to === '0.58.0' && r.shelf === 'close
 // The file the check reads is the file the release writes. Without this the two
 // halves could drift apart silently: a manifest renamed here would only be
 // noticed by an office out in the world, pressing a button that says «offline».
-const tag = execFileSync('git', ['tag', '-l', 'v*'], { cwd: path.dirname(import.meta.dirname), encoding: 'utf8' })
-  .split('\n').filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).pop();
+// Asked of git rather than assumed: a copy of the tree without the repository —
+// a container with the sources mounted in, a worktree whose .git points at a
+// path that does not exist there — has no tags, and that is a skip, not a
+// failure. Before this the throw read as «the archive update is broken».
+let tag = null;
+try {
+  tag = execFileSync('git', ['tag', '-l', 'v*'], { cwd: path.dirname(TOOLS), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+    .split('\n').filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).pop() || null;
+} catch { /* not a repository here */ }
 if (!tag) {
-  console.log('skip  | the manifest: this checkout has no v* tag to build one from');
+  console.log('skip  | the manifest: no v* tag to build one from here');
 } else {
   const out = path.join(tmp, 'dist');
-  execFileSync(process.execPath, [path.join(import.meta.dirname, 'dist.mjs'), tag, '--out', out], { stdio: 'ignore' });
+  execFileSync(process.execPath, [path.join(TOOLS, 'dist.mjs'), tag, '--out', out], { stdio: 'ignore' });
   const m = JSON.parse(fs.readFileSync(path.join(out, 'valey-latest.json'), 'utf8'));
   ok('the release writes the manifest the check asks for', m.version === tag.replace(/^v/, '') && typeof m.sha256 === 'string' && Number.isFinite(m.feats) && Number.isFinite(m.fixes), m);
   // And it is read as such: served in place of the stand's own, it drives the row.

@@ -1,7 +1,7 @@
 import { lookOf, drawPerson, drawCat, normalizeLook, isSelfLabel, dressOf, dressMe } from './sprites.js';
 import { potState, water as waterPot, tally, CAN_FULL } from './garden.js';
 import { buildLayout, planSignature, blocked, roomAt, anchorOf, applyAnchor, pickRoom, WALL } from './layout.js';
-import { loadModules, collect, first, attachStreams } from './modules.js';
+import { loadModules, collect, first, attachStreams, guestModules } from './modules.js';
 import { owned, passQuery, setTokens } from './owned.js';
 import { initStand } from './stand.js';
 import { switcherSign, drawCorridor, drawRoom, drawBoard, drawDesk, drawRoomProps, drawLight, drawBlackout, drawBreaker, breakerAt, drawSecurity, drawMeeting, drawGreenhouse, drawMicro, drawLift, drawReception, drawPortal, pxText, kickerBusy, RUGS, rugIndex, rugRect } from './office.js';
@@ -377,6 +377,10 @@ UI.initUI(state, {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({ guestId, agentId }),
   }).then((r) => r.json()).catch((e) => ({ error: e.message })),
+  guestModule: (id, choice) => fetch('/api/invite/guests', {
+    method: 'POST', headers: owned({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ id, choice }),
+  }).then((r) => r.json()).catch((e) => ({ error: e.message })),
   revokeInvite: (id) => fetch('/api/invite/revoke', {
     method: 'POST', headers: owned({ 'content-type': 'application/json' }),
     body: JSON.stringify({ id }),
@@ -654,6 +658,11 @@ function openStream() {
     try { sessionStorage.setItem('valeyUpdated', e.data); } catch { /* private mode: no toast, still a reload */ }
     es.close();
     setTimeout(() => location.reload(), 300);
+  });
+  // The modules a guest should have, sent on every connect and whenever the
+  // owner changes them (web/modules.js, guestModules). Owners never receive it.
+  es.addEventListener('modules', (e) => {
+    try { guestModules(JSON.parse(e.data)); } catch { /* junk in the frame — we skip it */ }
   });
   attachStreams(es);
   linkTrying();
@@ -944,6 +953,7 @@ function onKey(e) {
   if (UI.skyKey(e.key)) { e.preventDefault(); return; }
   if (UI.skinKey(e.key)) { e.preventDefault(); return; }
   if (UI.langKey(e.key)) { e.preventDefault(); return; }
+  if (UI.inviteKey(e.key)) { e.preventDefault(); return; }
   // What we take from the browser: scrolling on space, moving focus on Tab. Counted by
   // the physical key rather than by the character: under a Russian layout the space bar
   // is still the space bar, while a check by character walked past Cyrillic in silence.

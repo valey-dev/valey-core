@@ -3,6 +3,7 @@
   "name": { "ru": "Радио у входа", "en": "The radio" },
   "tier": "core",
   "guests": "shown",
+  "guestNote": { "ru": "музыка", "en": "music" },
   "client": "client.js",
   "style": "style.css",
   "server": "server.js"

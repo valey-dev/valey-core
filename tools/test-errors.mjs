@@ -59,6 +59,8 @@ process.exit(1);
 
 // A folder that exists: the CLI is spawned in the agent's cwd.
 const claude = await fakeClaudeDir(dir, { cwd: dir });
+// And a chat whose folder was moved away after it started.
+const gone = await fakeClaudeDir(dir, { slot: 'gone', sessionId: 'bbbbbbbb-0000-4000-8000-000000000002', cwd: path.join(dir, 'moved-away') });
 const { base, stop, settingsFile } = await startOffice({ claudeDir: claude.dir, env: { CLAUDE_BIN: fake, VALEY_ERRORS: '' } });
 try {
   const journal = settingsFile.replace(/\.json$/, '.errors.jsonl');
@@ -82,6 +84,21 @@ try {
   ok('a failed delivery lands in the journal with the CLI answer', failed && /No conversation found/.test(failed.message), failed);
   ok('with which CLI and which version', failed && failed.cli === fake && failed.cliVersion === '9.9.9 (Claude Code)', failed);
   ok('and without the text of the task', failed && !JSON.stringify(failed).includes('private task'), failed);
+
+  // The folder is checked before the CLI is started: until 26 September 2026
+  // this read «claude exited with code -2» and nothing else.
+  for (let i = 0; i < 40 && !((await get('/api/state')).agents || []).some((a) => a.id === gone.sessionId); i++)
+    await new Promise((r) => setTimeout(r, 150));
+  const lost = await (await post('/api/task', { agentId: gone.sessionId, text: 'a task for a moved chat', deliver: true })).json();
+  ok('a task to a chat without its folder is accepted', lost.ok === true, lost);
+  let noCwd = null;
+  for (let i = 0; i < 60 && !noCwd; i++) {
+    const { errors } = await get('/api/errors');
+    noCwd = (errors || []).find((e) => e.source === 'deliver' && e.agent === gone.sessionId.slice(0, 8));
+    if (!noCwd) await new Promise((r) => setTimeout(r, 150));
+  }
+  ok('and fails saying the folder is gone, with the path, not an exit code',
+    noCwd && noCwd.key === 'err.noCwd' && noCwd.message.includes('moved-away') && !/exited with code/.test(noCwd.message), noCwd);
 
   const { env, errors } = await get('/api/errors');
   const p = errors.find((e) => e.source === 'page');

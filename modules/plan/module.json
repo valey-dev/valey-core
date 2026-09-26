@@ -3,6 +3,7 @@
   "name": { "ru": "План офиса", "en": "Office plan" },
   "tier": "core",
   "guests": "shown",
+  "guestNote": { "ru": "карта этажа", "en": "the floor map" },
   "client": "client.js",
   "style": "style.css"
 }

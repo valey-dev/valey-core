@@ -96,6 +96,30 @@ ok('the untracked backlog is left where it was', fs.existsSync(path.join(office,
 r = await checkUpdate(office);
 ok('and check then says up to date', r.upToDate === true, r);
 
+// A session commits to the Modules' backlog and does not push — on
+// 26 September 2026 that one commit held the owner's office: nothing was coming
+// into the Modules at all, yet «HEAD is not on the way to upstream» read as
+// diverged and refused the core with it. Commits of one's own with nothing
+// incoming are not in the way: there is nothing to merge there.
+write(mods, 'BACKLOG.md', 'tracked, like the real one\n- a note, committed\n');
+g(mods, 'commit', '-q', '-am', 'docs(backlog): a note, committed and not pushed');
+const localNote = g(mods, 'rev-parse', 'HEAD');
+write(author, 'd.js', '1'); write(author, 'package.json', pkg('0.55.0'));
+commit(author, 'chore(release): v0.55.0'); g(author, 'push', '-q', 'origin', 'HEAD:main');
+r = await pullUpdate(office);
+ok('Modules ahead with nothing incoming do not hold the core', r.ok && r.to === '0.55.0', r);
+ok('and their own commit stays exactly where it was', g(mods, 'rev-parse', 'HEAD') === localNote);
+
+// Truly diverged — their own commit and one upstream: a fast-forward is
+// impossible, so this still refuses, and nothing moves.
+write(authorMods, 'n.js', '1'); commit(authorMods, 'fix(feed): n'); g(authorMods, 'push', '-q', 'origin', 'HEAD:main');
+write(author, 'e.js', '1'); write(author, 'package.json', pkg('0.56.0'));
+commit(author, 'chore(release): v0.56.0'); g(author, 'push', '-q', 'origin', 'HEAD:main');
+const coreBefore = g(office, 'rev-parse', 'HEAD');
+r = await pullUpdate(office);
+ok('Modules with commits on both sides are still refused as diverged', !r.ok && r.repo === 'modules' && r.reason === 'diverged', r);
+ok('and the core did not move without them', g(office, 'rev-parse', 'HEAD') === coreBefore);
+
 // An office folder with no git at all is not a broken checkout: it came from
 // an archive, and since v0.62.0 that is its own way of updating. What is
 // checked here is only that it is read as such — the archive itself has its own

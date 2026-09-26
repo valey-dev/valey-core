@@ -160,7 +160,7 @@ let denying = false;
 const said = (o, field = 'error') => {
   if (!o) return '';
   const key = field === 'hint' ? o.hintKey : o.errorKey;
-  return key ? tr(key) : (o[field] || '');
+  return key ? tr(key, field === 'hint' ? undefined : o.errorVars) : (o[field] || '');
 };
 
 const STATUS_WORDS = ['awaiting', 'stopped', 'idle'];
@@ -3662,7 +3662,30 @@ function devicesHtml() {
 }
 
 export function inviteOpen() { return el.invite && !el.invite.hidden; }
-export function closeInvite() { if (el.invite) el.invite.hidden = true; }
+
+// The keys of the invite panel: ↑↓ walk the rows of "what a guest sees" keeping
+// the column, ←→ move between shown and hidden, Enter presses; the other buttons
+// of the panel are reached the same way, one after another.
+const inviteRing = focusRing(() => el.invite, '.segbtn, #invMake, #invCopy, [data-yes], [data-no], [data-shut], [data-douse]', { rows: '.gmrow' });
+export function inviteKey(raw) { return inviteRing.key(raw, el.invite && !el.invite.hidden); }
+
+// "What a guest sees": the owner's choice per module over the manifest's
+// default, one choice for all guests. A row whose choice departs from the
+// default is marked; choosing the default again clears both. The frame: WIP
+// #guests, "the owner picks modules", v2, approved 11 September 2026.
+const guestsHtml = (mods) => {
+  if (!Array.isArray(mods) || !mods.length) return '';
+  const word = (o) => esc((o && (o[lang()] || o.ru || o.en)) || '');
+  return `<p class="hint gmhead">${tr('inv.guests')}</p>
+    <div class="gmlist">${mods.map((m) => `<div class="gmrow" data-gm="${esc(m.id)}">
+      <b>${word(m.name) || esc(m.id)}</b><span class="gmnote">${word(m.note)}</span>
+      <i class="gmmark">${m.choice && m.choice !== m.default ? tr('inv.notDefault') : ''}</i>
+      <span class="seg">
+        <button class="segbtn${m.shown ? ' on' : ''}" data-gm-set="${esc(m.id)}|shown">${tr('inv.shown')}</button>
+        <button class="segbtn${m.shown ? '' : ' on'}" data-gm-set="${esc(m.id)}|hidden">${tr('inv.hidden')}</button>
+      </span></div>`).join('')}</div>`;
+};
+export function closeInvite() { if (el.invite) el.invite.hidden = true; inviteRing.reset(); }
 
 export async function openInvite() {
   el.invite.hidden = false;
@@ -3725,6 +3748,7 @@ async function renderInvite() {
       </div>` : ''}
       ${(S.settings && S.settings.access && S.settings.access.mode === 'shared')
         ? `<p class="hint warn">${tr('inv.shared')}</p>` : ''}
+      ${guestsHtml(list.modules)}
       ${requestsHtml()}
       ${openHtml()}
       <p class="hint">${tr('inv.given')}</p>
@@ -3780,6 +3804,14 @@ async function renderInvite() {
   el.invite.querySelectorAll('[data-douse]').forEach((b) => {
     b.onclick = async () => { await api.revokeInvite(b.dataset.douse); await renderInvite(); };
   });
+  el.invite.querySelectorAll('[data-gm-set]').forEach((b) => {
+    b.onclick = async () => {
+      const [id, choice] = b.dataset.gmSet.split('|');
+      await api.guestModule(id, choice);
+      await renderInvite();
+    };
+  });
+  inviteRing.paint();
 }
 
 export function openLift(lift, floorNow, pick) {

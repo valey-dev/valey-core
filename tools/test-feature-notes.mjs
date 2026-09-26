@@ -13,7 +13,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { parseFragment, readFragments, renderNote, checkNotes, missingShots, unpictured, assemble, shotSource, beforeSource, findBefore, cmpTag, releaseBody } from './notes.mjs';
+import { parseFragment, readFragments, renderNote, checkNotes, missingShots, unpictured, assemble, shotSource, beforeSource, findBefore, cmpTag, releaseBody, fixSections } from './notes.mjs';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -21,6 +21,22 @@ const ok = (name, cond, got) => {
   else { bad += 1; console.log('FAIL  |', name, '→', String(got).slice(0, 300)); }
 };
 const fails = (fn) => { try { fn(); return ''; } catch (e) { return e.message; } };
+
+// --- fixes in the note ---------------------------------------------------
+// A patch had no note before 26 September 2026; its fixes are its sections now.
+{
+  const fx = fixSections([
+    { scope: 'office', text: 'answering a question leaves the card on «what are you working on»' },
+    { scope: 'release', text: 'a release that loses the race takes its tag back' },
+    { scope: '', text: '`promote` names the version' },
+  ]);
+  ok('a service scope stays out of the note, a visible one gets a capital',
+    fx.length === 2 && fx[0].title.startsWith('Answering') && fx[0].scope === 'office', JSON.stringify(fx));
+  ok('a subject that starts with code keeps it as written', fx[1].title === '`promote` names the version', fx[1].title);
+  const md = renderNote('v0.61.5', '17 September 2026', [], '## v0.61.5\n\n### Fixed\n\n- **office:** x\n', fx);
+  ok('a patch note has a section per fix, marked, above the changelog',
+    /## Answering[^\n]*\n\n<!-- fix -->\n\n\*office\*/.test(md) && md.indexOf('## Answering') < md.indexOf('### What changed'), md);
+}
 
 // --- the front matter ----------------------------------------------------
 const good = `---
