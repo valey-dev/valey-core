@@ -75,7 +75,11 @@ export const gated = (handler) => async (req, res) => {
 // ------------------------------------------------------------- the update state
 // What the version row in the office tab shows. One office, one update at a
 // time: a second press while one runs gets the same state back.
-export const upd = { state: 'idle', current: null, available: null, feats: 0, fixes: 0, steps: [], reason: null, repo: null, detail: null, at: 0 };
+// `source` is where the office came from — a checkout or an archive from
+// valey.dev — and `shelf` whether the modules of the Office are a checkout that
+// can still be reached. Both are answers to «what will the button do», so they
+// are part of the state the row reads, not a second request.
+export const upd = { state: 'idle', source: 'git', shelf: 'none', current: null, available: null, feats: 0, fixes: 0, steps: [], reason: null, repo: null, detail: null, at: 0 };
 const readVersion = (root) => JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 
 export async function runCheck(root, running) {
@@ -83,6 +87,8 @@ export async function runCheck(root, running) {
   Object.assign(upd, { state: 'checking', current: running, reason: null, repo: null, detail: null, steps: [] });
   const r = await checkUpdate(root);
   upd.at = Date.now();
+  upd.source = r.source || 'git';
+  upd.shelf = r.shelf || 'none';
   if (r.error) return Object.assign(upd, { state: 'failed', reason: r.error.reason, repo: r.error.repo || null, detail: r.error.detail || null });
   // The code on disk can already be ahead of the running office: a previous
   // update pulled it and the new server did not come up. Then there is still
@@ -102,6 +108,9 @@ export async function runUpdate(root, running) {
   Object.assign(upd, { state: 'updating', current: running, reason: null, repo: null, detail: null, steps: [] });
   const r = await pullUpdate(root, { step: (k) => upd.steps.push(k) });
   if (!r.ok) return Object.assign(upd, { state: 'failed', reason: r.reason, repo: r.repo || null, detail: r.detail || null, at: Date.now() });
+  // The core moved and the shelf did not: not a refusal — the office runs the
+  // new core — but the row has to say it rather than report a clean update.
+  if (r.shelf === 'failed') Object.assign(upd, { shelf: 'failed', detail: r.detail || null });
   // Nothing came in and the running office is what is on disk: there is no
   // newer office to hand over to, and a swap for nothing still blinks every page.
   if (r.from === r.to && r.to === running) return Object.assign(upd, { state: 'latest', available: null, at: Date.now() });

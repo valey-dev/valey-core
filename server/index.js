@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { snapshot, fileOwners, conversation, PACK_IDS, namePool, nameSample, effectivePack, previewPack } from './agents.js';
@@ -1192,7 +1193,20 @@ async function handle(req, res) {
   // fetch — so they happen only on these requests, never on a timer.
   // Which repositories «update» moves — the row says «core and Modules» only
   // when there is a Modules checkout to move.
-  const updView = async () => ({ ...upd, running: UPDATE_VERSION, repos: (await updateRepos(UPDATE_ROOT)).map((r) => r.key) });
+  // Where the office came from is read off the directory every time rather
+  // than taken from the last check: the row says «from the archive» before
+  // anything has been pressed, and that is the state it is opened in.
+  const updView = async () => {
+    const list = await updateRepos(UPDATE_ROOT);
+    // Where the previous office will be left. The row promises it by name, so
+    // the path is computed here, where the office's own directory is known,
+    // and written the way a person writes it.
+    const aside = `${UPDATE_ROOT}.v${UPDATE_VERSION}`.replace(os.homedir(), '~');
+    // `root` is for install.sh: run with --update against a folder whose office
+    // is up, it has to know that the folder is that office's own before it
+    // decides to leave the replacing to it rather than doing it underneath.
+    return { ...upd, running: UPDATE_VERSION, repos: list.map((r) => r.key), source: list[0].from, aside, root: UPDATE_ROOT };
+  };
   if (url.pathname === '/api/update' && req.method === 'GET') {
     if (!(await isOwner(req))) return forbidden(res);
     return send(res, 200, await updView());
