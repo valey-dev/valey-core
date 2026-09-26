@@ -20,8 +20,8 @@ import { hire, release as releaseHire, hireList, hiredAt, hireCwd, resumeCommand
 import { repoRoot } from './stack.js';
 import { ask as askPermit, answer as answerPermit, permits, forgetGone, retryAll } from './permit.js';
 import { releaseNudge } from './release.js';
-import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset, modulesOff, setOwnerOff } from './modules.js';
-import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
+import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleAll, setModuleOff, moduleAsset, modulesOff, setOwnerOff, setGuestChoice, moduleGuestRows } from './modules.js';
+import { check as checkNetwork, newToken, isLocal, proxied, inviteUrl } from './network.js';
 import { isLan, deviceOf, shownDevice, deviceName, Pairings, SEEN_EVERY } from './devices.js';
 import { MIME, MAX_VIEW, fileType, fileHeaders } from './files.js';
 import { listenFree } from './port.js';
@@ -276,11 +276,32 @@ async function deviceFrom(req, s) {
 
 // A guest is whoever came in by an invitation and holds the token issued to
 // them. Different from the owner in everything: may watch, may not command.
+// The guest's pass as a cookie too. A module's code is loaded with import(),
+// which sends no headers of its own, and the module's own files follow by
+// relative path — so a guest page asked for /modules/<id>/client.js with no
+// pass at all and got 403 for every module the owner had left shown. Found on
+// the #guests stand, 26 September 2026: the guest's list said plan, polaroid,
+// radio and the page had loaded none of them. It had been so since guests came
+// in, v0.27.0; the stands send the header themselves and never saw it. The
+// cookie is set whenever a request names a real guest by header, and read here
+// alongside it; a guest shown out is not found in the invites, cookie or not.
+const GUEST_COOKIE = 'valey_guest';
+const guestCookie = (id) => `${GUEST_COOKIE}=${encodeURIComponent(id)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${60 * 60 * 24 * 30}`;
+function cookieGuest(req) {
+  for (const part of String(req.headers.cookie || '').split(';')) {
+    const [k, ...v] = part.trim().split('=');
+    if (k === GUEST_COOKIE) { try { return decodeURIComponent(v.join('=')); } catch { return ''; } }
+  }
+  return '';
+}
+
 async function guestOf(req) {
   // A header for ordinary requests, a parameter for the stream: EventSource
-  // cannot set headers, and the stream is the first thing a guest needs.
+  // cannot set headers, and the stream is the first thing a guest needs. The
+  // cookie for what can send neither: a module's code, see guestCookie.
   const given = req.headers['x-valey-guest']
-    || new URL(req.url, 'http://localhost').searchParams.get('guest');
+    || new URL(req.url, 'http://localhost').searchParams.get('guest')
+    || cookieGuest(req);
   if (!given) return null;
   const s = await getSettings();
   return (s.access.invites || []).find((i) => i.guest && i.guest === given) || null;
@@ -481,6 +502,7 @@ async function tick() {
     const full = `data: ${JSON.stringify(last)}\n\n`;
     // A stream is only as invited as the settings say right now.
     const acc = (await getSettings()).access;
+    setGuestChoice(acc.guests);
     const invited = new Set((acc.invites || []).map((i) => i.guest).filter(Boolean));
     for (const res of [...clients]) {
       if (res.valeyGuest && (acc.mode !== 'shared' || !invited.has(res.valeyGuest))) dropGuest(res.valeyGuest);
@@ -721,6 +743,9 @@ async function handle(req, res) {
     res.write(`data: ${JSON.stringify(who ? project(last, who) : last)}\n\n`);
     // Whoever just came in sees who is already in the office at once, not a presence tick later.
     res.write(`event: people\ndata: ${JSON.stringify(livePeople())}\n\n`);
+    // A guest learns on every connect which modules are his, so a page that
+    // slept through the owner's switch catches up (web/modules.js, guestModules).
+    if (who) res.write(`event: modules\ndata: ${JSON.stringify(moduleList(false).map((m) => m.id))}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
     return;
@@ -898,7 +923,8 @@ async function handle(req, res) {
     await updateSettings((s) => ({
       access: { ...s.access, mode: 'shared', invites: [...(s.access.invites || []), invite] },
     }));
-    const host = req.headers.host || `localhost:${PORT}`;
+    const net = (await getSettings()).network || {};
+    const link = inviteUrl(req.headers.host || `localhost:${PORT}`, code, { external: !!net.external, lan: lanAddresses(), token: net.token });
     // The owner token comes back together with the link — not a relaxation but
     // the condition for an invitation working at all. Going shared kills the
     // "came from this machine" shortcut, and a page that was the owner over
@@ -907,7 +933,7 @@ async function handle(req, res) {
     // gets this far, so handing him his own token risks nothing.
     return send(res, 200, {
       ok: true, invite, owner: (await getSettings()).access.token,
-      url: `http://${host}/#code=${code}`,
+      url: link,
     });
   }
 
@@ -938,7 +964,30 @@ async function handle(req, res) {
   if (url.pathname === '/api/invites') {
     if (!(await isOwner(req))) return forbidden(res);
     const s = await getSettings();
-    return send(res, 200, { invites: (s.access.invites || []).map(safeInvite) });
+    return send(res, 200, { invites: (s.access.invites || []).map(safeInvite), modules: moduleGuestRows() });
+  }
+
+  // The owner decides what a guest sees, module by module, over the manifest's
+  // default: {id, choice: 'shown' | 'hidden'}. Choosing the default again
+  // forgets the choice, so the row's «not the default» mark goes by itself. One
+  // choice for all guests, not per link — decided 11 September 2026. It takes
+  // effect at once: the routes stop answering (moduleRoute reads the same
+  // choice), and every guest with a page open is told to reload it, so the
+  // client of a hidden module leaves his page without his help.
+  if (url.pathname === '/api/invite/guests' && req.method === 'POST') {
+    if (!(await isOwner(req))) return forbidden(res);
+    const b = await readJson(req);
+    const row = moduleGuestRows().find((m) => m.id === String(b.id || ''));
+    if (!row) return send(res, 404, { error: 'no such module' });
+    const choice = b.choice === 'shown' || b.choice === 'hidden' ? b.choice : null;
+    const s = await getSettings();
+    const guests = { ...((s.access || {}).guests || {}) };
+    if (!choice || choice === row.default) delete guests[row.id]; else guests[row.id] = choice;
+    const saved = await patchSettings({ access: { ...s.access, guests } });
+    setGuestChoice((saved.access || {}).guests);
+    const shown = `event: modules\ndata: ${JSON.stringify(moduleList(false).map((m) => m.id))}\n\n`;
+    for (const res of [...clients]) if (res.valeyGuest) res.write(shown);
+    return send(res, 200, { ok: true, modules: moduleGuestRows() });
   }
 
   // Entry by code. One use: it worked, it is spent, and the same link does not
@@ -1271,6 +1320,7 @@ async function handle(req, res) {
         setOwnerOff(saved.modulesOff);
         forgetWeather();
         moduleOnPatch(patch);
+        if (patch.access) setGuestChoice((saved.access || {}).guests);
         last.weather = await realWeather({ force: true });
         return send(res, 200, { ok: true, settings: publicSettings(saved), weather: last.weather, packs: PACK_LIST });
       } catch (e) {
@@ -1373,7 +1423,14 @@ async function handle(req, res) {
   // module that does not say `"guests": "shown"` is left out of a guest's list,
   // so its client never reaches the page: no key of its own gets registered, no
   // object of its own gets drawn, and its panel cannot be opened.
-  if (url.pathname === '/api/modules') return send(res, 200, moduleList(await isOwner(req)));
+  if (url.pathname === '/api/modules') {
+    const owner = await isOwner(req);
+    // The page asks for this list right before importing the modules, with the
+    // guest's header: the moment to hand it the cookie the imports will carry.
+    const g = owner ? null : await guestOf(req);
+    const extra = g && cookieGuest(req) !== g.guest ? { 'set-cookie': guestCookie(g.guest) } : {};
+    return send(res, 200, moduleList(owner), undefined, extra);
+  }
 
   // The test stand. An empty text means "this is an ordinary office" and the
   // client draws nothing. git is asked for the branch only here: in a normal run
@@ -1473,6 +1530,7 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   const mods = await loadModules(ROOT, { people: livePeople, toPerson, settings: getSettings });
   let boot = await getSettings();
   setOwnerOff(boot.modulesOff);
+  setGuestChoice((boot.access || {}).guests);
   const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
   if (external && !(boot.network || {}).token) {
     // updateSettings: an office started beside this one may save a token first.

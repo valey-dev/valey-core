@@ -131,7 +131,8 @@ const DEFAULTS = {
   // opened later: an invitation that dies with a server restart is useless.
   // devices — owner devices paired with a code: { id, name, hash, pairedAt,
   // lastSeen }. Only the hash of each token is kept; see server/devices.js.
-  access: { mode: 'private', token: '', invites: [], devices: [] },
+  // guests — the owner's choice per module over its manifest: { id: 'shown' | 'hidden' }.
+  access: { mode: 'private', token: '', invites: [], devices: [], guests: {} },
   // Which addresses the office answers at all. Off means loopback is listened
   // to, and that is not caution for its own sake: the office serves every
   // session transcript in full, so an open port equals an open correspondence.
