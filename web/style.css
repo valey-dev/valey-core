@@ -1462,3 +1462,22 @@ body.touch .tmeta.center{visibility:hidden}
 .fchip.bad{border-color:var(--bad); color:var(--bad)}
 .fchip.bad .csize{color:var(--bad)}
 .notes .nclip{color:var(--muted)}
+
+/* F in a conversation: the files the agent named, docked above the key line
+   (#reply-links). Rows are numbered like the links in the text above. */
+.chatfiles{border-top:2px solid var(--frame); background:var(--bg-deep); padding:10px 14px 8px;
+  font-size:11px; display:flex; flex-direction:column; gap:5px}
+.chatfiles .fhead{color:var(--muted); font-weight:bold; font-size:10px; letter-spacing:.04em}
+.chatfiles .frow{display:flex; align-items:baseline; gap:8px; white-space:nowrap; overflow:hidden}
+.chatfiles .fnum{background:var(--info); color:var(--bg-deep); width:15px; text-align:center; font-size:10px}
+.chatfiles .fname{color:var(--ink)}
+.chatfiles .fline{color:var(--warn)}
+.chatfiles .fdir{color:var(--ink-dim)}
+.chatfiles .frow i{color:var(--muted); font-style:normal; font-size:10px; overflow:hidden; text-overflow:ellipsis}
+.chatfiles .fmore{color:var(--muted); font-size:10px}
+.chatfiles .fhint{color:var(--info); font-size:10px}
+.pickhint.files{color:var(--info)}
+/* The line a link named: a band laid over the code, not cut into it. */
+.single.haslines{position:relative}
+.lineband{position:absolute; left:0; right:0; pointer-events:none;
+  background:rgba(255, 209, 102, .14); border-left:4px solid var(--warn)}

@@ -203,5 +203,35 @@ check('numbers lit up before ESC check', UI.pickOn() === true, 'they did not lig
 check('ESC extinguishes numbers', (UI.viewerKey('Escape'), UI.pickOn()) === false, 'they are lit');
 check('and does not close the conversation', viewer.hidden === false, 'it closed');
 
+// --- F: the files the agent named by link (#reply-links) ---
+const fileA = { path: '/work/seedbank/docs/score-words.md', name: 'score-words.md', dir: 'docs/', line: null, ts: 1, hrefs: ['docs/score-words.md'] };
+const fileB = { path: '/work/seedbank/web/ui.js', name: 'ui.js', dir: 'web/', line: 1860, ts: 2, hrefs: ['web/ui.js:1860'] };
+// The conversation was closed further up; open it again, first with no files.
+logPresent = true;
+served = { messages: [msg('assistant', 'без ссылок')], files: { files: [], refused: {} } };
+await UI.openTranscript(agent);
+UI.viewerKey('f');
+check('F with no named files raises nothing', UI.filesOn() === false, 'a list came up');
+served = { messages: [...served.messages, msg('assistant', 'см. [ui.js:1860](web/ui.js:1860)')], files: { files: [fileB, fileA], refused: { hidden: 1 } } };
+await UI.openTranscript(agent);
+UI.viewerKey('f');
+check('F raises the files list', UI.filesOn() === true, 'nothing came up');
+check('the Russian layout reaches it too', (UI.viewerKey('Escape'), UI.viewerKey('а'), UI.filesOn()) === true, 'the Russian F did nothing');
+check('ESC puts the list away', (UI.viewerKey('Escape'), UI.filesOn()) === false, 'still up');
+check('and leaves the conversation open', viewer.hidden === false, 'it closed');
+UI.viewerKey('f');
+UI.viewerKey('c');
+check('C takes the digits back: the list goes down', UI.filesOn() === false, 'both lists up');
+UI.pickClose();
+const asked = [];
+const fetchBefore = globalThis.fetch;
+globalThis.fetch = async (url) => { asked.push(String(url)); return { ok: false, status: 404, json: async () => ({}), text: async () => '' }; };
+UI.viewerKey('f');
+UI.viewerKey('1');
+await new Promise((r) => setTimeout(r, 0));
+globalThis.fetch = fetchBefore;
+check('a digit opens the file under that number — the newest first', asked.some((u) => u.includes(encodeURIComponent(fileB.path))), asked);
+check('and the list is down after it', UI.filesOn() === false, 'still up');
+
 console.log(failed ? `\nfailed: ${failed}` : '\nall matched');
 process.exit(failed ? 1 : 0);

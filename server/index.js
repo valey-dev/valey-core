@@ -25,6 +25,7 @@ import { check as checkNetwork, newToken, isLocal, proxied, inviteUrl } from './
 import { isLan, deviceOf, shownDevice, deviceName, Pairings, SEEN_EVERY } from './devices.js';
 import { deskFile, loadDesk, deskWriter } from './desk.js';
 import { MIME, MAX_VIEW, fileType, fileHeaders } from './files.js';
+import { fileList } from './links.js';
 import { listenFree } from './port.js';
 import { createExposure, lanAddresses } from './expose.js';
 import { isWorker, fixedAddress, gated, listenForSwap, upd, runCheck, runUpdate } from './swap.js';
@@ -1167,7 +1168,11 @@ async function handle(req, res) {
     }
     const agent = last.agents.find((a) => a.id === id);
     if (!agent) return send(res, 404, { error: 'this agent is not in the office', errorKey: 'err.noSuchAgent' });
-    return send(res, 200, { agent: { id, name: agent.name, title: agent.title }, messages: conversation(id) });
+    // The files the agent named by link, for F in the conversation (#reply-links):
+    // only those /api/file will hand out, and a count of the rest by reason.
+    const messages = conversation(id);
+    const files = await fileList(messages, agent.cwd, MAX_VIEW);
+    return send(res, 200, { agent: { id, name: agent.name, title: agent.title }, messages, files });
   }
 
   // An uncaught error of the page, sent by web/report.js. A guest's browser may

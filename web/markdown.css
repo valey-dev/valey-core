@@ -17,6 +17,15 @@
 .md a{color:#8fc8ff}
 .md a:hover{color:var(--warn)}
 .md .mdlink{color:#8fc8ff; border-bottom:1px dotted #4a6a8a}
+/* A file link the server will hand out (#reply-links): the same dotted line, now
+   one that opens. F puts a number on it, blue like the link rather than green
+   like C's copy numbers, so the two lists never read as one. */
+.md .mdlink.mdfile{cursor:pointer; position:relative}
+.md .mdlink.mdfile:hover{color:var(--warn); border-bottom:1px solid var(--warn)}
+.md .mdlink.fpicked::after{content:attr(data-fnum); position:absolute; right:-9px; top:-12px;
+  width:13px; height:13px; line-height:13px; text-align:center;
+  background:var(--info); color:var(--bg-deep); border:1px solid var(--bg-deep);
+  font:bold 9px "JetBrains Mono", monospace}
 .md .mdimg{color:#c39bff}
 .md code{background:#1f150f; color:#9fe0a8; padding:1px 4px; border:1px solid #3a2a1e}
 .md pre.mdcode{background:#1a120c; border:2px solid var(--frame); border-left:4px solid var(--accent);

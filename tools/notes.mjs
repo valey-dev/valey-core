@@ -99,7 +99,7 @@ const MAPS = new Set(['shots']);
 // frame too. `setup` cannot do this either: whether the office serves the file
 // is decided on the server, from the transcript. Added 26 September 2026 for
 // #reply-image, whose first picture drew both files refused and showed nothing.
-const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport', 'touch', 'setup', 'interrupt', 'picture']);
+const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport', 'touch', 'setup', 'interrupt', 'picture', 'links']);
 
 // A three-line parser instead of a YAML dependency. The project has none, and a
 // front matter of three keys is not a reason for the first one.

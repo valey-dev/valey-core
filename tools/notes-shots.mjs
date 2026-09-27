@@ -162,6 +162,34 @@ async function picture(slot) {
   return who;
 }
 
+// `links: <slot>` — see SHOT_FIELDS in notes.mjs. A reply that names files by
+// link (#reply-links) needs the files to exist inside the agent's folder, and
+// the cast's folders are invented paths that are on nobody's disk. So this
+// brings one more person in, whose project is a real folder under the temporary
+// directory: three files named in the reply, one link into .env and one out of
+// the folder, so the list shows what it refuses as well. Invented at the source.
+async function links(slot) {
+  const cwd = path.join(tmp, 'Projects', 'seed-bank');
+  const put = async (rel, text) => { await fsp.mkdir(path.dirname(path.join(cwd, rel)), { recursive: true }); await fsp.writeFile(path.join(cwd, rel), text); };
+  await put('docs/score-words.md', '# Score words\n\nOne word for every colour band of every scale.\n');
+  await put('web/legend.js', 'export const LEGEND = [];\n');
+  await put('web/ui.js', Array.from({ length: 1859 }, (_, i) => `// line ${i + 1}`).join('\n')
+    + "\nexport const DIRECTION = {\n  mood: 'up', sleepiness: 'down', workload: 'neutral',\n};\n");
+  await put('.env', 'SEED_KEY=not-a-real-key\n');
+  const said = 'The dictionary is [docs/score-words.md](docs/score-words.md): one word for every colour band. '
+    + 'The direction of each scale lives in one table, [ui.js:1860](web/ui.js:1860), and the legend reads it — '
+    + '[legend.js:1](web/legend.js:1). The key it needs is in [.env](.env), and the old notes are in [../archive.md](../archive.md).';
+  // Its own session id: one borrowed from the cast replaces that person's transcript.
+  const made = await fakeClaudeDir(tmp, { slot, sessionId: 'aaaaaaaa-0000-4000-8000-0000000001a0',
+    cwd, branch: 'feature/score-words', asked: 'Where do the score words live?', said, file: path.join(cwd, 'docs/score-words.md') });
+  for (let i = 0; i < 40; i++) {
+    if ((await statusOf(made.sessionId)) !== undefined) break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  await new Promise((r) => setTimeout(r, 1500));
+  return made;
+}
+
 // The old office is a detached worktree of the tag — its own server, its own
 // web/. It goes outside the checkout: a worktree under it gets walked by every
 // file watcher in the project.
@@ -201,6 +229,7 @@ for (const f of wanted) {
     if (sh.setup) args.push('--setup', sh.setup);
     const cut = sh.interrupt ? await interrupt(sh.interrupt) : null;
     const drew = sh.picture ? await picture(sh.picture) : null;
+    if (sh.links) await links(sh.links);
     const r = spawnSync(process.execPath, [shotTool, ...args], { cwd: ROOT, stdio: 'inherit' });
     if (cut) await resume(cut);
     if (drew) await resume(drew);
