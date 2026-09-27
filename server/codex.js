@@ -310,5 +310,14 @@ export function applyCodexLine(st, line) {
       if (said) st.task = said;
       st.ended = endOf(said);
     } else if (p.type === 'item_completed' && p.item) item(st, p.item, r.timestamp);
+    else if (p.type === 'token_count' && p.info) {
+      // How full the context is, the way Claude's is read: what the last
+      // request was fed. OpenAI counts the cached part inside input_tokens, so
+      // that one number is the whole of it. The window comes with it — the page
+      // cannot guess one from a GPT model's name.
+      const u = p.info.last_token_usage;
+      if (u && u.input_tokens > 0) st.ctx = u.input_tokens;
+      if (p.info.model_context_window > 0) st.ctxWindow = p.info.model_context_window;
+    }
   }
 }

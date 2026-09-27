@@ -26,6 +26,7 @@ ok('a model nobody measured has no window', contextWindow('claude-nova-1') === n
 ok('310k / 1M', ctxText(310_000, 'claude-opus-5') === '310k / 1M', ctxText(310_000, 'claude-opus-5'));
 ok('an unknown window leaves the bare number', ctxText(62_000, 'claude-nova-1') === '62k', ctxText(62_000, 'claude-nova-1'));
 ok('a Haiku reads out of 200k', ctxText(150_400, 'claude-haiku-4-5-20251001') === '150k / 200k');
+ok('a window the agent reported wins over the name', ctxText(53_282, 'gpt-5-codex', 258_400) === '53k / 258k', ctxText(53_282, 'gpt-5-codex', 258_400));
 ok('nothing before the first reply', ctxText(0, 'claude-opus-5') === '');
 ok('a few hundred tokens still read as 1k, not 0k', ctxText(300, 'claude-opus-5') === '1k / 1M');
 
@@ -33,6 +34,7 @@ ok('a few hundred tokens still read as 1k, not 0k', ctxText(300, 'claude-opus-5'
 ok('yellow from 80%', CTX_WARN === 0.8
   && ctxShare({ model: 'claude-opus-5', ctx: 860_000 }) >= CTX_WARN
   && ctxShare({ model: 'claude-opus-5', ctx: 310_000 }) < CTX_WARN);
+ok('a Codex agent warns off its own window', ctxShare({ model: 'gpt-5-codex', ctx: 220_000, ctxWindow: 258_400 }) >= CTX_WARN);
 ok('no share without a window — the floor stays quiet', ctxShare({ model: 'claude-nova-1', ctx: 990_000 }) === null);
 
 // ------------------------------------------------------------------ the transcript

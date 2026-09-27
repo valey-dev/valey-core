@@ -48,6 +48,7 @@ const turn = [
   line(3, 'event_msg', { type: 'item_completed', item: { type: 'UserMessage', content: [{ type: 'text', text: 'The chart is an hour off' }] } }),
   line(4, 'event_msg', { type: 'item_completed', item: { type: 'CommandExecution', cwd: 'file://' + work, command: ['/bin/zsh', '-lc', 'sed -n 1,40p src/chart.js'], parsed_cmd: [{ type: 'read', path: 'src/chart.js' }] } }),
   line(5, 'event_msg', { type: 'item_completed', item: { type: 'FileChange', changes: { [work + '/src/chart.js']: { type: 'update' } } } }),
+  line(6, 'event_msg', { type: 'token_count', info: { last_token_usage: { input_tokens: 53282, cached_input_tokens: 44416, output_tokens: 159 }, model_context_window: 258400 } }),
   line(6, 'event_msg', { type: 'item_completed', item: { type: 'AgentMessage', content: [{ type: 'Text', text: report('Ничего') }] } }),
   line(7, 'event_msg', { type: 'task_complete', turn_id: 't1', last_agent_message: report('Ничего') }),
 ];
@@ -85,6 +86,9 @@ ok('the prompt is what the person typed, not the injected rulebook', st.lastUser
 ok('the edited file is on the desk as made', st.files.get(work + '/src/chart.js')?.made === true, [...st.files.keys()]);
 ok('the last act is the edit', st.lastTool === 'Edit', st.lastTool);
 ok('the task comes from the report', st.task && st.task.what === 'часовой пояс на графике', st.task);
+ok('the context is what the last request was fed, cached part included', st.ctx === 53282, st.ctx);
+ok('and the window is the one Codex reports', st.ctxWindow === 258400, st.ctxWindow);
+ok('a turn with no usage keeps the last number', read([meta(LIVE, 'vscode'), ...turn, line(8, 'event_msg', { type: 'token_count', info: null })]).ctx === 53282);
 ok('a report that needs nothing is at rest', statusOf(st, now) === 'idle', statusOf(st, now));
 
 const asked = read([meta(LIVE, 'vscode'), ...turn.slice(0, -1),
@@ -102,6 +106,7 @@ ok('the snapshot seats the Codex thread', !!a, snap.agents.map((x) => x.id));
 ok('as provider codex, with no pid of its own', a && a.provider === 'codex' && a.pid === null, a && { provider: a.provider, pid: a.pid });
 ok('with a name and a desk like anyone else', a && a.name && Number.isInteger(a.seat), a && { name: a.name, seat: a.seat });
 ok('its title and branch', a && a.title === 'Timezone on the chart' && a.branch === 'fix/timezone-drift', a && { title: a.title, branch: a.branch });
+ok('its context and window travel to the card', a && a.ctx === 53282 && a.ctxWindow === 258400, a && { ctx: a.ctx, ctxWindow: a.ctxWindow });
 ok('and its conversation opens', conversation(LIVE).some((m) => m.role === 'user' && m.text === 'The chart is an hour off'));
 
 // --- a task into the thread ---------------------------------------------------

@@ -695,7 +695,7 @@ function emptyState() {
     lastUserPrompt: '', acts: [], role: '', files: new Map(),
     ended: '',               // how the turn ended, if it did — see endOf()
     background: new Map(),   // tool_use id -> when that background job started
-    turns: 0, model: '', effort: '', turnEffort: '', ctx: 0, branch: '', slug: '', title: '', aiTitle: '', task: null,
+    turns: 0, model: '', effort: '', turnEffort: '', ctx: 0, ctxWindow: 0, branch: '', slug: '', title: '', aiTitle: '', task: null,
     bornAt: 0,             // the first reply in the file, see born()
     skills: newSkills(),   // the grade counter: it grows and is never trimmed
     shift: newShift(),     // replies, characters and idle gaps, over the whole file
@@ -1267,6 +1267,8 @@ export async function snapshot() {
       // Tokens in the context after the last reply or compaction; the window is
       // the page's to know (web/model-name.js), as the model's name is.
       ctx: t.ctx || 0,
+      // Codex states its window in the rollout; Claude's is known by the model.
+      ctxWindow: t.ctxWindow || 0,
       // A one-turn boost is the level only while that turn is open.
       effort: (status === 'working' && t.turnEffort) || t.effort,
       // A Codex thread carries the name the app shows on the session itself.
