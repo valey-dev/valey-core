@@ -22,7 +22,18 @@
    like C's copy numbers, so the two lists never read as one. */
 .md .mdlink.mdfile{cursor:pointer; position:relative}
 .md .mdlink.mdfile:hover{color:var(--warn); border-bottom:1px solid var(--warn)}
-.md .mdlink.fpicked::after{content:attr(data-fnum); position:absolute; right:-9px; top:-12px;
+/* L's numbers sit on web links (#reply-weblinks): lilac, where C's are green and
+   F's blue — three lists on one row of digits must not read as one. The number
+   hangs on the <a> itself, not on its copy wrapper: a wrapper that breaks across
+   two lines puts an absolute badge at the first line's top and the last line's
+   right edge — in the middle of somebody else's words (seen 27 September 2026). */
+.md a.lpicked{position:relative}
+.md .mdcopyable:has(a.lpicked) .mdcopy-in{display:none}
+.md a.lpicked::after{content:attr(data-lnum); position:absolute; right:-11px; top:-8px;
+  width:13px; height:13px; line-height:13px; text-align:center;
+  background:var(--lilac); color:var(--bg-deep); border:1px solid var(--bg-deep);
+  font:bold 9px "JetBrains Mono", monospace}
+.md .mdlink.fpicked::after{content:attr(data-fnum); position:absolute; right:-11px; top:-8px;
   width:13px; height:13px; line-height:13px; text-align:center;
   background:var(--info); color:var(--bg-deep); border:1px solid var(--bg-deep);
   font:bold 9px "JetBrains Mono", monospace}

@@ -1488,3 +1488,7 @@ body.touch .tmeta.center{visibility:hidden}
 .single.haslines{position:relative}
 .lineband{position:absolute; left:0; right:0; pointer-events:none;
   background:rgba(255, 209, 102, .14); border-left:4px solid var(--warn)}
+/* L: the same docked list as F, in L's lilac (#reply-weblinks). */
+.chatlinks .fnum{background:var(--lilac)}
+.chatlinks .fhint, .pickhint.links{color:var(--lilac)}
+.chatlinks .fdir{overflow:hidden; text-overflow:ellipsis}

@@ -89,8 +89,9 @@ const PLACES = [
     registry: true,
     caps: {
       KeyC: 'place.copy', KeyN: 'place.card.note', KeyR: 'place.viewer.reread',
-      // F raises the files the agent named by link; a digit opens one (#reply-links).
-      KeyF: 'place.transcript.files',
+      // F raises the files the agent named by link (#reply-links), L the web links it
+      // gave (#reply-weblinks); a digit opens one from whichever list is up.
+      KeyF: 'place.transcript.files', KeyL: 'place.transcript.links',
       Digit1: 'place.transcript.file', Digit2: 'place.transcript.file', Digit3: 'place.transcript.file',
       Digit4: 'place.transcript.file', Digit5: 'place.transcript.file', Digit6: 'place.transcript.file',
       Digit7: 'place.transcript.file', Digit8: 'place.transcript.file', Digit9: 'place.transcript.file',

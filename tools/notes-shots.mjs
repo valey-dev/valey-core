@@ -178,7 +178,10 @@ async function links(slot) {
   await put('.env', 'SEED_KEY=not-a-real-key\n');
   const said = 'The dictionary is [docs/score-words.md](docs/score-words.md): one word for every colour band. '
     + 'The direction of each scale lives in one table, [ui.js:1860](web/ui.js:1860), and the legend reads it — '
-    + '[legend.js:1](web/legend.js:1). The key it needs is in [.env](.env), and the old notes are in [../archive.md](../archive.md).';
+    + '[legend.js:1](web/legend.js:1). The key it needs is in [.env](.env), and the old notes are in [../archive.md](../archive.md).'
+    // Web links too, for L (#reply-weblinks): invented places, never opened by the shot.
+    + '\n\nThe pull request is [PR #48 · score words](https://github.com/kolya/seed-bank/pull/48), the frame to check it against is '
+    + '[Score words · v2](https://www.figma.com/design/seedbank/Seed-Bank), and the colours pass https://webaim.org/resources/contrastchecker/.';
   // Its own session id: one borrowed from the cast replaces that person's transcript.
   const made = await fakeClaudeDir(tmp, { slot, sessionId: 'aaaaaaaa-0000-4000-8000-0000000001a0',
     cwd, branch: 'feature/score-words', asked: 'Where do the score words live?', said, file: path.join(cwd, 'docs/score-words.md') });
