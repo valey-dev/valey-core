@@ -4,6 +4,15 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.76.0 — 27 September 2026
+
+### Added
+
+- **office:** a file an agent names in its reply opens from the conversation — F lists them, a digit opens one on its line (5c97467)
+
+### Other
+
+- chore(notes): a picture recipe can bring in an agent whose reply names real files (101d238)
 ## v0.75.0 — 27 September 2026
 
 ### Added
