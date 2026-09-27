@@ -4,6 +4,12 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.76.1 — 27 September 2026
+
+### Fixed
+
+- **standup:** portraits on standup cards lose the thick frame the office floor's canvas rule gave them (f7d6866)
+- **standup:** an agent's trade on a standup card is the coloured badge with its pixel icon, as on the agent card (3a7a7fd)
 ## v0.76.0 — 27 September 2026
 
 ### Added
