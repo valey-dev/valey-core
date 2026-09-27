@@ -71,14 +71,25 @@ export function coreOf(pkg) {
 // now carries its install.sh to the site as well, byte for byte.
 export const installerDiffers = (core, site) => core != null && core !== site;
 
-// The site's branch and commit for one installer. A `fix` on purpose: the site
-// counts its own digit, and a new installer at the same address is a patch
-// there whatever it was in the core.
-export function installerChange(tag) {
-  return {
-    branch: `install-${tag}`,
-    message: `fix(install): valey.dev serves the installer of core ${tag}\n\n` +
-      `Carried by the core's promote: the file is the core's install.sh at ${tag},\n` +
-      'byte for byte. It is edited in the core, never here.\n',
-  };
+// The site also runs the office's own drawing code: its demo floor imports
+// core/web through a submodule pinned to a public core. Nothing moved that pin
+// either — it stood on v0.55.0 while v0.72.0 was out — so a publication moves
+// it too, forward only, and in the same branch as the installer: the site
+// follows the core it was published with, in one step with one set of stands.
+//
+// The site's branch and commit for what a publication carries. A `fix` on
+// purpose: the site counts its own digit, and the same page on a newer engine,
+// or a newer installer at the same address, is a patch there whatever it was
+// in the core.
+export function siteChange(tag, { installer = false, core = false } = {}) {
+  if (!installer && !core) return null;
+  const subject = installer && core
+    ? `fix(site): valey.dev follows core ${tag} — its installer and the demo floor's engine`
+    : installer ? `fix(install): valey.dev serves the installer of core ${tag}`
+    : `fix(landing): the demo floor runs on core ${tag}`;
+  const why = [
+    installer && `install.sh is the core's at ${tag}, byte for byte. It is edited in the core, never here.`,
+    core && `core/ is pinned to ${tag}, the version the core just published.`,
+  ].filter(Boolean).join('\n');
+  return { branch: `core-${tag}`, message: `${subject}\n\nCarried by the core's promote.\n${why}\n` };
 }
