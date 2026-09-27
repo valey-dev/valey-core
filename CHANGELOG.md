@@ -4,6 +4,11 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.72.1 — 27 September 2026
+
+### Fixed
+
+- **install:** valey.dev's installer follows every publication of the core instead of staying on its own copy (e19371d)
 ## v0.72.0 — 26 September 2026
 
 ### Added
