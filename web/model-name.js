@@ -27,15 +27,16 @@ export function contextWindow(id) {
 // From here on the card's tail turns yellow and the bubble grows a meter:
 // auto-compaction comes at about 97%, so the warning arrives well before it.
 export const CTX_WARN = 0.8;
+// A window the agent reported itself (Codex does) wins over the guess.
 export function ctxShare(a) {
-  const w = contextWindow(a && a.model);
+  const w = (a && a.ctxWindow) || contextWindow(a && a.model);
   return w && a.ctx ? a.ctx / w : null;
 }
 const kilo = (n) => (n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : `${Math.max(1, Math.round(n / 1000))}k`);
 // «310k / 1M», or «62k» when the window is unknown; nothing before a reply.
-export function ctxText(ctx, id) {
+export function ctxText(ctx, id, win) {
   if (!ctx) return '';
-  const w = contextWindow(id);
+  const w = win || contextWindow(id);
   return w ? `${kilo(ctx)} / ${kilo(w)}` : kilo(ctx);
 }
 

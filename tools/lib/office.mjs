@@ -108,6 +108,7 @@ export async function fakeCodexDir(dir, {
     line(55_000, 'turn_context', { cwd, model: 'gpt-invented' }),
     line(54_000, 'event_msg', { type: 'item_completed', item: { type: 'UserMessage', content: [{ type: 'text', text: asked }] } }),
     line(40_000, 'event_msg', { type: 'item_completed', item: { type: 'FileChange', changes: { [file]: { type: 'update' } } } }),
+    line(30_000, 'event_msg', { type: 'token_count', info: { last_token_usage: { input_tokens: 84_210, cached_input_tokens: 61_440, output_tokens: 312 }, model_context_window: 258_400 } }),
     line(30_000, 'event_msg', { type: 'item_completed', item: { type: 'AgentMessage', content: [{ type: 'Text', text: said }] } }),
   ];
   await fsp.writeFile(path.join(day, `rollout-2026-09-13T10-00-00-${id}.jsonl`), lines.join('\n') + '\n');

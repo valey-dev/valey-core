@@ -12,7 +12,7 @@ import { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes
 import { esc } from './esc.js';
 import { modelLabel, ctxText, ctxShare, CTX_WARN } from './model-name.js';
 // The context tail of the model line: « · 310k / 1M», yellow from 80%.
-const ctxTail = (a) => { const t = ctxText(a.ctx, a.model); return t ? `\u00a0·\u00a0${t}` : ''; };
+const ctxTail = (a) => { const t = ctxText(a.ctx, a.model, a.ctxWindow); return t ? `\u00a0·\u00a0${t}` : ''; };
 const ctxHot = (a) => (ctxShare(a) || 0) >= CTX_WARN;
 import { roleIcon } from './roleicon.js';
 import { owned } from './owned.js';
