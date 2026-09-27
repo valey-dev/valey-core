@@ -4482,7 +4482,7 @@ async function loadChat(fresh) {
   if (fresh) {
     const added = msgs.length - was.length;
     chatStatus(added > 0 ? tr('chat.newBelow', { n: added }) : tr('chat.appended'));
-    toast(added > 0 ? tr('chat.newToast', { name: a.name, n: added, a: added === 1 ? 'а' : '' })
+    toast(added > 0 ? tr('chat.newToast', { name: a.name, n: added })
                     : tr('chat.appendedToast', { name: a.name }));
   } else chatStatus(a.title || '');
 }
