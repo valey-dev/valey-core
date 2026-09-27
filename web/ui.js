@@ -3,6 +3,7 @@
 import { drawPerson, drawItem, dressMe, cycle, hash, SKIN, HAIR, SHIRT, PANTS, BOOTS, HEADS, FACES, HANDS,
   SHIRT_WORK, BLOUSE, JACKET, TIE, CUTS, BOTTOMS } from './sprites.js';
 import { renderMarkdown } from './markdown.js';
+import { waitsOnYou } from './visitor.js';
 import { highlight, langOf } from './highlight.js';
 import { collect, first, moduleIds, moduleOffIds } from './modules.js';
 import { LIBRARY, TIERS, DIRS, SUBS, byId, children, colOf, inDir, dirTally, isSub } from './library.js';
@@ -102,7 +103,7 @@ const WEATHER_ICON = { clear: '☀', clouds: '☁', rain: '☂', storm: '⚡', s
 // Our own player knows the track by name, the built-in one only the wave it is tuned to.
 
 export function renderHud() {
-  const waiting = S.agents.filter((a) => a.status === 'awaiting').length;
+  const waiting = S.agents.filter(waitsOnYou).length;
   const working = S.agents.filter((a) => a.status === 'working').length;
   const stopped = S.agents.filter((a) => a.status === 'stopped').length;
   const d = new Date();
@@ -171,7 +172,11 @@ const said = (o, field = 'error') => {
 };
 
 const STATUS_WORDS = ['awaiting', 'stopped', 'idle'];
-const statusWord = (a) => tr('status.' + (STATUS_WORDS.includes(a.status) ? a.status : 'working'));
+// «Waiting on you» is a lie about a teammate's agent: it waits on the office it
+// came from, and this one cannot answer it or send it anything. Everything else
+// — working, stopped, idle — reads the same whoever the agent belongs to.
+const statusWord = (a) => (a.status === 'awaiting' && a.visitor ? tr('vis.waiting')
+  : tr('status.' + (STATUS_WORDS.includes(a.status) ? a.status : 'working')));
 export const ago = (sec) => sec == null || !Number.isFinite(sec) ? ''
   : sec < 90 ? tr('ago.now')
   : sec < 5400 ? tr('ago.min', { n: Math.round(sec / 60) })
@@ -215,6 +220,9 @@ const chatTask = (a) => {
 const FALLBACK_ARG = { edit: 'act.someCode', read: 'act.someFile' };
 export const actText = (a) => {
   if (!a || !a.act || !a.act.key) return (a && a.activity) || '';
+  // Same reason as statusWord: over a visitor's desk the floor must not promise
+  // that pressing something here moves the work along.
+  if (a.act.key === 'awaiting' && a.visitor) return tr('vis.awaiting');
   const arg = a.act.arg || (FALLBACK_ARG[a.act.key] ? tr(FALLBACK_ARG[a.act.key]) : '');
   return tr('act.' + a.act.key, { arg });
 };
@@ -573,7 +581,21 @@ function buildDialog(a) {
     // "never left the machine" would be false here: these sessions belong to this
     // office and the server simply withholds them.
     const st = isGuest() ? accessOf(a.id) : 'open';
-    if (st !== 'open') {
+    // An agent from another participant's machine. Here "never left the
+    // machine" is the truth, and it is what the card says: the server did not
+    // get the reply, so there is nothing for anybody on this floor to be
+    // granted. No button — access is that participant's to give, and a request
+    // does not reach their machine yet.
+    // Design: [Foreign agent · v2](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=1074-2),
+    // words from [v1](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=378-3).
+    if (a.visitor) {
+      const who = esc(a.visitor.name || tr('vis.someone'));
+      body = `<p class="q">${tr('dlg.whatUp')}</p>
+        <p class="say">${tr('vis.whose', { who })}</p>
+        <p class="hint">${tr('vis.closed')}</p>
+        <p class="hint dim">${tr('vis.note', { who })}</p>`;
+    }
+    else if (st !== 'open') {
       const btn = st === 'pending' ? ''
         : `<button id="askAccess">${tr(st === 'refused' ? 'acc.askAgain' : 'acc.ask')}</button>`;
       body = `<p class="q">${tr('dlg.whatUp')}</p>
@@ -609,7 +631,8 @@ function buildDialog(a) {
     }
   }
   else if (S.page === 'work') {
-    body = (a.files || []).length
+    body = a.visitor ? `<p class="say">${tr('vis.noFiles')}</p>`
+      : (a.files || []).length
       ? `<p class="q">${tr('dlg.showWork')}</p><ul class="files">${fileList(a)}</ul>`
       : `<p class="say">${tr('dlg.noFiles')}</p>`;
   } else if (S.page === 'task') {
@@ -710,7 +733,7 @@ function buildDialog(a) {
       <div class="acts">
         <button data-p="talk" class="${S.page === 'talk' ? 'on' : ''}">${tr('tab.talk')} <kbd>1</kbd></button>
         <button data-p="work" class="${S.page === 'work' ? 'on' : ''}">${tr('tab.work')} <kbd>2</kbd></button>
-        <button data-p="task" class="${S.page === 'task' ? 'on' : ''}" ${permitOf(a.id) ? 'disabled' : ''}>${tr('tab.task')} <kbd>3</kbd></button>
+        <button data-p="task" class="${S.page === 'task' ? 'on' : ''}" ${permitOf(a.id) || a.visitor ? 'disabled' : ''}>${tr('tab.task')} <kbd>3</kbd></button>
         <button data-p="close">${tr('tab.close')} <kbd>Esc</kbd></button>
       </div>
     </div>`;
@@ -1747,7 +1770,7 @@ export function standupTeams(agents, rooms = [], prefs = {}) {
         CARD_ORDER[CARD_STATE(p)] - CARD_ORDER[CARD_STATE(q)]
         || (p.seat || 0) - (q.seat || 0)
         || String(p.name).localeCompare(String(q.name))),
-      waiting: list.filter((a) => a.status === 'awaiting').length,
+      waiting: list.filter(waitsOnYou).length,
     };
   });
   return teams.sort((x, y) => TEAM_GROUP[x.group] - TEAM_GROUP[y.group]
@@ -1861,7 +1884,7 @@ export function renderRoster() {
   const live = standupTeams(S.agents, S.layout && S.layout.projectRooms, standupPrefs());
   if (!rosterOrder) rosterOrder = freeze(live);
   const teams = holdOrder(live, rosterOrder);
-  const waiting = S.agents.filter((a) => a.status === 'awaiting').length;
+  const waiting = S.agents.filter(waitsOnYou).length;
   el.roster.hidden = false;
 
   const key = teams.map((t) => t.project + ':' + (t.mark || '') + (t.folded ? '_' : '') + ':' + t.list.map(cardSig).join(',')).join('|');
@@ -4029,7 +4052,7 @@ export function liftKey(raw) { return liftRing.key(raw, el.lift && !el.lift.hidd
 export function openReception(desk, guide) {
   const rows = desk.rooms.map((title) => {
     const list = S.agents.filter((a) => a.project === title);
-    const waiting = list.filter((a) => a.status === 'awaiting');
+    const waiting = list.filter(waitsOnYou);
     const lead = waiting[0] || list.find((a) => a.status === 'working') || list[0];
     return { title, n: list.length, waiting: waiting.length, lead };
   }).filter((r) => r.n);

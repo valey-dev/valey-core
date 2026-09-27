@@ -331,6 +331,27 @@ export async function moduleObserve(now, prev) {
   });
 }
 
+// Agents that sit on this floor and live on another machine. A module that
+// brings them hands in a list; the core sieves it and seats it — see
+// admitVisitors in index.js. They are asked for before the observers run and
+// merged into the snapshot, rather than pushed into it by an observer: the
+// observers run side by side, and a journal next to the one doing the pushing
+// would see the floor with or without the visitors depending on who got there
+// first.
+//
+// A module that throws brings nobody, and the rest of the floor comes anyway.
+export async function moduleVisitors() {
+  const from = live().filter((m) => typeof m.server?.visitors === 'function');
+  if (!from.length) return [];
+  const done = await Promise.allSettled(from.map((m) => m.server.visitors()));
+  const out = [];
+  done.forEach((r, i) => {
+    if (r.status === 'rejected') console.log(`module ${from[i].id} failed while bringing visitors: ${r.reason}`);
+    else if (Array.isArray(r.value)) out.push(...r.value);
+  });
+  return out;
+}
+
 // A module that failed to load must not stay quiet: otherwise "the feature is
 // gone" gets investigated by eye instead of by one line in the log.
 export function moduleErrors() {

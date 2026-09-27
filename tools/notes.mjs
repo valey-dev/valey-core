@@ -99,7 +99,15 @@ const MAPS = new Set(['shots']);
 // frame too. `setup` cannot do this either: whether the office serves the file
 // is decided on the server, from the transcript. Added 26 September 2026 for
 // #reply-image, whose first picture drew both files refused and showed nothing.
-const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport', 'touch', 'setup', 'interrupt', 'picture', 'links']);
+//
+// `settings` is the office itself rather than the page: a JSON object seeded
+// into the settings file of an office raised for this one shot. `setup` cannot
+// reach that far — switching the demo office to shared mode from the page makes
+// that same page a stranger in it on the next request, and the picture comes
+// back as the entrance screen. Written on 27 September 2026 for the shared
+// floor, whose whole subject is an office somebody was invited into: without an
+// invitation in the settings there is nothing to photograph.
+const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport', 'touch', 'setup', 'interrupt', 'picture', 'links', 'settings']);
 
 // A three-line parser instead of a YAML dependency. The project has none, and a
 // front matter of three keys is not a reason for the first one.
@@ -144,6 +152,11 @@ export function parseFragment(text, name) {
     if (!/^[a-z0-9][a-z0-9-]*$/.test(sh.id)) fail(`\`${sh.id}\` is not a usable file name; use letters, digits and dashes`);
     if (seen.has(sh.id)) fail(`two shots share the id \`${sh.id}\`; one would overwrite the other`);
     seen.add(sh.id);
+    // Checked here rather than where the office is raised: a typo in the JSON
+    // would otherwise be found after the run has already taken half the shots.
+    if (sh.settings) {
+      try { sh.settings = JSON.parse(sh.settings); } catch (e) { fail(`\`settings\` of shot \`${sh.id}\` is not JSON: ${e.message}`); }
+    }
   }
   if (front.nopicture && shots.length) fail('`nopicture` and `shots` both: a note either has a picture or says why not');
   return { title: front.title, scope: front.scope || '', event: front.event || '', keys: front.keys || [], shots, nopicture: front.nopicture || '', body };

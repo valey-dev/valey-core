@@ -9,6 +9,7 @@ import { LINK, initLink, linkSeen, linkLost, linkTrying, linkDown, paintLink } f
 import { drawCamera, buildCameras } from './cctv.js';
 import { syncActors, tickActors } from './actors.js';
 import * as UI from './ui.js';
+import { waitsOnYou } from './visitor.js';
 import { proceduralWeather, fromWeatherCode, flash } from './weather.js';
 import { sound, tickSound } from './sound.js';
 import { initPager, seePermits, renderPager, pagerKey, recall, waitingCount, forgetPermit } from './pager.js';
@@ -846,7 +847,7 @@ const onSnapshot = (e) => {
 
   for (const a of state.agents) {
     const was = state.prevStatus.get(a.id);
-    if (was === 'working' && a.status === 'awaiting') UI.toast(tr('toast.freed', { name: a.name, a: a.gender === 'f' ? 'ась' : 'ся' }), 'wait');
+    if (was === 'working' && waitsOnYou(a)) UI.toast(tr('toast.freed', { name: a.name, a: a.gender === 'f' ? 'ась' : 'ся' }), 'wait');
     state.prevStatus.set(a.id, a.status);
   }
 

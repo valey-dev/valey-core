@@ -9,6 +9,7 @@ import { pxText, drawSwitcher } from './office.js';
 import { touchHint } from './touch.js';
 import { t as tr, lang } from './i18n.js';
 import { esc } from './esc.js';
+import { waitsOnYou } from './visitor.js';
 import { drawPerson } from './sprites.js';
 import { PLAQUE, drawPlaque } from './plaque.js';
 import { actionOf, codesOf } from './keymap.js';
@@ -45,7 +46,7 @@ function tally() {
   const a = S.agents || [];
   return {
     total: a.length,
-    waiting: a.filter((x) => x.status === 'awaiting').length,
+    waiting: a.filter(waitsOnYou).length,
     working: a.filter((x) => x.status === 'working').length,
     idle: a.filter((x) => x.status === 'idle').length,
     rooms: (S.layout && S.layout.projectRooms) || [],
@@ -482,7 +483,7 @@ function menuHtml(n) {
 function roomsHtml(n) {
   const rows = n.rooms.map((r, i) => {
     const list = (S.agents || []).filter((a) => r.agents.includes(a.id));
-    const wait = list.filter((a) => a.status === 'awaiting').length;
+    const wait = list.filter(waitsOnYou).length;
     const work = list.filter((a) => a.status === 'working').length;
     const note = wait ? tr('title.waiting', { n: wait, word: word('title.wait', wait) })
       : work ? tr('title.working', { n: work }) : tr('title.idleShort');
