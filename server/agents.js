@@ -695,7 +695,7 @@ function emptyState() {
     lastUserPrompt: '', acts: [], role: '', files: new Map(),
     ended: '',               // how the turn ended, if it did — see endOf()
     background: new Map(),   // tool_use id -> when that background job started
-    turns: 0, model: '', effort: '', turnEffort: '', branch: '', slug: '', title: '', aiTitle: '', task: null,
+    turns: 0, model: '', effort: '', turnEffort: '', ctx: 0, branch: '', slug: '', title: '', aiTitle: '', task: null,
     bornAt: 0,             // the first reply in the file, see born()
     skills: newSkills(),   // the grade counter: it grows and is never trimmed
     shift: newShift(),     // replies, characters and idle gaps, over the whole file
@@ -753,6 +753,11 @@ function applyLine(st, line) {
   // automatic one happens inside the model's turn and the model goes on.
   if (r.type === 'system' && r.subtype === 'compact_boundary'
     && r.compactMetadata && r.compactMetadata.trigger === 'manual' && !st.ended) st.ended = 'stopped';
+  // After a compaction the context is what it kept, and the record says so
+  // itself — postTokens — so the number drops the second /compact finishes,
+  // not with the next reply, which may be minutes away.
+  if (r.type === 'system' && r.subtype === 'compact_boundary' && !r.isSidechain
+    && r.compactMetadata && Number.isFinite(r.compactMetadata.postTokens)) st.ctx = r.compactMetadata.postTokens;
 
   if (r.type === 'assistant' && r.message) {
     born(st, r.timestamp);
@@ -769,6 +774,15 @@ function applyLine(st, line) {
       // changed mid-session in 22.
       st.effort = r.effort || '';
       st.turnEffort = r.perTurnEffort || '';
+      // How full the context is: what the last reply of the main thread was fed —
+      // fresh input, read from the cache and written to it. Output is not
+      // counted: it becomes input on the next turn, and that turn will say so.
+      // A subagent's reply is its own context, not this session's.
+      const u = r.message.usage;
+      if (u && !r.isSidechain) {
+        const n = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+        if (n > 0) st.ctx = n;
+      }
     }
     const content = r.message.content || [];
     const txt = textOf(content);
@@ -1250,6 +1264,9 @@ export async function snapshot() {
       repo: !!repo.git,
       branch: t.branch,
       model: t.model,
+      // Tokens in the context after the last reply or compaction; the window is
+      // the page's to know (web/model-name.js), as the model's name is.
+      ctx: t.ctx || 0,
       // A one-turn boost is the level only while that turn is open.
       effort: (status === 'working' && t.turnEffort) || t.effort,
       // A Codex thread carries the name the app shows on the session itself.

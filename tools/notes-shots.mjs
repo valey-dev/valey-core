@@ -81,7 +81,7 @@ const CAST = [
   { slot: 'a', sessionId: 'aaaaaaaa-0000-4000-8000-00000000000a', cwd: '/Users/kolya/Projects/rocket-shop',
     branch: 'feature/cart-discount', asked: 'Calculate the discount in the cart',
     said: 'Done: the cart calculates the discount and its test is green.',
-    file: '/Users/kolya/Projects/rocket-shop/src/cart.js' },
+    file: '/Users/kolya/Projects/rocket-shop/src/cart.js', ctx: 310_000 },
   { slot: 'b', sessionId: 'aaaaaaaa-0000-4000-8000-00000000000b', cwd: '/Users/kolya/Projects/tide-charts',
     branch: 'fix/timezone-drift', asked: 'The chart is an hour off after the clocks change',
     said: 'Found it: the chart was drawn in local time and the data comes in UTC.',
@@ -89,7 +89,8 @@ const CAST = [
   { slot: 'c', sessionId: 'aaaaaaaa-0000-4000-8000-00000000000c', cwd: '/Users/kolya/Projects/paper-radio',
     branch: 'feature/sleep-timer', asked: 'Add a sleep timer',
     said: 'The timer is in. It fades the volume out over the last minute.',
-    file: '/Users/kolya/Projects/paper-radio/src/timer.js' },
+    // Past 80%: the card's tail is yellow and the bubble carries its meter.
+    file: '/Users/kolya/Projects/paper-radio/src/timer.js', ctx: 860_000 },
   // Three more in rocket-shop, since 13 September 2026: the standup gives a project
   // the whole width, and with one person a project nothing in the picture showed
   // it — a row of three and one below does.

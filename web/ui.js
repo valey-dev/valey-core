@@ -9,7 +9,10 @@ import { LIBRARY, TIERS, DIRS, SUBS, byId, children, colOf, inDir, dirTally, isS
 import { theme, applyTheme, resetTheme, PRESETS, ui, UI_STEPS, applyUiScale } from './theme.js';
 import { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } from './notes.js';
 import { esc } from './esc.js';
-import { modelLabel } from './model-name.js';
+import { modelLabel, ctxText, ctxShare, CTX_WARN } from './model-name.js';
+// The context tail of the model line: « · 310k / 1M», yellow from 80%.
+const ctxTail = (a) => { const t = ctxText(a.ctx, a.model); return t ? `\u00a0·\u00a0${t}` : ''; };
+const ctxHot = (a) => (ctxShare(a) || 0) >= CTX_WARN;
 import { roleIcon } from './roleicon.js';
 import { owned } from './owned.js';
 import { linkDown, linkRetrying } from './link.js';
@@ -331,6 +334,12 @@ function patchDialog(a) {
   const model = el.dialog.querySelector('.model');
   const label = modelLabel(a.model, a.effort);
   if (model && model.textContent !== label) model.textContent = label;
+  const cx = el.dialog.querySelector('.ctx');
+  if (cx) {
+    const tail = ctxTail(a);
+    if (cx.textContent !== tail) cx.textContent = tail;
+    if (cx.classList) cx.classList.toggle('hot', ctxHot(a));
+  }
   set('.act', actLine(a));
   // The task is rewritten by every answer, so its row moves as a whole rather
   // than being patched piece by piece: between "you are needed" and its absence
@@ -692,7 +701,7 @@ function buildDialog(a) {
   el.dialog.innerHTML = `
     <div class="portrait"><canvas width="48" height="48" id="pf"></canvas></div>
     <div class="content">
-      <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${roleIcon(a.roleKey)}${esc(roleText(a))}</span>${providerBadge(a)}<span class="model">${esc(modelLabel(a.model, a.effort))}</span>
+      <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${roleIcon(a.roleKey)}${esc(roleText(a))}</span>${providerBadge(a)}<span class="model">${esc(modelLabel(a.model, a.effort))}</span><span class="ctx${ctxHot(a) ? ' hot' : ''}">${esc(ctxTail(a))}</span>
         <span class="meta">${metaLine(a)}</span><div class="taskrow">${taskRow(a)}</div></div>
       <div class="act">${actLine(a)}</div>
       <div class="hiredrow">${hiredRow(a)}</div>

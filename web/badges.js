@@ -4,6 +4,7 @@
 // mock-up would diverge from the engine silently, so the badge moved out here and
 // is drawn by one function in both places.
 import { pxText } from './office.js';
+import { ctxShare, CTX_WARN } from './model-name.js';
 
 // The shell alone: the box, the tail and the light border. Exported because a
 // module draws its own state inside the same bubble — the voice puts a speaking
@@ -50,5 +51,17 @@ export function drawBubble(ctx, x, y, agent, t) {
       ctx.fillStyle = on ? col : 'rgba(255,255,255,0.22)';
       ctx.fillRect(x - 5 + i * 4, y - 7 - (on ? 1 : 0), 2, 2);
     }
+  }
+  // From 80% the bubble's bottom edge becomes a meter: the track in the dim
+  // frame colour, the share in warn. Below the threshold the floor stays
+  // quiet — a strip over every agent would be noise.
+  // Frame: [Bubbles over the head · context](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2469-16337)
+  const share = ctxShare(agent);
+  if (share !== null && share >= CTX_WARN) {
+    const w = 14;
+    ctx.fillStyle = '#6d5040';
+    ctx.fillRect(x - 7, y - 1, w, 1);
+    ctx.fillStyle = '#ffd166';
+    ctx.fillRect(x - 7, y - 1, Math.max(1, Math.round(w * Math.min(1, share))), 1);
   }
 }
