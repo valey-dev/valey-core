@@ -11,6 +11,7 @@ import { projectInfo, repoRoot, repoRootCached } from './stack.js';
 import { present } from './files.js';
 import { trinketTier } from '../web/trinkets.js';
 import { liveCodexSessions, applyCodexLine } from './codex.js';
+import { namedPaths } from './links.js';
 
 // Where the office reads sessions from. The variable is for the stands: until
 // 4 September 2026 the directory was pinned to the home one, and transcript
@@ -1301,9 +1302,13 @@ export function conversation(sessionId) {
 // Whose files these are: the ids of the agents in whose transcript the path
 // appeared. A file belongs to a conversation, and it may be opened for a guest
 // exactly when the conversation is.
+//
+// A file the agent named by a link in its own reply belongs to it as well
+// (#reply-links): server/links.js says which links count, and why so few.
 export function fileOwners(p, snap) {
   return (snap.agents || [])
-    .filter((a) => a.files.some((f) => f.path === p) || a.artifacts.some((f) => f.path === p))
+    .filter((a) => a.files.some((f) => f.path === p) || a.artifacts.some((f) => f.path === p)
+      || namedPaths(conversation(a.id), a.cwd).has(p))
     .map((a) => a.id);
 }
 

@@ -72,6 +72,9 @@ export const clean = (s) => (s || '')
     const src = angled !== undefined ? angled : bare;
     return `🖼 ${alt || String(src).split('/').pop()}`;
   })
+  // A link reads as its text: «[ui.js:1860](web/ui.js:1860)» printed whole is the
+  // address twice with brackets around it (#reply-links, 27 September 2026).
+  .replace(/\[([^\]]+)\]\(\s*(?:<[^)]*?>|[^)\s]+)[^)]*\)/g, '$1')
   .replace(/[*#`]/g, '').replace(/\n{3,}/g, '\n\n').trim();
 
 // ------------------------------------------------------------------- toasts
@@ -1273,6 +1276,7 @@ function pickNothing() {
 
 export function pickOpen() {
   pickClose();
+  filesClose();
   picked = pickTargets();
   if (!picked.length) { pickNothing(); return false; }
   picked.forEach((n, i) => { n.classList.add('picked'); n.dataset.pick = String(i + 1); });
@@ -1433,7 +1437,14 @@ export function toggleMarkdownRaw() {
   return true;
 }
 
-export async function openFile(p, items = null, index = -1, title = '') {
+// A file opened from a link in a conversation (#reply-links) remembers the
+// conversation, so ESC goes back to it rather than out of the panel, and may be
+// opened on a line: the one the link named.
+let viewBack = null;
+
+export async function openFile(p, items = null, index = -1, title = '', opts = {}) {
+  viewBack = opts.back || null;
+  const line = opts.line > 0 ? opts.line : 0;
   gallery = items
     ? { items, title, sel: index, mode: 'single' }
     : { items: [], title: '', sel: 0, mode: 'single' };
@@ -1456,7 +1467,8 @@ export async function openFile(p, items = null, index = -1, title = '') {
   }
   const many = gallery.items.length > 1;
   const back = gallery.title ? tr('gal.toGrid') : tr('gal.back');
-  el.viewer.innerHTML = `<div class="vwrap"><div class="vhead">${esc(p.split('/').pop())}
+  const shownLine = line && !isImg && !docKind ? line : 0;
+  el.viewer.innerHTML = `<div class="vwrap"><div class="vhead">${esc(p.split('/').pop())}${shownLine ? ' · ' + tr('gal.line', { n: shownLine }) : ''}
       <span class="zhint">${many ? tr('gal.of', { i: gallery.sel + 1, n: gallery.items.length }) : ''}${isImg ? tr('gal.loupe') : ''}${docKind ? `R — ${toggleLabel()} · ` : ''}${!isImg && !docKind && langOf(p) ? `${langOf(p)} · ` : ''}Esc — ${back}</span>
       ${docKind ? `<button id="mdtoggle">${toggleLabel()}</button>` : ''}
       <button id="vx">✕</button></div>
@@ -1464,6 +1476,7 @@ export async function openFile(p, items = null, index = -1, title = '') {
   $('#vx').onclick = closeViewer;
   bindDocControls();
   paintCopyHint();
+  if (shownLine) markLine(shownLine);
   const img = $('#zimg');
   if (img) {
     img.onclick = () => { img.classList.toggle('pixel'); };
@@ -1485,7 +1498,28 @@ function columns() {
   return Math.max(1, figs.filter((f) => f.offsetTop === top).length);
 }
 
+// The line a link named: a band across it, and the file scrolled so that it is
+// the third line on screen — the two above it say where you are. The code is one
+// <pre>, so the band is laid over it by the line height rather than cut into it.
+function markLine(n) {
+  const box = el.viewer.querySelector('.single');
+  const pre = box && box.querySelector('pre');
+  if (!pre || !pre.getBoundingClientRect || typeof getComputedStyle !== 'function') return;
+  const lines = pre.textContent.split('\n').length;
+  if (n > lines) return;
+  const lh = parseFloat(getComputedStyle(pre).lineHeight) || 18;
+  const top = pre.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop + (n - 1) * lh;
+  const band = document.createElement('div');
+  band.className = 'lineband';
+  band.style.top = top + 'px';
+  band.style.height = lh + 'px';
+  box.classList.add('haslines');
+  box.appendChild(band);
+  box.scrollTop = Math.max(0, top - 2 * lh);
+}
+
 export function closeViewer() {
+  viewBack = null;
   el.viewer.hidden = true;
   chatView = null;
   mdSource = null;
@@ -1562,6 +1596,7 @@ export function viewerKey(raw, big = false) {
   // Pressed a second time — or where the screen holds no code block — it hands
   // the page to the digits instead.
   if (key === 'c' || key === 'с') {
+    filesClose();
     if (!copiedByC && el.viewer.querySelector('.mdblock') && copyTopBlock()) {
       copiedByC = true;
       return true;
@@ -1602,7 +1637,8 @@ export function viewerKey(raw, big = false) {
       return VIEWER_KEYS.includes(key);
     }
     if (key === 'escape') {
-      if (gallery.title) renderGallery(); else closeViewer();
+      if (viewBack) { const a = viewBack; viewBack = null; openTranscript(a); }
+      else if (gallery.title) renderGallery(); else closeViewer();
       return true;
     }
     return VIEWER_KEYS.includes(key);
@@ -4326,7 +4362,7 @@ function paintChat(msgs, fresh = 0, force = false) {
   // badges vanish under the hand that was choosing. Found on 5 September 2026 —
   // the numbers appeared and were gone a second later, and it read as the key
   // not working at all.
-  if (pickOn() && !force) { chatView.pending = { msgs, fresh }; return; }
+  if ((pickOn() || filesOn()) && !force) { chatView.pending = { msgs, fresh }; return; }
   const a = chatView.agent;
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
   const keep = box.scrollTop;
@@ -4351,6 +4387,7 @@ function paintChat(msgs, fresh = 0, force = false) {
         + (ed && !ed.id && ed.ts === m.ts ? noteEditor(m.ts, ed.text) : '')).join('')
     : loose + `<p class="empty">${tr('chat.empty')}</p>`;
   bindPictures(box);
+  bindFileLinks(box);
   chatView.msgs = msgs;
   // The conversation was opened with a snapshot of the agent, while the task is
   // rewritten by every new answer: take the fresh one from the list, or the head
@@ -4493,6 +4530,7 @@ async function loadChat(fresh) {
     return;
   }
   const msgs = r.messages || [];
+  chatView.files = r.files || { files: [], refused: {} };
   const was = chatView.msgs;
   // The tail may grow in place rather than gain an item; a growing answer is one message.
   const grew = msgs.length > was.length
@@ -4519,6 +4557,14 @@ export function transcriptKey(key, big) {
   // While the editor is open, textarea owns the keys. Only misses arrive here,
   // and the log must not move at that point.
   if (chatView.editing) return key === 'escape' ? (closeNoteEditor(), true) : true;
+  // While the files list is up it owns the digits, ESC and F; any other key
+  // takes it down and goes on to do its usual job — the same rule as C's numbers.
+  if (filesOn()) {
+    if (/^[1-9]$/.test(key)) { const f = listedFiles()[Number(key) - 1]; filesClose(); if (f) openNamedFile(f); return true; }
+    if (key === 'escape' || key === 'f' || key === 'а') { filesClose(); return true; }
+    filesClose();
+  }
+  if (key === 'f' || key === 'а') { filesOpen(); return true; }
   if (key === 'n' || key === 'т') { openNoteEditor(topMessageTs(), null); return true; }
   if (key === 'arrowup') { scrollChat(-1, big); return true; }
   if (key === 'arrowdown') { scrollChat(1, big); return true; }
@@ -4529,6 +4575,99 @@ export function transcriptKey(key, big) {
   if (key === 'r' || key === 'к') { chatStatus(tr('chat.rereading')); loadChat(1); return true; }
   if (key === 'escape') { closeViewer(); return true; }
   return false;
+}
+
+// ------------------------------------------------------ files of a conversation
+// F in a conversation raises the files the agent named by link (#reply-links):
+// the ones the server will hand out, newest first, one per digit. The same
+// numbers go onto the links in the text. The server decides what is openable —
+// server/links.js — so the page never guesses a path.
+const LIST_MAX = 9;
+const listedFiles = () => ((chatView && chatView.files && chatView.files.files) || []).slice(0, LIST_MAX);
+export const filesOn = () => !!(chatView && chatView.filesUp);
+
+function openNamedFile(f) {
+  const back = chatView && chatView.agent;
+  openFile(f.path, null, -1, '', { line: f.line, back });
+}
+
+// Every link whose address the server resolved comes alive; the rest stay the
+// dotted line they were. A click opens it too — the keyboard is the way the
+// frames show, the mouse is the spare.
+function bindFileLinks(box) {
+  const all = (chatView && chatView.files && chatView.files.files) || [];
+  const byHref = new Map();
+  all.forEach((f, i) => (f.hrefs || []).forEach((h) => byHref.set(h, i)));
+  for (const n of box.querySelectorAll('.mdlink[data-href]')) {
+    const i = byHref.get(n.dataset.href);
+    if (i == null) continue;
+    n.classList.add('mdfile');
+    n.dataset.file = String(i);
+    n.title = all[i].path;
+    n.onclick = () => { filesClose(); openNamedFile(all[i]); };
+  }
+}
+
+function filesOpen() {
+  if (!chatView) return;
+  pickClose();
+  const list = listedFiles();
+  if (!list.length) {
+    const head = el.viewer.querySelector('.vhead');
+    if (head && !el.viewer.querySelector('.pickhint')) {
+      const hint = document.createElement('span');
+      hint.className = 'pickhint';
+      hint.textContent = tr('files.none');
+      head.appendChild(hint);
+      setTimeout(() => hint.remove(), 1800);
+    }
+    return;
+  }
+  chatView.filesUp = true;
+  const refused = chatView.files.refused || {};
+  const more = (chatView.files.files || []).length - list.length;
+  const out = ['outside', 'hidden', 'gone'].filter((k) => refused[k] > 0)
+    .map((k) => tr('files.' + k, { n: refused[k] }));
+  const nOut = ['outside', 'hidden', 'gone'].reduce((s, k) => s + (refused[k] || 0), 0);
+  const who = esc(chatView.agent.name);
+  const rows = list.map((f, i) => `<div class="frow"><b class="fnum">${i + 1}</b><span class="fname">${esc(f.name)}</span>`
+    + (f.line ? `<span class="fline">:${f.line}</span>` : '')
+    + `<span class="fdir">${esc(f.dir || '')}</span><i>${who}${f.ts ? ' · ' + fmtStamp(f.ts) : ''}</i></div>`).join('');
+  const panel = document.createElement('div');
+  panel.className = 'chatfiles';
+  panel.innerHTML = `<div class="fhead">${tr('files.title', { n: list.length })}</div>${rows}`
+    + (more > 0 ? `<div class="fmore">${tr('files.more', { n: more })}</div>` : '')
+    + (nOut ? `<div class="fmore">${tr('files.refused', { n: nOut })}: ${out.join(', ')}</div>` : '')
+    + `<div class="fhint">${tr('files.hint')}</div>`;
+  const wrap = el.viewer.querySelector('.vwrap');
+  const path = wrap && wrap.querySelector('.vpath');
+  if (wrap) wrap.insertBefore(panel, path || null);
+  for (const n of el.viewer.querySelectorAll('.mdfile')) {
+    const i = Number(n.dataset.file);
+    if (i < list.length) { n.classList.add('fpicked'); n.dataset.fnum = String(i + 1); }
+  }
+  const head = el.viewer.querySelector('.vhead');
+  if (head && !el.viewer.querySelector('.pickhint')) {
+    const hint = document.createElement('span');
+    hint.className = 'pickhint files';
+    hint.textContent = tr('files.pick');
+    head.appendChild(hint);
+  }
+}
+
+function filesClose() {
+  if (!filesOn()) return;
+  chatView.filesUp = false;
+  const panel = el.viewer.querySelector('.chatfiles');
+  if (panel) panel.remove();
+  for (const n of el.viewer.querySelectorAll('.fpicked')) { n.classList.remove('fpicked'); delete n.dataset.fnum; }
+  const hint = el.viewer.querySelector('.pickhint');
+  if (hint) hint.remove();
+  if (chatView.pending) {
+    const waiting = chatView.pending;
+    chatView.pending = null;
+    paintChat(waiting.msgs, waiting.fresh, true);
+  }
 }
 
 // ---------------------------------------------------------- all notes at once

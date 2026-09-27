@@ -40,7 +40,12 @@ const cases = [
     ['<table>', '<th>Экран</th>', '<td>Вход</td>']],
   ['link', '[доска](https://example.com/a)', ['<a href="https://example.com/a"']],
   ['bare URL', 'смотри https://example.com/x дальше', ['<a href="https://example.com/x"']],
-  ['a local link is not clickable', '[файл](../secret.md)', ['<span class="mdlink">файл</span>']],
+  // A local link is not a link on the page: it keeps its address for the
+  // conversation, which opens it only if the server hands the file out (#reply-links).
+  ['a local link is not clickable', '[файл](../secret.md)', ['<span class="mdlink" data-href="../secret.md">файл</span>'], ['<a href="../secret.md"']],
+  ['a file link keeps its line', '[ui.js:1860](web/ui.js:1860)', ['data-href="web/ui.js:1860">ui.js:1860</span>']],
+  ['a path with a space in angle brackets', '[отчёт](<docs/my notes.md>)', ['data-href="docs/my notes.md">отчёт</span>']],
+  ['a quote in the address stays inside the attribute', '[x](a"onmouseover=alert(1).md)', ['data-href="a&quot;onmouseover=alert(1'], ['" onmouseover', '"onmouseover=alert(1).md"']],
   // A picture an agent sent is drawn, not named (#reply-image): the file goes
   // through /api/file, which opens only what the agent touched in its work.
   ['a picture from disk is drawn', '![кадр](/tmp/shot.png)',

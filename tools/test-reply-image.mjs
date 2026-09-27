@@ -27,7 +27,10 @@ const bare = clean('![кадр](/tmp/shot.png)');
 ok('a bare path is named too', bare === '🖼 кадр', bare);
 const noAlt = clean('![](/tmp/снимок-шапки.png)');
 ok('with no caption the file name is the name', noAlt === '🖼 снимок-шапки.png', noAlt);
-ok('an ordinary link is left alone', clean('см. [бриф](https://x/y)') === 'см. [бриф](https://x/y)', clean('см. [бриф](https://x/y)'));
+// Not taken for a picture — and since #reply-links the card reads any link as
+// its text, because the card is plain text and the address is noise there.
+ok('an ordinary link is not taken for a picture, and reads as its text', clean('см. [бриф](https://x/y)') === 'см. бриф', clean('см. [бриф](https://x/y)'));
+ok('a file link reads as its text', clean('Словарь — [docs/score-words.md](docs/score-words.md), строка [ui.js:1860](web/ui.js:1860).') === 'Словарь — docs/score-words.md, строка ui.js:1860.');
 
 // -------------------------------------------------------- the conversation
 const html = renderMarkdown('Вот: ![кадр](/tmp/shot.png)');
