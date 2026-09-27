@@ -116,6 +116,25 @@ try {
   const vanished = await req('/api/file?path=' + encodeURIComponent(gone));
   ok('missing file - 404', vanished.status === 404, vanished.status);
 
+  // ------------------------------------------------------ a Codex thread
+  // A task for a Codex thread goes through `codex queue`, never `claude
+  // --resume` — which with a Codex thread id would start a Claude session
+  // nobody asked for. The CLI here is the stand's own: it writes down how it
+  // was called, and no real thread is touched.
+  const codexArgs = path.join(dir, 'codex-args.json');
+  const fakeCodex = path.join(dir, 'codex');
+  await fsp.writeFile(fakeCodex, `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(codexArgs)}, JSON.stringify(process.argv.slice(2)));\n`, { mode: 0o755 });
+  process.env.CODEX_BIN = fakeCodex;
+  setSnapshot({ agents: [{ id: 'cx1', name: 'Марина', project: 'tide-charts', provider: 'codex', files: [], artifacts: [] }] });
+  const OWN = { 'content-type': 'application/json', 'x-valey-owner': OWNER };
+  const toCodex = await req('/api/task', { method: 'POST', headers: OWN, body: JSON.stringify({ agentId: 'cx1', text: 'hi', deliver: true }) });
+  ok('a task for a Codex thread is queued into it',
+    toCodex.status === 200 && toCodex.j.task.state === 'delivered' && toCodex.j.task.queued === true, toCodex.j);
+  const called = JSON.parse(await fsp.readFile(codexArgs, 'utf8').catch(() => '[]'));
+  ok('through codex queue, with the thread and the text', JSON.stringify(called) === JSON.stringify(['queue', '--thread', 'cx1', '--message', 'hi']), called);
+  ok('and the page learns the codex CLI is there', toCodex.j.delivery && toCodex.j.delivery.codex && toCodex.j.delivery.codex.available === true, toCodex.j.delivery);
+  delete process.env.CODEX_BIN;
+
   // ------------------------------------------------------- the network gate
   // Through a middleman means from outside. A closed office answers 404: a
   // scanner has no business learning that anyone lives here.

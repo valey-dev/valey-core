@@ -12,7 +12,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { loadModules, moduleList, moduleAll, moduleDefaults, moduleErrors, moduleRoute, moduleObserve, moduleAsset, setModuleOff } from '../server/modules.js';
+import { loadModules, moduleList, moduleAll, moduleDefaults, moduleErrors, moduleRoute, moduleObserve, moduleAsset, setModuleOff, setGuestChoice, moduleGuestRows } from '../server/modules.js';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -97,6 +97,21 @@ ok('nor the manifest, a stand, or a dotfile', !(await served('module.json')) && 
 ok('nor anything above the module', !(await served('../BACKLOG.md')) && !(await served('../../package.json')));
 ok('a module nobody knows serves nothing', (await moduleAsset('нет', 'client.js', true)) === null);
 ok('the answer is the real path on disk', path.isAbsolute((await moduleAsset('пример', 'client.js', true)) || ''));
+
+// The owner's choice lies over the manifest: «shown» in the manifest, hidden by
+// the owner — and the row says so. Choosing the default again forgets it.
+setGuestChoice({ 'пример': 'hidden' });
+ok('hidden by the owner, a shown module leaves the guest list', !moduleList(false).some((m) => m.id === 'пример'), moduleList(false));
+ok('and the owner still sees it', moduleList(true).some((m) => m.id === 'пример'));
+ok('and its files are not served to a guest', (await moduleAsset('пример', 'client.js', false)) === null);
+let row = moduleGuestRows().find((m) => m.id === 'пример');
+ok('the row names the default, the choice and the outcome', row && row.default === 'shown' && row.choice === 'hidden' && row.shown === false, row);
+setGuestChoice({});
+row = moduleGuestRows().find((m) => m.id === 'пример');
+ok('without a choice the manifest decides', row && row.choice === null && row.shown === true, row);
+setGuestChoice({ 'пример': 'nonsense' });
+ok('a value nobody understands is no choice', moduleGuestRows().find((m) => m.id === 'пример').choice === null);
+setGuestChoice({});
 ok('in the list for the client there is a path to the client and style',
   moduleList(true)[0]?.client === 'client.js' && moduleList(true)[0]?.style === 'style.css', moduleList(true));
 ok('the module delivered its settings', moduleDefaults()['пример']?.ключ === '', moduleDefaults());

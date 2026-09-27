@@ -19,7 +19,7 @@ A fragment declares shots, and a shot is a recipe rather than a file — an id, 
 shots:
   - id: standup
     url: "#room=standup"
-    keys: "Enter,wait:2500,hold-w:1500"
+    keys: "Enter,wait:2500,hold-ArrowUp:1500"
 ```
 
 `node tools/notes-shots.mjs` raises a demo office, walks it through each recipe and puts the frame next to its fragment. The release moves the pictures under the version and writes the recipes beside them in `notes/vX.Y.Z/shots.json` — a picture can only be looked at, but a recipe can be replayed on an older tag, which is what a real before-and-after will be made of. Declaring a shot and never rendering it stops the release.

@@ -158,13 +158,22 @@ export function buildLayout(agents, opts = {}) {
   for (const r of rooms) {
     r.back = backDoor(r);
     r.board.y += r.y;
-    r.coffee.y = r.y + r.h - 44;
+    // The kitchen corner stands against the bottom wall, level with the plant in
+    // the other corner. Until 13 September 2026 it stood 28 higher, and the
+    // microwave's shelf sat right under the last desk of the right column: the
+    // floor below that desk was 64 points free out of 200, and the spot under it
+    // could not be reached from the door at all. Against the wall the band is
+    // free end to end. Frame: Prod «02 · Офис · сцены», «Офис · кухонный угол
+    // у нижней стены», node 2122:6225.
+    r.coffee.y = r.y + r.h - 16;
     // The microwave is to the left of the coffee machine, in the same kitchen
     // corner. Everyone has one: fish can be heated in any room, and that is the whole
     // point.
-    // On a shelf rather than on the floor: a person 24 tall covers everything
-    // standing at his level — and what has to be looked at here is precisely the window.
-    r.micro = { x: r.coffee.x - 44, y: r.coffee.y - 18 };
+    // It used to sit on a shelf, because a person standing in front of it on the
+    // floor covered the window. Against the wall nobody can stand in front of it —
+    // its collision runs down to the wall (blocked below) — so it stands on the
+    // floor next to the machine and is approached from above.
+    r.micro = { x: r.coffee.x - 44, y: r.coffee.y };
     for (let i = 0; i < r.agents.length; i++) {
       const cx = i % COLS_IN_ROOM, cy = Math.floor(i / COLS_IN_ROOM);
       r.desks.push({
@@ -287,6 +296,11 @@ export function buildLayout(agents, opts = {}) {
   // fireplace this office does not have.
   props.push({ kind: 'bearrug', x: lounge.x, y: lounge.y + 22 });
   props.push({ kind: 'kicker', x: kicker.x, y: kicker.y });
+  // The pole and its robot (web/pole.js), in the free stretch between the hookah
+  // and the control room's wall. Added 13 September 2026 on a live demo, the
+  // design phase skipped on the owner's word; the frame is owed afterwards. The
+  // stage is what blocks the way — the pole rises out of its middle.
+  props.push({ kind: 'pole', x: lounge.x + 150, y: lounge.y + 8, w: 34, h: 10 });
 
   // The landing in front of the conservatory is an ordinary corridor, only the top
   // one, and it has to be laid by hand: flushRow lays a strip above its row, and
@@ -701,8 +715,10 @@ export function blocked(L, x, y) {
     }
     // the tub takes up the floor, the crown hangs above head height and is in nobody's way
     if (r.ficus && x > r.ficus.x - 12 && x < r.ficus.x + 12 && y > r.ficus.y - 14 && y < r.ficus.y + 4) return true;
-    if (r.coffee && x > r.coffee.x - 16 && x < r.coffee.x + 14 && y > r.coffee.y - 34 && y < r.coffee.y + 4) return true;
-    if (r.micro && x > r.micro.x - 17 && x < r.micro.x + 17 && y > r.micro.y - 22 && y < r.micro.y + 4) return true;
+    // Both run down to the wall: a strip of free floor under them is a place to
+    // stand in front of the window and cover it, which is what the shelf was for.
+    if (r.coffee && x > r.coffee.x - 16 && x < r.coffee.x + 14 && y > r.coffee.y - 34) return true;
+    if (r.micro && x > r.micro.x - 17 && x < r.micro.x + 17 && y > r.micro.y - 22) return true;
     for (const b of r.blocks || []) {
       if (x > b.x - 4 && x < b.x + b.w + 4 && y > b.y && y < b.y + b.h) return true;
     }

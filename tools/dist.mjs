@@ -12,6 +12,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { countNotes } from '../server/archive.js';
 
 const ROOT = path.dirname(path.dirname(new URL(import.meta.url).pathname));
 const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8' }).trim();
@@ -36,6 +37,22 @@ const latest = path.join(outDir, 'valey-latest.tar.gz');
 copyFileSync(tgz, latest);
 writeFileSync(`${latest}.sha256`, `${digest}  valey-latest.tar.gz\n`);
 
+// What an office installed from an archive asks before it downloads anything:
+// which version is published, and what is in it. It is one small file because
+// the answer is read by a button somebody is waiting on — the alternative was
+// following the redirect to the release page and reading the tag out of a URL,
+// which tells the office nothing about what it would be getting.
+//
+// The counts come from this version's own changelog section, the way the row
+// says them: «2 фичи, 5 починок».
+const changelog = readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8');
+const version = tag.replace(/^v/, '');
+const manifest = { version, sha256: digest, ...countNotes(changelog, version) };
+for (const name of [`valey-${tag}.json`, 'valey-latest.json']) {
+  writeFileSync(path.join(outDir, name), JSON.stringify(manifest, null, 2) + '\n');
+}
+
 console.log(`${tgz}`);
 console.log(`  тег ${tag} · ${sha.slice(0, 8)} · sha256 ${digest.slice(0, 16)}…`);
 console.log(`  и то же под именем valey-latest.tar.gz`);
+console.log(`  манифест: v${version} · фич: ${manifest.feats} · починок: ${manifest.fixes}`);

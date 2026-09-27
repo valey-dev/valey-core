@@ -24,6 +24,21 @@ const cases = [
   ['json: key', 'json', '{"mode":"acceptEdits"}', ['<span class="t-cssprop">"mode"</span>']],
   ['json: literal', 'json', '{"on":true}', ['<span class="t-literal">true</span>']],
 
+  ['yaml: key and value', 'yaml', 'name: rocket', ['<span class="t-cssprop">name</span><span class="t-punct">:</span>']],
+  ['yaml: a key inside a list item', 'yaml', '  - uses: actions/checkout@v4', ['<span class="t-punct">-</span>', '<span class="t-cssprop">uses</span>']],
+  ['yaml: on is a key in a CI file, not a literal', 'yaml', 'on:\n  push:', ['<span class="t-cssprop">on</span>'], ['t-literal']],
+  ['yaml: comment', 'yaml', 'retries: 3 # three', ['<span class="t-comment"># three</span>', '<span class="t-number">3</span>']],
+  ['yaml: a hash inside a quoted string is not a comment', 'yaml', 'title: "a # b"', ['<span class="t-string">"a # b"</span>'], ['t-comment']],
+  ['yaml: a colon in a URL is not a key', 'yaml', 'url: http://a:b/c#frag', ['http://a:b/c#frag'], ['t-cssprop">http', 't-comment']],
+  ['yaml: an apostrophe in a word does not open a string', 'yaml', "name: don't stop", ["don't stop"], ['t-string']],
+  ['yaml: literals and the null tilde', 'yaml', 'a: yes\nb: ~', ['<span class="t-literal">yes</span>', '<span class="t-literal">~</span>']],
+  ['yaml: anchor, alias and tag', 'yaml', 'base: &b\nx: *b\ny: !!str 1', ['<span class="t-atrule">&amp;b</span>', '<span class="t-atrule">*b</span>', '<span class="t-keyword">!!str</span>']],
+  ['yaml: a block after run: | is text, keys and comments included', 'yaml', 'run: |\n  echo key: value # not a key\nnext: 1',
+    ['<span class="t-string">  echo key: value # not a key</span>', '<span class="t-cssprop">next</span>'], ['t-comment']],
+  ['yaml: a folded block ends where the indent does', 'yaml', 'a: >-\n  folded\n\n  more\nb: 2',
+    ['<span class="t-string">  folded</span>', '<span class="t-string">  more</span>', '<span class="t-cssprop">b</span>']],
+  ['yaml: a tag inside a value is escaped', 'yaml', 'x: "<img onerror=x>"', ['&lt;img'], ['<img']],
+
   ['html: tag', 'html', '<div class="a">текст</div>', ['<span class="t-tag">div</span>']],
   ['html: attribute', 'html', '<div class="a"></div>', ['<span class="t-attr">class</span>']],
   ['html: attribute value', 'html', '<div class="a"></div>', ['<span class="t-string">"a"</span>']],
@@ -55,13 +70,14 @@ for (const [name, lang, src, must = [], mustNot = []] of cases) {
 
 // the language from the extension and from the fence label in markdown
 const byExt = [['a/b.js', 'js'], ['style.css', 'css'], ['data.json', 'json'],
+  ['.github/workflows/test.yml', 'yaml'], ['compose.YAML', 'yaml'],
   ['page.html', 'html'], ['page.htm', 'html'], ['photo.png', null]];
 for (const [path, want] of byExt) {
   const got = langOf(path);
   if (got !== want) { failed++; console.log(`FAIL  | langOf(${path}) → ${got}, expected ${want}`); }
   else console.log(`ok    | langOf(${path}) → ${got}`);
 }
-for (const [tag, want] of [['JavaScript', 'js'], ['CSS', 'css'], ['html', 'html'], ['bash', null]]) {
+for (const [tag, want] of [['JavaScript', 'js'], ['CSS', 'css'], ['html', 'html'], ['yaml', 'yaml'], ['YML', 'yaml'], ['bash', null]]) {
   const got = normaliseLang(tag);
   if (got !== want) { failed++; console.log(`FAIL  | normaliseLang(${tag}) → ${got}`); }
   else console.log(`ok    | normaliseLang(${tag}) → ${got}`);
@@ -71,7 +87,8 @@ for (const [tag, want] of [['JavaScript', 'js'], ['CSS', 'css'], ['html', 'html'
 const strip = (html) => html.replace(/<[^>]*>/g, '')
   .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
-for (const [file, lang] of [['../web/main.js', 'js'], ['../web/style.css', 'css'], ['../web/index.html', 'html']]) {
+for (const [file, lang] of [['../web/main.js', 'js'], ['../web/style.css', 'css'], ['../web/index.html', 'html'],
+  ['../.github/workflows/test.yml', 'yaml']]) {
   const src = readFileSync(new URL(file, import.meta.url), 'utf8');
   const t0 = Date.now();
   const out = highlight(src, lang);
@@ -80,6 +97,40 @@ for (const [file, lang] of [['../web/main.js', 'js'], ['../web/style.css', 'css'
   if (!same) { failed++; console.log(`FAIL  | ${file}: highlighting lost text`); }
   console.log(`${same ? 'ok   ' : 'FAILED'} | ${file}: ${src.length} chars → ${ms} ms, text ${same ? 'intact' : 'damaged'}`);
 }
+
+// Every token colour reads on both grounds code is shown on: the viewer panel
+// (--wood-dark) and a fence in rendered markdown (#1a120c). On 13 September
+// 2026 punctuation was #7a6450 — 2.93:1 on the panel — and inside fences the
+// comments and punctuation had darker copies of their own, 3.50 and 4.12:1,
+// written for a base text that is no longer dimmer there.
+const hex2rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const lum = (rgb) => {
+  const [r, g, b] = rgb.map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrast = (a, b) => {
+  const x = lum(hex2rgb(a)), y = lum(hex2rgb(b));
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+};
+const tokens = readFileSync(new URL('../web/tokens.css', import.meta.url), 'utf8');
+const vars = Object.fromEntries([...tokens.matchAll(/(--[\w-]+):(#[0-9a-f]{6})/gi)].map((m) => [m[1], m[2]]));
+const sheet = readFileSync(new URL('../web/highlight.css', import.meta.url), 'utf8');
+const grounds = { 'the viewer': vars['--wood-dark'], 'a markdown fence': '#1a120c' };
+const colours = [...sheet.matchAll(/\.t-([\w-]+)\{color:(#[0-9a-f]{6}|var\((--[\w-]+)\))\}/gi)]
+  .map((m) => [m[1], m[3] ? vars[m[3]] : m[2]]);
+let dim = 0;
+for (const [cls, hex] of colours) {
+  for (const [where, bg] of Object.entries(grounds)) {
+    const c = contrast(hex, bg);
+    if (c < 4.5) { dim++; console.log(`FAIL  | .t-${cls} ${hex} on ${where} is ${c.toFixed(2)}:1`); }
+  }
+}
+if (colours.length < 10) { dim++; console.log(`FAIL  | only ${colours.length} token colours read from highlight.css`); }
+if (!/\.md pre\.mdcode\{background:#1a120c/.test(readFileSync(new URL('../web/markdown.css', import.meta.url), 'utf8'))) {
+  dim++; console.log('FAIL  | the markdown fence is no longer #1a120c — move the ground above with it');
+}
+failed += dim;
+if (!dim) console.log(`ok    | ${colours.length} token colours read at 4.5:1 on the viewer and in fences`);
 
 console.log(failed ? `\nfailed: ${failed}` : '\nall good');
 process.exit(failed ? 1 : 0);

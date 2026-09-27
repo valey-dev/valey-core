@@ -1,0 +1,19 @@
+{
+  "tag": "v0.52.4",
+  "shots": [
+    {
+      "file": "muted-contrast-muted-standup.png",
+      "slug": "muted-contrast",
+      "id": "muted-standup",
+      "url": "#room=standup",
+      "keys": "Enter,wait:2500,Tab,wait:900"
+    },
+    {
+      "file": "muted-contrast-muted-entrance.png",
+      "slug": "muted-contrast",
+      "id": "muted-entrance",
+      "keys": "wait:1500",
+      "viewport": "1400,860"
+    }
+  ]
+}

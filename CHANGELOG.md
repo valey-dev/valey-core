@@ -4,6 +4,532 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.73.0 — 27 September 2026
+
+### Added
+
+- **office:** notes left on a desk survive a restart, and counted things are said in the right number (f359958)
+
+### Other
+
+- docs(notes): the release note for the desk kept on disk, with a picture of a note lying on one (83a4e2d)
+## v0.72.1 — 27 September 2026
+
+### Fixed
+
+- **install:** valey.dev's installer follows every publication of the core instead of staying on its own copy (e19371d)
+## v0.72.0 — 26 September 2026
+
+### Added
+
+- **office:** the standup puts first the teams that need you, and Shift+↑↓ pins or puts one away (d0c2e0f)
+## v0.71.0 — 26 September 2026
+
+### Added
+
+- **office:** a breaker by the lift puts the whole office in the dark, for everyone (905cdfa)
+
+### Fixed
+
+- **office:** in a lost office the phones light the agents holding them, instead of punching holes through the floor (203aac1)
+
+### Other
+
+- docs(notes): the picture of the breaker's dark, rendered from the demo office (2324a76)
+- chore(office): the breaker moves to a panel under the security room, reachable by anyone (a9527b0)
+## v0.70.0 — 26 September 2026
+
+### Added
+
+- **access:** the owner decides what a guest sees, module by module (623f4ee)
+
+### Fixed
+
+- **access:** a guest's page loads the modules shown to him, not none of them (1464f0a)
+- **access:** a guest whose phone slept through the owner's switch still gets the module (cb39571)
+- **access:** a guest invited over the Wi-Fi gets in, instead of «a token is required» (0be5799)
+- **access:** an invitation made from localhost names the office's address on the Wi-Fi (96178d7)
+
+### Other
+
+- test(access): the guest stand listens for the set of modules, not for «reload» (3ccbe68)
+## v0.69.5 — 26 September 2026
+
+### Fixed
+
+- **test:** the Codex stand writes its recording script as CommonJS, so Node 18 and 20 can run it (7c31fd1)
+## v0.69.4 — 26 September 2026
+
+### Fixed
+
+- **test:** the branch-cleanup stand builds its bare repository on main, so a machine that still defaults to master can run it (5d03f48)
+## v0.69.3 — 26 September 2026
+
+### Fixed
+
+- **test:** the archive-update stand runs on Node 18, and a copy of the tree without git skips the manifest instead of throwing (9af8ce9)
+## v0.69.2 — 26 September 2026
+
+### Fixed
+
+- **release:** land stops reporting «branch cleanup failed» for a branch that is fully merged (e7a98d0)
+## v0.69.1 — 26 September 2026
+
+### Fixed
+
+- **install:** an update run from inside the office warns the terminal on Linux too, not only on a mac (0725724)
+## v0.69.0 — 26 September 2026
+
+### Added
+
+- **notes:** a patch release gets a note — each fix a section in its own words, tooling fixes left out (627cffa)
+## v0.68.2 — 26 September 2026
+
+### Fixed
+
+- **deliver:** a task to a chat whose folder is gone says so instead of «exited with code -2» (093837f)
+## v0.68.1 — 26 September 2026
+
+### Fixed
+
+- **update:** an unpushed commit in the Modules no longer holds the office back when nothing is coming into them (081e464)
+## v0.68.0 — 26 September 2026
+
+### Added
+
+- **claim:** a claimed backlog item says whether anybody is still working on it (f0f2723)
+## v0.67.0 — 26 September 2026
+
+### Added
+
+- **office:** when the server is gone the lights go out, instead of the floor pretending to be alive (3c16604)
+
+### Other
+
+- chore(office): the power comes back over the same 1.6 s, and the UPS beep is held with a drag (114184e)
+- chore(office): a longer power-down, and a quiet UPS beep while the lights are out (8c59fe1)
+- chore(stand): the breaker repaints through a hook, so the stand's fake DOM still holds one key listener (79f80e4)
+- chore(stand): a breaker on the stand plaque that plays a lost office in this tab (99e3c00)
+- chore(office): count a dead server's errors, which the stream never reported as closed (a4f0e0f)
+- docs(notes): the picture of the lights going out, rendered from the demo office (ee5d714)
+## v0.66.2 — 26 September 2026
+
+### Fixed
+
+- **office:** a chat archived in the desktop app leaves its desk instead of sleeping there for an hour (47f5854)
+## v0.66.1 — 26 September 2026
+
+### Fixed
+
+- **newsstand:** the paper's key hint names Space next to Enter (99af8b7)
+## v0.66.0 — 26 September 2026
+
+### Added
+
+- **release:** a released office publishes a manifest of its version, so the archive office can ask what is out without downloading it (256d53c)
+- **office:** an office installed from an archive updates itself, core from valey.dev and the modules of the Office from the shelf (7f53bbc)
+## v0.65.3 — 26 September 2026
+
+### Fixed
+
+- **install:** an update run from inside the office tells the terminal to cd into the new one (df94598)
+## v0.65.2 — 26 September 2026
+
+### Fixed
+
+- **newsstand:** a name nobody invented is refused in the picture office instead of being dressed in an invented paper (e608c06)
+- **newsstand:** Space opens a post like Enter, and the answer is said on the paper instead of in a corner of the screen (e52ef1f)
+- **newsstand:** the invented papers say so instead of sending the reader to a channel that does not exist, and a photo is halftoned on a finer grid (d4591ee)
+
+### Other
+
+- chore(notes): the v0.65.0 reply-image recipe gets back the line that puts a picture in the frame (05f4335)
+- chore(newsstand): the picture office reads invented papers, so the stand has something a public note may show (ad0e9e3)
+## v0.65.1 — 26 September 2026
+
+### Fixed
+
+- **release:** a picture quoted as an example in a note stays an example on the page (c2881c4)
+## v0.65.0 — 26 September 2026
+
+### Added
+
+- **office:** a picture an agent sends in a reply is drawn in the conversation, not spelled out (2cd4806)
+
+### Fixed
+
+- **office:** a picture an agent names in its reply opens, even when no tool touched it (279bc71)
+
+### Other
+
+- chore(notes): the reply-image fragment declares only fields the release knows (b7a180f)
+- docs(notes): the reply-image picture shows the picture, and the note says what now opens (08a57ec)
+- chore(notes): a picture recipe can have a demo agent answer with a picture (7c0ba5e)
+## v0.64.0 — 26 September 2026
+
+### Added
+
+- **office:** the office keeps a journal of what broke, on this machine (e89d762)
+## v0.63.1 — 26 September 2026
+
+### Fixed
+
+- **office:** an empty office no longer freezes a few seconds after walking in (1383166)
+## v0.63.0 — 23 September 2026
+
+### Added
+
+- **office:** Codex threads sit at desks next to Claude sessions, marked ◇ where Claude is ✶ (b74c819)
+
+### Fixed
+
+- **office:** a file dropped into a task for a Codex thread goes with it, instead of being left behind (4a4c997)
+- **office:** a Codex agent takes a task from the office — it goes into the thread's own queue (2f411ef)
+
+### Other
+
+- docs(notes): the Codex pictures re-rendered after main caught up (89a5a3a)
+- docs(notes): the Codex note says tasks go into the thread's queue, with the Task page (0b88de8)
+- docs(notes): the Codex sessions note, with the floor and the card (8485473)
+- chore(notes): the demo office for release pictures seats one invented Codex thread (cde65bf)
+- refactor(agents): one function records a tool call, whoever made it (de054f6)
+## v0.62.3 — 21 September 2026
+
+### Other
+
+- docs(readme): drop the note about a landing page the public repo never had (46d733d)
+## v0.62.2 — 19 September 2026
+
+### Fixed
+
+- **office:** an agent the app put to sleep stays at the desk for an hour instead of vanishing mid-conversation (246e7f8)
+## v0.62.1 — 19 September 2026
+
+### Fixed
+
+- **office:** a card reads the report tail in English too, so an English-speaking project stops showing the chat title instead of the task (82af9a9)
+## v0.62.0 — 17 September 2026
+
+### Added
+
+- **office:** a file dropped onto a task goes to the agent with it (2d69c46)
+## v0.61.4 — 17 September 2026
+
+### Fixed
+
+- **release:** a package.json version that is not X.Y.Z stops the release instead of cutting vNaN.undefined.NaN (31a7b46)
+
+### Other
+
+- chore(demo): the product demo, 20–30 seconds, shot from an invented office (b077996)
+- docs(keys): the office walks on arrows only — WASD leaves the Russian README and the W examples of the picture recipes (31da8c5)
+- docs(readme): a one-page Russian instruction for the first cohort — install, first screen, keys, the hook (293d986)
+- ci(tests): main no longer goes red after every release — the release dry run step reads «nothing to cut» as green (5768b0c)
+## v0.61.3 — 17 September 2026
+
+### Fixed
+
+- **tree:** the PR board's card says what the board shows — main, the agents' branches and today's merges (19c3eb4)
+## v0.61.2 — 17 September 2026
+
+### Fixed
+
+- **office:** answering an agent's question leaves the card on «what are you working on», not on «this question is already closed» (83bf59b)
+
+### Other
+
+- test(ui): a page module may only call the callbacks it was handed (2567670)
+## v0.61.1 — 16 September 2026
+
+### Fixed
+
+- **release:** a release that loses the race for main pushes nothing and takes its tag back, instead of leaving a tag no branch can see (4efafb5)
+## v0.61.0 — 15 September 2026
+
+### Added
+
+- **office:** each room's rug takes its own colour — SPACE on the rug walks six colourways (151e7c7)
+## v0.60.0 — 15 September 2026
+
+### Added
+
+- **office:** the agent card names its model and reasoning level, and a trade wears a pixel icon instead of a border (cf77577)
+
+### Fixed
+
+- **dossier:** the model no longer reads «<synthetic>» after an API error or a resume (f368269)
+
+### Other
+
+- test(language): the guard reads what a stand prints, not only its label — failure details, assert messages, summaries (a054abf)
+- chore(stand-stop): the stand stopper reports in English (ab2da9c)
+- test(stands): failure details, assert messages and summaries print in English, as the rule has said since 9 September (3406dc2)
+## v0.59.1 — 15 September 2026
+
+### Fixed
+
+- **release:** a release page is built from its tag's changelog, so `promote` from a tree behind the tag no longer publishes a version without one (e432ebe)
+## v0.59.0 — 15 September 2026
+
+### Added
+
+- **tree:** an installed module is switched off and back on from its card in the module tree, and the PR board has its node (6473101)
+
+### Fixed
+
+- **office:** a delivered or hired session no longer inherits the office's settings, port and stand plaque (1cb25eb)
+
+### Other
+
+- refactor(tree): the module switch is the office's segmented control, as its frame is (a8fb9a4)
+## v0.58.2 — 15 September 2026
+
+### Fixed
+
+- **update:** «update» no longer refuses over an uncommitted change the update does not touch, and catches an untracked file in its way before the core moves (9f3b43f)
+## v0.58.1 — 15 September 2026
+
+### Fixed
+
+- **radio:** the down arrow walks wave to wave instead of through every ✕ (9849513)
+- **radio:** Enter and Space on a wave in the list start it playing (aaee62a)
+
+### Other
+
+- ci(runners): keep private checks off hosted minute quota (c27234a)
+## v0.58.0 — 13 September 2026
+
+### Added
+
+- **office:** the standup gives a project the whole width, and its name stays pinned while you arrow down (ceb0a6a)
+
+### Other
+
+- chore(notes): the demo cast puts four people in rocket-shop, so a project's row shows in the pictures (71b32bf)
+## v0.57.1 — 13 September 2026
+
+### Fixed
+
+- **update:** an agent the updated office resumes no longer raises every office it starts on port 5177 (8e4af43)
+
+### Other
+
+- docs(readme): updating without stopping needs npm start, one restart after an office older than v0.55.0, and Ctrl-C is still a restart (9d8955d)
+## v0.57.0 — 13 September 2026
+
+### Added
+
+- **office:** a pole in the lounge, and Bolty, a tin robot who dances on it badly — SPACE tips him (de82074)
+
+### Other
+
+- docs(notes): the note for the pole and its robot, with the head coming off (3b54dab)
+- docs(readme): SPACE tips the robot on the pole in the lounge (13a6146)
+## v0.56.0 — 13 September 2026
+
+### Added
+
+- **office:** the office hires agents — a new session starts at the reception and walks out of a portal at the room's door (6dbc0b3)
+
+### Fixed
+
+- **office:** a hire into a far room is seen — the portal opens beside the owner and the agent walks to its room (def73d9)
+- **tree:** the module tree's lines and borders are the frame's tone, not a step darker (4e5d735)
+- **radio:** the receiver scales its own panel only, and keeps the digit on its stations (ba48cdb)
+- **office:** the reception's arrows reach «нанять», and the hiring panel picks its room with arrows instead of digits that typed into the task (507197d)
+
+### Other
+
+- docs(notes): hiring opens the portal beside you — the note, the README line and the pictures (640ff44)
+- test(styles): a module's stylesheet cannot repaint the office (856dbdf)
+- refactor(style): the core stops carrying the git tree's diff styles (81ba78a)
+- docs(notes): the hiring note says the arrows, not digits, and its pictures are retaken (f1f3188)
+- docs(notes): the note for hiring, with the reception, the panel and the portal (5e27642)
+- docs(readme): + at the reception desk hires, and what a hire runs (4cbb14e)
+- test(hire): a stand for hiring — the first message, refusals, a run that starts, stays and is let go, and one that never starts (7551ccb)
+## v0.55.0 — 13 September 2026
+
+### Added
+
+- **office:** the office updates itself from its repository without stopping — a version row in the office tab (118dd06)
+
+### Other
+
+- docs(notes): the picture for the office-update note, rendered from its recipe on the demo office (8c18120)
+- docs(notes): the note for updating the office without stopping, with the version row in the picture (37f3778)
+- chore(update): npm run update does from a terminal what the office tab's button does (1173c69)
+- chore(keys): the first ↓ in the office tab lands on «check for updates», and the light stays on it while it runs (515bd0f)
+- chore(update): npm start runs the supervisor, and a stand proves the swap drops nothing (9f7a35b)
+- chore(update): a supervisor holds the port and swaps the office under it without dropping anything (82c8361)
+- chore(update): the office can check its repositories and pull them forward, both or neither (9510ecd)
+## v0.54.2 — 13 September 2026
+
+### Fixed
+
+- **office:** a manual /compact over a stalled turn shows the agent waiting for you, not working (9fa002a)
+- **office:** an agent after /compact is back at the prompt, not «working» forever (fa5b9c7)
+## v0.54.1 — 13 September 2026
+
+### Fixed
+
+- **keys:** a field in a panel takes the caret the moment the arrows land on it (d2982bd)
+- **notes:** the «conversation closed» badge no longer takes half the row and cuts the quote (b3f05cd)
+- **office:** an agent asking a question or showing a plan is «waiting on you», not working (5dfc97e)
+## v0.54.0 — 13 September 2026
+
+### Added
+
+- **board:** YAML files and yaml blocks in markdown are highlighted (e7fa628)
+
+### Fixed
+
+- **board:** comments and punctuation in code read on the board and in markdown blocks (38b2dd1)
+
+### Other
+
+- docs(notes): the note for YAML on the board and readable comments in code (5001c08)
+## v0.53.1 — 13 September 2026
+
+### Fixed
+
+- **office:** the copy button on a code block turns green while the mouse is still on it (76d0519)
+## v0.53.0 — 13 September 2026
+
+### Added
+
+- **office:** a phone or an Xbox in your network becomes the owner after your yes in Invite (ed28d71)
+
+### Other
+
+- docs(notes): the note for owner devices, with the pairing request on the picture (d45f966)
+- chore(office): the server pairs owner devices by a four-digit code, answered only from this machine (4103f55)
+## v0.52.4 — 13 September 2026
+
+### Fixed
+
+- **office:** key hints, dates and counters are readable in every office colour (9913156)
+
+### Other
+
+- docs(notes): the note for one readable tone of service text (722cc1d)
+## v0.52.3 — 13 September 2026
+
+### Fixed
+
+- **deliver:** a turn sent through the office is no longer interrupted when the office is stopped with Ctrl-C (39ec993)
+## v0.52.2 — 13 September 2026
+
+### Fixed
+
+- **settings:** saves no longer vanish when two of them, or two offices, meet in one file (0388a23)
+## v0.52.1 — 13 September 2026
+
+### Fixed
+
+- **board:** files that are gone from the disk no longer sit on the board as a ✕ that will not open (f4657bd)
+## v0.52.0 — 13 September 2026
+
+### Added
+
+- **office:** an agent cut off mid-step is «stopped», with a chip of its own, not «waiting on you» (bbb1ced)
+
+### Fixed
+
+- **office:** a stopped card's last line is muted, not the green of an agent at work (0acca76)
+
+### Other
+
+- docs(notes): the stopped state's note, with the standup card and the dialog (d180159)
+- chore(notes): a picture recipe can interrupt a demo agent before the camera (b907bb9)
+## v0.51.0 — 13 September 2026
+
+### Added
+
+- **notes:** a feature note can name the event it is meant to move, and the release keeps it (98f2897)
+## v0.50.0 — 13 September 2026
+
+### Added
+
+- **radio:** the receiver finds stations by name or genre in the radio-browser catalogue (2296547)
+
+### Other
+
+- docs(office): the kitchen corner points at its frame on Prod, not the WIP section it left (05f62f2)
+- docs(notes): the note for finding stations, with the results on camera (c9e59df)
+- test(radio): a stand for the station search — the filters, the tag top-up, genres, clicks and a guest (128124d)
+## v0.49.3 — 13 September 2026
+
+### Fixed
+
+- **office:** the kitchen corner no longer blocks the way to the last desk (114fea7)
+## v0.49.2 — 13 September 2026
+
+### Fixed
+
+- **guest:** opening an invitation link no longer spends it — the code burns on entering (8f7686b)
+- **shot:** an invitation link is photographed with its card, not as an empty doorway (29ec460)
+
+### Other
+
+- chore(shot): the comment on the reload quotes the doorway in English, as operator files must (ed98b29)
+## v0.49.1 — 13 September 2026
+
+### Fixed
+
+- **office:** an agent is «waiting on you» only when it asks for something, not on every end of turn (e0f414e)
+## v0.49.0 — 13 September 2026
+
+### Added
+
+- **radio:** the receiver plays internet radio by its stream — no account, a display that says what is on and why it is silent (50f575f)
+
+### Fixed
+
+- **radio:** removing a wave nobody is listening to no longer breaks the music off or restarts the playlist (9660f1d)
+
+### Other
+
+- docs(notes): the radio-stream note shows the receiver on the air (67827fc)
+- docs(notes): the note for internet radio streams (b44d841)
+- test(radio): a stand for streams — the pasted line, a station's answer, playlists, ICY titles and who may ask (c09535d)
+## v0.48.1 — 13 September 2026
+
+### Fixed
+
+- **guest:** a guest whose browser once owned a stand on the same port no longer stands on an empty floor (7ca1bd8)
+- **guest:** a guest let in while another office saved the settings no longer lands in an empty office (78bbae0)
+## v0.48.0 — 13 September 2026
+
+### Added
+
+- **release:** a feature note shows the feature or says why it cannot (96e5625)
+
+### Other
+
+- docs(notes): the note for pictures owed in release notes (1810190)
+- docs(notes): six releases get the pictures they shipped without, and ten say why they have none (ab1e354)
+## v0.47.4 — 13 September 2026
+
+### Fixed
+
+- **office:** a long-running office no longer keeps every agent that ever passed through in memory (e0379d9)
+- **delivery:** a task that hangs no longer holds its agent busy until the server restarts (33f266f)
+- **delivery:** the office no longer says the CLI is missing while it is still looking for it (8372ed6)
+## v0.47.3 — 13 September 2026
+
+### Fixed
+
+- **office:** an agent's transcript is no longer empty after the office restarts (8e16405)
+## v0.47.2 — 13 September 2026
+
+### Fixed
+
+- **shot:** a run no longer leaves its Chrome profile in the temp folder (4efd253)
+- **shot:** a refused, dropped or unanswered CDP command ends the run with its name (6bd2ef2)
+
+### Other
+
+- chore(shot): --help prints the usage from the file's own header (1c87a13)
 ## v0.47.1 — 12 September 2026
 
 ### Fixed

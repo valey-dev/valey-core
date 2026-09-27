@@ -81,18 +81,18 @@ const check = (name, ok, got) => {
 current = makeDialog();
 UI.closeDialog();
 UI.dialogUp();
-check('up on a fresh card puts focus on the link', current.link.has('focus'), 'focus нет');
+check('up on a fresh card puts focus on the link', current.link.has('focus'), 'no focus');
 check('the text doesn\'t move around', current.body.scrollTop === 0, current.body.scrollTop);
-check('the buttons at the bottom lose focus', !current.buttons.some((b) => b.has('focus')), 'кнопка подсвечена');
+check('the buttons at the bottom lose focus', !current.buttons.some((b) => b.has('focus')), 'the button is lit');
 
 // --- 2. Enter presses the link, not the button ---
 UI.pressDialogFocus();
 check('Enter clicks the link', current.link.clicked === 1, current.link.clicked);
-check('no buttons pressed', current.buttons.every((b) => b.clicked === 0), 'кнопка нажалась');
+check('no buttons pressed', current.buttons.every((b) => b.clicked === 0), 'the button was pressed');
 
 // --- 3. down returns to the text ---
 UI.dialogDown();
-check('down removes focus from the link', !current.link.has('focus'), 'focus остался');
+check('down removes focus from the link', !current.link.has('focus'), 'focus stayed');
 check('and scrolls the text down', current.body.scrollTop > 0, current.body.scrollTop);
 
 // --- 4. the text is scrolled: up scrolls first, and only from the top leaves for the link ---
@@ -103,7 +103,7 @@ UI.dialogUp();
 check('scrolled text moves up before focus jumps to the link', !current.link.has('focus') && current.body.scrollTop < 200, current.body.scrollTop);
 current.body.scrollTop = 0;
 UI.dialogUp();
-check('scrolled to the top - the next one up takes you to a link', current.link.has('focus'), 'focus нет');
+check('scrolled to the top - the next one up takes you to a link', current.link.has('focus'), 'no focus');
 
 // --- 5. a short reply: there is no link, up just scrolls ---
 current = makeDialog({ withLink: false });
@@ -122,8 +122,8 @@ current = makeDialog();
 UI.closeDialog();
 UI.dialogUp();
 UI.moveDialogFocus(1);
-check('right removes focus from the link', !current.link.has('focus'), 'focus остался');
-check('and lights up the button', current.buttons.some((b) => b.has('focus')), 'ни одна не подсвечена');
+check('right removes focus from the link', !current.link.has('focus'), 'focus stayed');
+check('and lights up the button', current.buttons.some((b) => b.has('focus')), 'none is lit');
 
 // --- 7. closing the card resets the focus ---
 UI.dialogUp();
@@ -147,13 +147,13 @@ state.focus = agent;
 state.page = 'talk';
 UI.renderDialog();                       // the first paint of the card
 UI.dialogUp();
-check('the focus was on the link in the real card', current.link.has('focus'), 'focus нет');
+check('the focus was on the link in the real card', current.link.has('focus'), 'no focus');
 
 current.link = node('linky more', { id: 'readAll' });   // the reply finished, the node rewritten
 agent.lastSaid = 'начало ответа и продолжение';
 UI.renderDialog();
-check('after completing the answer, the backlight is in place', current.link.has('focus'), 'focus слетел');
-check('and the text is not retyped', state.typed === state.sayText.length, `${state.typed} из ${state.sayText.length}`);
+check('after completing the answer, the backlight is in place', current.link.has('focus'), 'focus was lost');
+check('and the text is not retyped', state.typed === state.sayText.length, `${state.typed} of ${state.sayText.length}`);
 
 UI.pressDialogFocus();
 check('Enter still clicks the link after the update', current.link.clicked === 1, current.link.clicked);
@@ -162,10 +162,10 @@ check('Enter still clicks the link after the update', current.link.clicked === 1
 UI.dialogUp();
 current.link = null;                     // "show the work" — there is no link on the tab
 UI.renderDialog();
-check('without a link, the backlight returns to the button', current.buttons.some((b) => b.has('focus')), 'ни одна не подсвечена');
+check('without a link, the backlight returns to the button', current.buttons.some((b) => b.has('focus')), 'none is lit');
 current.buttons.forEach((b) => { b.clicked = 0; });
 UI.pressDialogFocus();
-check('and Enter presses the button, not the void', current.buttons.some((b) => b.clicked === 1), 'ничего не нажалось');
+check('and Enter presses the button, not the void', current.buttons.some((b) => b.clicked === 1), 'nothing was pressed');
 
 clearInterval(state.tw);
 
@@ -177,22 +177,22 @@ current = makeDialog({ withLink: false, files: 3 });
 UI.closeDialog();
 UI.dialogUp();
 check('goes up in the list from the last file', current.files[2].has('focus'), current.files.map((f) => f.has('focus')).join(','));
-check('the buttons below give focus', !current.buttons.some((b) => b.has('focus')), 'кнопка подсвечена');
+check('the buttons below give focus', !current.buttons.some((b) => b.has('focus')), 'the button is lit');
 check('and the text doesn’t move around', current.body.scrollTop === 0, current.body.scrollTop);
 
 // --- 10. further up — up the list ---
 UI.dialogUp();
-check('next up moves one line higher', current.files[1].has('focus'), 'не там');
-check('and removes the backlight from the previous one', !current.files[2].has('focus'), 'подсвечены две');
+check('next up moves one line higher', current.files[1].has('focus'), 'in the wrong place');
+check('and removes the backlight from the previous one', !current.files[2].has('focus'), 'two are lit');
 
 // --- 11. Enter opens the file, not the button ---
 UI.pressDialogFocus();
 check('Enter presses file line', current.files[1].clicked === 1, current.files[1].clicked);
-check('the buttons are not pressed', current.buttons.every((b) => b.clicked === 0), 'кнопка нажалась');
+check('the buttons are not pressed', current.buttons.every((b) => b.clicked === 0), 'the button was pressed');
 
 // --- 12. from the top row up scrolls rather than throwing you out of the list ---
 UI.dialogUp();
-check('from the first line the focus remains in the list', current.files[0].has('focus'), 'вылетел');
+check('from the first line the focus remains in the list', current.files[0].has('focus'), 'it left the list');
 current.body.scrollTop = 200;
 UI.dialogUp();
 check('above the first line - we move the text, but the focus remains on the line',
@@ -203,16 +203,16 @@ current = makeDialog({ withLink: false, files: 2 });
 UI.closeDialog();
 UI.dialogUp();                       // on the last row
 UI.dialogDown();                     // a dead end at the bottom of the list reads as "the keyboard is broken"
-check('down from the last line returns to the buttons', current.buttons.some((b) => b.has('focus')), 'ни одна не подсвечена');
-check('and no one is highlighted in the list', !current.files.some((f) => f.has('focus')), 'строка осталась подсвеченной');
+check('down from the last line returns to the buttons', current.buttons.some((b) => b.has('focus')), 'none is lit');
+check('and no one is highlighted in the list', !current.files.some((f) => f.has('focus')), 'the row stayed lit');
 
 // --- 14. left and right lead out of the list ---
 current = makeDialog({ withLink: false, files: 2 });
 UI.closeDialog();
 UI.dialogUp();
 UI.moveDialogFocus(1);
-check('right removes from the list', !current.files.some((f) => f.has('focus')), 'строка подсвечена');
-check('and lights up the button', current.buttons.some((b) => b.has('focus')), 'ни одна не подсвечена');
+check('right removes from the list', !current.files.some((f) => f.has('focus')), 'the row is lit');
+check('and lights up the button', current.buttons.some((b) => b.has('focus')), 'none is lit');
 
 // --- 15. the focused file disappeared from the live stream ---
 // files come from the snapshot and change on the fly; the row under the cursor
@@ -231,14 +231,14 @@ check('and Enter goes to the button', current.buttons.some((b) => b.clicked === 
 // "Close" gets no number — it has Esc.
 current = makeDialog();
 state.dialogOpen = true;
-check('number 2 processed by card', UI.dialogNumber('2') === true, 'не обработана');
+check('number 2 processed by card', UI.dialogNumber('2') === true, 'not handled');
 check('and clicked “show work”', current.buttons[1].clicked === 1, current.buttons[1].clicked);
 check('adjacent tabs are not touched',
-  current.buttons[0].clicked === 0 && current.buttons[2].clicked === 0, 'тронуты');
-check('“close” number cannot be pressed', UI.dialogNumber('4') === false, 'нажимается');
+  current.buttons[0].clicked === 0 && current.buttons[2].clicked === 0, 'touched');
+check('“close” number cannot be pressed', UI.dialogNumber('4') === false, 'it presses');
 check('and the close button is intact', current.buttons[3].clicked === 0, current.buttons[3].clicked);
 state.dialogOpen = false;
-check('when the card is closed, the number goes to the office', UI.dialogNumber('1') === false, 'осталась');
+check('when the card is closed, the number goes to the office', UI.dialogNumber('1') === false, 'stayed');
 
 // --- 16. while a line is being typed out, Enter finishes it rather than pressing a button ---
 // with a mouse this was a click on the text itself; there was no key, and the
@@ -249,7 +249,7 @@ state.page = 'talk';
 state.sayText = 'длинная реплика агента';
 state.typed = 4;
 UI.pressDialogFocus();
-check('Enter on a printed replica appends it', state.typed === state.sayText.length, `${state.typed} из ${state.sayText.length}`);
+check('Enter on a printed replica appends it', state.typed === state.sayText.length, `${state.typed} of ${state.sayText.length}`);
 check('and does not press the button under focus', current.buttons.every((b) => b.clicked === 0), current.buttons.map((b) => b.clicked).join(','));
 
 // --- 17. a finished line no longer intercepts the key ---
@@ -268,13 +268,13 @@ state.sayText = 'длинная реплика агента';
 state.typed = 4;
 UI.dialogUp();
 check('up to the transcript block adds the replica at once',
-  state.typed === state.sayText.length, `${state.typed} из ${state.sayText.length}`);
+  state.typed === state.sayText.length, `${state.typed} of ${state.sayText.length}`);
 check('and the focus remains on the block, and does not go back to the buttons',
   current.link.has('focus') && current.buttons.every((b) => !b.has('focus')),
-  `ссылка: ${current.link.has('focus')}`);
+  `link: ${current.link.has('focus')}`);
 UI.pressDialogFocus();
 check('Enter on the transcript link opens it the first time',
-  current.link.clicked === 1, `нажатий: ${current.link.clicked}`);
+  current.link.clicked === 1, `presses: ${current.link.clicked}`);
 
 // --- the guest's card: the arrows have to reach «попросить доступ» ---
 // Until 5 September 2026 they could not: the walk knew the bottom row and the
@@ -283,14 +283,14 @@ check('Enter on the transcript link opens it the first time',
 current = makeDialog({ withLink: false, files: 0, ask: true });
 UI.closeDialog();
 UI.dialogUp();
-check('up goes to “request access”', current.ask.has('focus'), 'focus нет');
-check('and the bottom row gave focus', !current.buttons.some((b) => b.has('focus')), 'кнопка подсвечена');
+check('up goes to “request access”', current.ask.has('focus'), 'no focus');
+check('and the bottom row gave focus', !current.buttons.some((b) => b.has('focus')), 'the button is lit');
 UI.pressDialogFocus();
 check('Enter presses it', current.ask.clicked === 1, current.ask.clicked);
-check('no tabs pressed', current.buttons.every((b) => b.clicked === 0), 'вкладка нажалась');
+check('no tabs pressed', current.buttons.every((b) => b.clicked === 0), 'the tab was pressed');
 UI.dialogDown();
 check('down returns focus to tabs',
-  !current.ask.has('focus') && current.buttons.some((b) => b.has('focus')), 'фокус потерялся');
+  !current.ask.has('focus') && current.buttons.some((b) => b.has('focus')), 'focus was lost');
 
 // --- the options of a question are reached by the arrows and pressed by Enter ---
 // The office answers a question by pressing one of them, so «choose with the
@@ -299,12 +299,12 @@ check('down returns focus to tabs',
 current = makeDialog({ withLink: false, files: 0, opts: 3 });
 UI.closeDialog();
 UI.dialogUp();
-check('up goes to the last option', current.opts[2].has('focus'), 'focus нет');
+check('up goes to the last option', current.opts[2].has('focus'), 'no focus');
 UI.dialogUp();
-check('and the next one goes up in the list of options', current.opts[1].has('focus'), 'focus не сдвинулся');
+check('and the next one goes up in the list of options', current.opts[1].has('focus'), 'focus did not move');
 UI.pressDialogFocus();
 check('Enter presses option under focus', current.opts[1].clicked === 1, current.opts[1].clicked);
-check('no tabs pressed', current.buttons.every((b) => b.clicked === 0), 'вкладка нажалась');
+check('no tabs pressed', current.buttons.every((b) => b.clicked === 0), 'the tab was pressed');
 
 console.log(failed ? `\nfailed: ${failed}` : '\nall matched');
 process.exit(failed ? 1 : 0);

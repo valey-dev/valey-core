@@ -131,9 +131,9 @@ ok('caps are given as a copy, not a link', (() => {
 
 // ---------------------------------------------------------------- refusals
 const throws = (fn) => { try { fn(); return false; } catch { return true; } };
-ok('place without id is rejected', throws(() => define([{ title: 'x' }])), 'приняли');
-ok('place without signature is rejected', throws(() => define([{ id: 'x.y' }])), 'приняли');
-ok('repeated id is rejected', throws(() => define([{ id: 'mod.map', title: 'x' }])), 'приняли');
+ok('place without id is rejected', throws(() => define([{ title: 'x' }])), 'accepted');
+ok('place without signature is rejected', throws(() => define([{ id: 'x.y' }])), 'accepted');
+ok('repeated id is rejected', throws(() => define([{ id: 'mod.map', title: 'x' }])), 'accepted');
 
 // ------------------------------------------------------------------- reset
 reset();

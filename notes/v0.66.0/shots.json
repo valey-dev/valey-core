@@ -1,0 +1,12 @@
+{
+  "tag": "v0.66.0",
+  "shots": [
+    {
+      "file": "archive-update-available.png",
+      "slug": "archive-update",
+      "id": "available",
+      "setup": "(()=>{const f0=window.fetch;const view={state:'available',source:'archive',shelf:'ok',running:'0.55.0',available:'0.58.0',feats:2,fixes:5,repos:['core','modules'],steps:[],aside:'~/valey.v0.55.0'};window.fetch=(u,o)=>String(u).startsWith('/api/update')?Promise.resolve(new Response(JSON.stringify(view),{headers:{'content-type':'application/json'}})):f0(u,o);})()",
+      "keys": "Enter,wait:2500,c,wait:600,3,wait:900"
+    }
+  ]
+}

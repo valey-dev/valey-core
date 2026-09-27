@@ -1,0 +1,11 @@
+{
+  "tag": "v0.59.0",
+  "shots": [
+    {
+      "file": "module-switch-module-switch.png",
+      "slug": "module-switch",
+      "id": "module-switch",
+      "keys": "Enter,wait:2500,c,wait:600,4,wait:600,v,wait:500,3,wait:600,tap:.tnode[data-id=prboard],wait:800"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "tag": "v0.67.0",
+  "shots": [
+    {
+      "file": "office-unreachable-blackout.png",
+      "slug": "office-unreachable",
+      "id": "blackout",
+      "setup": "setTimeout(()=>__link.cut(),3500)",
+      "keys": "Enter,wait:4500"
+    }
+  ]
+}

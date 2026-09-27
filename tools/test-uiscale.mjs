@@ -52,5 +52,5 @@ ok('There can be several subscribers, and everyone is called', a === 1 && b === 
 
 ok('size steps remain the same', UI_STEPS.join() === '1,1.15,1.3,1.5,1.75', UI_STEPS);
 
-console.log(bad ? `\n${bad} упало` : '\nall intact');
+console.log(bad ? `\n${bad} failed` : '\nall intact');
 process.exit(bad ? 1 : 0);

@@ -232,5 +232,5 @@ if (!legacyCtx.rects.some((r) => r.c === '#cfe8ff')) bad('the glasses from the o
     isSelfLabel('ТЫ') && isSelfLabel(' you ') && !isSelfLabel('ТЫСЯЧА') && !isSelfLabel(''), null);
 }
 
-console.log(failed ? `\nFAILED: ${failed}` : 'GOOD | внешность: сдвиги на месте, старые look читаются, слоты рисуются');
+console.log(failed ? `\nFAILED: ${failed}` : 'GOOD | looks: offsets in place, old looks read, slots draw');
 process.exit(failed ? 1 : 0);

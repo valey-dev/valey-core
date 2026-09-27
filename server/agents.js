@@ -8,7 +8,9 @@ import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { getSettings, patchSettings } from './settings.js';
 import { projectInfo, repoRoot, repoRootCached } from './stack.js';
+import { present } from './files.js';
 import { trinketTier } from '../web/trinkets.js';
+import { liveCodexSessions, applyCodexLine } from './codex.js';
 
 // Where the office reads sessions from. The variable is for the stands: until
 // 4 September 2026 the directory was pinned to the home one, and transcript
@@ -64,6 +66,114 @@ export async function liveSessions() {
   return dedupeSessions(out);
 }
 
+// A conversation the desktop app has put to sleep. The app shuts the CLI of an
+// idle session down by itself — «[CliGovernor] pressure evicting … (idle 747s)»
+// in its own log, fourteen times on 19 September 2026, sometimes after ninety
+// seconds of silence — and the chat stays in its list, resumable. The office saw
+// only processes, so the agent left the floor the same second and took with it
+// the desk one could leave a note on, while the app still offered to write to it.
+//
+// So a session whose transcript was touched within the hour stays in the office,
+// asleep. An hour, because that is how long a conversation stays worth resuming
+// by hand; after it the agent goes for good. Waking one needs no process: the
+// office resumes it exactly as the app does, with `claude --resume`.
+const PAUSED_MS = 60 * 60_000;
+const PAUSED_TTL = 10_000;          // the scan is a stat per transcript; a tick is a second
+let pausedAt = 0;
+let pausedList = [];
+
+// Conversations the person archived in the desktop app. Archiving shuts the CLI
+// down the same way the app's own eviction does and leaves the transcript just
+// as fresh, so the office could not tell the two apart: an archived chat stayed
+// at its desk, asleep, for the rest of the hour, as if it could still be written
+// to. Noticed on 26 September 2026 by the very conversation that was archived.
+//
+// The app keeps one record per chat under claude-code-sessions/<account>/<org>/,
+// and two of its fields are read here: cliSessionId, the id the office knows the
+// agent by, and isArchived. Nothing else in the record is looked at. A stand that
+// points the office at invented sessions reads none of it, as with Codex.
+const DESKTOP_DIR = process.env.VALEY_DESKTOP_DIR
+  || (process.env.VALEY_CLAUDE_DIR ? null
+    : path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude-code-sessions'));
+// file -> { mtimeMs, id, archived }: a record is re-read only when it changes,
+// since the app writes one on every turn and there are hundreds of them.
+const desktopRecords = new Map();
+
+async function archivedIds() {
+  const out = new Set();
+  if (!DESKTOP_DIR) return out;
+  const seen = new Set();
+  async function walk(dir, depth) {
+    let entries = [];
+    try { entries = await fsp.readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const file = path.join(dir, e.name);
+      if (e.isDirectory() && depth < 2) { await walk(file, depth + 1); continue; }
+      if (!e.isFile() || !e.name.endsWith('.json')) continue;
+      seen.add(file);
+      let st;
+      try { st = await fsp.stat(file); } catch { continue; }
+      let rec = desktopRecords.get(file);
+      if (!rec || rec.mtimeMs !== st.mtimeMs) {
+        rec = { mtimeMs: st.mtimeMs, id: '', archived: false };
+        try {
+          const j = JSON.parse(await fsp.readFile(file, 'utf8'));
+          rec.id = typeof j.cliSessionId === 'string' ? j.cliSessionId : '';
+          rec.archived = j.isArchived === true;
+        } catch { /* half-written by the app; the next scan reads it whole */ }
+        desktopRecords.set(file, rec);
+      }
+      if (rec.archived && rec.id) out.add(rec.id);
+    }
+  }
+  await walk(DESKTOP_DIR, 0);
+  for (const file of desktopRecords.keys()) if (!seen.has(file)) desktopRecords.delete(file);
+  return out;
+}
+
+// Every record carries the session's cwd, so the tail is enough to learn where
+// the agent sat. Read as text: a 64 KB tail crosses no record boundary that
+// matters, and a half-line at its head simply does not match.
+const CWD_RE = /"cwd"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+async function cwdOf(file, size) {
+  const len = Math.min(size, 64 * 1024);
+  const fh = await fsp.open(file, 'r');
+  try {
+    const buf = Buffer.alloc(len);
+    await fh.read(buf, 0, len, size - len);
+    const text = buf.toString('utf8');
+    let last = null, m;
+    CWD_RE.lastIndex = 0;
+    while ((m = CWD_RE.exec(text))) last = m[1];
+    return last ? JSON.parse('"' + last + '"') : '';
+  } finally { await fh.close(); }
+}
+
+export async function pausedSessions(live = [], now = Date.now()) {
+  if (now - pausedAt < PAUSED_TTL) return pausedList.filter((s) => !live.some((l) => l.sessionId === s.sessionId));
+  const index = await indexTranscripts();
+  const archived = await archivedIds();
+  const out = [];
+  for (const [id, paths] of index) {
+    // archived by the person, not put to sleep by the app: it has left
+    if (archived.has(id)) continue;
+    for (const file of paths) {
+      let st;
+      try { st = await fsp.stat(file); } catch { continue; }
+      if (now - st.mtimeMs > PAUSED_MS || !st.size) continue;
+      let cwd = '';
+      try { cwd = await cwdOf(file, st.size); } catch { /* rotated under us */ }
+      if (!cwd) continue;
+      // startedAt belongs to the session rather than to the file's last write:
+      // the trinkets on a veteran's desk are counted from it.
+      out.push({ sessionId: id, cwd, pid: 0, paused: true, startedAt: Math.round(st.birthtimeMs || st.mtimeMs) });
+      break;
+    }
+  }
+  pausedList = out; pausedAt = now;
+  return out.filter((s) => !live.some((l) => l.sessionId === s.sessionId));
+}
+
 const projectDirOf = (cwd) => (cwd || '').replace(/[^a-zA-Z0-9]/g, '-');
 
 // picks the transcript that belongs to this session's own working directory
@@ -107,7 +217,25 @@ async function indexTranscripts() {
 }
 
 // Incremental tail: each session is read once deep, then only the new bytes.
-const cache = new Map(); // sessionId -> { file, offset, pending, st }
+const cache = new Map(); // sessionId -> { file, offset, pending, st, seen }
+
+// A session that left the office is dropped from the cache ten minutes later.
+// Nothing reads it once the agent is gone — /api/chat answers only about agents
+// in the snapshot — and until 13 September 2026 the map kept every session that
+// ever passed through a running server, each with its files and conversation.
+// The ten minutes are for a session that blinks out of the list for a tick: it
+// should not pay for the deep pass over its transcript again.
+const FORGET_MS = 10 * 60 * 1000;
+
+export function pruneTranscripts(liveIds, now = Date.now()) {
+  const live = new Set(liveIds);
+  let dropped = 0;
+  for (const [id, c] of cache) {
+    if (live.has(id) || c.seen === undefined) c.seen = now;
+    else if (now - c.seen > FORGET_MS) { cache.delete(id); dropped++; }
+  }
+  return dropped;
+}
 
 // Grades are counted over the whole transcript, not over the tail follow reads.
 // Measured on this machine's ~/.claude on 5 September 2026: a 63 MB file holds
@@ -124,20 +252,55 @@ const cache = new Map(); // sessionId -> { file, offset, pending, st }
 // same pass, for the same reason: on the tail it would be a percentage of a
 // day. The filter widens from a tool call to any assistant line, which is what
 // a reply is; measured at the same 350 ms on the largest file here.
+//
+// The conversation is collected in the same pass too, and that one is a fix.
+// After a restart the office knows only what the last megabyte holds, and a
+// megabyte is one screenshot: a tool result carrying a base64 PNG is a single
+// line of 1.1–1.3 MB. On 13 September 2026 three of fourteen live sessions here
+// had no reply at all in their last megabyte against 48–123 in the file, and
+// their transcript opened empty after the office was restarted. So the head
+// hands over its own last replies, the reply said last and the task named last,
+// and the tail's newer ones stay in front of them.
 async function deepSkills(st, file, until) {
   if (until <= 0) return;
   const own = { last: 0 };
+  const said = [];
+  let lastText = '';
+  let lastTask = null;
+  const keep = (role, text, ts) => {
+    said.push({ role, text: text.slice(0, MSG_MAX), ts: ts ? Date.parse(ts) : 0 });
+    if (said.length > RECENT_MAX) said.shift();
+  };
   const rl = createInterface({
     input: createReadStream(file, { encoding: 'utf8', start: 0, end: until - 1 }),
     crlfDelay: Infinity,
   });
   for await (const line of rl) {
-    // JSON.parse only where the agent speaks: on 63 MB that is the difference
-    // between 350 ms and parsing the whole file for nothing.
-    if (line.length < 40 || !line.includes('"assistant"')) continue;
+    // JSON.parse only where the agent speaks or the person does: on 63 MB that
+    // is the difference between 350 ms and parsing the whole file for nothing.
+    // A tool result is a user line too, and the heaviest kind — every one of
+    // them carries a tool_use_id, and none of the person's prompts does.
+    if (line.length < 40) continue;
+    const speaks = line.includes('"assistant"');
+    if (!speaks && !(line.includes('"user"') && !line.includes('"tool_use_id"'))) continue;
     let r;
     try { r = JSON.parse(line); } catch { continue; }
+    // The summary a compaction writes is not something the person said (see
+    // applyLine below): shown as their line it put pages of recap in their mouth.
+    if (r.type === 'user' && r.message && !r.isSidechain && !r.isCompactSummary) {
+      const content = r.message.content;
+      if (Array.isArray(content) && content.some((b) => b?.type === 'tool_result')) continue;
+      const txt = textOf(content);
+      if (txt && !txt.startsWith('<') && !INTERRUPTED_RE.test(txt)) keep('user', txt, r.timestamp);
+      continue;
+    }
     if (r.type !== 'assistant' || !r.message) continue;
+    const txt = textOf(r.message.content || []);
+    if (txt) {
+      keep('assistant', txt, r.timestamp);
+      lastText = txt;
+      lastTask = reportTail(txt) || lastTask;
+    }
     born(st, r.timestamp);
     // The head keeps its own clock. It runs after the tail has been applied and
     // its stamps are all older, so sharing one would produce negative gaps; the
@@ -151,6 +314,11 @@ async function deepSkills(st, file, until) {
       if (SKILL_OF[mood]) st.skills[SKILL_OF[mood]]++;
     }
   }
+  // Older than anything the tail found, so they go in front; the tail may have
+  // grown while this pass ran, and its replies stay the newest either way.
+  if (said.length) st.recent = [...said, ...st.recent].slice(-RECENT_MAX);
+  if (!st.lastAssistantText && lastText) st.lastAssistantText = lastText;
+  if (!st.task && lastTask) st.task = lastTask;
 }
 
 async function readRange(file, start, length) {
@@ -168,13 +336,13 @@ async function readRange(file, start, length) {
   }
 }
 
-async function follow(sessionId, file, apply, fresh, deep) {
+async function follow(sessionId, file, apply, fresh, deep, firstRead = FIRST_READ_BYTES) {
   let c = cache.get(sessionId);
   let size = 0;
   try { size = (await fsp.stat(file)).size; } catch { return c?.st; }
 
   if (!c || c.file !== file || size < c.offset) {
-    const start = Math.max(0, size - FIRST_READ_BYTES);
+    const start = Math.max(0, size - firstRead);
     const text = await readRange(file, start, size - start);
     const lines = text.split('\n');
     if (start > 0) lines.shift();
@@ -253,7 +421,14 @@ const ACT_EN = {
   figma: 'drawing in Figma', jira: 'working in Jira', slack: 'writing in Slack',
   mail: 'going through the mail', mcp: 'calling {arg}', work: 'working', thinking: 'thinking',
   awaiting: 'waiting on your word', idle: 'staring out of the window',
+  stopped: 'stopped mid-step',
 };
+
+// A stopped agent's line says where it was cut off: the file of the step it
+// never finished, when the step had one. Without it «stopped mid-step» leaves
+// the person guessing what to say «continue» to.
+const stoppedAct = (status, act) => (status !== 'stopped' ? null
+  : act.arg ? { key: 'stoppedAt', arg: act.arg } : { key: 'stopped', arg: '' });
 const ACT_FALLBACK_EN = { edit: 'code', read: 'a file' };
 const actEn = (a) => (ACT_EN[a.key] || ACT_EN.work).replace('{arg}', a.arg || ACT_FALLBACK_EN[a.key] || '');
 
@@ -300,14 +475,24 @@ function tailField(tail, label) {
   return last[1].replace(/[*_`]/g, '').trim().slice(0, TAIL_VALUE);
 }
 
+// Both languages, because the tail belongs to the project rather than to the
+// office: a repository whose AGENTS.md is written in English closes its answers
+// in English, and until 19 September 2026 the office saw none of it — the card
+// fell back to the chat title, dim, in a room where the agents were reporting
+// properly all along. The English labels are the ones the rulebook template
+// ships: «Current task», «Status», «Needed from you».
+const L_WHAT = 'Текущая (?:фича\\/задача|задача|фича)|Current (?:feature\\/task|task|feature)';
+const L_STATUS = 'Статус|Status';
+const L_NEED = 'Что нужно от меня|Needed from you';
+
 export function reportTail(text) {
   const tail = String(text || '').slice(-TAIL_MAX);
-  const what = tailField(tail, 'Текущая (?:фича\\/задача|задача|фича)');
+  const what = tailField(tail, L_WHAT);
   if (!what) return null;
-  const need = tailField(tail, 'Что нужно от меня');
+  const need = tailField(tail, L_NEED);
   return {
     what,
-    status: tailField(tail, 'Статус'),
+    status: tailField(tail, L_STATUS),
     // "Ничего" is a full answer, and it has no business in the head: the ⚑ plate
     // must mean "you are needed", not "the line was filled in".
     need: NOTHING.test(need) ? '' : need,
@@ -416,6 +601,46 @@ function textOf(content) {
 const IMAGE_RE = /\.(png|jpe?g|gif|svg|webp)$/i;
 const INTERRUPTED_RE = /^\[Request interrupted by user/;
 
+// Background work: a shell command started with run_in_background, or a
+// subagent (they run in the background by default). The tool answers at once
+// with one of these lines, and the agent may end its turn right after — not to
+// wait for anybody, but for its own work, which wakes it with a
+// <task-notification> naming the same tool_use id. Formats read off live
+// transcripts on 13 September 2026.
+//
+// The notification does not always come as a user line. A job that finishes
+// while the turn is still open is queued into it instead — a
+// `queue-operation` line and a `queued_command` attachment — and a stand that
+// only read user lines left 9 of 37 jobs in one transcript running forever.
+// So the id is crossed off wherever it is named. A job stopped by hand leaves
+// no marker at all ("these leave no transcript marker", says the app), and
+// that is what the hour in isRunning is for.
+const BACKGROUND_RE = /^(Command running in background with ID|Async agent launched)/;
+const NOTIFIED_RE = /<task-notification>/;
+const TOOL_USE_ID_RE = /<tool-use-id>([^<\s\\]+)<\/tool-use-id>/g;
+
+// How a turn ended, by what the agent said last. This repository asks every
+// answer to end with a report whose last line is «Что нужно от меня», and the
+// agent's own word there beats any guess from the protocol: «Ничего» means the
+// work is handed over and nothing is being asked, so it is not «waiting on
+// you». Until 13 September 2026 every end_turn was — 52 of 695 turn ends over
+// four days said «Ничего» and still rang the pager.
+//   'asked'   — the report names what only the person can do;
+//   'settled' — the report says nothing is needed;
+//   'bare'    — no report: another project, a question, a short answer.
+// An answer with no report keeps the old reading, because nothing better is
+// known about it.
+const endOf = (said) => (!said ? 'bare' : said.need ? 'asked' : 'settled');
+
+// Tools that put the agent on hold until the person answers: a question with
+// options, a plan waiting for approval. The turn is not over — no end_turn is
+// written — but nothing moves until somebody replies, and the transcript stays
+// silent the whole time. Read as an ordinary step, that silence counted as work
+// for up to an hour (STEP_MS below): until 13 September 2026 an agent asking
+// «Какой цвет?» sat «working» at its desk while it waited for the answer. The
+// answer comes back as the tool's result, which reopens the turn like any other.
+const ASKING = new Set(['AskUserQuestion', 'ExitPlanMode']);
+
 const RECENT_MAX = 16;
 const MSG_MAX = 12000;
 
@@ -431,13 +656,45 @@ function born(st, ts) {
 function remember(st, role, text, ts) {
   st.recent.push({ role, text: text.slice(0, MSG_MAX), ts: ts ? Date.parse(ts) : Date.now() });
   if (st.recent.length > RECENT_MAX) st.recent.splice(0, st.recent.length - RECENT_MAX);
+  if (role === 'assistant') pictured(st, text, ts);
+}
+
+/*
+ * A picture the agent shows in its own reply is part of its work (#reply-image).
+ * The conversation draws `![caption](</path/frame.png>)` through /api/file, and
+ * that serves only paths in the agent's files — which used to mean paths a tool
+ * took as `file_path`. Pictures often do not arrive that way: a generated one
+ * reaches the transcript with no path, a rendered one as a shell command. Run
+ * over the owner's transcripts on 26 September 2026: of the 9 pictures replies
+ * showed that were still on disk, 4 had never been touched by a tool and would
+ * have been refused; with this, all 9 are served.
+ *
+ * Kept narrow on purpose, because this widens what /api/file hands out: a
+ * picture type (no svg — that one is served as an attachment and runs scripts
+ * when opened), an absolute path, written by the agent in a reply rather than
+ * by anybody in a prompt. A guest still sees it only while the conversation is
+ * open. What a guest could not see before is a picture the agent named without
+ * opening it — the owner's call, made that day.
+ */
+const PICTURE_RE = /!\[[^\]]*\]\(\s*(?:<([^>)]*)>|([^)\s]+))[^)]*\)/g;
+const SHOWN_RE = /\.(png|jpe?g|gif|webp)$/i;
+function pictured(st, text, ts) {
+  if (!text.includes('![')) return;
+  for (const m of text.matchAll(PICTURE_RE)) {
+    const fp = (m[1] !== undefined ? m[1] : m[2]).trim();
+    if (!fp.startsWith('/') || !SHOWN_RE.test(fp) || st.files.has(fp)) continue;
+    st.files.set(fp, { path: fp, name: base(fp), image: true, ts: (ts && Date.parse(ts)) || st.lastTs, made: false });
+    if (st.files.size > 60) st.files.delete(st.files.keys().next().value);
+  }
 }
 
 function emptyState() {
   return {
     lastTs: 0, lastTool: null, lastToolInput: null, lastAssistantText: '',
-    lastUserPrompt: '', awaitingUser: false, acts: [], role: '', files: new Map(),
-    turns: 0, model: '', branch: '', slug: '', title: '', aiTitle: '', task: null,
+    lastUserPrompt: '', acts: [], role: '', files: new Map(),
+    ended: '',               // how the turn ended, if it did — see endOf()
+    background: new Map(),   // tool_use id -> when that background job started
+    turns: 0, model: '', effort: '', turnEffort: '', branch: '', slug: '', title: '', aiTitle: '', task: null,
     bornAt: 0,             // the first reply in the file, see born()
     skills: newSkills(),   // the grade counter: it grows and is never trimmed
     shift: newShift(),     // replies, characters and idle gaps, over the whole file
@@ -446,11 +703,38 @@ function emptyState() {
   };
 }
 
+// One tool call, whoever made it. Claude names its tools itself; the Codex
+// parser (server/codex.js) translates its items into the same names, so the
+// act, the role, the grade and the files are counted one way for both.
+function useTool(st, name, input = {}) {
+  const d = describeTool(name, input);
+  const mood = (IMAGE_RE.test(input?.file_path || '') && /Write|Edit/.test(name)) ? 'design' : d.mood;
+  st.acts.push({ mood, ts: st.lastTs || Date.now() });
+  if (st.acts.length > 60) st.acts.splice(0, st.acts.length - 60);
+  // The grade counts the same mood — but before the trim and with no window.
+  if (SKILL_OF[mood]) st.skills[SKILL_OF[mood]]++;
+  st.lastTool = name;
+  st.lastToolInput = input;
+  const fp = input?.file_path;
+  if (fp) {
+    st.files.set(fp, {
+      path: fp, name: base(fp), image: IMAGE_RE.test(fp), ts: st.lastTs,
+      made: /Write|Edit|Artifact/.test(name),
+    });
+    if (st.files.size > 60) st.files.delete(st.files.keys().next().value);
+  }
+}
+
 function applyLine(st, line) {
   if (!line) return;
   let r;
   try { r = JSON.parse(line); } catch { return; }
   if (r.timestamp) st.lastTs = Math.max(st.lastTs, Date.parse(r.timestamp) || 0);
+  // Read off the raw line: the notification may sit in a user line, a queue
+  // operation or an attachment, and the ids read the same in all three.
+  if (st.background.size && NOTIFIED_RE.test(line)) {
+    for (const m of line.matchAll(TOOL_USE_ID_RE)) st.background.delete(m[1]);
+  }
   if (r.gitBranch) st.branch = r.gitBranch;
   if (r.slug) st.slug = r.slug;
   // what the chat is called in the app — two sessions can share a name, so it is
@@ -458,13 +742,36 @@ function applyLine(st, line) {
   if (r.type === 'custom-title' && r.customTitle) st.title = r.customTitle;
   if (r.type === 'ai-title' && r.aiTitle) st.aiTitle = r.aiTitle;
   if (r.type === 'last-prompt' && r.lastPrompt) st.lastUserPrompt = String(r.lastPrompt).slice(0, 400);
+  // A manual compaction cuts a turn that was still open. The app runs /compact
+  // and then waits at the prompt: it does not pick the interrupted work back
+  // up. On 13 September 2026 a session stalled after a tool result, the owner
+  // ran /compact ten minutes later, and the office — whose last word from that
+  // session was the tool result — kept the agent «working» for the hour it
+  // gives a pending tool, while the agent was in fact waiting for a word. So a
+  // manual compaction over an open turn is the same as an interruption. An
+  // automatic one happens inside the model's turn and the model goes on.
+  if (r.type === 'system' && r.subtype === 'compact_boundary'
+    && r.compactMetadata && r.compactMetadata.trigger === 'manual' && !st.ended) st.ended = 'stopped';
 
   if (r.type === 'assistant' && r.message) {
     born(st, r.timestamp);
     gap(st.shift, Date.parse(r.timestamp || '') || 0, st.clock);
-    st.model = r.message.model || st.model;
+    // «<synthetic>» is the app's own line (an API error, a resume), not a model:
+    // taken as one, it stood in the dossier until the agent next said a word —
+    // 353 such lines in 200 transcripts on 15 September 2026.
+    if (r.message.model && r.message.model !== '<synthetic>') {
+      st.model = r.message.model;
+      // The reasoning level rides on every reply: `effort` is the session's,
+      // `perTurnEffort` a one-turn boost that is gone with the turn. Both are
+      // read off the last reply, as the model is — /effort mid-session shows
+      // from the next answer. In 60 transcripts on 15 September 2026 it
+      // changed mid-session in 22.
+      st.effort = r.effort || '';
+      st.turnEffort = r.perTurnEffort || '';
+    }
     const content = r.message.content || [];
     const txt = textOf(content);
+    const said = txt ? reportTail(txt) : null;
     if (txt) {
       st.lastAssistantText = txt; st.turns++; remember(st, 'assistant', txt, r.timestamp);
       // The same three numbers the deep pass keeps for the head of the file.
@@ -474,34 +781,37 @@ function applyLine(st, line) {
       // tail — going by the last one, the line went out exactly during the
       // minutes the work is happening, which is when it is wanted. Found on a
       // live stand on 5 September 2026.
-      const said = reportTail(txt);
       if (said) st.task = said;
     }
-    st.awaitingUser = r.message.stop_reason === 'end_turn';
     // An API error is written as a synthetic assistant message — model
     // «<synthetic>», stop_sequence — and it ends the turn the way end_turn does:
     // the app is back at the prompt. Read as an open turn it kept the agent
     // «working» on an error nobody was going to retry for it.
-    if (r.isApiErrorMessage) st.awaitingUser = true;
+    if (r.isApiErrorMessage) st.ended = 'error';
+    // The other synthetic line is the app's own «No response requested.»,
+    // written when a session is resumed, just before the prompt that resumed
+    // it. Nobody said it and it ends nothing: taken for a reply it was read as
+    // the agent's, and on 13 September 2026 it was apologised for as one.
+    else if (r.message.model === '<synthetic>') { /* neither opens nor closes a turn */ }
+    else st.ended = r.message.stop_reason === 'end_turn' ? endOf(said) : '';
     for (const b of Array.isArray(content) ? content : []) {
       if (b?.type !== 'tool_use') continue;
-      const d = describeTool(b.name, b.input);
-      const mood = (IMAGE_RE.test(b.input?.file_path || '') && /Write|Edit/.test(b.name)) ? 'design' : d.mood;
-      st.acts.push({ mood, ts: st.lastTs || Date.now() });
-      if (st.acts.length > 60) st.acts.splice(0, st.acts.length - 60);
-      // The grade counts the same mood — but before the trim and with no window.
-      if (SKILL_OF[mood]) st.skills[SKILL_OF[mood]]++;
-      st.lastTool = b.name;
-      st.lastToolInput = b.input;
-      const fp = b.input?.file_path;
-      if (fp) {
-        st.files.set(fp, {
-          path: fp, name: base(fp), image: IMAGE_RE.test(fp), ts: st.lastTs,
-          made: /Write|Edit|Artifact/.test(b.name),
-        });
-        if (st.files.size > 60) st.files.delete(st.files.keys().next().value);
-      }
+      useTool(st, b.name, b.input);
+      // Asking is Claude's own: the two tools that end a turn on a question
+      // have no counterpart in a Codex rollout, so it stays with this parser
+      // rather than moving into useTool().
+      if (ASKING.has(b.name)) st.ended = 'asked';
     }
+  } else if (r.type === 'user' && r.message && !r.isSidechain && r.isCompactSummary) {
+    // A compaction writes its summary as a user line — «This session is being
+    // continued from a previous conversation…» — and nobody typed it. Read as
+    // a prompt it opened a turn: after a /compact the app is back at the prompt
+    // and writes nothing more, so the agent sat «working» at its desk until the
+    // person typed again, and the office read that as an agent not answering.
+    // Found 13 September 2026: in 2 of 8 manual compactions on this machine the
+    // transcript simply ends there. An automatic one is followed by the model's
+    // own reply, so leaving the turn as it was is right for both — and the
+    // summary does not become «what was asked» either.
   } else if (r.type === 'user' && r.message && !r.isSidechain) {
     const content = r.message.content;
     const isToolResult = Array.isArray(content) && content.some((b) => b?.type === 'tool_result');
@@ -513,14 +823,25 @@ function applyLine(st, line) {
       // a prompt it kept the turn open, and under the hour above an interrupted
       // agent would sit «working» at a desk nobody was working at.
       if (INTERRUPTED_RE.test(txt)) {
-        st.awaitingUser = true;
+        st.ended = 'stopped';
+      } else if (NOTIFIED_RE.test(txt)) {
+        // Background work reported back (crossed off above). The app hands the
+        // news to the model, which takes the turn back — so this opens it,
+        // without being a prompt anybody typed. A job stopped by a restart
+        // reports here too, on the next start.
+        st.ended = '';
       } else if (txt && !txt.startsWith('<')) {
         st.lastUserPrompt = txt.slice(0, 400);
-        st.awaitingUser = false;
+        st.ended = '';
         remember(st, 'user', txt, r.timestamp);
       }
     } else {
-      st.awaitingUser = false;
+      for (const b of content) {
+        if (b?.type === 'tool_result' && BACKGROUND_RE.test(textOf(b.content))) {
+          st.background.set(b.tool_use_id, Date.parse(r.timestamp || '') || st.lastTs);
+        }
+      }
+      st.ended = '';
     }
   }
 }
@@ -836,31 +1157,68 @@ const STEP_MS = 60 * 60_000;
 
 // 'working' | 'awaiting' | 'idle', from the parsed transcript alone — so a stand
 // can drive it with lines and a clock of its own.
+//
+// «Awaiting» means the agent has done its part and the next move is the
+// person's. An explicit ask always is; an API error is too — the app is back at
+// the prompt with nothing to retry. An interrupt is «stopped»: the agent was cut
+// off mid-step and will not go on by itself, but it asks for nothing either, so
+// it rings neither the pager nor «! N» and is counted by a chip of its own.
+// 21 interrupts in four days, 20 of them followed by the app's resume line —
+// most were a restart of the process, which the person never saw happen. A turn ended with background
+// work still running is not: the agent is waiting on its own job and will be
+// woken by it, so it is working, under the same hour as an open turn. A report
+// that says «Ничего» is the agent at rest.
+// A job counts for an hour from its start, the same hour an open turn gets: one
+// stopped by hand never reports, and without the limit the agent that started
+// it would never be seen waiting again.
+const isRunning = (t, now) => [...(t.background || new Map()).values()].some((at) => now - at < STEP_MS);
+
 export function statusOf(t, now = Date.now()) {
-  if (t.awaitingUser) return 'awaiting';
+  const own = isRunning(t, now);
+  if (t.ended === 'stopped') return 'stopped';
+  if (t.ended === 'asked' || t.ended === 'error') return 'awaiting';
+  if (t.ended === 'bare' && !own) return 'awaiting';
+  if (t.ended === 'settled' && !own) return 'idle';
   const idleFor = t.lastTs ? now - t.lastTs : Infinity;
   return idleFor < STEP_MS ? 'working' : 'idle';
 }
 
+// A Codex rollout is read whole rather than by its last megabyte: it has no
+// deep pass of its own, and its files run to a few megabytes here. The cap is
+// for the thread that has been fed screenshots.
+const CODEX_FIRST_READ = 16 * 1024 * 1024;
+
 export async function snapshot() {
-  const sessions = await liveSessions();
+  const live = await liveSessions();
+  await indexTranscripts();
+  // The ones the app put to sleep join the live ones: same desks, same names,
+  // same notes — see pausedSessions above for why they are here at all. Codex
+  // threads take desks in the same list too, with one registry of names and
+  // seats for everybody; the provider travels with the agent.
+  const sessions = [...live, ...await pausedSessions(live), ...await liveCodexSessions()];
   // Warm the roots cache before the seats are computed: projectOf is
   // synchronous while git is asynchronous, and without the warm-up the first
   // snapshot would seat everyone by directory.
   await Promise.all(sessions.map((s) => repoRoot(s.cwd)));
-  await indexTranscripts();
   const names = await nameRegistry(sessions);
   const namesPack = effectivePack(await getSettings());
   const seats = await seatRegistry(sessions);
   const agents = [];
 
   for (const s of sessions) {
-    const file = await transcriptFor(s.sessionId, s.cwd);
-    const t = (file ? await follow(s.sessionId, file, applyLine, emptyState, deepSkills) : null) || emptyState();
-    const files = [...t.files.values()].sort((a, b) => b.ts - a.ts).slice(0, 16);
+    const codex = s.provider === 'codex';
+    const file = codex ? s.file : await transcriptFor(s.sessionId, s.cwd);
+    const t = (file ? await (codex
+      ? follow(s.sessionId, file, applyCodexLine, emptyState, null, CODEX_FIRST_READ)
+      : follow(s.sessionId, file, applyLine, emptyState, deepSkills)) : null) || emptyState();
+    // Only what can still be opened: see present() in files.js.
+    const files = await present([...t.files.values()].sort((a, b) => b.ts - a.ts), 16);
     const artifacts = files.filter((f) => f.made || f.image);
     const idleFor = t.lastTs ? Date.now() - t.lastTs : Infinity;
-    const status = statusOf(t);
+    // A paused session has no process to be working in: whatever the tail was
+    // in the middle of, it is not happening now. «Awaiting» stays — the question
+    // it asked is still the person's to answer.
+    const status = s.paused && statusOf(t) === 'working' ? 'idle' : statusOf(t);
     const busy = status === 'working';
     const act = t.lastTool ? describeTool(t.lastTool, t.lastToolInput) : { key: 'thinking', mood: 'plan' };
     const roleInfo = inferRole(t);
@@ -871,7 +1229,13 @@ export async function snapshot() {
 
     agents.push({
       id: s.sessionId,
-      pid: s.pid,
+      // Codex threads have no process of their own: the pid that holds their
+      // lock is the whole app, and nothing should ever be sent to it per agent.
+      pid: codex ? null : s.pid,
+      paused: !!s.paused,
+      // 'claude' | 'codex': the badge on the floor and in the card, and what
+      // the office can do for the agent — delivery is Claude's alone.
+      provider: codex ? 'codex' : 'claude',
       handle: s.name || s.sessionId.slice(0, 8),
       name: names[s.sessionId] || s.sessionId.slice(0, 6),
       // gender travels with the snapshot: on the page the name is one line,
@@ -885,12 +1249,15 @@ export async function snapshot() {
       repo: !!repo.git,
       branch: t.branch,
       model: t.model,
-      title: t.title || t.aiTitle || '',
+      // A one-turn boost is the level only while that turn is open.
+      effort: (status === 'working' && t.turnEffort) || t.effort,
+      // A Codex thread carries the name the app shows on the session itself.
+      title: t.title || t.aiTitle || s.title || '',
       role: roleInfo.role,
       roleKey: roleInfo.short,
       status,
-      act: busy ? { key: act.key, arg: act.arg || '' } : { key: t.awaitingUser ? 'awaiting' : 'idle', arg: '' },
-      activity: busy ? actEn(act) : (t.awaitingUser ? ACT_EN.awaiting : ACT_EN.idle),
+      act: busy ? { key: act.key, arg: act.arg || '' } : stoppedAct(status, act) || { key: status === 'awaiting' ? 'awaiting' : 'idle', arg: '' },
+      activity: busy ? actEn(act) : (status === 'stopped' ? ACT_EN.stopped : status === 'awaiting' ? ACT_EN.awaiting : ACT_EN.idle),
       mood: act.mood,
       lastSaid: t.lastAssistantText.slice(0, 1500),
       // The limit notice is not something the agent said: it came from the
@@ -916,10 +1283,11 @@ export async function snapshot() {
         idleMin: Math.round(t.shift.idleMs / 60000) },
       files,
       artifacts,
-      hasNews: t.awaitingUser && artifacts.length > 0,
+      hasNews: !busy && !!t.ended && artifacts.length > 0,
     });
   }
 
+  pruneTranscripts(sessions.map((s) => s.sessionId));
   agents.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
   return { now: Date.now(), agents };
 }
@@ -946,5 +1314,7 @@ export function fileAllowed(p, snap) {
 export {
   fs, inferRole, describeTool, ROLES, ROLE_WINDOW_MS, ROLE_STALE_MS,
   // exported for the stand alone: it runs the parser on real transcript lines
-  applyLine, emptyState, SKILL_OF, SKILL_BRANCHES,
+  applyLine, emptyState, SKILL_OF, SKILL_BRANCHES, follow, deepSkills,
+  // shared with the Codex parser, server/codex.js
+  useTool, remember, born, gap, endOf,
 };

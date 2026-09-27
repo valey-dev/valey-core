@@ -1,0 +1,26 @@
+{
+  "tag": "v0.56.0",
+  "shots": [
+    {
+      "file": "hire-reception.png",
+      "slug": "hire",
+      "id": "reception",
+      "setup": "setTimeout(() => { const g = window.__game; const r = g.layout.lift.reception.find((x) => x.rooms.includes('rocket-shop')); g.player.x = r.spot.x; g.player.y = r.spot.y; }, 2500)",
+      "keys": "Enter,wait:3500,Space,wait:900"
+    },
+    {
+      "file": "hire-panel.png",
+      "slug": "hire",
+      "id": "panel",
+      "setup": "setTimeout(() => { const g = window.__game; const r = g.layout.lift.reception.find((x) => x.rooms.includes('rocket-shop')); g.player.x = r.spot.x; g.player.y = r.spot.y; }, 2500); setTimeout(() => { const t = document.querySelector('#hireTask'); if (t) { t.value = 'Check the prices on the pricing page against pricing-q4.csv, fix what differs and show me a screenshot.'; t.dispatchEvent(new Event('input')); } }, 5800)",
+      "keys": "Enter,wait:3500,Space,wait:900,=,wait:1500"
+    },
+    {
+      "file": "hire-portal.png",
+      "slug": "hire",
+      "id": "portal",
+      "setup": "const g = window.__game; setTimeout(() => { const r = g.layout.lift.reception.find((x) => x.rooms.includes('rocket-shop')); g.player.x = r.spot.x; g.player.y = r.spot.y; }, 2500); Object.defineProperty(g, 'hires', { get: () => [{ id: 1, project: 'rocket-shop', state: 'starting', sessionId: null, spot: { x: Math.round(g.player.x + 26), y: Math.round(g.player.y) } }], set() {} })",
+      "keys": "Enter,wait:5200"
+    }
+  ]
+}

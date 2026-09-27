@@ -158,6 +158,49 @@ try {
   ok('the manifest and the server are not files of the page', await raw('/modules/plan/module.json', 'owner') === 404 && await raw('/modules/plan/server.js', 'owner') === 404);
   ok('nothing at the root of modules/ is served', await raw('/modules/AGENTS.md', 'owner') === 404 && await raw('/modules/.git/HEAD', 'owner') === 404);
   ok('nor a path that climbs out', await raw('/modules/plan/..%2F..%2Fpackage.json', 'owner') === 404);
+  // A page imports a module's code with import(), which sends no header of its
+  // own: a guest's page loaded none of the modules shown to him until the pass
+  // rode in a cookie too (26 September 2026). The list hands the cookie out,
+  // and the cookie alone opens the files.
+  const listRes = await fetch(base + '/api/modules', { headers: { 'x-valey-guest': GUEST } });
+  const jar = (listRes.headers.get('set-cookie') || '').split(';')[0];
+  ok('the module list hands a guest his pass as a cookie', /^valey_guest=/.test(jar), jar);
+  const byCookie = await fetch(base + '/modules/plan/client.js', { headers: { cookie: jar } }).then((r) => r.status);
+  ok('and with the cookie alone, as import() sends it, the module\'s code loads', byCookie === 200, byCookie);
+  const forged = await fetch(base + '/modules/plan/client.js', { headers: { cookie: 'valey_guest=nobody' } }).then((r) => r.status);
+  ok('a cookie naming nobody opens nothing', forged === 403, forged);
+
+  // ------------------------------------------- the owner hides a module live
+  // One choice for all guests, over the manifest's default; it takes effect on
+  // the next request, and a guest with a page open is sent his new set of
+  // modules, which his page compares with what it loaded (web/modules.js).
+  const rowsBefore = await call('/api/invites', { as: 'owner', method: 'GET' });
+  const planRow = (rowsBefore.j.modules || []).find((m) => m.id === 'plan');
+  ok('the invite list carries a row per module, with the default and no choice', planRow && planRow.default === 'shown' && planRow.choice === null && planRow.shown === true, planRow);
+  const guestStream2 = await fetch(base + '/api/stream?guest=' + encodeURIComponent(GUEST));
+  const reloadSeen = (async () => {
+    const reader = guestStream2.body.getReader();
+    const deadline = Date.now() + 8000;
+    let buf = '';
+    while (Date.now() < deadline) {
+      const { value, done } = await Promise.race([reader.read(), new Promise((r) => setTimeout(() => r({ done: null }), 300))]);
+      if (done === true) return false;
+      if (value) { buf += Buffer.from(value).toString('utf8'); if ([...buf.matchAll(/event: modules\ndata: (\[[^\n]*\])/g)].some((m) => !JSON.parse(m[1]).includes('plan'))) { reader.cancel().catch(() => {}); return true; } }
+    }
+    reader.cancel().catch(() => {});
+    return false;
+  })();
+  const hid = await call('/api/invite/guests', { as: 'owner', body: { id: 'plan', choice: 'hidden' } });
+  ok('the owner hides the plan from guests', hid.status === 200 && hid.j.modules.find((m) => m.id === 'plan').shown === false, hid.j);
+  ok('and the row is marked as a departure from the default', hid.j.modules.find((m) => m.id === 'plan').choice === 'hidden');
+  const guestList = await call('/api/modules', { as: 'guest', method: 'GET' });
+  ok('the guest list loses it at once', !(guestList.j || []).some((m) => m.id === 'plan'), guestList.j);
+  ok('and its client is no longer served to the guest', await raw('/modules/plan/client.js', 'guest') === 404);
+  ok('a guest cannot choose', (await call('/api/invite/guests', { as: 'guest', body: { id: 'plan', choice: 'shown' } })).status === 403);
+  ok('the guest with a page open is sent his modules without the hidden one', await reloadSeen);
+  const back = await call('/api/invite/guests', { as: 'owner', body: { id: 'plan', choice: 'shown' } });
+  ok('choosing the default again forgets the choice', back.j.modules.find((m) => m.id === 'plan').choice === null && back.j.modules.find((m) => m.id === 'plan').shown === true, back.j);
+  ok('an unknown module is refused', (await call('/api/invite/guests', { as: 'owner', body: { id: 'нет', choice: 'hidden' } })).status === 404);
 
   // ------------------------------------------------------------- evicting
   const out = await call('/api/invite/revoke', { as: 'owner', body: { id: list.j.invites[0].id } });

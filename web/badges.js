@@ -35,6 +35,12 @@ export function drawBubble(ctx, x, y, agent, t) {
     const blink = Math.sin(t / 260) > -0.3;
     ctx.fillStyle = blink ? '#ffd166' : '#8a6a2a';
     ctx.fillRect(x - 1, y - 10, 2, 5); ctx.fillRect(x - 1, y - 4, 2, 2);
+  } else if (agent.status === 'stopped') {
+    // Two bars, still: cut off mid-step. It does not blink — blinking calls, and
+    // a stopped agent has nothing to call about. The colour is --off.
+    // Design: [Bubbles · stopped](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2122-6372)
+    ctx.fillStyle = '#c2795f';
+    ctx.fillRect(x - 3, y - 10, 2, 7); ctx.fillRect(x + 1, y - 10, 2, 7);
   } else if (agent.status === 'idle') {
     pxText(ctx, 'z z', x - 6, y - 3, '#9fb4c8');
   } else {

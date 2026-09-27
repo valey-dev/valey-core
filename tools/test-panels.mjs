@@ -26,7 +26,10 @@ const ok = (name, cond, got) => {
 // The panels that place themselves and are left out of the shared list by
 // design. The list is short and deliberate: if a panel is here, it has a rule of
 // its own in style.css — which is what is checked below.
-const OWN = ['dialog', 'viewer', 'title', 'pager'];
+// `offline` is the plaque of a lost office: it stands in the middle of the
+// screen over whatever is open, and it must not dim the floor the way the
+// shared rule does — the dark floor behind it is half of what it says.
+const OWN = ['dialog', 'viewer', 'title', 'pager', 'offline'];
 
 const hidden = [...html.matchAll(/<div id="([\w-]+)" hidden><\/div>/g)].map((m) => m[1]);
 ok('panels were found in the markup', hidden.length >= 8, hidden);

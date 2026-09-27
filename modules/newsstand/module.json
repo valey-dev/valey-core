@@ -1,6 +1,7 @@
 {
   "id": "newsstand",
   "name": { "ru": "Газетная стойка", "en": "The newsstand" },
+  "guestNote": { "ru": "газеты на стойке", "en": "the papers on the stand" },
   "tier": "core",
   "guests": "shown",
   "client": "client.js",

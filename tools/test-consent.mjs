@@ -42,8 +42,11 @@ const call = (p, { as = 'nobody', method = 'POST', body = {} } = {}) => {
 const stateAs = (who) => call('/api/state', { as: who, method: 'GET' }).then((r) => r.j);
 
 // The fields the owner sees and a guest must not. The list from the brief: the
-// last thing said, the prompt, the files, the branch, the project path.
-const SECRET = ['lastSaid', 'lastAsked', 'files', 'artifacts', 'branch', 'cwd', 'title', 'model', 'turns'];
+// last thing said, the prompt, the files, the branch, the project path. The
+// model was on it from the first commit with no word why, and left it on
+// 15 September 2026: which model answers is a fact about the desk, like the
+// trade, and the approved #model-card brief shows it to guests too.
+const SECRET = ['lastSaid', 'lastAsked', 'files', 'artifacts', 'branch', 'cwd', 'title', 'turns'];
 
 try {
   const made = await call('/api/invite', { as: 'owner', body: { name: 'Костя', from: 'Сергей' } });
@@ -65,6 +68,7 @@ try {
     !!a.name && !!a.roleKey && !!a.project && !!a.status, a);
   const leaked = SECRET.filter((k) => a[k] !== undefined);
   ok('but nothing that the agent is doing', leaked.length === 0, leaked);
+  ok('the model is shown, as the trade is', !!a.model && a.model === asOwner.agents[0].model, { guest: a.model, owner: asOwner.agents[0].model });
   ok('the owner has these fields in place - which means they are really hiding them, and not lost',
     SECRET.some((k) => asOwner.agents[0][k] !== undefined), null);
 

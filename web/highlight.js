@@ -43,12 +43,29 @@ const RULES = {
     ['punct', /[{}[\],:]+/y],
     [null, /[\s\S]/y],
   ],
+  // Run one line at a time by highlightYaml, so ^ is the start of the line and
+  // the lookbehinds can ask what stands before a token on it. A scalar only
+  // starts after a space, a colon, a dash or a flow bracket: without that
+  // «don't» and «Bob's» would open a quoted string, and «a#b» a comment.
+  yaml: [
+    ['comment', /(?<=^|[ \t])#.*/my],
+    ['punct', /^(?:---|\.\.\.)(?=[ \t]|$)/my],
+    ['cssprop', /(?<=^[ \t]*(?:-[ \t]+)*)(?:"(?:\\.|[^"\\\n])*"|'(?:''|[^'\n])*'|[^\s#'"?:,[\]{}-][^\n:#]*?|-[^\s:#][^\n:#]*?)(?=[ \t]*:(?:[ \t]|$))/my],
+    ['string', /(?<=^|[\s:,[{-])(?:"(?:\\.|[^"\\\n])*"|'(?:''|[^'\n])*')/my],
+    ['atrule', /(?<=^|[\s,[{])[&*][^\s,[\]{}]+/my],
+    ['keyword', /(?<=^|[\s,[{])!{1,2}[^\s,[\]{}]*/my],
+    ['literal', /(?<=^|[\s:,[{-])(?:true|false|null|yes|no|on|off|True|False|Null|Yes|No|On|Off|TRUE|FALSE|NULL|YES|NO|ON|OFF|~)(?=[ \t]*(?:$|#|,|\]|\}))/my],
+    ['number', /(?<=^|[\s:,[{-])[-+]?(?:0x[0-9a-fA-F]+|0o[0-7]+|\d[\d_]*(?:\.\d+)?(?:[eE][-+]?\d+)?|\.inf|\.nan)(?=[ \t]*(?:$|#|,|\]|\}))/my],
+    ['punct', /(?<=^[ \t]*(?:-[ \t]+)*)-(?=[ \t]|$)|:(?=[ \t]|$)|(?<=[ \t])[|>][-+0-9]*(?=[ \t]*(?:#|$))|[[\]{},]/my],
+    [null, /[^\s#'"[\]{},:&*!|>-]+|\s+|[\s\S]/y],
+  ],
 };
 
 const BY_EXT = {
   js: 'js', mjs: 'js', cjs: 'js', jsx: 'js', ts: 'js', tsx: 'js',
   css: 'css', scss: 'css', less: 'css',
   json: 'json',
+  yml: 'yaml', yaml: 'yaml',
   html: 'html', htm: 'html', svg: 'html', xml: 'html',
 };
 
@@ -121,7 +138,28 @@ export function normaliseLang(tag = '') {
   if (/^(css|scss|less)$/.test(t)) return 'css';
   if (/^(html|htm|xml|svg|vue)$/.test(t)) return 'html';
   if (t === 'json') return 'json';
+  if (t === 'yaml' || t === 'yml') return 'yaml';
   return null;
+}
+
+// YAML needs to remember one thing across lines: after `run: |` or `key: >`
+// every more indented line is text, not keys. A CI file is mostly such blocks,
+// and a shell line like `echo a: b` inside one must not come out as a key.
+const BLOCK_OPENER = /^([ \t]*)(?:-[ \t]+)*(?:[^\n#]*?:[ \t]+)?[|>][-+0-9]*[ \t]*(?:#.*)?$/;
+export function highlightYaml(src) {
+  let out = '', block = null;
+  for (const line of src.split(/(?<=\n)/)) {
+    const body = line.replace(/\n$/, ''), nl = line.slice(body.length);
+    const indent = /^[ \t]*/.exec(body)[0].length;
+    if (block !== null && (!body.trim() || indent > block)) {
+      out += (body.trim() ? span('string', body) : esc(body)) + nl;
+      continue;
+    }
+    block = null;
+    out += highlightWith(RULES.yaml, body) + nl;
+    if (BLOCK_OPENER.test(body)) block = indent;
+  }
+  return out;
 }
 
 // CSS needs one bit of memory: a colon right after a property opens a value, and
@@ -160,8 +198,13 @@ export function highlightCss(src) {
 export function highlight(src, lang) {
   if (lang === 'html') return highlightHtml(src);
   if (lang === 'css') return highlightCss(src);
+  if (lang === 'yaml') return highlightYaml(src);
   const rules = RULES[lang];
   if (!rules) return esc(src);
+  return highlightWith(rules, src);
+}
+
+function highlightWith(rules, src) {
   let out = '', i = 0;
   while (i < src.length) {
     let matched = false;

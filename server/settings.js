@@ -129,7 +129,10 @@ const DEFAULTS = {
   // invites — the invitations handed out: { code, name, from, at, usedAt,
   // guest }. They live on disk because the link is sent in a messenger and
   // opened later: an invitation that dies with a server restart is useless.
-  access: { mode: 'private', token: '', invites: [] },
+  // devices — owner devices paired with a code: { id, name, hash, pairedAt,
+  // lastSeen }. Only the hash of each token is kept; see server/devices.js.
+  // guests — the owner's choice per module over its manifest: { id: 'shown' | 'hidden' }.
+  access: { mode: 'private', token: '', invites: [], devices: [], guests: {} },
   // Which addresses the office answers at all. Off means loopback is listened
   // to, and that is not caution for its own sake: the office serves every
   // session transcript in full, so an open port equals an open correspondence.
@@ -143,7 +146,16 @@ const DEFAULTS = {
   // The floor's dress code: 'casual' is how it was always drawn, 'office' is
   // light tops, ties, jackets and skirts. A setting of the office, not of the
   // browser: every tab changes clothes at once, as with the weather.
+  // Modules the owner switched off from the module tree. Ids only: the folder
+  // stays, the office stops running it. See setOwnerOff() in server/modules.js.
+  modulesOff: [],
   dress: { code: 'casual' },
+  // project -> rug colourway id ('indigo'). Missing is the terracotta every room
+  // had before; the owner recolours a rug by standing on it and pressing SPACE.
+  rugs: {},
+  // project -> 'pin' | 'sink': where the owner put a team on the standup. A
+  // team with no entry stands where its work puts it; see standupTeams().
+  standup: {},
   // The greenhouse. Shared across the office, like the names and the seating:
   // you water it, everyone sees. pots: pot index -> { wateredAt, streak }. Four
   // waterings in the can — the same as CAN_FULL in web/garden.js; it cannot be
@@ -184,19 +196,127 @@ const readWithRevision = async (file) => {
     const after = await revisionOf(file);
     if (before === after) return { raw, revision: after };
   }
-  throw new Error(`Settings changed repeatedly while being read: ${file}`);
+  // Neighbours saving back to back can outpace three attempts: under a stress
+  // run of four offices the read gave up and took the office down with it
+  // (13 September 2026). Under the lock no office that takes it can save, so
+  // one more read is a steady one.
+  return withLock(async () => {
+    let raw = null;
+    try { raw = await fsp.readFile(file, 'utf8'); } catch (e) {
+      if (e.code !== 'ENOENT') throw e;
+    }
+    return { raw, revision: await revisionOf(file) };
+  });
 };
+
+// Every office on this machine saves into the same file, and a revision check
+// alone could not keep them apart: between comparing the revision and the
+// rename a neighbour could rename its own copy in, both saves reported success
+// and one of them was gone — a name, a seat, a guest's pass. The same window
+// sat between the rename and reading the new revision, and there the office
+// took the neighbour's file for its own and dropped its keys on the next save.
+// A stress run on 13 September 2026 lost about a hundred keys a run, three runs
+// out of three. The file system has no compare-and-swap, so the check, the
+// rename and the new revision happen under a lock file every office takes:
+// created with `wx`, so exactly one creator wins.
+const LOCK = `${FILE}.lock`;
+// A save holds the lock for milliseconds. A lock whose holder is gone, or
+// which is ten seconds old, was left by a save that died halfway, and waiting
+// for it would stop every office on the machine from saving at all.
+const LOCK_STALE_MS = 10_000;
+const LOCK_WAIT_MS = 5_000;
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+const holderAlive = (pid) => {
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+};
+
+// True when the lock is gone or was removed as stale, so the caller tries
+// again at once. The holder is read twice and removed only if it did not
+// change in between: two offices meeting the same stale lock would otherwise
+// let the second remove the fresh lock the first had just taken. A narrower
+// window remains between the second read and the removal; it needs a crashed
+// save and two offices at the same millisecond, and costs one save made
+// without the lock — the revision check still stands behind it.
+async function breakStaleLock() {
+  let text, stat;
+  try {
+    [text, stat] = await Promise.all([fsp.readFile(LOCK, 'utf8'), fsp.stat(LOCK)]);
+  } catch (e) {
+    if (e.code === 'ENOENT') return true;
+    throw e;
+  }
+  // An empty lock is one being written this instant: judged by its age only.
+  const pid = Number(text.split(' ')[0]);
+  const gone = Number.isInteger(pid) && pid > 0 && !holderAlive(pid);
+  const old = Date.now() - stat.mtimeMs > LOCK_STALE_MS;
+  if (!gone && !old) return false;
+  try {
+    if (await fsp.readFile(LOCK, 'utf8') !== text) return true;
+  } catch (e) {
+    if (e.code === 'ENOENT') return true;
+    throw e;
+  }
+  await fsp.rm(LOCK, { force: true });
+  console.log(`Settings lock ${LOCK} was left by ${gone ? `process ${pid}, which is gone` : 'a save that never finished'}; removed it.`);
+  return true;
+}
+
+async function withLock(fn) {
+  const mine = `${process.pid} ${crypto.randomUUID()}\n`;
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      await fsp.writeFile(LOCK, mine, { flag: 'wx', mode: 0o600 });
+      break;
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+    }
+    if (await breakStaleLock()) continue;
+    if (Date.now() > deadline) {
+      throw new Error(`Settings were not saved: another office has held ${LOCK} for over ${LOCK_WAIT_MS / 1000} s. `
+        + 'Try again; if it stays, the office holding it is stuck.');
+    }
+    await sleep(2 + Math.random() * 8);
+  }
+  try {
+    return await fn();
+  } finally {
+    // Only our own lock is removed. If it was taken for stale while we held
+    // it, the one lying there now belongs to somebody else.
+    try {
+      if (await fsp.readFile(LOCK, 'utf8') === mine) await fsp.rm(LOCK, { force: true });
+    } catch (e) {
+      if (e.code !== 'ENOENT') console.log(`Settings lock ${LOCK} could not be released: ${e.message}`);
+    }
+  }
+}
 
 // The token is created once and lives in the file. Without it the office
 // cannot tell an owner from a guest, so it must exist before the first request.
+//
+// Through updateSettings: offices started together on a file without a token
+// each made one, the second save was refused, and the refusal took that office
+// down before it opened its port (13 September 2026). Read again, the file
+// already holds the neighbour's token, and that one is taken.
 export async function ownerToken() {
-  const s = await getSettings();
-  if (!s.access.token) await patchSettings({ access: { ...s.access, token: crypto.randomUUID() } });
-  return (await getSettings()).access.token;
+  const s = await updateSettings((now) => (now.access.token ? null : { access: { ...now.access, token: crypto.randomUUID() } }));
+  return s.access.token;
 }
 
+// One read at a time. After a refusal the cache is empty and every request
+// arriving then reads the file; with a read each, a slower one could finish
+// last and put an older file and its older revision over a newer cache, and
+// the next save was refused for nothing. Everybody waiting for the same read
+// gets the same object.
+let loading = null;
 export async function getSettings() {
   if (cache) return cache;
+  if (!loading) loading = loadSettings().finally(() => { loading = null; });
+  return loading;
+}
+
+async function loadSettings() {
   try {
     const m = await migrateSettings();
     if (m.done) console.log(`Settings moved to ${m.file}; the legacy file was left in place.`);
@@ -248,7 +368,16 @@ export async function getSettings() {
 }
 
 export async function patchSettings(patch) {
-  const s = await getSettings();
+  // The patch goes on top of the cache as it is at this instant, with no
+  // await between reading it and replacing it. It used to go on top of what
+  // getSettings() had returned before an await: two saves in one office took
+  // the same snapshot, the second built its cache without the first one's
+  // change, and wrote it with a revision that matched — so nothing refused it.
+  // A stress run lost 26 to 41 saves a run this way with the lock already in
+  // (13 September 2026), and one office alone was enough: the tick saving
+  // names while a request saves the language.
+  while (!cache) await getSettings();
+  const s = cache;
   cache = {
     ...s, ...patch,
     weather: { ...s.weather, ...(patch.weather || {}) },
@@ -261,6 +390,8 @@ export async function patchSettings(patch) {
       // The invitation list is replaced whole: a revoked one has to disappear,
       // and a key-wise merge cannot delete — the same reason as for names.
       invites: (patch.access || {}).invites || s.access.invites || [],
+      // Replaced whole, like invites: a revoked device has to disappear.
+      devices: (patch.access || {}).devices || s.access.devices || [],
     },
     // The network token survives a patch that omits it for the same reason as
     // the owner token: the page sends the settings whole and has never seen it.
@@ -275,6 +406,21 @@ export async function patchSettings(patch) {
     // recovered.
     names: patch.names || s.names,
     seats: patch.seats || s.seats,
+    // Key-wise: a page sends only the rug it recoloured, and two tabs
+    // recolouring two rooms must not undo each other.
+    // The server does not know the colourway names (they live in web/); it
+    // only keeps the values short strings, and the page falls back to the
+    // terracotta for anything it does not recognise.
+    rugs: {
+      ...(s.rugs || {}),
+      ...Object.fromEntries(Object.entries(patch.rugs || {})
+        .filter(([, v]) => typeof v === 'string' && v.length <= 24)),
+    },
+    // Key-wise as well, and one value more than the rugs need: 'normal' takes
+    // the entry away, because a team brought back from pinned or sunk has no
+    // mark at all. Anything but the three words is dropped.
+    standup: Object.fromEntries(Object.entries({ ...(s.standup || {}), ...(patch.standup || {}) })
+      .filter(([k, v]) => k.length <= 200 && (v === 'pin' || v === 'sink'))),
     // The pack mark travels beside the names and is replaced the same way: it
     // describes them. An empty string is a legal value here ("nobody has been
     // handed a name yet"), so || will not do.
@@ -287,6 +433,31 @@ export async function patchSettings(patch) {
   return cache;
 }
 
+// A change worked out from the settings as they are on disk, and worked out
+// again if another office wrote the file in between. `change` gets the
+// settings and returns a patch, or nothing when there is nothing to write; it
+// may run more than once, so it must not touch what it is given.
+//
+// patchSettings alone cannot retry: its patch was computed from the stale copy,
+// and saving it again would put back whatever the other office had just
+// changed. Every office on this machine shares one file, and each saves names
+// and seats on its own tick, so a save racing a foreign one is ordinary. Until
+// 13 September 2026 the door did exactly that: the refusal lost the guest's
+// pass after /api/enter had already chosen it, the stream answered 403, and
+// the guest stood in an empty office for good — the code was already gone
+// from the address, so a reload did not help either.
+export async function updateSettings(change, tries = 3) {
+  for (let attempt = 1; ; attempt += 1) {
+    const patch = await change(await getSettings());
+    if (!patch) return getSettings();
+    try {
+      return await patchSettings(patch);
+    } catch (e) {
+      if (!e.stale || attempt >= tries) throw e;
+    }
+  }
+}
+
 // Writes go through a temp file and a rename, and one at a time. The office
 // tick and the request handlers save settings independently of each other; two
 // writes into one file directly interleaved bytes, and the broken JSON that
@@ -295,40 +466,48 @@ export async function patchSettings(patch) {
 // new one. The queue writes the cache as it stood when it was called — whoever
 // called last is what ends up on disk.
 let writing = Promise.resolve();
+// The refusal is marked so updateSettings can tell it from a full disk: this
+// one is cured by reading the file again, that one is not.
+const staleWrite = () => Object.assign(
+  new Error(`Settings were not saved because ${FILE} changed after this process read it. Reload and try again.`),
+  { stale: true },
+);
 function persist() {
   const text = JSON.stringify(cache, null, 2);
   const generation = writeGeneration;
   writing = writing.catch(() => {}).then(async () => {
-    if (generation !== writeGeneration) {
-      throw new Error(`Settings were not saved because ${FILE} changed after this process read it. Reload and try again.`);
-    }
+    if (generation !== writeGeneration) throw staleWrite();
     const expected = diskRevision;
     const changed = async () => (await revisionOf(FILE)) !== expected;
     const refuseStaleWrite = () => {
       cache = null;
       writeGeneration += 1;
-      throw new Error(`Settings were not saved because ${FILE} changed after this process read it. Reload and try again.`);
+      throw staleWrite();
     };
-    if (await changed()) refuseStaleWrite();
     // The folder is made 0700 when it is made here; one that already exists is
     // left as its owner set it — tightening somebody's ~/.config from a save
     // would be a surprise, and the files inside are 0600 either way.
     await fsp.mkdir(path.dirname(FILE), { recursive: true, mode: 0o700 });
-    const tmp = `${FILE}.tmp-${process.pid}`;
-    try {
-      // The file holds the owner token, the network token and the invitations.
-      // A temporary file written with the default mode came out world-readable
-      // wherever the umask allowed, and the rename carried that mode over the
-      // file it replaced — found by the audit of 12 September 2026. 0600 on
-      // every write here, the migration and the broken-file copy alike.
-      await fsp.writeFile(tmp, text, { mode: 0o600 });
-      // Catch an edit made while the temporary file was being written too.
+    await withLock(async () => {
       if (await changed()) refuseStaleWrite();
-      await fsp.rename(tmp, FILE);
-      diskRevision = await revisionOf(FILE);
-    } finally {
-      await fsp.rm(tmp, { force: true });
-    }
+      const tmp = `${FILE}.tmp-${process.pid}`;
+      try {
+        // The file holds the owner token, the network token and the invitations.
+        // A temporary file written with the default mode came out world-readable
+        // wherever the umask allowed, and the rename carried that mode over the
+        // file it replaced — found by the audit of 12 September 2026. 0600 on
+        // every write here, the migration and the broken-file copy alike.
+        await fsp.writeFile(tmp, text, { mode: 0o600 });
+        // Offices take the lock; a hand edit or an older office does not, so
+        // an edit made while the temporary file was being written is still
+        // caught here.
+        if (await changed()) refuseStaleWrite();
+        await fsp.rename(tmp, FILE);
+        diskRevision = await revisionOf(FILE);
+      } finally {
+        await fsp.rm(tmp, { force: true });
+      }
+    });
   });
   return writing;
 }
@@ -342,7 +521,7 @@ export function publicSettings(s) {
   // out: a guest's page reads these settings with the same request as the
   // owner's page. Only what is visible anyway goes out — the mode, and how many
   // invitations are still unclaimed.
-  const { token: owner, invites = [], ...access } = s.access || {};
+  const { token: owner, invites = [], devices = [], ...access } = s.access || {};
   // The network token is not shown even to our own: the settings go down the
   // SSE stream into a browser that hosts the radio iframe and the sandbox for
   // foreign HTML. It can only be read from disk — which is what the word

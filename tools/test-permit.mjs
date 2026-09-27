@@ -56,7 +56,7 @@ async function untilPermits(n) {
     if ((s.permits || []).length >= n) return s;
     await wait(50);
   }
-  throw new Error(`запрос не доехал до офиса за 5 секунд`);
+  throw new Error(`the request did not reach the office in 5 seconds`);
 }
 
 // A request from the hook: we do not await it, it hangs. We return a promise with the answer.

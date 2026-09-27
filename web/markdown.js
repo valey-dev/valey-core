@@ -29,8 +29,23 @@ function inline(s) {
   });
 
   out = out
-    .replace(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g, (_, alt, src) =>
-      `<span class="mdimg">🖼 ${alt || src.split('/').pop()}</span>`)
+    .replace(/!\[([^\]]*)\]\(\s*(?:&lt;([^)]*?)&gt;|([^)\s]+))[^)]*\)/g, (_, alt, angled, bare) => {
+      const raw = angled !== undefined ? angled : bare;
+      // Codex writes the path in angle brackets — ![caption](</path/file.png>) —
+      // which is also how markdown carries a path with a space in it.
+      const src = raw;
+      const name = src.split('/').pop();
+      // Only a file on this disk is drawn. A picture from the internet stays a
+      // line: the office does not go outside, and a reply is not a reason to
+      // start — that is what the weather switch is for.
+      if (!src.startsWith('/')) return `<span class="mdimg">🖼 ${alt || name}</span>`;
+      // The picture is served by /api/file, which opens only what the agent
+      // touched in its work — and for a guest only while the conversation is
+      // open. Nothing new is unlocked here.
+      const url = `/api/file?path=${encodeURIComponent(src)}`;
+      return `<span class="mdpic" data-path="${src}"><img src="${url}" alt="${alt || name}" loading="lazy">`
+        + `<span class="mdpicname">${alt || name}</span></span>`;
+    })
     .replace(/\[([^\]]+)\]\(([^)\s]+)[^)]*\)/g, (_, text, href) =>
       (SAFE_LINK.test(href)
         // A link copies its address, not its text: nobody needs «the frame it

@@ -134,7 +134,18 @@ export function applyCleanup(plan) {
   if (plan.state === 'already-clean' || plan.state === 'worktree-kept') return plan;
   for (const action of plan.actions) {
     if (action.type === 'remove-worktree') git(plan.repo, ['worktree', 'remove', action.path]);
-    else if (action.type === 'delete-local') git(plan.repo, ['branch', '-d', action.branch]);
+    else if (action.type === 'delete-local') {
+      // `-d` checks «merged?» itself, but against the branch's upstream or,
+      // once the host has deleted that, against HEAD — the local main, which
+      // land's release in a temporary tree never moves. It refused three
+      // landings in a row that were fully in origin/main (23–26 September
+      // 2026). So merged-ness is asked against mainRef, again, right here —
+      // the branch could have moved since inspect — and `-D` does the rest.
+      if (!isAncestor(plan.repo, `refs/heads/${action.branch}`, plan.mainRef)) {
+        throw new Error(`local branch is not fully merged into ${plan.mainRef}: ${action.branch}`);
+      }
+      git(plan.repo, ['branch', '-D', action.branch]);
+    }
     else if (action.type === 'delete-remote') git(plan.repo, ['push', 'origin', '--delete', action.branch]);
   }
   return { ...plan, state: 'cleaned' };

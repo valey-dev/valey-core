@@ -13,7 +13,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { parseFragment, readFragments, renderNote, checkNotes, missingShots, assemble, shotSource, beforeSource, findBefore, cmpTag, releaseBody } from './notes.mjs';
+import { parseFragment, readFragments, renderNote, checkNotes, missingShots, unpictured, assemble, shotSource, beforeSource, findBefore, cmpTag, releaseBody, fixSections } from './notes.mjs';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -21,6 +21,22 @@ const ok = (name, cond, got) => {
   else { bad += 1; console.log('FAIL  |', name, '→', String(got).slice(0, 300)); }
 };
 const fails = (fn) => { try { fn(); return ''; } catch (e) { return e.message; } };
+
+// --- fixes in the note ---------------------------------------------------
+// A patch had no note before 26 September 2026; its fixes are its sections now.
+{
+  const fx = fixSections([
+    { scope: 'office', text: 'answering a question leaves the card on «what are you working on»' },
+    { scope: 'release', text: 'a release that loses the race takes its tag back' },
+    { scope: '', text: '`promote` names the version' },
+  ]);
+  ok('a service scope stays out of the note, a visible one gets a capital',
+    fx.length === 2 && fx[0].title.startsWith('Answering') && fx[0].scope === 'office', JSON.stringify(fx));
+  ok('a subject that starts with code keeps it as written', fx[1].title === '`promote` names the version', fx[1].title);
+  const md = renderNote('v0.61.5', '17 September 2026', [], '## v0.61.5\n\n### Fixed\n\n- **office:** x\n', fx);
+  ok('a patch note has a section per fix, marked, above the changelog',
+    /## Answering[^\n]*\n\n<!-- fix -->\n\n\*office\*/.test(md) && md.indexOf('## Answering') < md.indexOf('### What changed'), md);
+}
 
 // --- the front matter ----------------------------------------------------
 const good = `---
@@ -74,11 +90,20 @@ ok('a misspelled shot field is a failure too',
   /unknown shot field `keyz`/.test(fails(() => parseFragment('---\ntitle: x\nshots:\n  - id: a\n    keyz: b\n---\n\nbody\n', 'x.md'))));
 ok('an ordinary field after a recipe is still an ordinary field',
   parseFragment('---\nshots:\n  - id: a\ntitle: x\n---\n\nbody\n', 'x.md').title === 'x');
+const withEvent = parseFragment('---\ntitle: Touch\nscope: touch\nevent: Stick Moved\n---\n\nbody\n', 't.md');
+ok('a fragment may name the event its feature moves', withEvent.event === 'Stick Moved', withEvent);
+ok('and a fragment without one has an empty event, not a missing field', parseFragment('---\ntitle: x\n---\n\nbody\n', 'x.md').event === '');
 
 // --- the rendered note ---------------------------------------------------
 const section = '## v0.24.0 — 8 September 2026\n\n### Added\n\n- **office:** the arrows stop (abc1234)\n';
 const note = renderNote('v0.24.0', '8 September 2026', [f], section);
 ok('the note opens with the version and the date', note.startsWith('# v0.24.0 — 8 September 2026'), note.slice(0, 60));
+{
+  const withEv = renderNote('v0.24.0', '8 September 2026', [{ ...f, event: 'Stick Moved' }], section);
+  ok('the event rides under the feature\'s heading as a comment the release page does not show',
+    withEv.includes(`## ${f.title}\n\n<!-- event: Stick Moved -->\n`), withEv.slice(0, 200));
+  ok('a feature without an event gets no comment', !note.includes('<!-- event:'));
+}
 ok('the prose is in it', note.includes('Holding the arrow'), note);
 ok('the keys are a list under a heading', /\*\*Keys\*\*\n\n- `→`/.test(note), note);
 ok('the pictures are in the note, named by version, slug and id',
@@ -117,6 +142,17 @@ ok('no relative picture survives', !/!\[[^\]]*\]\((?!https:)/.test(page), page);
 ok('the changelog section rides along unchanged', page.includes('- **office:** the arrows stop (abc1234)'), page);
 ok('a picture that is already absolute is left alone',
   releaseBody('# v1\n\n![x](https://example.com/a.png)\n', { repo: 'r/r', sha: 's' }).includes('](https://example.com/a.png)'));
+// v0.65.0 published its own first sentence as a broken raw URL: the note quoted
+// `![подпись](/путь/кадр.png)` as the markdown an agent types, and the rewrite
+// could not tell an example from a picture.
+const quoted = releaseBody('# v1\n\nan agent writes `![подпись](/путь/кадр.png)` and\n\n'
+  + '```\n![fenced](shot.png)\n```\n\n![real](v1/shot.png)\n', { repo: 'r/r', sha: 's' });
+ok('a picture quoted in a code span stays an example',
+  quoted.includes('`![подпись](/путь/кадр.png)`'), quoted);
+ok('a picture inside a fence stays an example',
+  quoted.includes('![fenced](shot.png)'), quoted);
+ok('the picture outside code still becomes absolute',
+  quoted.includes('![real](https://github.com/r/r/raw/s/notes/v1/shot.png)'), quoted);
 
 // --- the guard -----------------------------------------------------------
 const feats = [{ hash: 'abc1234', subject: 'feat(office): the arrows stop' }];
@@ -182,6 +218,26 @@ ROOTS: {
   ok('and the recipe records which tag the before half came from',
     side.shots[0].before.tag === 'v0.12.0'
     && side.shots[0].before.file === 'arrows-standup.before-v0.12.0.png', side.shots[0]);
+}
+
+// ---------------------------------------------------------- a picture is owed
+// 13 September 2026: 13 of the 17 feature notes since v0.32.0 had no picture,
+// six of them for things plainly on the screen. A note now carries a shot or
+// says why it has none; the release refuses one with neither.
+{
+  const bare = { slug: 'bare', ...parseFragment('---\ntitle: A thing\n---\n\nIt does a thing.\n', 'bare.md') };
+  const why = { slug: 'why', ...parseFragment('---\ntitle: A tool\nnopicture: a terminal tool, nothing in the office changes\n---\n\nIt prints.\n', 'why.md') };
+  const shot = { slug: 'shot', ...parseFragment('---\ntitle: A room\nshots:\n  - id: room\n    url: "#room=standup"\n---\n\nIt shows.\n', 'shot.md') };
+  ok('the reason for no picture is read', why.nopicture === 'a terminal tool, nothing in the office changes', why.nopicture);
+  ok('a note with neither a shot nor a reason is owed a picture', JSON.stringify(unpictured([bare, why, shot])) === '["bare"]', unpictured([bare, why, shot]));
+  ok('a shot and a reason together are a contradiction, not a choice',
+    /both/.test(fails(() => parseFragment('---\ntitle: x\nnopicture: no\nshots:\n  - id: a\n---\n\nbody\n', 'x.md'))));
+  const md = renderNote('v0.99.0', '13 September 2026', [why], '## v0.99.0\n\n- **tools:** a thing\n');
+  ok('the reason stays in the file as a comment, off the page', md.includes('<!-- no picture: a terminal tool, nothing in the office changes -->'), md);
+  ok('a double dash cannot close the comment early',
+    !renderNote('v0.99.0', 'd', [{ ...why, nopicture: 'a -- b' }], '## v\n').includes('a -- b'));
+  const setup = parseFragment('---\ntitle: The pager\nshots:\n  - id: card\n    setup: "fetch(\x27/api/permit\x27)"\n    keys: "Enter"\n---\n\nIt asks.\n', 'p.md');
+  ok('a recipe may prepare the page before its keys', setup.shots[0].setup === "fetch('/api/permit')", setup.shots[0]);
 }
 
 console.log(bad ? `\nFAILED: ${bad}` : '\nall green');

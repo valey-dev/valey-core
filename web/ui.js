@@ -4,12 +4,15 @@ import { drawPerson, drawItem, dressMe, cycle, hash, SKIN, HAIR, SHIRT, PANTS, B
   SHIRT_WORK, BLOUSE, JACKET, TIE, CUTS, BOTTOMS } from './sprites.js';
 import { renderMarkdown } from './markdown.js';
 import { highlight, langOf } from './highlight.js';
-import { collect, first, moduleIds } from './modules.js';
-import { LIBRARY, TIERS, DIRS, SUBS, byId, children, colOf, inDir, dirTally } from './library.js';
+import { collect, first, moduleIds, moduleOffIds } from './modules.js';
+import { LIBRARY, TIERS, DIRS, SUBS, byId, children, colOf, inDir, dirTally, isSub } from './library.js';
 import { theme, applyTheme, resetTheme, PRESETS, ui, UI_STEPS, applyUiScale } from './theme.js';
 import { notesOf, noteCount, addNote, editNote, removeNote, splitNotes, allNotes } from './notes.js';
 import { esc } from './esc.js';
+import { modelLabel } from './model-name.js';
+import { roleIcon } from './roleicon.js';
 import { owned } from './owned.js';
+import { linkDown, linkRetrying } from './link.js';
 // The standup catches its own key by the physical code rather than by the
 // letter — see rosterKey below.
 import { codeOf } from './keymap.js';
@@ -28,6 +31,7 @@ export function initUI(state, callbacks) {
   el.invite = $('#invite');
   el.notes = $('#notes');
   el.lang = $('#lang');
+  el.hire = $('#hire');
   // One handler for the whole viewer panel, set at the entrance: the markup
   // inside it is repainted constantly, and the handler outlives that.
   bindCopyButtons();
@@ -42,6 +46,8 @@ export function initUI(state, callbacks) {
   selfClosing(el.invite, closeInvite);
   selfClosing(el.bag, closeBag);
   selfClosing(el.skin, closeSkin);
+  selfClosing(el.hire, closeHire);
+  if (el.hire && el.hire.addEventListener) el.hire.addEventListener('keydown', hirePanelKey);
 }
 
 // The handler is hung on the panel itself rather than on the field: the innards
@@ -49,12 +55,24 @@ export function initUI(state, callbacks) {
 function selfClosing(box, close) {
   if (!box) return;
   box.onkeydown = (e) => {
-    if (e.key !== 'Escape') return;
+    // An Escape typed into a field of the panel's ring takes the caret out and
+    // no more (focusRing marks it on the way down); the next one closes.
+    if (e.key !== 'Escape' || e.fromRingField) return;
     e.preventDefault(); e.stopPropagation(); close();
   };
 }
 
-export const clean = (s) => (s || '').replace(/```[\s\S]*?```/g, tr('clean.code')).replace(/[*#`]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+// The card types the reply out as plain text, so markdown is stripped rather
+// than rendered. A picture is named instead: «![подпись](</путь/кадр.png>)»
+// read as a path with brackets around it, and the picture itself is in the
+// conversation, where the markup lives (#reply-image, 17 September 2026).
+export const clean = (s) => (s || '')
+  .replace(/```[\s\S]*?```/g, tr('clean.code'))
+  .replace(/!\[([^\]]*)\]\(\s*(?:<([^)]*?)>|([^)\s]+))[^)]*\)/g, (_, alt, angled, bare) => {
+    const src = angled !== undefined ? angled : bare;
+    return `🖼 ${alt || String(src).split('/').pop()}`;
+  })
+  .replace(/[*#`]/g, '').replace(/\n{3,}/g, '\n\n').trim();
 
 // ------------------------------------------------------------------- toasts
 export function toast(text, kind = '') {
@@ -79,6 +97,7 @@ const WEATHER_ICON = { clear: '☀', clouds: '☁', rain: '☂', storm: '⚡', s
 export function renderHud() {
   const waiting = S.agents.filter((a) => a.status === 'awaiting').length;
   const working = S.agents.filter((a) => a.status === 'working').length;
+  const stopped = S.agents.filter((a) => a.status === 'stopped').length;
   const d = new Date();
   const room = S.currentRoom ? `<span class="chip room">▣ ${esc(S.currentRoom.title)}</span>` : `<span class="chip room">${tr('hud.corridor')}</span>`;
   const w = S.weather || { kind: 'clear' };
@@ -94,12 +113,25 @@ export function renderHud() {
       // The counter says what it counts and opens the round, where those very
       // agents are listed.
       ? `<button id="waitChip" class="chip wait" title="${tr('hud.waitTitle')}">! ${waiting}</button>`
+      : ''}${stopped
+      // Its own count rather than a share of «! N»: the stopped ask for nothing,
+      // but a restart of the app cuts every agent off at once, and without a
+      // number here that is found only by walking the floor. Not a button —
+      // the way on is «continue» in the session's chat, which is the person's.
+      // Design: [HUD · stopped chip](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2126-3686)
+      ? `<span class="chip stop" title="${tr('hud.stopTitle')}">‖ ${stopped}</span>`
       : ''}
     <span class="chip">👥 ${S.agents.length}</span>
     <span class="chip zoom${z.tight ? ' wait' : ''}" title="${tr('hud.zoomTitle')}${
       z.tight ? tr('hud.zoomTitleTight') : ''
     }">⛶ ×${z.dev}${z.auto ? tr('hud.zoomAuto') : ''}${z.tight ? tr('hud.zoomTight') : ''}</span>
-    ${S.pagerWaiting ? `<button id="pagerChip" class="chip wait" title="${tr('hud.pagerTitle')}">📟 ${S.pagerWaiting}</button>` : ''}
+    ${S.pagerWaiting ? `<button id="pagerChip" class="chip wait" title="${tr('hud.pagerTitle')}">📟 ${S.pagerWaiting}</button>` : ''}${
+      // The first failed reconnect shows here and nowhere else: the floor stays
+      // lit, nothing beeps. A blink of the network is not worth a black screen,
+      // and this chip is what tells the difference between a blink and a loss.
+      linkRetrying() || linkDown()
+        ? `<span class="chip wait" title="${tr('hud.linkTitle')}">⚡ ${tr(linkDown() ? 'hud.linkDown' : 'hud.linkRetry')}</span>`
+        : ''}
     <span class="chip dim">${S.soundOn ? '🔊' : '🔇'} M</span>
     ${collect('hud', S).map((c) => `<span class="chip ${esc(c.kind || 'dim')}" title="${esc(c.title || '')}">${esc(c.text || '')}</span>`).join('')}
     <span class="chip dim">${tr('hud.round')}</span>`;
@@ -128,10 +160,11 @@ let denying = false;
 const said = (o, field = 'error') => {
   if (!o) return '';
   const key = field === 'hint' ? o.hintKey : o.errorKey;
-  return key ? tr(key) : (o[field] || '');
+  return key ? tr(key, field === 'hint' ? undefined : o.errorVars) : (o[field] || '');
 };
 
-const statusWord = (a) => tr('status.' + (a.status === 'awaiting' ? 'awaiting' : a.status === 'idle' ? 'idle' : 'working'));
+const STATUS_WORDS = ['awaiting', 'stopped', 'idle'];
+const statusWord = (a) => tr('status.' + (STATUS_WORDS.includes(a.status) ? a.status : 'working'));
 export const ago = (sec) => sec == null || !Number.isFinite(sec) ? ''
   : sec < 90 ? tr('ago.now')
   : sec < 5400 ? tr('ago.min', { n: Math.round(sec / 60) })
@@ -187,13 +220,22 @@ const readLabel = (a) => {
   const cut = (a.saidLen || 0) - (a.lastSaid || '').length;
   return cut > 0 ? tr('dlg.readOnArrow', { n: cut }) : tr('dlg.readAll');
 };
-const NOTE_ICON = { note: '📋', sending: '✈', delivered: '✅', failed: '⚠' };
+const NOTE_ICON = { note: '📋', sending: '⏳', delivered: '✅', failed: '⚠' };
 // Which note is holding its breath before going into a real chat. Kept here rather
 // than in the DOM, so the two-second repaint of the list does not disarm it.
 let armedNote = 0;
 const noteList = (a) => (a.outbox || []).map((t) => {
   const icon = t.blocked ? '🔒' : NOTE_ICON[t.state] || '📋';
-  const tail = t.state === 'sending' ? `<span class="ntail">${tr('note.sending')}</span>`
+  // Two waits, told apart on purpose (#drop-files, v2). The file's wait is a
+  // chip under the field and lasts milliseconds; this one is the session's —
+  // `claude --resume` loads the whole transcript, so it runs to a minute and
+  // beyond on a working one. Same words for both read as an upload that never
+  // ends, so the desk gets the hourglass, the waiting colour and mm:ss.
+  const waited = Math.max(0, Math.round((Date.now() - (t.startedAt || t.at || Date.now())) / 1000));
+  const clock = `${Math.floor(waited / 60)}:${String(waited % 60).padStart(2, '0')}`;
+  const tail = t.state === 'sending' ? `<span class="ntail warn">${tr('note.waitingFor', { t: clock })}</span>`
+    // a Codex task is taken in by the thread later; its answer arrives in the conversation
+    : t.state === 'delivered' && t.queued ? `<span class="ntail ok">${tr('note.queued')}</span>`
     : t.state === 'delivered' ? `<span class="ntail ${t.blocked ? 'warn' : 'ok'}">${
         t.blocked ? tr('note.blocked') : tr('note.replied')}${esc(clean(t.reply || '').slice(0, 110))}</span>`
     : t.state === 'failed' ? `<span class="ntail bad">${esc(said(t) || tr('note.failed'))}</span>`
@@ -205,7 +247,12 @@ const noteList = (a) => (a.outbox || []).map((t) => {
   const toChat = t.state === 'note'
     ? `<button class="tochat${armed ? ' arm' : ''}" data-send="${t.id}">${armed ? tr('note.confirm') : tr('note.toChat')}</button>`
     : '';
-  return `<li>${icon} ${esc(t.text.slice(0, 90))}${tail}${retry}${toChat}</li>`;
+  const clip = (t.files || []).length ? ` <span class="nclip">📎 ${t.files.length}</span>` : '';
+  // A note of files only still has to say what it is: its name is what it
+  // carries.
+  // `said` is taken by the helper above; this is the note's own line.
+  const titled = t.text || (t.files || []).map((f) => f.name).join(', ');
+  return `<li>${icon} ${esc(titled.slice(0, 90))}${clip}${tail}${retry}${toChat}</li>`;
 }).join('');
 const fileList = (a) => (a.files || []).map((f) =>
   `<li data-path="${encodeURIComponent(f.path)}"><span class="ic">${f.image ? '▨' : '▤'}</span>${esc(f.name)}</li>`).join('');
@@ -233,7 +280,12 @@ const hintText = () => {
 // 2026 the latter overwrote the guest hint with the owner's: the button was
 // already gone, while the text still promised delivery.
 const isGuest = () => S.owner === false;
-const taskHint = () => (isGuest() ? tr('hint.guest') : hintText());
+// A Codex thread takes its task through Codex's own queue (server/codex.js):
+// its hint says so, or that the codex CLI is missing; Claude's is as before.
+const codexOf = (a) => !!a && a.provider === 'codex';
+const taskHint = (a) => (isGuest() ? tr('hint.guest')
+  : codexOf(a) ? tr((S.delivery && S.delivery.codex && S.delivery.codex.available) ? 'dlg.codexHint' : 'err.codexNoCli')
+  : hintText());
 
 let btnIndex = 0;   // which of the bottom buttons the arrows are standing on
 
@@ -247,7 +299,13 @@ export function renderDialog() {
   // denied" does not rebuild the body and a person clicks a dead button.
   // The request is part of the key too: it disappears after any answer, ours or
   // another tab's, and the card must rebuild instead of leaving dead buttons.
-  const key = a.id + '|' + S.page + '|' + accessOf(a.id) + '|' + ((permitOf(a.id) || {}).id || '') + '|' + (denying ? 'deny' : '');
+  // So is being stopped: the talk page shows a notice instead of the reply, and
+  // an agent cut off while its card was open must not keep typing its last words.
+  const key = a.id + '|' + S.page + '|' + accessOf(a.id) + '|' + ((permitOf(a.id) || {}).id || '') + '|' + (denying ? 'deny' : '')
+    + '|' + (a.status === 'stopped' ? 'stop' : '');
+  // Files follow the card they were dropped on: walking to another agent must
+  // not carry somebody else's screenshot into his task.
+  if (taskFilesFor !== a.id) { taskFiles = []; taskFilesFor = a.id; }
   if (key === dialogKey && el.dialog.firstChild) return patchDialog(a);
   dialogKey = key;
   buildDialog(a);
@@ -256,11 +314,19 @@ export function renderDialog() {
 function patchDialog(a) {
   const set = (sel, html) => { const n = el.dialog.querySelector(sel); if (n && n.innerHTML !== html) n.innerHTML = html; };
   set('.meta', metaLine(a));
+  paintTaskChips();
+  // By text, not markup: innerHTML hands the no-break spaces back as &nbsp;, and
+  // a comparison that never matches would rewrite the model on every tick.
+  const model = el.dialog.querySelector('.model');
+  const label = modelLabel(a.model, a.effort);
+  if (model && model.textContent !== label) model.textContent = label;
   set('.act', actLine(a));
   // The task is rewritten by every answer, so its row moves as a whole rather
   // than being patched piece by piece: between "you are needed" and its absence
   // what changes is the set of rows, not the text.
   set('.taskrow', taskRow(a));
+  const hr = el.dialog.querySelector('.hiredrow');
+  if (hr && hr.innerHTML !== hiredRow(a)) { hr.innerHTML = hiredRow(a); bindHired(a); }
 
   if (S.page === 'talk') {
     const said = clean(a.lastSaid) || tr('dlg.silent');
@@ -287,7 +353,7 @@ function patchDialog(a) {
     else if (!list && html) buildDialog(a);
   }
   if (S.page === 'task') {
-    set('.hint', taskHint());
+    set('.hint', taskHint(a));
     const notes = el.dialog.querySelector('.notes');
     const html = noteList(a);
     // Rewriting the list drops the handlers with it, so bind them again right after.
@@ -299,6 +365,57 @@ function patchDialog(a) {
   }
   // Paint the highlight again: an update may have replaced the node and its class.
   paintDialogFocus();
+}
+
+// An agent the office hired says so on its card, and once its turn is over the
+// card offers to continue it in a terminal. Not while it works: the terminal
+// would be a second process writing the same transcript. Continuing lets the
+// office's process go first, so the agent leaves the floor as the command is
+// copied.
+// Frames: [Card · hired, working](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2092-2031)
+// [Card · hired, finished](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2092-2046)
+const hireOf = (id) => (S.hires || []).find((h) => h.sessionId === id) || null;
+// The command as the server gave it, kept after the release: without a
+// clipboard it is copied by hand from the field, and the next repaint must not
+// take the field away.
+const resumed = new Map();
+
+function hiredRow(a) {
+  if (!a.hired) return '';
+  const h = hireOf(a.id);
+  const line = [tr('hire.hiredAt', { at: when(a.hired), a: a.gender === 'f' ? 'а' : '' }), h && h.source ? tr('hire.src.' + h.source) : '']
+    .filter(Boolean).join(' · ');
+  let rest = '';
+  const cmd = resumed.get(a.id);
+  if (!isGuest() && h && h.state === 'working') rest = `<p class="hint dim">${tr('hire.busyNote')}</p>`;
+  else if (!isGuest() && h && (h.state === 'done' || cmd)) {
+    rest = `<div class="sendrow"><input class="hirecmd" readonly value="${esc(cmd || 'claude --resume ' + a.id)}">
+        <button class="hirecopy" ${cmd ? 'disabled' : ''}>${tr(cmd ? 'hire.copiedBtn' : 'hire.copy')}</button></div>
+      <p class="hint dim">${tr(cmd ? 'hire.leftNote' : 'hire.copyNote')}</p>`;
+  }
+  return `<p class="hiredline">${esc(line)}</p>${rest}`;
+}
+
+function bindHired(a) {
+  const b = el.dialog.querySelector('.hirecopy');
+  if (!b) return;
+  b.onclick = async () => {
+    b.disabled = true;
+    const r = await api.releaseHire(a.id);
+    if (!r || !r.command) { toast(said(r) || tr('hire.errUnknown')); b.disabled = false; return; }
+    resumed.set(a.id, r.command);
+    const hr = el.dialog.querySelector('.hiredrow');
+    if (hr) hr.innerHTML = hiredRow(a);
+    const box = el.dialog.querySelector('.hirecmd');
+    try {
+      await navigator.clipboard.writeText(r.command);
+      toast(tr('hire.copied', { name: a.name, a: a.gender === 'f' ? 'ла' : 'ёл' }));
+    } catch {
+      // Over plain http on the network there is no clipboard: the command stays
+      // selected in the field for Cmd+C.
+      if (box) { box.focus(); box.select(); }
+    }
+  };
 }
 
 // The permission request this agent is waiting on. A guest has no such list—the
@@ -314,6 +431,117 @@ function accessOf(id) {
   if ((acc.pending || []).includes(id)) return 'pending';
   if ((acc.refused || []).includes(id)) return 'refused';
   return 'closed';
+}
+
+
+// Which source the agent came from, after the role: ✶ Claude, ◇ Codex. The
+// role's own frame without its colour — roles are coloured, and a provider
+// must not read as one. Brand names, so not translated. ✶ rather than ✳: the
+// second is not in the office's font.
+const PROVIDER_MARK = { claude: '✶', codex: '◇' };
+const providerBadge = (a) => (PROVIDER_MARK[a.provider]
+  ? `<span class="role prov">${PROVIDER_MARK[a.provider]} ${a.provider === 'codex' ? 'Codex' : 'Claude'}</span>`
+  : '');
+// ------------------------------------------------------- files on a task
+// A file dropped onto the task field (or pasted — a screenshot in the
+// clipboard is the common one). The browser hands over bytes and never a
+// path, so the office puts them into its inbox at once and keeps the answer;
+// on send the paths ride in the text as «@<path>» and Claude Code opens them
+// itself. Frame: WIP «Files dropped into a task #drop-files», v1.
+//
+// The chip appears the moment the file is taken, before the bytes are up:
+// «загружаю…» is the honest state of a 12 MB screenshot on a slow disk, and a
+// chip that appears only afterwards reads as a drop that did nothing.
+const DROP_MAX_FILES = 5;
+const DROP_MAX_BYTES = 16 * 1024 * 1024;
+let taskFiles = [];       // what is attached to the task being typed
+let taskFilesFor = '';    // whose card they were attached on
+
+const sizeLabel = (n) => (n < 1024 ? tr('drop.bytes', { n })
+  : n < 1024 * 1024 ? tr('drop.kb', { n: Math.round(n / 1024) })
+  : tr('drop.mb', { n: (n / (1024 * 1024)).toFixed(1) }));
+
+const chipRow = (files) => (files || []).map((f, i) => {
+  const tail = f.error ? tr(f.error) : f.pending ? tr('drop.uploading') : esc(sizeLabel(f.size));
+  const cls = f.error ? ' bad' : f.pending ? ' wait' : '';
+  return `<span class="fchip${cls}">${f.image ? '▨' : '▤'} ${esc(f.name)}`
+    + `<span class="csize">${tail}</span>`
+    + `<button class="cdel" data-i="${i}" title="${tr('drop.remove')}">✕</button></span>`;
+}).join('');
+
+// Only files that are actually on disk go with the task: a chip with an error
+// is a message to the person, not an attachment.
+const readyFiles = (files) => (files || []).filter((f) => f.path && !f.error && !f.pending)
+  .map((f) => ({ path: f.path, name: f.name, size: f.size }));
+
+// Taking files is the same everywhere — the card, the hire panel. `paint` is
+// how that place redraws its own row: the dialog must not be rebuilt under a
+// half-typed task.
+async function takeFiles(list, files, paint) {
+  if (isGuest()) { toast(tr('drop.guest')); return; }
+  const going = [];
+  for (const file of [...list]) {
+    if (files.length >= DROP_MAX_FILES) { toast(tr('drop.many', { n: DROP_MAX_FILES })); break; }
+    const item = { name: file.name || tr('drop.pasted'), size: file.size, image: /^image\//.test(file.type || ''), pending: true };
+    files.push(item);
+    if (file.size > DROP_MAX_BYTES) { item.pending = false; item.error = 'drop.tooBig'; continue; }
+    // All of them at once: three screenshots in one drop should not queue
+    // behind the first one's bytes.
+    going.push(api.putFile(file).then((r) => {
+      item.pending = false;
+      if (r && r.ok && r.file) { item.path = r.file.path; item.name = r.file.name; item.size = r.file.size; }
+      else item.error = 'drop.failed';
+      paint();
+    }));
+  }
+  paint();
+  await Promise.all(going);
+}
+
+// The whole card takes the drop, not only the field: aiming at a three-line
+// textarea with a file in hand is a needless test of the mouse.
+function bindDrop(zone, field, files, paint) {
+  if (!zone) return;
+  // The dashed border says «something is being held over me»; the line says
+  // what will happen to it. It goes into the placeholder, so a task already
+  // typed is never covered by a message about a file.
+  const over = (on) => {
+    if (!field) return;
+    field.classList.toggle('dropping', on);
+    if (on) { if (field.dataset.said === undefined) field.dataset.said = field.placeholder; field.placeholder = tr('drop.hint'); }
+    else if (field.dataset.said !== undefined) { field.placeholder = field.dataset.said; delete field.dataset.said; }
+  };
+  zone.ondragover = (e) => { e.preventDefault(); over(true); };
+  zone.ondragleave = (e) => { if (e.target === zone) over(false); };
+  zone.ondrop = async (e) => {
+    e.preventDefault(); over(false);
+    const dropped = e.dataTransfer && e.dataTransfer.files;
+    if (dropped && dropped.length) await takeFiles(dropped, files, paint);
+  };
+  if (field) field.onpaste = async (e) => {
+    const items = [...((e.clipboardData && e.clipboardData.files) || [])];
+    if (!items.length) return;   // ordinary text: the field keeps it
+    e.preventDefault();
+    await takeFiles(items, files, paint);
+  };
+}
+
+// The task's own row of chips. One painter for everyone who can change it —
+// a drop, the ✕, and the tick that patches the card — because the card is
+// patched piece by piece and would otherwise keep showing files that have
+// already left with the task (17 September 2026).
+function paintTaskChips() {
+  const row = el.dialog && el.dialog.querySelector('#taskChips');
+  if (!row) return;
+  const html = chipRow(taskFiles);
+  if (row.innerHTML !== html) row.innerHTML = html;
+  bindChips(row, taskFiles, paintTaskChips);
+}
+
+// The ✕ on a chip. Bound after every repaint of the row, by index in it.
+function bindChips(root, files, paint) {
+  if (!root) return;
+  root.querySelectorAll('.cdel').forEach((b) => b.onclick = () => { files.splice(Number(b.dataset.i), 1); paint(); });
 }
 
 function buildDialog(a) {
@@ -347,6 +575,16 @@ function buildDialog(a) {
         ${btn}
         <p class="hint dim">${tr('acc.note')}</p>`;
     }
+    // Cut off mid-step: the notice stands where the reply would, as the limit's
+    // does, because the last thing said was not an answer to anything. The hint
+    // names the one way on — «continue» in the session's own chat — and that
+    // sending there stays the person's word.
+    // Design: [Dialog · stopped](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2122-6434)
+    else if (a.status === 'stopped') {
+      body = `<p class="q">${tr('dlg.whatUp')}</p>
+        <p class="say stopline">‖ ${tr('dlg.stopped')}</p>
+        <p class="hint">${tr('dlg.stoppedHint')}</p>`;
+    }
     // The subscription limit is a notice on the door, not the agent's words: it did not reply.
     else if (a.limited) {
       body = `<p class="q">${tr('dlg.whatUp')}</p>
@@ -372,21 +610,26 @@ function buildDialog(a) {
     const d = S.delivery || {};
     const mode = (S.settings && S.settings.delivery && S.settings.delivery.mode) || 'default';
     const guest = isGuest();
+    // Codex: its own CLI decides whether «send» works, and there is no mode —
+    // permission modes are Claude's (frame WIP «Codex sessions», v4)
+    const codex = codexOf(a);
+    const canSend = codex ? !!(d.codex && d.codex.available) : !!d.available;
     body = `<p class="q">${tr('dlg.whatToDo')}</p>
       <textarea id="taskInput" rows="3" placeholder="${tr(guest ? 'dlg.enterHintGuest' : 'dlg.enterHint')}"></textarea>
+      <div class="fchips" id="taskChips">${chipRow(taskFiles)}</div>
       <div class="sendrow">
         <button id="asNote">${tr('dlg.onDesk')}</button>
-        ${guest ? '' : `<button id="asSend" ${d.available ? '' : 'disabled'}>${tr('dlg.send')}</button>
-        <label class="modepick">${tr('dlg.mode')}
+        ${guest ? '' : `<button id="asSend" ${canSend ? '' : 'disabled'}>${tr('dlg.send')}</button>
+        ${codex ? '' : `<label class="modepick">${tr('dlg.mode')}
           <select id="sendMode" ${d.available ? '' : 'disabled'}>
             ${Object.entries(MODE_LABEL()).map(([k, v]) => `<option value="${k}" ${k === mode ? 'selected' : ''}>${v}</option>`).join('')}
           </select>
-        </label>`}
+        </label>`}`}
       </div>
-      <p class="hint">${taskHint()}</p>
+      <p class="hint">${taskHint(a)}</p>
       ${(a.outbox || []).length ? `<ul class="notes">${noteList(a)}</ul>` : ''}
       ${(a.outbox || []).some((t) => t.state === 'delivered')
-        ? `<p class="hint dim">${tr('dlg.appendHint')}</p>`
+        ? `<p class="hint dim">${tr(codex ? 'dlg.codexQueued' : 'dlg.appendHint')}</p>`
         : ''}`;
   }
 
@@ -447,9 +690,10 @@ function buildDialog(a) {
   el.dialog.innerHTML = `
     <div class="portrait"><canvas width="48" height="48" id="pf"></canvas></div>
     <div class="content">
-      <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${esc(roleText(a))}</span>
+      <div class="who"><b>${esc(a.name)}</b> <span class="role r-${esc(a.roleKey)}">${roleIcon(a.roleKey)}${esc(roleText(a))}</span>${providerBadge(a)}<span class="model">${esc(modelLabel(a.model, a.effort))}</span>
         <span class="meta">${metaLine(a)}</span><div class="taskrow">${taskRow(a)}</div></div>
       <div class="act">${actLine(a)}</div>
+      <div class="hiredrow">${hiredRow(a)}</div>
       <div class="body">${body}</div>
       <div class="acts">
         <button data-p="talk" class="${S.page === 'talk' ? 'on' : ''}">${tr('tab.talk')} <kbd>1</kbd></button>
@@ -478,6 +722,7 @@ function buildDialog(a) {
   });
   bindFiles();
   bindPermit(a);
+  bindHired(a);
 
   const say = $('#say');
   if (say) say.onclick = () => finishTypewriter();
@@ -506,17 +751,19 @@ function buildDialog(a) {
       // A guest always leaves the note on the desk. Keyboard shortcuts outlive
       // buttons, and otherwise Ctrl+Enter would still reach the server and be denied.
       const deliver = wanted && !isGuest();
-      const text = ta.value.trim(); if (!text) return;
+      const text = ta.value.trim();
+      // A file with no words is still a message; only nothing at all is not.
+      if (!text && !readyFiles(taskFiles).length) return;
       if (deliver && armed !== 'yes') { armed = 'yes'; renderArm(); return; }
       armed = '';
       ta.disabled = true;
-      const r = await api.sendTask(a.id, text, deliver);
+      const r = await api.sendTask(a.id, text, deliver, null, null, readyFiles(taskFiles));
       ta.disabled = false;
       if (!r.ok) S.notice = tr('task.failed', { err: said(r) || '?' });
       else if (!deliver) { S.notice = tr('task.onDeskToast'); toast(tr('task.onDeskTitle', { name: a.name })); }
       else if (r.task && r.task.state === 'failed') S.notice = tr('task.notSent', { err: said(r.task) || '?' });
       else { S.notice = tr('task.sentToast', { name: a.name }); toast(tr('task.sentTitle', { name: a.name })); }
-      if (r.ok) ta.value = '';
+      if (r.ok) { ta.value = ''; taskFiles = []; paintTaskChips(); }
       ta.focus();
       renderDialog();
     };
@@ -537,6 +784,8 @@ function buildDialog(a) {
     };
     const note = $('#asNote'); if (note) note.onclick = () => submit(false);
     const snd = $('#asSend'); if (snd) snd.onclick = () => submit(true);
+    bindDrop(el.dialog, ta, taskFiles, paintTaskChips);
+    bindChips($('#taskChips'), taskFiles, paintTaskChips);
     bindNotes(a);
     const sel = $('#sendMode');
     if (sel) sel.onchange = () => api.saveSettings({ delivery: { mode: sel.value } });
@@ -583,7 +832,7 @@ function bindPermit(a) {
       const r = await api.answerPermit(p.id, 'answer', '', label);
       denying = false;
       if (r && r.error) UI_toastKey(r);
-      else api.toast(tr('toast.permitAnswered', { who: a.name, answer: label, a: a.gender === 'f' ? 'а' : '' }));
+      else toast(tr('toast.permitAnswered', { who: a.name, answer: label, a: a.gender === 'f' ? 'а' : '' }));
       api.forgetPermit(p.id);
       S.page = 'talk';
       renderDialog();
@@ -602,10 +851,10 @@ function bindPermit(a) {
     // The server may not find the request because another tab answered it or it
     // expired. In that case the card simply rebuilds and says so.
       if (r && r.error) UI_toastKey(r);
-      else if (act === 'always' && p.rule) api.toast(tr('toast.permitAlways', { rule: p.rule }), 'news');
-      else if (act === 'allow') api.toast(tr('toast.permitAllowed', { who: a.name }));
-      else if (act === 'deny') api.toast(tr('toast.permitDenied', { who: a.name }), 'wait');
-      else if (act === 'terminal') api.toast(tr('toast.permitTerminal', { who: a.name }), 'wait');
+      else if (act === 'always' && p.rule) toast(tr('toast.permitAlways', { rule: p.rule }), 'news');
+      else if (act === 'allow') toast(tr('toast.permitAllowed', { who: a.name }));
+      else if (act === 'deny') toast(tr('toast.permitDenied', { who: a.name }), 'wait');
+      else if (act === 'terminal') toast(tr('toast.permitTerminal', { who: a.name }), 'wait');
       api.forgetPermit(p.id);
       S.page = 'talk';
       renderDialog();
@@ -1109,6 +1358,27 @@ const plainText = (t) => esc(t.slice(0, 20000));
 const codeBody = (txt, lang) => (lang
   ? `<pre class="code lang-${lang}">${highlight(txt.slice(0, 60000), lang)}</pre>`
   : `<pre>${plainText(txt)}</pre>`);
+// Pictures inside a rendered reply (#reply-image). Two things the markup
+// cannot do by itself: a click that opens the office viewer, and an honest
+// fallback. /api/file serves only what the agent touched in its work, so a
+// path it never opened — or a file already deleted — answers 403 or 404, and
+// an empty frame with a broken-image glyph would say nothing. The line with
+// the name and the reason says what happened.
+export function bindPictures(root) {
+  if (!root) return;
+  root.querySelectorAll('.mdpic').forEach((box) => {
+    const img = box.querySelector('img');
+    const path = box.dataset.path || '';
+    if (!img) return;
+    img.onerror = () => {
+      const name = box.querySelector('.mdpicname');
+      box.classList.add('gone');
+      box.innerHTML = `<span class="mdimg">🖼 ${esc(name ? name.textContent : path.split('/').pop())}</span>`
+        + `<span class="mdpicwhy">${tr('pic.gone')}</span>`;
+    };
+    box.onclick = () => { if (!box.classList.contains('gone')) openFile(path); };
+  });
+}
 const mdBody = (txt) => (mdRaw
   ? `<pre>${plainText(txt)}</pre>`
   : `<div class="md">${renderMarkdown(txt.slice(0, 120000))}</div>`);
@@ -1141,6 +1411,8 @@ function redrawDoc() {
   if (box) { box.innerHTML = docBody(); box.scrollTop = 0; }
   if (btn) btn.textContent = toggleLabel();
   bindDocControls();
+  // A picture inside a viewed markdown file behaves as one in a reply.
+  bindPictures(el.viewer);
 }
 
 export function toggleMarkdownRaw() {
@@ -1246,6 +1518,7 @@ export function viewerOpen() {
   return gallery.mode === 'single' ? 'single' : 'gallery';
 }
 export function liftOpen() { return !!(el.lift && !el.lift.hidden); }
+export function receptionOpen() { return liftOpen() && !!el.lift.querySelector('.recwrap'); }
 // The tab the card is reading. In «поговорить» the cursor sits in the field, and
 // that is a different place from the card itself: there the letters type.
 export function cardPage() { return S.page; }
@@ -1369,17 +1642,31 @@ export function viewerKey(raw, big = false) {
 // out of the question — the task is what this is opened for, and the lie would
 // sit exactly where the eye goes.
 
-const CARD_STATE = (a) => (a.status === 'awaiting' ? 'wait' : a.status === 'working' ? 'work' : 'idle');
-const CARD_ORDER = { wait: 0, work: 1, idle: 2 };
+// A stopped agent ranks right after the waiting ones: it will not go on until
+// somebody says so, which makes it the second thing a person looks for.
+// Design: [Person card · four states](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2122-6385)
+const CARD_STATE = (a) => (a.status === 'awaiting' ? 'wait' : a.status === 'stopped' ? 'stop'
+  : a.status === 'working' ? 'work' : 'idle');
+const CARD_ORDER = { wait: 0, stop: 1, work: 2, idle: 3 };
 
 /**
- * The teams in the order their rooms stand on the floor. The order is held by
- * the layout — a slot belongs to a project for as long as the project lives —
- * and it is held there for the very reason it is wanted here: a board that
- * reshuffles every two seconds cannot be read. A project whose room has not
- * been built yet goes last, alphabetically, rather than disappearing.
+ * The teams in the order that matters: pinned first, then those where somebody
+ * waits for you or stopped, then those at work, then those resting, and the ones
+ * the owner put away last, folded to one line. Inside a group the floor decides —
+ * the order the rooms stand in, which a slot holds for as long as the project
+ * lives. A project whose room has not been built yet goes last in its group,
+ * alphabetically, rather than disappearing.
+ *
+ * Until 26 September 2026 the floor was the whole order, so the standup read in
+ * the order sessions happened to be opened, and the project you were working on
+ * was a scroll away. A question beats «put away»: a sunk team where somebody
+ * waits rises with the askers, unfolded, and says why it is there.
+ *
+ * `prefs` is `settings.standup`: project -> 'pin' | 'sink'. The order is still
+ * not live — renderRoster freezes it when the panel opens (see rosterOrder).
  */
-export function standupTeams(agents, rooms = []) {
+export const TEAM_GROUP = { pin: 0, ask: 1, work: 2, idle: 3, sink: 4 };
+export function standupTeams(agents, rooms = [], prefs = {}) {
   const by = new Map();
   for (const a of agents) {
     if (!by.has(a.project)) by.set(a.project, []);
@@ -1387,19 +1674,51 @@ export function standupTeams(agents, rooms = []) {
   }
   const order = (rooms || []).map((r) => r.key);
   const place = (p) => { const i = order.indexOf(p); return i < 0 ? order.length : i; };
-  return [...by.keys()]
-    .sort((x, y) => place(x) - place(y) || String(x).localeCompare(String(y)))
-    .map((project) => ({
+  const teams = [...by.keys()].map((project) => {
+    const list = by.get(project);
+    const tier = (prefs || {})[project] === 'pin' ? 'pin' : (prefs || {})[project] === 'sink' ? 'sink' : 'normal';
+    const asks = list.some((a) => a.status === 'awaiting' || a.status === 'stopped');
+    const busy = list.some((a) => a.status === 'working');
+    const group = tier === 'pin' ? 'pin' : asks ? 'ask' : tier === 'sink' ? 'sink' : busy ? 'work' : 'idle';
+    return {
       project,
+      tier,
+      group,
+      // A sunk team with nobody asking is one line; asking, it unfolds.
+      folded: group === 'sink',
+      mark: tier === 'pin' ? 'pinned' : tier === 'sink' ? (asks ? 'sunkWaits' : 'sunk') : null,
       // Those waiting rise to the top — the only reordering inside a team, and
       // it is about the work. Below them the desk seat decides: a seat belongs
       // to a session, so the order holds by itself.
-      list: by.get(project).slice().sort((p, q) =>
+      list: list.slice().sort((p, q) =>
         CARD_ORDER[CARD_STATE(p)] - CARD_ORDER[CARD_STATE(q)]
         || (p.seat || 0) - (q.seat || 0)
         || String(p.name).localeCompare(String(q.name))),
-      waiting: by.get(project).filter((a) => a.status === 'awaiting').length,
-    }));
+      waiting: list.filter((a) => a.status === 'awaiting').length,
+    };
+  });
+  return teams.sort((x, y) => TEAM_GROUP[x.group] - TEAM_GROUP[y.group]
+    || place(x.project) - place(y.project) || String(x.project).localeCompare(String(y.project)));
+}
+
+/**
+ * Hold the order the panel opened with. The snapshot comes every two seconds and
+ * a status changes in minutes, so a live order would move the list from under a
+ * reading person. `frozen` is the project order at opening; a team that was not
+ * among the askers then and asks now keeps its place and gets the «new question»
+ * mark instead. A project that appeared since goes to the end.
+ */
+export function holdOrder(teams, frozen) {
+  if (!frozen) return teams;
+  const at = new Map(frozen.order.map((p, i) => [p, i]));
+  const idx = (t) => (at.has(t.project) ? at.get(t.project) : frozen.order.length);
+  return teams.slice().sort((x, y) => idx(x) - idx(y)).map((t) => {
+    const was = frozen.groups[t.project];
+    const fresh = t.group === 'ask' && was !== undefined && was !== 'ask' && was !== 'pin';
+    // Where it stands is the order at opening; whether it is folded is not — a
+    // sunk team that starts asking unfolds in place, it does not wait to be reopened.
+    return fresh && !t.mark ? { ...t, mark: 'fresh' } : t;
+  });
 }
 
 /**
@@ -1422,7 +1741,7 @@ export function standupCard(a) {
     cold: !t || (a.status !== 'working' && (a.idleFor || 0) > COLD_TASK),
     status: t ? (t.status || '') : '',
     need: t ? (t.need || '') : '',
-    now: a.status === 'working' ? actText(a) : '',
+    now: a.status === 'working' || a.status === 'stopped' ? actText(a) : '',
   };
 }
 
@@ -1430,8 +1749,8 @@ const cardToken = (a) => {
   const when = ago(a.idleFor);
   const s = CARD_STATE(a);
   if (s === 'work') return '● ' + tr('status.working');
-  return (s === 'wait' ? '⚑ ' : '○ ') + tr('status.' + (s === 'wait' ? 'awaiting' : 'idle'))
-    + (when ? ' · ' + when : '');
+  const [mark, word] = s === 'wait' ? ['⚑ ', 'awaiting'] : s === 'stop' ? ['‖ ', 'stopped'] : ['○ ', 'idle'];
+  return mark + tr('status.' + word) + (when ? ' · ' + when : '');
 };
 const cardFoot = (c) => (c.now ? '▸ ' + c.now : c.status ? tr('task.status', { s: c.status }) : '');
 const headLine = (teams, people, waiting) => [
@@ -1455,25 +1774,44 @@ const cardSig = (a) => {
 const cardHtml = (a) => {
   const c = standupCard(a);
   const foot = cardFoot(c);
-  return `<div class="pcard ${c.state}" role="button" data-id="${esc(a.id)}">
+  return `<div class="pcard ${c.state}" role="button" data-id="${esc(a.id)}" data-project="${esc(a.project)}">
     <canvas class="pface" width="28" height="30" data-face="${esc(a.id)}"></canvas>
     <span class="pname">${S.visited.has(a.id) ? '✓ ' : ''}${esc(a.name)}</span>
     <span class="ptok">${esc(cardToken(a))}</span>
     <span class="pmeta">${esc(roleText(a))}${a.branch ? ' · ' + esc(a.branch) : ''}</span>
     <span class="ptask${c.cold ? ' cold' : ''}">${esc(c.task || tr('standup.untitled'))}${
       c.reported ? '' : ` <i>· ${tr('standup.noReport')}</i>`}</span>
-    <span class="pfoot${c.now ? ' now' : ''}">${esc(foot)}</span>
+    <span class="pfoot${c.now && c.state === 'work' ? ' now' : ''}">${esc(foot)}</span>
     ${c.need ? `<span class="pneed">⚑ ${tr('task.need', { s: esc(c.need) })}</span>` : ''}
     <button class="plead" data-go="${esc(a.id)}" title="${tr('standup.lead')}">⇢</button>
   </div>`;
 };
 
+const standupPrefs = () => (S.settings && S.settings.standup) || {};
+// The order the panel opened with; null while it is closed. See holdOrder().
+let rosterOrder = null;
+const freeze = (teams) => ({
+  order: teams.map((t) => t.project),
+  groups: Object.fromEntries(teams.map((t) => [t.project, t.group])),
+});
+
+const teamMark = (t) => (t.mark ? `<b class="pmark ${t.mark}">${tr('standup.mark.' + t.mark)}</b>` : '');
+const teamCount = (t) => `<i>${t.list.length}${t.waiting ? ' · ⚑' + t.waiting : ''}</i>`;
+// A folded team is a step of the focus ring like a card: otherwise a team put
+// away could never be reached again to bring it back.
+const teamHtml = (t) => (t.folded
+  ? `<section class="pteam sunk"><h4 class="pfold" role="button" data-project="${esc(t.project)}">▣ ${esc(t.project)}${teamMark(t)}${teamCount(t)}</h4></section>`
+  : `<section class="pteam${t.tier === 'pin' ? ' pinned' : ''}"><h4>▣ ${esc(t.project)}${teamMark(t)}${teamCount(t)}</h4>
+        <div class="pgrid">${t.list.map(cardHtml).join('')}</div></section>`);
+
 export function renderRoster() {
-  const teams = standupTeams(S.agents, S.layout && S.layout.projectRooms);
+  const live = standupTeams(S.agents, S.layout && S.layout.projectRooms, standupPrefs());
+  if (!rosterOrder) rosterOrder = freeze(live);
+  const teams = holdOrder(live, rosterOrder);
   const waiting = S.agents.filter((a) => a.status === 'awaiting').length;
   el.roster.hidden = false;
 
-  const key = teams.map((t) => t.project + ':' + t.list.map(cardSig).join(',')).join('|');
+  const key = teams.map((t) => t.project + ':' + (t.mark || '') + (t.folded ? '_' : '') + ':' + t.list.map(cardSig).join(',')).join('|');
   if (key === rosterSig && el.roster.querySelector('.rbody')) { patchRoster(teams, waiting); return; }
   rosterSig = key;
 
@@ -1482,9 +1820,7 @@ export function renderRoster() {
 
   el.roster.innerHTML = `<div class="rwrap pwrap">
     <div class="vhead"><span id="rcount">${headLine(teams.length, S.agents.length, waiting)}</span><button id="rx">✕</button></div>
-    <div class="rbody">${teams.length ? `<div class="pcols">${teams.map((t) => `
-      <div class="pcol"><h4>▣ ${esc(t.project)}<i>${t.list.length}${t.waiting ? ' · ⚑' + t.waiting : ''}</i></h4>
-        ${t.list.map(cardHtml).join('')}</div>`).join('')}</div>`
+    <div class="rbody">${teams.length ? `<div class="pteams">${teams.map(teamHtml).join('')}</div>`
     : `<p class="empty">${tr('standup.nobody')}<span>${tr('standup.nobodyWhy')}</span></p>`}</div>
     <p class="pkeys">${tr('standup.keys')}</p>
   </div>`;
@@ -1494,6 +1830,8 @@ export function renderRoster() {
 
   $('#rx').onclick = closeRoster;
   el.roster.querySelectorAll('.pcard').forEach((c) => c.onclick = () => openFromStandup(c.dataset.id));
+  // ENTER or a click on a folded team brings it back among the others.
+  el.roster.querySelectorAll('.pfold').forEach((h) => h.onclick = () => moveTeam(h.dataset.project, 1));
   el.roster.querySelectorAll('.plead').forEach((b) => b.onclick = (e) => {
     e.stopPropagation();                    // a button inside a card: lead me, not open
     api.guideTo(b.dataset.go);
@@ -1554,16 +1892,54 @@ function openFromStandup(id) {
   api.openAgent(a.id);
 }
 
-// The ring walks the cards: up and down inside a column, sideways between
-// columns. A card is one thing rather than a row of buttons, so in the ring it
-// is one thing too.
-const rosterRing = focusRing(() => el.roster, '.pcard', { cols: '.pcol', noWrap: true });
-export function closeRoster() { el.roster.hidden = true; rosterSig = ''; rosterRing.reset(); }
+// The ring walks the cards as they stand: up and down a row at a time, across
+// projects, sideways in reading order. Until 13 September 2026 a project was a
+// column and the arrows stayed inside it — and a project of seven was a column
+// of seven with the rest of the width empty. A card is one thing rather than a
+// row of buttons, so in the ring it is one thing too.
+const rosterRing = focusRing(() => el.roster, '.pcard, .pfold', { grid: true, noWrap: true });
+export function closeRoster() { el.roster.hidden = true; rosterSig = ''; rosterOrder = null; rosterRing.reset(); }
 export function rosterOpen() { return !!(el.roster && !el.roster.hidden); }
+
+// The three steps a team stands on. Shift+↑ climbs one, Shift+↓ goes down one;
+// normal is the absence of a mark, so the setting holds only the two others.
+const TIERS_UP = ['sink', 'normal', 'pin'];
+export function nextTier(tier, dir) {
+  const i = TIERS_UP.indexOf(tier || 'normal');
+  return TIERS_UP[Math.max(0, Math.min(TIERS_UP.length - 1, (i < 0 ? 1 : i) + dir))];
+}
+
+// The owner's own move is the one reordering that happens at once: he asked for
+// it, so the list is frozen again from the new order, and the focus stays on the
+// team he moved.
+function moveTeam(project, dir) {
+  // The order is the owner's setting; a guest's page would only reorder itself
+  // until the server said no.
+  if (!project || isGuest()) return;
+  const was = standupPrefs()[project] || 'normal';
+  const now = nextTier(was, dir);
+  if (now === was) return;
+  const next = { ...standupPrefs() };
+  if (now === 'normal') delete next[project]; else next[project] = now;
+  S.settings = { ...(S.settings || {}), standup: next };
+  api.saveSettings({ standup: { [project]: now } });
+  rosterOrder = null;
+  rosterSig = '';
+  renderRoster();
+  const moved = [...el.roster.querySelectorAll('.pcard, .pfold')].find((n) => n.dataset.project === project);
+  if (moved) rosterRing.on(moved);
+}
+
+// What still answers with the standup open. The standup is a place for reading,
+// so the floor's letters are dead here — R used to start the radio and B the
+// skateboard from under it — and so is the zoom. Left alive: closing (Esc, Tab),
+// the sound, the shot and «?». Frames: WIP «Standup order», «Контекст · планёрка».
+const STANDUP_PASS = new Set(['Escape', 'Tab', 'KeyM', 'F9', 'Slash']);
 
 /**
  * The standup's keys. Arrows, ENTER and ESC are the shared panel machinery;
- * one is its own: G leads you to whoever you are standing on.
+ * its own are G, which leads you to whoever you are standing on, and Shift
+ * with ↑ or ↓, which moves the team of the focused card a step up or down.
  *
  * The event arrives whole rather than as a single letter, because it carries
  * the physical key code and that is what «вести» is caught by. Otherwise on
@@ -1575,14 +1951,23 @@ export function rosterKey(raw) {
   if (!rosterOpen()) return false;
   const code = raw && typeof raw === 'object' ? codeOf(raw) : null;
   const key = String(raw && typeof raw === 'object' ? (raw.key || '') : raw).toLowerCase();
+  const shift = !!(raw && typeof raw === 'object' && raw.shiftKey);
+  const cur = el.roster.querySelector('.pcard.focus, .pfold.focus');
+  if (shift && (key === 'arrowup' || key === 'arrowdown')) {
+    // A card and a folded team both carry their project.
+    moveTeam(cur && cur.dataset.project, key === 'arrowup' ? 1 : -1);
+    return true;
+  }
   if (code === 'KeyG' || (!code && key === 'g')) {
-    const cur = el.roster.querySelector('.pcard.focus');
-    if (!cur) return true;
+    if (!cur || !cur.dataset.id) return true;
     api.guideTo(cur.dataset.id);
     closeRoster();
     return true;
   }
-  return rosterRing.key(key, true);
+  if (rosterRing.key(key, true)) return true;
+  // Everything else is swallowed, except the few that answer everywhere. A key
+  // with no code (the gamepad, the stands) is let through as before.
+  return !!code && !STANDUP_PASS.has(code);
 }
 
 // -------------------------------------------------------------------- inventory
@@ -1832,17 +2217,13 @@ function bindKeys() {
   // of a field has to be the field's own. Escape hands the ring back rather than
   // shutting the shelf: el.bag is selfClosing, and without this an Escape typed
   // into a half-filled Client ID threw the whole inventory away. A second Escape,
-  // with the ring back on, still closes it — the two steps are the point.
-  //
-  // A listener rather than onkeydown: a module binds its own handler to the same
-  // field, and assigning would wipe it.
-  detail.querySelectorAll('input').forEach((f) => f.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    e.preventDefault();
-    e.stopPropagation();
-    f.blur();
-    paintBagFocus();
-  }));
+  // with the ring back on, still closes it — the two steps are the point. The
+  // ring does it now, for every panel (focusRing); armed here because a field
+  // can be reached with the mouse before any arrow has painted the ring.
+  keysRing.arm();
+  // A field entered by the mouse puts the hand inside the card: ↑↓ from it then
+  // walk the card's rows instead of stepping in again from the top.
+  detail.addEventListener('focusin', () => { keysIn = true; });
   paintBagFocus();
 }
 
@@ -1903,12 +2284,124 @@ function keysKey(key) {
   return keysRing.key(key, true);
 }
 
+// ------------------------------------------------------------ the office version
+// The first row of the office tab: which version runs, and pulling a newer one
+// from the repository without stopping the office. The owner's alone — a guest
+// cannot update somebody else's office. Checking reaches outside (a git fetch),
+// so nothing here asks on its own: only the buttons do.
+// Frames: WIP section #office-update, node 2169:6969 (states 2169:7029, 2169:7104,
+// 2169:7181, 2170:2564, 2170:2641).
+let upd = null;
+let updPoll = null;
+
+async function loadUpd() {
+  try {
+    const r = await fetch('/api/update', { headers: owned() });
+    upd = r.ok ? await r.json() : null;
+  } catch { upd = null; }
+}
+
+const UPD_REASONS = new Set(['dirty', 'diverged', 'noUpstream', 'notGit', 'fetch', 'newServer', 'noSupervisor',
+  // The archive office refuses in ways a checkout cannot: its bytes come over
+  // the wire and are weighed against a published sum before anything moves.
+  'offline', 'noSum', 'badSum', 'badArchive', 'move', 'archive']);
+const updRepo = (key) => tr(key === 'modules' ? 'upd.inModules' : 'upd.inCore');
+
+// Two offices, one row. A checkout pulls with git; an office installed from an
+// archive downloads a new one from valey.dev, and its modules of the Office —
+// the shelf — are a checkout beside it that may have been closed together with
+// the subscription. Every line that differs is a key of its own rather than a
+// sentence built from halves: half-sentences translate into machine output in
+// whichever language was not written first.
+function updRow() {
+  const u = upd || { state: 'idle', running: '' };
+  const arch = u.source === 'archive';
+  const hasShelf = arch ? !!u.shelf && u.shelf !== 'none' : (u.repos || []).includes('modules');
+  const ver = `v${esc(u.running || '')}`;
+  let desc = arch
+    ? tr(hasShelf ? 'upd.fromArchiveShelf' : 'upd.fromArchive')
+    : tr((u.repos || []).includes('modules') ? 'upd.from' : 'upd.fromCore');
+  let btn = tr('upd.check'), act = 'check', prim = false, off = false;
+  let note = tr(arch ? 'upd.idleNoteArchive' : 'upd.idleNote');
+  if (u.state === 'checking') { desc = tr('upd.checking'); btn = tr('upd.checking'); off = true; }
+  if (u.state === 'available') {
+    const what = [u.feats ? tr('upd.feats', { n: u.feats }) : '', u.fixes ? tr('upd.fixes', { n: u.fixes }) : ''].filter(Boolean).join(', ');
+    // With a shelf the row says which halves move rather than how many commits:
+    // the counts are the core's, and printed beside «core and the modules» they
+    // would read as the count for both.
+    const tail = arch && u.shelf === 'ok' ? tr('upd.bothHalves')
+      : arch && u.shelf === 'closed' ? tr('upd.coreOnly')
+        : what;
+    desc = tr('upd.available', { v: esc(u.available || '') }) + (tail ? ` · ${tail}` : '');
+    btn = tr('upd.run'); act = 'run'; prim = true;
+    const key = arch
+      ? (u.shelf === 'ok' ? 'upd.availNoteShelf' : u.shelf === 'closed' ? 'upd.availNoteClosed' : 'upd.availNoteArchive')
+      : 'upd.availNote';
+    note = tr(key, { old: esc(u.aside || '') });
+  }
+  if (u.state === 'latest') { desc = tr('upd.latest'); note = tr(arch ? 'upd.latestNoteArchive' : 'upd.latestNote'); }
+  if (u.state === 'updating') {
+    const done = new Set(u.steps || []);
+    const mark = (key, label) => tr(label) + (done.has(key) ? ' ✓' : '');
+    const steps = arch
+      ? [mark('archive', 'upd.stepArchive'), mark('sum', 'upd.stepSum')]
+      : [mark('core', 'upd.stepCore')];
+    if (hasShelf) steps.push(mark('modules', arch ? 'upd.stepShelf' : 'upd.stepModules'));
+    steps.push(tr('upd.stepServer') + (done.has('server') ? '…' : ''));
+    desc = arch ? steps.join(' · ') : `git pull · ${steps.join(' · ')}`;
+    btn = tr('upd.running'); off = true; note = tr('upd.updNote');
+  }
+  if (u.state === 'failed') {
+    desc = tr('upd.failed', { v: esc(u.running || '') });
+    btn = tr('upd.retry'); act = u.available ? 'run' : 'check';
+    const key = UPD_REASONS.has(u.reason) ? u.reason : 'other';
+    note = tr(`upd.why.${key}`, { repo: updRepo(u.repo), detail: esc(u.detail || '') });
+  }
+  return `<p class="dcap">${tr(arch ? 'upd.capArchive' : 'upd.cap')}</p>
+      <div class="orow"><b>${tr('upd.name')}</b><span>${desc}</span><i>${ver}</i>
+        <button class="obtn${prim ? ' prim' : ''}" data-upd="${act}"${off ? ' disabled' : ''}>${btn}</button></div>
+      <p class="hint">${note}</p>`;
+}
+
+// Only the block is redrawn: the whole tab would take the focus off whatever
+// the hand is on while the steps tick past.
+function paintUpd() {
+  const box = el.bag && el.bag.querySelector('.updblock');
+  if (!box) return;
+  box.innerHTML = updRow();
+  const b = box.querySelector('[data-upd]');
+  if (b) b.onclick = () => updPost(b.dataset.upd);
+  // The button is a new node after every repaint — once a second while an
+  // update runs — and the ring's light has to land on it again, or the hand
+  // loses its place mid-update.
+  if (bagTab === 'office' && !el.bag.hidden) officeRing.paint();
+}
+
+async function updPost(what) {
+  try {
+    const r = await fetch(`/api/update/${what}`, { method: 'POST', headers: owned({ 'content-type': 'application/json' }), body: '{}' });
+    if (r.ok) upd = await r.json();
+  } catch { /* the office is changing hands; the stream will say so */ }
+  paintUpd();
+  watchUpd();
+}
+
+// While something runs the row follows it, once a second, and only while the
+// tab is open: nobody watching means nobody to show the steps to.
+function watchUpd() {
+  clearTimeout(updPoll);
+  const busy = upd && (upd.state === 'checking' || upd.state === 'updating');
+  if (!busy || !el.bag.querySelector('.updblock')) return;
+  updPoll = setTimeout(async () => { await loadUpd(); paintUpd(); watchUpd(); }, 1000);
+}
+
 // The "office" tab. Dress code lives here because it has no object in the
 // office: weather is set at the window, language at the sign, while "put ties
 // on everyone" hangs nowhere.
 const officeHtml = () => {
   const on = officeOn();
   return `<div class="bbody">
+      ${isGuest() ? '' : `<div class="updblock">${updRow()}</div>`}
       <p class="dcap">${tr('bag.dressCode')}</p>
       <div class="oseg">
         <button class="obtn${on ? '' : ' on'}" data-code="casual">${tr('bag.casual')}</button>
@@ -1944,19 +2437,24 @@ let treeSel = null;
 // it grew from the work board alongside the Git tree, and two adjacent green
 // nodes read as a single object.
 const TONE = { floor1: '#c9a06a', bible: '#c9a06a', art: '#d97b6c', easel: '#d97b6c',
-  board: '#9fe0a8', gittree: '#9fe0a8', task: '#ffd166', feed: '#ffd166', cctv: '#8fbcff', dossier: '#8fbcff',
+  board: '#9fe0a8', gittree: '#9fe0a8', prboard: '#9fe0a8', task: '#ffd166', feed: '#ffd166', cctv: '#8fbcff', dossier: '#8fbcff',
   radio: '#c39bff', dress: '#f6e3c0', agents: '#e0a06a', floor: '#e0a06a', talk: '#9fe0a8', meet: '#9fe0a8',
   door: '#8c7660', guest: '#8c7660' };
 const L = (v) => (v ? (v[lang()] || v.en) : '');
 // own is lit; office/floor is dim with the tier name; room is a free branch
 // whose folder is absent (radio without modules/); ghost is "in a year."
+// off is installed and switched off by the owner: dimmed like a missing one, but
+// its card keeps the switch to bring it back.
 const treeState = (n) => (n.tier === 'more' ? 'ghost'
-  : n.module ? (moduleIds().includes(n.module) ? 'own' : n.tier)
+  : n.module ? (moduleIds().includes(n.module) ? 'own' : moduleOffIds().includes(n.module) ? 'off' : n.tier)
   : n.tier === 'room' ? 'own' : n.tier);
 const treeOwn = (n) => treeState(n) === 'own';
+// Bought, running or not: what the counts count. A switched-off module is still
+// «6 из 6 · куплен» (frame 2239:9503), not «часть модулей ещё не приехала».
+const treeHave = (n) => treeOwn(n) || treeState(n) === 'off';
 const treeCount = (tier) => {
   const all = LIBRARY.filter((n) => n.tier === tier);
-  return { t: tier, n: all.filter(treeOwn).length, m: all.length };
+  return { t: tier, n: all.filter(treeHave).length, m: all.length };
 };
 const treeSub = (c) => (c.t === 'room' ? tr(c.n === c.m ? 'tree.sub.room' : 'tree.sub.roomSome')
   : c.t === 'office' ? tr(c.n === c.m ? 'tree.sub.officeAll' : c.n ? 'tree.sub.officeSome' : 'tree.sub.office')
@@ -1964,21 +2462,53 @@ const treeSub = (c) => (c.t === 'room' ? tr(c.n === c.m ? 'tree.sub.room' : 'tre
 // Select the first missing Office module by default: that directly answers
 // "what is in the next tier." When everything is installed, select the ghost
 // node about the coming year.
-const treeDefault = () => LIBRARY.find((n) => n.tier === 'office' && !treeOwn(n)) || byId('more');
+const treeDefault = () => LIBRARY.find((n) => n.tier === 'office' && !treeHave(n)) || byId('more');
 const treeCur = () => byId(treeSel) || (treeSel = treeDefault().id, byId(treeSel));
 export const treeSelected = () => treeCur().id;
+
+// The owner's switch, on the card of an installed module: «выкл | вкл», the
+// office's Segmented control (.sizes/.szbtn, component 1402:491). Frames
+// 2239:9315 (on) and 2239:9503 (off). Switching reloads the page — a module's
+// client cannot be taken off a running page, only not loaded into the next one,
+// the way the stand's switches already work.
+const switchable = (n) => !!n.module && !isGuest() && ['own', 'off'].includes(treeState(n));
+const switchHtml = (n, st) => `<div class="sizes tswitch">
+      <button class="szbtn${st === 'off' ? ' on' : ''}" data-mod="${esc(n.module)}" data-off="1">${tr('tree.switch.off')}</button>
+      <button class="szbtn${st === 'own' ? ' on' : ''}" data-mod="${esc(n.module)}" data-off="0">${tr('tree.switch.on')}</button>
+    </div>`;
+
+async function switchModule(id, off) {
+  const now = new Set((S.settings && S.settings.modulesOff) || []);
+  if (off === now.has(id)) return;
+  if (off) now.add(id); else now.delete(id);
+  const r = await api.saveSettings({ modulesOff: [...now] });
+  if (r !== false) location.reload();
+}
 
 const treeCard = (n) => {
   const st = treeState(n), from = n.parent ? L(byId(n.parent).name) : '';
   const meta = st === 'own' ? tr(n.tier === 'room' ? 'tree.meta.room' : 'tree.meta.owned', { from })
+    : st === 'off' ? tr('tree.meta.off', { from })
     : st === 'ghost' ? tr('tree.meta.more')
     : tr('tree.meta.' + n.tier, { from });
+  const sw = switchable(n);
+  // Switched off, a module with its own words replaces the whole card body with
+  // them (frame 2239:9503): what is gone, what stays, how to bring it back.
+  if (sw && st === 'off' && n.switchOff) {
+    return `<div class="lcard">
+      <div class="lhead"><b>${esc(L(n.name))}</b><span>${meta}</span></div>
+      ${n.switchOff.map((p) => `<p>${esc(L(p))}</p>`).join('')}
+      ${switchHtml(n, st)}
+    </div>`;
+  }
+  const note = st === 'off' ? tr('tree.switch.offNote') : n.switchOn ? esc(L(n.switchOn)) : tr('tree.switch.onNote');
   return `<div class="lcard">
       <div class="lhead"><b>${esc(L(n.name))}</b><span>${meta}</span></div>
       <p>${tr('tree.gives')} ${esc(L(n.gives))}</p>
       ${n.where ? `<p>${tr('tree.where')} ${esc(L(n.where))}</p>` : ''}
-      ${n.without && st !== 'own' ? `<p>${tr('tree.without')} ${esc(L(n.without))}</p>` : ''}
-      ${st === 'ghost' ? '' : `<p>${tr('tree.arrives')} ${tr('tree.arrive.' + n.tier)}</p>`}
+      ${n.without && (st !== 'own' || n.switchOn) ? `<p>${tr('tree.without')} ${esc(L(n.without))}</p>` : ''}
+      ${st === 'ghost' || sw ? '' : `<p>${tr('tree.arrives')} ${tr('tree.arrive.' + n.tier)}</p>`}
+      ${sw ? `<p>${note}</p>${switchHtml(n, st)}` : ''}
     </div>`;
 };
 
@@ -2016,7 +2546,7 @@ const treeHeadHtml = () => {
 };
 
 const dirsHtml = () => `<div class="tdirs">${DIRS.map((d, i) => {
-  const t = dirTally(d.id, treeOwn);
+  const t = dirTally(d.id, treeHave);
   return `<button class="tdir${d.id === treeDir ? ' on' : ''}${t.free ? ' free' : ''}" data-dir="${d.id}">
       <b>${i + 1} ${esc(L(d.name))}</b><span>${dirSub(t)}</span>
       ${t.free ? `<em>${tr('tree.dir.noTiers')}</em>`
@@ -2028,7 +2558,10 @@ const dirsHtml = () => `<div class="tdirs">${DIRS.map((d, i) => {
 // panel is wide enough — below that CSS hides it and the card carries the same
 // list in one line, because a label over a neighbour is worse than no label.
 const wideNode = (n, sel) => {
-  const st = treeState(n), subs = SUBS[n.id] || [];
+  // A switched-off node says so in its labels and keeps its tier tag, as in
+  // frame 2239:9503; the flat view has no labels and tags it «выкл» instead.
+  const st = treeState(n);
+  const subs = st === 'off' ? (SUBS[n.id + '.off'] || [{ ru: 'выключен', en: 'switched off' }]) : (SUBS[n.id] || []);
   return `<div class="wkey">
       <button class="tnode ${st}${n.id === sel.id ? ' on' : ''}" data-id="${n.id}">
         ${st === 'ghost' ? '' : `<i class="tico" style="--c:${TONE[n.id] || '#8c7660'}"></i>`}
@@ -2050,11 +2583,15 @@ const wideHtml = () => {
       return `<p class="wempty">${tr(tier === 'floor' ? 'tree.wide.noFloor'
         : treeDir === 'you' ? 'tree.wide.noSale' : 'tree.wide.noOffice')}</p>`;
     }
-    return `<div class="wtier">${list.map((n) => wideNode(n, sel)).join('')}</div>`;
+    // A node grown out of a node of its own tier stands a row above it, and is
+    // moved over its parent once the row is measured (wideEdges).
+    const subs = list.filter(isSub), main = list.filter((n) => !isSub(n));
+    return (subs.length ? `<div class="wtier wsubrow">${subs.map((n) => wideNode(n, sel)).join('')}</div>` : '')
+      + `<div class="wtier">${main.map((n) => wideNode(n, sel)).join('')}</div>`;
   };
   const gate = (tier) => {
     const list = here.filter((n) => n.tier === tier);
-    const own = list.filter(treeOwn).length;
+    const own = list.filter(treeHave).length;
     return `<div class="wgate"><b>${tr('tree.tier.' + tier)}</b><span>${
       list.length ? tr('tree.gate.' + tier, { n: own, m: list.length }) : tr('tree.gate.' + tier + 'None')}</span></div>`;
   };
@@ -2087,10 +2624,10 @@ const treeHtml = () => {
       <div class="tcols">${cols.map((c) => `<div class="tcol${c.n === c.m ? ' own' : ''}">
         <b>${tr('tree.col.' + c.t, { n: c.n, m: c.m })}</b><span>${treeSub(c)}</span></div>`).join('')}</div>
       <div class="tree" id="tree"><svg class="tedges"></svg>
-        ${LIBRARY.map((n) => { const st = treeState(n); return `<button class="tnode ${st}${n.id === sel.id ? ' on' : ''}"
+        ${LIBRARY.map((n) => { const st = treeState(n); return `<button class="tnode ${st}${isSub(n) ? ' sub' : ''}${n.id === sel.id ? ' on' : ''}"
           data-id="${n.id}" data-col="${colOf(n)}" data-row="${n.row}" style="grid-column:${colOf(n) * 2 + 1}; grid-row:${n.row + 1}">
           ${st === 'ghost' ? '' : `<i class="tico" style="--c:${TONE[n.id] || '#8c7660'}"></i>`}<span>${esc(L(n.name))}</span>
-          ${st === 'own' || st === 'ghost' ? '' : `<em>${tr('tree.tag.' + n.tier)}</em>`}</button>`; }).join('')}
+          ${st === 'own' || st === 'ghost' ? '' : `<em>${tr('tree.tag.' + (st === 'off' ? 'off' : n.tier))}</em>`}</button>`; }).join('')}
       </div>
       ${treeCard(sel)}
       <p class="hint dim">${tr('tree.note')} ${tr('tree.keys')}</p>
@@ -2106,14 +2643,17 @@ function treeEdges() {
   const box = el.bag.querySelector('#tree'), svg = box && box.querySelector('.tedges');
   if (!svg || !box.getBoundingClientRect) return;          // The stand's substitute DOM.
   const o = box.getBoundingClientRect();
-  const at = (b) => { const r = b.getBoundingClientRect(); return { l: r.left - o.left, r: r.right - o.left, y: r.top - o.top + r.height / 2 }; };
+  const at = (b) => { const r = b.getBoundingClientRect(); return { l: r.left - o.left, r: r.right - o.left, y: r.top - o.top + r.height / 2, b: r.bottom - o.top }; };
   const nodes = new Map([...box.querySelectorAll('.tnode')].map((b) => [b.dataset.id, b]));
   let out = '';
   for (const n of LIBRARY) {
     const p = n.parent && nodes.get(n.parent), c = nodes.get(n.id);
     if (!p || !c) continue;
     const a = at(p), z = at(c), xm = z.l - 18;
-    const d = a.y === z.y ? `M${a.r},${a.y} H${z.l}` : `M${a.r},${a.y} H${xm} V${z.y} H${z.l}`;
+    // A node grown out of its own column hangs from under its parent's left end:
+    // down, then right into the indented child. Frame 2239:9724.
+    const d = isSub(n) ? `M${a.l + 8},${a.b} V${z.y} H${z.l}`
+      : a.y === z.y ? `M${a.r},${a.y} H${z.l}` : `M${a.r},${a.y} H${xm} V${z.y} H${z.l}`;
     out += `<path d="${d}"${c.classList.contains('own') ? ' class="lit"' : ''}/>`;
   }
   svg.setAttribute('viewBox', `0 0 ${o.width} ${o.height}`);
@@ -2132,6 +2672,16 @@ function wideEdges() {
     return { x: r.left - o.left + r.width / 2, top: r.top - o.top, bottom: r.bottom - o.top };
   };
   const nodes = new Map([...box.querySelectorAll('.tnode')].map((b) => [b.dataset.id, b]));
+  // A sub-node's row starts at the left; move each over its parent before the
+  // edges are measured. One sub-node per parent today (the PR board over the git
+  // tree); two in one row would need spacing this does not do.
+  for (const n of inDir(treeDir).filter(isSub)) {
+    const p = nodes.get(n.parent), c = nodes.get(n.id);
+    const key = c && c.closest && c.closest('.wkey');
+    if (!p || !key) continue;
+    key.style.marginLeft = '0px';
+    key.style.marginLeft = Math.max(0, p.getBoundingClientRect().left - key.getBoundingClientRect().left) + 'px';
+  }
   let out = '';
   for (const n of inDir(treeDir)) {
     const p = n.parent && nodes.get(n.parent), c = nodes.get(n.id);
@@ -2186,13 +2736,18 @@ function pickDir(dir) {
   treeDir = dir;
   const here = inDir(dir);
   if (!here.some((n) => n.id === treeSel)) {
-    treeSel = (here.find((n) => !treeOwn(n)) || here[0] || {}).id || treeSel;
+    treeSel = (here.find((n) => !treeHave(n)) || here[0] || {}).id || treeSel;
   }
   renderBag();
 }
 
+function bindSwitch() {
+  el.bag.querySelectorAll('[data-mod]').forEach((b) => b.onclick = () => switchModule(b.dataset.mod, b.dataset.off === '1'));
+}
+
 function bindTree() {
   el.bag.querySelectorAll('.tnode').forEach((b) => b.onclick = () => { treeSel = b.dataset.id; renderBag(); });
+  bindSwitch();
   if (treeWide) return;
   treeEdges();
   const on = el.bag.querySelector('.tnode.on');
@@ -2211,7 +2766,8 @@ function wideKey(key, cur) {
   if (key === 'arrowdown') next = list[Math.min(i + 1, list.length - 1)];
   else if (key === 'arrowright') next = list[(i + 1) % list.length];
   else if (key === 'arrowup' || key === 'arrowleft') next = list[(i - 1 + list.length) % list.length];
-  else if (key === 'enter' || key === ' ') return true;
+  else if (key === 'enter') { if (switchable(cur)) switchModule(cur.module, treeState(cur) === 'own'); return true; }
+  else if (key === ' ') return true;
   else return false;
   if (next && next.id !== cur.id) { treeSel = next.id; renderBag(); }
   return true;
@@ -2243,8 +2799,13 @@ function treeKey(key) {
     next = cur.parent ? byId(cur.parent) : treeNear(colOf(cur) - 1, cur.row);
   } else if (key === 'arrowright') {
     next = children(cur.id)[0] || treeNear(colOf(cur) + 1, cur.row);
-  } else if (key === 'enter' || key === ' ') {
-    return true;                       // The selected item is already open in the card.
+  } else if (key === 'enter') {
+    // Enter on an installed module flips its switch; on anything else the
+    // selected item is already open in the card.
+    if (switchable(cur)) switchModule(cur.module, treeState(cur) === 'own');
+    return true;
+  } else if (key === ' ') {
+    return true;
   } else return false;
   // The edge of the tree is not a reason to hand the arrow back to the office.
   if (next && next.id !== cur.id) { treeSel = next.id; renderBag(); }
@@ -2311,6 +2872,10 @@ function bindOffice() {
     if (act === 'skin') { closeBag(); return renderSkin(); }
     if (act === 'sound') { api.sound(); renderBag(); }
   });
+  if (el.bag.querySelector('.updblock')) {
+    paintUpd();
+    loadUpd().then(() => { paintUpd(); watchUpd(); });
+  }
   paintBagFocus();
 }
 
@@ -2343,6 +2908,22 @@ function bindSelf() {
   // An empty field is an empty name, not the word «ТЫ» stored as one: that
   // string used to travel outward and label a stranger YOU.
   $('#myname').oninput = (e) => { S.me.name = e.target.value.toUpperCase().slice(0, 14); api.saveMe(); };
+  // The name is the wardrobe's one field, and it keys the way a field in any
+  // ring does (focusRing): Escape parks, ↑↓ leave through the office, Tab has
+  // nowhere else to go and stays.
+  $('#myname').onkeydown = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      nameParked = true; e.target.blur(); paintBagFocus();
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault(); e.stopPropagation();
+      nameParked = true; e.target.blur();
+      if (api.pressKey) api.pressKey(e.key);
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+    }
+  };
+  $('#myname').onfocus = () => { nameParked = false; };
   paintBagFocus();
   const rowFields = () => [...colorFields(), ...BODY, bottomCut];
   el.bag.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => {
@@ -2379,17 +2960,20 @@ function bindThings() {
 
 // The "office" tab is a row of buttons, not a slot list or a grid. It has a
 // third keyboard behaviour, which need not be maintained beside the other two.
-const officeRing = focusRing(() => el.bag, '.obtn');
+// Nothing lit on open: the first button is «check for updates», a trip to git,
+// and the first ↓ lands on it — asked by Sergey on 13 September 2026, when
+// reaching it took a lap round the whole tab.
+const officeRing = focusRing(() => el.bag, '.obtn', { startEmpty: true });
 
 function openTab(tab) {
   if (!tabs().includes(tab) || tab === bagTab) return;
-  bagTab = tab; bagIdx = 0; cellIdx = 0;
+  bagTab = tab; bagIdx = 0; cellIdx = 0; nameParked = true;
   keysOut();
   officeRing.reset();
   renderBag();
 }
 
-export function closeBag() { el.bag.hidden = true; bagIdx = 0; cellIdx = 0; officeRing.reset(); keysOut(); }
+export function closeBag() { el.bag.hidden = true; bagIdx = 0; cellIdx = 0; nameParked = true; officeRing.reset(); keysOut(); }
 
 // Open the shelf on one particular key. The thing that uses a key is the natural
 // place to ask for it — the receiver knows the office has no Spotify long before
@@ -2412,6 +2996,11 @@ export function openKeyCard(id) {
 // represent both interactions, so there are two.
 let bagIdx = 0;
 let cellIdx = 0;
+// The wardrobe opens with the ring on the name row, and a caret there on
+// opening would take the very letter that opened it: C would type «c» instead of
+// closing, and the digits would land in the name instead of picking a tab. So
+// the caret comes in when the hand moves onto the row, not when the panel opens.
+let nameParked = true;
 const bagRows = () => [...el.bag.querySelectorAll('.namerow, .drow')];
 const bagCats = () => [...el.bag.querySelectorAll('.bcat')];
 const catCells = (cat) => (cat ? [...cat.querySelectorAll('.bcell')] : []);
@@ -2440,6 +3029,17 @@ function paintBagFocus() {
   bagIdx = Math.max(0, Math.min(list.length - 1, bagIdx));
   list.forEach((r, i) => r.classList.toggle('focus', i === bagIdx));
   list[bagIdx].scrollIntoView({ block: 'nearest' });
+  // The caret follows the ring on and off the name, as in any other ring.
+  const input = list[bagIdx].querySelector('input');
+  const name = list.map((r) => r.querySelector('input')).find(Boolean);
+  const active = typeof document !== 'undefined' ? document.activeElement : null;
+  if (input && !nameParked && active !== input) {
+    input.focus({ preventScroll: true });
+    const n = String(input.value || '').length;
+    try { input.setSelectionRange(n, n); } catch { /* a type without a caret */ }
+  } else if (!input && name && active === name) {
+    name.blur();
+  }
 }
 
 // Leave Escape alone: closeAll() in main.js handles it.
@@ -2477,6 +3077,13 @@ export function bagKey(raw) {
 // this point — and a const would still be in its dead zone there.
 function stopAt(pos, by, len) { return Math.max(0, Math.min(len - 1, pos + by)); }
 function wrapAt(pos, by, len) { return (pos + by + len) % len; }
+// What takes typing: a text-like input or a textarea. A range, a checkbox or a
+// button in the ring is walked and pressed like any other control.
+function isField(n) {
+  if (!n) return false;
+  if (n.tagName === 'TEXTAREA') return true;
+  return n.tagName === 'INPUT' && !/^(range|checkbox|radio|button|submit|color|file)$/.test(n.type || '');
+}
 
 function selfKey(key) {
   const list = bagRows();
@@ -2484,7 +3091,10 @@ function selfKey(key) {
 
   const step = { arrowup: -1, arrowdown: 1 }[key];
   if (step !== undefined) {
+    const was = bagIdx;
     bagIdx = stopAt(bagIdx, step, list.length);
+    // Moving onto the name brings the caret; bumping the top edge does not.
+    if (bagIdx !== was) nameParked = false;
     paintBagFocus();
     return true;
   }
@@ -2498,10 +3108,10 @@ function selfKey(key) {
                                  // arrow should not escape into the office.
   }
   if (key === 'enter' || key === ' ') {
-    // The name is an input: Enter gives it real focus, then the browser types.
-    // On a slot, Enter does the same thing as ▶.
+    // The name is an input: Enter puts the caret back in a parked field. On a
+    // slot, Enter does the same thing as ▶.
     const input = row && row.querySelector('input');
-    if (input) { input.focus(); return true; }
+    if (input) { nameParked = false; paintBagFocus(); return true; }
     const next = row && row.querySelector('[data-d="1"]');
     if (next) next.click();
     return true;
@@ -2647,11 +3257,33 @@ function bindResults() {
 //   numbers: true          — every item in the ring
 //   numbers: '.rst'        — only these (in radio a digit is a station, not a knob)
 // opts.cols — the mirror of opts.rows for a panel laid out in columns.
+// opts.grid — a wrapping grid: ↑↓ go to the nearest row above or below, onto the
+//   item closest across; ←→ go to the neighbour in reading order.
 //   byData: 'n'            — find data-n="digit" instead of the Nth item: in the
 //                            lift, "3" is floor three even if it is second in the list.
+//
+// A text field in the ring holds the caret. Arriving on it puts the caret in —
+// the hand came to type, and making it press Enter first let the next letter
+// fall through to the office, where C shut the inventory around a half-typed
+// Client ID. Escape takes the caret out and leaves the ring standing on the
+// field, «parked», so the next Escape closes the panel as everywhere else. Tab
+// carries the caret to the panel's next field; ↑↓ leave the field the way they
+// leave a button. Asked for by the owner on 13 September 2026, reversing the
+// earlier «Enter first» rule.
+// opts.sideways — a class whose items ↑↓ step over and only ←→ reach: a small
+//   button that belongs to the row beside it, like the radio's ✕ by each wave.
+//   Until 15 September 2026 the down arrow walked a list of waves through every
+//   cross, so reaching the third wave took five presses instead of two.
+// opts.startEmpty — nothing is lit when the panel opens, and the first arrow
+//   picks the first (or, going up, the last) button. For a panel whose first
+//   button does something that should not happen on a stray Enter: the office
+//   tab's is «check for updates», a trip to git.
 export function focusRing(nodeOf, selector, opts = {}) {
   const stepTo = opts.noWrap ? stopAt : wrapAt;
-  let idx = 0;
+  const start = opts.startEmpty ? -1 : 0;
+  let idx = start;
+  let parked = false;   // Escape took the caret out; the ring stays on the field
+  let shown = -1;       // the index last painted: moving off it unparks
   // Only what has a box is in the ring. The radio's volume knob sits under a
   // `hidden` row until the full Spotify player connects, and until 11 September
   // 2026 one press of the down arrow went into it: the outline vanished and the
@@ -2685,19 +3317,78 @@ export function focusRing(nodeOf, selector, opts = {}) {
     node.addEventListener('focusin', (e) => {
       const l = list();
       const at = l.indexOf(e.target);
-      if (at < 0 || at === idx) return;
-      idx = at;
+      if (at < 0) return;
+      if (isField(e.target)) parked = false;
+      if (at === idx) return;
+      idx = at; shown = at;
       l.forEach((b, i) => b.classList.toggle('focus', i === at));
     });
+    // The field's keys. main.js hands nothing from an INPUT to the office, so a
+    // field that did not let go by itself was a room without a door.
+    //
+    // Escape is marked parked in the capture phase, before the field's own
+    // handler runs: the radio's and the newsstand's repaint the ring from there,
+    // and a repaint that did not know yet would put the caret straight back. The
+    // event is marked too, for selfClosing(): its Escape sits on this same panel,
+    // was hung on it first, and would shut the panel before the bubble below.
+    node.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !isField(e.target) || !list().includes(e.target)) return;
+      parked = true;
+      e.fromRingField = true;
+    }, true);
+    node.addEventListener('keydown', (e) => {
+      const f = e.target;
+      // A key the field's owner already took is theirs: the newsstand's Tab
+      // walks its channels, and that is not this ring's to overrule.
+      if (e.defaultPrevented || !isField(f)) return;
+      const l = list();
+      const at = l.indexOf(f);
+      if (at < 0) return;
+      if (e.key === 'Escape') {
+        e.preventDefault(); e.stopPropagation();
+        idx = at; f.blur(); paint();
+      } else if (e.key === 'Tab') {
+        e.preventDefault(); e.stopPropagation();
+        const fields = l.filter(isField);
+        const next = fields[(fields.indexOf(f) + (e.shiftKey ? -1 : 1) + fields.length) % fields.length];
+        idx = l.indexOf(next); parked = false; paint();
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        // Handed to the office as if pressed outside the field, so the panel's
+        // own walk decides where it goes — the key card's «up from the first row
+        // leaves the card» included. Parked first: if nothing moves, the caret
+        // must not come back into the field it has just left.
+        e.preventDefault(); e.stopPropagation();
+        idx = at; parked = true; f.blur();
+        if (api && api.pressKey) api.pressKey(e.key);
+      }
+    });
+  };
+  // Where the caret goes after a paint: into the field the ring stands on, or
+  // out of a field the ring has left.
+  const settle = (cur, l) => {
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    if (isField(cur)) {
+      if (parked || active === cur) return;
+      cur.focus({ preventScroll: true });
+      // At the end of what is already typed: the hand came to add, not to retype.
+      const n = String(cur.value || '').length;
+      try { cur.setSelectionRange(n, n); } catch { /* a type without a caret */ }
+    } else if (isField(active) && l.includes(active)) {
+      active.blur();
+    }
   };
 
   const paint = () => {
     const l = list();
     if (!l.length) return;
+    if (idx < 0) { l.forEach((b) => b.classList.remove('focus')); follow(); return; }
     idx = Math.max(0, Math.min(l.length - 1, idx));
+    if (idx !== shown) parked = false;
+    shown = idx;
     l.forEach((b, i) => b.classList.toggle('focus', i === idx));
     l[idx].scrollIntoView({ block: 'nearest' });
     follow();
+    settle(l[idx], l);
     // Some panels need more than a highlighted button. The language panel has a
     // "what happens if pressed" line below, which must follow focus, not a click.
     // Otherwise the cost would be shown only after it had already been paid.
@@ -2705,7 +3396,10 @@ export function focusRing(nodeOf, selector, opts = {}) {
   };
   return {
     paint,
-    reset() { idx = 0; },
+    reset() { idx = start; shown = -1; parked = false; },
+    // Hang the field keys on a panel drawn before the ring ever painted it: a
+    // field reached with the mouse must let go on Escape just the same.
+    arm: follow,
     // Focus a particular index: the current floor in the lift, or the first note
     // after leaving search.
     at(i) { idx = i; paint(); },
@@ -2717,6 +3411,12 @@ export function focusRing(nodeOf, selector, opts = {}) {
       const key = raw.toLowerCase();
       const l = list();
       if (!l.length) return false;
+      // Nothing picked yet: an arrow picks, and Enter has nothing to press.
+      if (idx < 0) {
+        const into = { arrowdown: 0, arrowright: 0, arrowup: l.length - 1, arrowleft: l.length - 1 }[key];
+        if (into !== undefined) { idx = into; paint(); return true; }
+        if (key === 'enter' || key === ' ') return true;
+      }
       const cur = l[idx];
 
       if (cur && cur.type === 'range' && (key === 'arrowleft' || key === 'arrowright')) {
@@ -2740,6 +3440,31 @@ export function focusRing(nodeOf, selector, opts = {}) {
           if (at >= 0) { idx = at; paint(); }
           if (!hit.disabled) hit.click();
           return true;
+        }
+      }
+
+      // A wrapping grid is walked by where its items stand, since the grid, not
+      // the markup, decides how many fit in a row: three at 100%, two at 175%.
+      // The standup has been one since 13 September 2026 — a project across every
+      // column — and the down arrow goes on into the next project's first row
+      // rather than stopping at its own last card. Items with no box to measure
+      // (a stand's stand-in DOM) fall through to the flat walk below.
+      if (opts.grid && cur && (key === 'arrowup' || key === 'arrowdown')) {
+        const box = (n) => (n.getBoundingClientRect ? n.getBoundingClientRect() : null);
+        const c = box(cur);
+        if (c && (c.width || c.height)) {
+          const down = key === 'arrowdown';
+          const beyond = l.map((n, i) => ({ i, r: box(n) }))
+            .filter(({ i, r }) => i !== idx && r && (down ? r.top >= c.bottom - 1 : r.bottom <= c.top + 1));
+          if (!beyond.length) {
+            if (opts.noWrap) { paint(); return true; }
+          } else {
+            const edge = down ? Math.min(...beyond.map((o) => o.r.top)) : Math.max(...beyond.map((o) => o.r.top));
+            const mid = (r) => (r.left + r.right) / 2;
+            const row = beyond.filter((o) => Math.abs(o.r.top - edge) < 2)
+              .sort((a, b) => Math.abs(mid(a.r) - mid(c)) - Math.abs(mid(b.r) - mid(c)));
+            idx = row[0].i; paint(); return true;
+          }
         }
       }
 
@@ -2795,12 +3520,24 @@ export function focusRing(nodeOf, selector, opts = {}) {
       }
 
       const step = { arrowup: -1, arrowdown: 1, arrowleft: -1, arrowright: 1 }[key];
-      if (step !== undefined) { idx = stepTo(idx, step, l.length); paint(); return true; }
+      if (step !== undefined) {
+        let to = stepTo(idx, step, l.length);
+        // A sideways item is stepped over going up or down; only ←→ land on it.
+        if (opts.sideways && (key === 'arrowup' || key === 'arrowdown')) {
+          const side = (i) => l[i].classList.contains(opts.sideways);
+          for (let n = l.length; n > 0 && side(to); n--) {
+            const next = stepTo(to, step, l.length);
+            if (next === to) break;
+            to = next;
+          }
+          if (side(to)) to = idx;
+        }
+        idx = to; paint(); return true;
+      }
       if (key === 'enter' || key === ' ') {
         if (!cur || cur.disabled) return true;
-        // Give an input real focus, then let the browser type.
-        if (cur.tagName === 'INPUT' && cur.type !== 'range') cur.focus();
-        else cur.click();
+        // A parked field takes the caret back; anything else is pressed.
+        if (isField(cur)) { parked = false; settle(cur, l); } else cur.click();
         return true;
       }
       return false;
@@ -3007,8 +3744,69 @@ function openHtml() {
     </li>`).join('')}</ul>`;
 }
 
+// Owner devices. A device asking to become the owner comes first in the panel:
+// it is the one thing here with a clock on it — two minutes — and a phone in the
+// owner's hand is waiting for the answer. Everything needed to decide precedes
+// the buttons, the code most of all: it is the same four digits the device
+// shows, and it is what tells this request from somebody else's.
+// Frames: WIP «Owner devices» (#devices), «Panel · Pairing request».
+function pairingHtml() {
+  const list = ((S.access || {}).pairings) || [];
+  return list.map((p) => `<div class="pairreq">
+      <p class="say">${tr('pair.lead', { name: esc(p.name) })}</p>
+      <div class="orow"><b>${tr('pair.device')}</b><span>${esc(p.name)}</span></div>
+      <div class="orow"><b>${tr('pair.from')}</b><span>${tr('pair.fromLan', { ip: esc(p.ip) })}</span></div>
+      <div class="orow"><b>${tr('pair.code')}</b><span>${tr('pair.codeSub')}</span><i class="paircode">${esc(p.code.split('').join(' '))}</i></div>
+      <div class="orow"><b>${tr('pair.howLong')}</b><span>${tr('pair.howLongSub')}</span></div>
+      <p class="act">${tr('pair.warn')}</p>
+      <div class="prow">
+        <button class="primary" data-pairyes="${esc(p.id)}">${tr('pair.yes')}</button>
+        <button data-pairno="${esc(p.id)}">${tr('pair.no')}</button>
+      </div>
+      <p class="hint dim">${tr('pair.foot')}</p>
+    </div>`).join('');
+}
+
+// The devices that may command this office. This machine heads the list and has
+// no button: it is the owner by being here, and there is nothing to revoke.
+function devicesHtml() {
+  const list = ((S.access || {}).devices) || [];
+  return `<p class="hint">${tr('pair.devices')}</p>
+    <ul class="notes">
+      <li><b>${tr('pair.thisMachine')}</b><span>${tr('pair.always')}</span></li>
+      ${list.map((d) => `<li>
+        <b>${esc(d.name)}</b>
+        <span>${d.lapsed ? tr('pair.lapsed') : tr('pair.since', { at: when(d.pairedAt), seen: when(d.lastSeen) })}</span>
+        <button data-unpair="${esc(d.id)}">${tr('pair.revoke')}</button>
+      </li>`).join('')}
+    </ul>`;
+}
+
 export function inviteOpen() { return el.invite && !el.invite.hidden; }
-export function closeInvite() { if (el.invite) el.invite.hidden = true; }
+
+// The keys of the invite panel: ↑↓ walk the rows of "what a guest sees" keeping
+// the column, ←→ move between shown and hidden, Enter presses; the other buttons
+// of the panel are reached the same way, one after another.
+const inviteRing = focusRing(() => el.invite, '.segbtn, #invMake, #invCopy, [data-yes], [data-no], [data-shut], [data-douse]', { rows: '.gmrow' });
+export function inviteKey(raw) { return inviteRing.key(raw, el.invite && !el.invite.hidden); }
+
+// "What a guest sees": the owner's choice per module over the manifest's
+// default, one choice for all guests. A row whose choice departs from the
+// default is marked; choosing the default again clears both. The frame: WIP
+// #guests, "the owner picks modules", v2, approved 11 September 2026.
+const guestsHtml = (mods) => {
+  if (!Array.isArray(mods) || !mods.length) return '';
+  const word = (o) => esc((o && (o[lang()] || o.ru || o.en)) || '');
+  return `<p class="hint gmhead">${tr('inv.guests')}</p>
+    <div class="gmlist">${mods.map((m) => `<div class="gmrow" data-gm="${esc(m.id)}">
+      <b>${word(m.name) || esc(m.id)}</b><span class="gmnote">${word(m.note)}</span>
+      <i class="gmmark">${m.choice && m.choice !== m.default ? tr('inv.notDefault') : ''}</i>
+      <span class="seg">
+        <button class="segbtn${m.shown ? ' on' : ''}" data-gm-set="${esc(m.id)}|shown">${tr('inv.shown')}</button>
+        <button class="segbtn${m.shown ? '' : ' on'}" data-gm-set="${esc(m.id)}|hidden">${tr('inv.hidden')}</button>
+      </span></div>`).join('')}</div>`;
+};
+export function closeInvite() { if (el.invite) el.invite.hidden = true; inviteRing.reset(); }
 
 export async function openInvite() {
   el.invite.hidden = false;
@@ -3024,6 +3822,8 @@ const accessSig = () => {
   return JSON.stringify([
     (a.requests || []).map((r) => [r.id, r.state, r.who, r.agentId]),
     (a.open || []).map((o) => [o.guestId, o.agentId]),
+    (a.pairings || []).map((p) => p.id),
+    (a.devices || []).map((d) => [d.id, d.lastSeen]),
   ]);
 };
 let inviteSig = '';
@@ -3057,6 +3857,7 @@ async function renderInvite() {
   el.invite.innerHTML = `<div class="rwrap invwrap">
     <div class="vhead">${tr('inv.title')}<button id="invx">✕</button></div>
     <div class="invbody">
+      ${pairingHtml()}
       <p class="say">${tr('inv.lead')}</p>
       <div class="sendrow">
         <input id="invWho" placeholder="${tr('inv.who')}" maxlength="24">
@@ -3068,6 +3869,7 @@ async function renderInvite() {
       </div>` : ''}
       ${(S.settings && S.settings.access && S.settings.access.mode === 'shared')
         ? `<p class="hint warn">${tr('inv.shared')}</p>` : ''}
+      ${guestsHtml(list.modules)}
       ${requestsHtml()}
       ${openHtml()}
       <p class="hint">${tr('inv.given')}</p>
@@ -3076,7 +3878,9 @@ async function renderInvite() {
           <span>${i.used ? tr('inv.entered', { at: when(i.usedAt) }) : tr('inv.pending', { at: when(i.at) })}</span>
           <button data-douse="${esc(i.id)}">${i.used ? tr('inv.evict') : tr('inv.douse')}</button>
         </li>`).join('')}</ul>` : `<p class="hint dim">${tr('inv.none')}</p>`}
+      ${devicesHtml()}
       <p class="hint dim">${tr('inv.note')}</p>
+      <p class="hint dim">${tr('pair.note')}</p>
     </div></div>`;
 
   $('#invx').onclick = closeInvite;
@@ -3084,6 +3888,15 @@ async function renderInvite() {
   // waiting for the 2.5-second snapshot. Otherwise the clicked button would look
   // untouched during that entire interval.
   const took = async (r) => { if (r && r.access) S.access = r.access; inviteSig = accessSig(); await renderInvite(); };
+  el.invite.querySelectorAll('[data-pairyes]').forEach((b) => {
+    b.onclick = async () => took(await api.answerPair(b.dataset.pairyes, true));
+  });
+  el.invite.querySelectorAll('[data-pairno]').forEach((b) => {
+    b.onclick = async () => took(await api.answerPair(b.dataset.pairno, false));
+  });
+  el.invite.querySelectorAll('[data-unpair]').forEach((b) => {
+    b.onclick = async () => took(await api.revokeDevice(b.dataset.unpair));
+  });
   el.invite.querySelectorAll('[data-yes]').forEach((b) => {
     b.onclick = async () => took(await api.answerAccess(b.dataset.yes, true));
   });
@@ -3112,6 +3925,14 @@ async function renderInvite() {
   el.invite.querySelectorAll('[data-douse]').forEach((b) => {
     b.onclick = async () => { await api.revokeInvite(b.dataset.douse); await renderInvite(); };
   });
+  el.invite.querySelectorAll('[data-gm-set]').forEach((b) => {
+    b.onclick = async () => {
+      const [id, choice] = b.dataset.gmSet.split('|');
+      await api.guestModule(id, choice);
+      await renderInvite();
+    };
+  });
+  inviteRing.paint();
 }
 
 export function openLift(lift, floorNow, pick) {
@@ -3143,7 +3964,9 @@ export function openLift(lift, floorNow, pick) {
 // merely inconvenient—without a mouse.
 //
 // Escape is left to closeAll() in main.js.
-const liftRing = focusRing(() => el.lift, '.liftbtn, .recgo', { numbers: '.liftbtn', byData: 'n' });
+// At the desk the ring is rows: ↑↓ walk the projects and keep the column,
+// ←→ walk the row — «проводить», «нанять». The lift has no rows and walks flat.
+const liftRing = focusRing(() => el.lift, '.liftbtn, .recgo, .rechire', { numbers: '.liftbtn', byData: 'n', rows: '.recrow' });
 export function closeLift() { el.lift.hidden = true; liftRing.reset(); }
 export function liftKey(raw) { return liftRing.key(raw, el.lift && !el.lift.hidden); }
 
@@ -3168,9 +3991,15 @@ export function openReception(desk, guide) {
           ? tr('rec.waiting', { n: total, word: tr(pluralKey('rec.wait', total)) })
           : tr('rec.nobodyWaits') });
 
+  // Hiring is the owner's: it starts a process on the owner's machine. A guest
+  // sees the same desk without the button, and the line under it says why.
+  // Frames: [Reception · owner](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2122-5869)
+  // [Reception · guest](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2122-5906)
+  const hires = !isGuest();
   el.lift.hidden = false;
   el.lift.innerHTML = `<div class="rwrap recwrap">
-    <div class="vhead">${tr('rec.title', { n: desk.n })}<button id="recx">✕</button></div>
+    <div class="vhead"><span>${tr('rec.title', { n: desk.n })}</span>
+      <span class="rechead"><span class="reckeys">${tr(hires ? 'rec.keysOwner' : 'rec.keys')}</span><button id="recx">✕</button></span></div>
     <div class="recbody">
       <p class="recgreet">${esc(greet)}</p>
       ${rows.map((r) => `<div class="recrow">
@@ -3179,15 +4008,189 @@ export function openReception(desk, guide) {
         <span class="reccnt">${tr('rec.agents', { n: r.n, word: tr(pluralKey('rec.agent', r.n)) })}</span>
         <span class="recwait${r.waiting ? ' on' : ''}">! ${r.waiting}</span>
         ${r.lead ? `<button class="recgo" data-go="${r.lead.id}">${tr('rec.lead')}</button>` : ''}
+        ${hires ? `<button class="rechire" data-hire="${esc(r.title)}">${tr('rec.hire')} <kbd>+</kbd></button>` : ''}
       </div>`).join('')}
-      <p class="hint">${tr('rec.hint')}</p>
+      <p class="hint">${tr(hires ? 'rec.hintOwner' : 'rec.hintGuest')}</p>
     </div></div>`;
   $('#recx').onclick = closeLift;
   el.lift.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => {
     closeLift();
     guide(b.dataset.go);
   });
+  el.lift.querySelectorAll('[data-hire]').forEach((b) => b.onclick = () => {
+    closeLift();
+    openHire({ project: b.dataset.hire });
+  });
   liftRing.at(0);
+}
+
+// «+» at the desk hires into the room the arrows stand on, whichever of its
+// two buttons they are on — the shortcut for → Enter.
+export function receptionHire(raw) {
+  if (!el.lift || el.lift.hidden || !el.lift.querySelector('.recwrap')) return false;
+  if (raw !== '+' && raw !== '=') return false;
+  const cur = el.lift.querySelector('.recgo.focus, .rechire.focus') || el.lift.querySelector('.recgo');
+  const row = cur && cur.closest('.recrow');
+  const b = row && row.querySelector('.rechire');
+  // a guest's «+» is swallowed rather than handed to the zoom under the panel
+  if (b) b.click();
+  return true;
+}
+
+// ------------------------------------------------------------------- hiring
+// A new Claude Code session, started by the office in a project's folder. The
+// panel names a room, never a path; the server finds the folder itself.
+// Frames: [Hire panel](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2090-747)
+// [Hire panel · from a letter](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2090-789)
+// [Hire panel · 175%](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2090-814)
+//
+// A module opens it with a task already written — the mail does, from a
+// letter — and hands the letter over as `quote`: it goes to the agent as a
+// quotation marked as somebody else's text, and the owner sees and edits the
+// task before anything starts.
+let hire = null;   // { project, task, model, quote, from, back, done, busy, error } while open
+
+const hireRooms = () => ((S.layout && S.layout.projectRooms) || [])
+  .map((r) => r.key).filter((k) => S.agents.some((a) => a.project === k));
+
+// Where the agent will sit, said the way the room is known: the folder of the
+// agent who works in the project root, and how many desks are taken.
+function hireWhere(project) {
+  const here = S.agents.filter((a) => a.project === project);
+  const root = here.find((a) => a.cwd && a.cwd.split('/').pop() === project);
+  const dir = root ? root.cwd.replace(/^\/(?:Users|home)\/[^/]+/, '~') : '';
+  const seats = tr('hire.seats', { n: here.length, word: tr(pluralKey('rec.agent', here.length)) });
+  return [dir, seats].filter(Boolean).join(' · ');
+}
+
+export function openHire(opts = {}) {
+  if (isGuest()) return;
+  const rooms = hireRooms();
+  const project = rooms.includes(opts.project) ? opts.project : rooms[0];
+  if (!project) { toast(tr('hire.noRooms')); return; }
+  hire = {
+    project, task: opts.task || '', files: [], model: 'opus', quote: opts.quote || null,
+    from: opts.from || null, back: opts.back || null, done: opts.done || null, busy: false, error: '',
+  };
+  el.hire.hidden = false;
+  renderHire();
+  setTimeout(() => { const ta = $('#hireTask'); if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } }, 30);
+}
+
+export function hireOpen() { return !!(el.hire && !el.hire.hidden); }
+
+// Esc from a panel a module opened goes back to that module — to the letter.
+export function closeHire(goBack = true) {
+  if (!el.hire || el.hire.hidden) return;
+  const back = hire && hire.back;
+  el.hire.hidden = true;
+  hire = null;
+  if (goBack && back) back();
+}
+
+function renderHire() {
+  if (!hire) return;
+  const rooms = hireRooms();
+  const d = S.delivery || {};
+  const blocked = d.checked !== false && d.available === false;
+  const f = hire.from;
+  el.hire.innerHTML = `<div class="rwrap hirewrap">
+    <div class="vhead"><span>${tr('hire.title')}</span>
+      <span class="rechead"><span class="reckeys">${tr(hire.back ? 'hire.keysBack' : 'hire.keys')}</span><button id="hirex">✕</button></span></div>
+    <div class="hirebody">
+      ${f ? `<div class="hirefrom"><i>${esc(f.kind || '')}</i><b>${esc(f.title || '')}</b>
+        <span>${tr('hire.quoteNote')}</span></div>` : ''}
+      <p class="hlabel">${tr('hire.room')}</p>
+      <div class="hchips" role="radiogroup">${rooms.map((k) => `<button class="hchip${k === hire.project ? ' on' : ''}" data-room="${esc(k)}"
+        role="radio" aria-checked="${k === hire.project}" tabindex="${k === hire.project ? 0 : -1}">${esc(k)}</button>`).join('')}</div>
+      <p class="hwhere">${esc(hireWhere(hire.project))}</p>
+      <p class="hlabel">${tr('hire.task')}</p>
+      <textarea id="hireTask" rows="3" maxlength="4000" placeholder="${tr('hire.taskHint')}">${esc(hire.task)}</textarea>
+      <div class="fchips" id="hireChips">${chipRow(hire.files)}</div>
+      <p class="hlabel">${tr('hire.model')}</p>
+      <div class="hmodels" role="radiogroup">${['sonnet', 'opus'].map((m) => `<button class="hmodel${m === hire.model ? ' on' : ''}" data-model="${m}"
+        role="radio" aria-checked="${m === hire.model}" tabindex="${m === hire.model ? 0 : -1}">${m === 'opus' ? 'Opus' : 'Sonnet'}</button>`).join('')}</div>
+      <p class="hint">${tr('hire.rules')}</p>
+      ${blocked ? `<p class="hint warn">${esc(said(d, 'hint') || tr('hire.noCli'))}</p>` : ''}
+      ${hire.error ? `<p class="hint warn">${esc(hire.error)}</p>` : ''}
+    </div>
+    <div class="hirefoot">
+      <button id="hireNo">${tr('hire.cancel')} <kbd>Esc</kbd></button>
+      <button id="hireGo" class="primary" ${blocked || hire.busy ? 'disabled' : ''}>${tr(hire.busy ? 'hire.going' : 'hire.go')} <kbd>Enter</kbd></button>
+    </div></div>`;
+
+  const ta = $('#hireTask');
+  ta.oninput = () => { hire.task = ta.value; };
+  ta.onkeydown = (e) => {
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    e.preventDefault();
+    submitHire();
+  };
+  $('#hirex').onclick = () => closeHire();
+  $('#hireNo').onclick = () => closeHire();
+  $('#hireGo').onclick = submitHire;
+  const pick = (group) => { const on = el.hire.querySelector(group + '.on'); if (on) on.focus(); };
+  el.hire.querySelectorAll('[data-room]').forEach((b) => b.onclick = () => { hire.project = b.dataset.room; hire.error = ''; renderHire(); pick('.hchip'); });
+  el.hire.querySelectorAll('[data-model]').forEach((b) => b.onclick = () => { hire.model = b.dataset.model; renderHire(); pick('.hmodel'); });
+  const paintHireChips = () => {
+    const row = $('#hireChips');
+    if (!row) return;
+    row.innerHTML = chipRow(hire.files);
+    bindChips(row, hire.files, paintHireChips);
+  };
+  bindDrop(el.hire, $('#hireTask'), hire.files, paintHireChips);
+  bindChips($('#hireChips'), hire.files, paintHireChips);
+}
+
+async function submitHire() {
+  if (!hire || hire.busy) return;
+  const task = hire.task.trim();
+  if (!task) { hire.error = tr('hire.errEmpty'); renderHire(); $('#hireTask')?.focus(); return; }
+  hire.busy = true; hire.error = '';
+  renderHire();
+  const r = await api.hire({ project: hire.project, task, files: readyFiles(hire.files), model: hire.model, quote: hire.quote, source: hire.from ? hire.from.source : null });
+  if (!hire) return;
+  hire.busy = false;
+  if (!r || !r.ok) {
+    hire.error = said(r && r.hire ? r.hire : r) || tr('hire.errUnknown');
+    renderHire();
+    return;
+  }
+  const { project, done } = hire;
+  closeHire(false);
+  toast(tr('hire.opened', { room: project }));
+  if (done) done(r.hire);
+}
+
+// The rooms and the models are two switches, each one stop for Tab: on them
+// ← → move the choice, and Enter hires rather than pressing the chip that is
+// already chosen. The focus opens in the task — the room was picked at the
+// desk — so Shift+Tab is the way back to it. Digits were here first, and they
+// could not work: with the caret in the task they typed into it (Sergey,
+// 13 September 2026).
+function hirePanelKey(e) {
+  const b = e.target;
+  if (!hire || !b || !b.classList) return;
+  const group = b.classList.contains('hchip') ? '.hchip' : b.classList.contains('hmodel') ? '.hmodel' : null;
+  if (!group) return;
+  if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); submitHire(); return; }
+  const step = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[e.key];
+  if (!step) return;
+  e.preventDefault(); e.stopPropagation();
+  const all = [...el.hire.querySelectorAll(group)];
+  const next = all[(all.indexOf(b) + step + all.length) % all.length];
+  if (group === '.hchip') { hire.project = next.dataset.room; hire.error = ''; } else hire.model = next.dataset.model;
+  renderHire();
+  const on = el.hire.querySelector(group + '.on');
+  if (on) on.focus();
+}
+
+// Whatever reaches the office past the panel's own fields waits: the panel is
+// in front of it.
+export function hireKey(raw) {
+  if (!hireOpen()) return false;
+  if (raw === 'Enter') { submitHire(); return true; }
+  return raw !== 'Tab' && raw !== 'Escape';
 }
 
 // English has two forms and Russian has three. Both use the same keys, while the
@@ -3280,7 +4283,7 @@ export async function openTranscript(a, focusTs = null) {
         <span class="zhint" id="chatst">${esc(a.title || '')}</span><button id="vx">✕</button></span>
       <span class="vrow vtask" id="chattask">${chatTask(a)}</span></div>
     <div class="single chatlog" id="chatlog"><p class="hint">${tr('chat.reading')}</p></div>
-    <div class="vpath">${tr('chat.keys')}<span class="ncount" id="ncount"></span></div></div>`;
+    <div class="vpath">${tr(linkDown() ? 'chat.keysOffline' : 'chat.keys')}<span class="ncount" id="ncount"></span></div></div>`;
   $('#vx').onclick = closeViewer;
   await loadChat(0);
 }
@@ -3342,6 +4345,7 @@ function paintChat(msgs, fresh = 0, force = false) {
         + renderNotes(byTs.get(m.ts) || [], false)
         + (ed && !ed.id && ed.ts === m.ts ? noteEditor(m.ts, ed.text) : '')).join('')
     : loose + `<p class="empty">${tr('chat.empty')}</p>`;
+  bindPictures(box);
   chatView.msgs = msgs;
   // The conversation was opened with a snapshot of the agent, while the task is
   // rewritten by every new answer: take the fresh one from the list, or the head
@@ -3473,8 +4477,14 @@ async function loadChat(fresh) {
   const box = $('#chatlog');
   if (!box) return;
   if (r.error) {
-    if (chatView.msgs.length) chatStatus(tr('chat.rereadFailed', { err: esc(r.error) }));
-    else box.innerHTML = `<p class="empty">${esc(r.error)}</p>`;
+    // `Failed to fetch` is the browser saying the request never left, and it is
+    // addressed to nobody: on 16 September 2026 a dead office turned every
+    // re-read into that line and it read as a broken agent. When the office is
+    // known to be gone, the panel says that instead — and what is on the screen
+    // is named for what it is.
+    const gone = linkDown();
+    if (chatView.msgs.length) chatStatus(gone ? tr('chat.offline') : tr('chat.rereadFailed', { err: esc(r.error) }));
+    else box.innerHTML = `<p class="empty">${esc(gone ? tr('chat.offlineEmpty') : r.error)}</p>`;
     return;
   }
   const msgs = r.messages || [];
@@ -3487,7 +4497,7 @@ async function loadChat(fresh) {
   if (fresh) {
     const added = msgs.length - was.length;
     chatStatus(added > 0 ? tr('chat.newBelow', { n: added }) : tr('chat.appended'));
-    toast(added > 0 ? tr('chat.newToast', { name: a.name, n: added, a: added === 1 ? 'а' : '' })
+    toast(added > 0 ? tr('chat.newToast', { name: a.name, n: added })
                     : tr('chat.appendedToast', { name: a.name }));
   } else chatStatus(a.title || '');
 }

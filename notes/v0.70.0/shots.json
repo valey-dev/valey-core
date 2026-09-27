@@ -1,0 +1,12 @@
+{
+  "tag": "v0.70.0",
+  "shots": [
+    {
+      "file": "guests-panel.png",
+      "slug": "guests",
+      "id": "panel",
+      "url": "",
+      "keys": "Enter,wait:2500,i,wait:900"
+    }
+  ]
+}

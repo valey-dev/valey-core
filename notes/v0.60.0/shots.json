@@ -1,0 +1,12 @@
+{
+  "tag": "v0.60.0",
+  "shots": [
+    {
+      "file": "model-card-model-card.png",
+      "slug": "model-card",
+      "id": "model-card",
+      "url": "#room=standup",
+      "keys": "Enter,wait:2500,Tab,wait:900,Enter,wait:900"
+    }
+  ]
+}

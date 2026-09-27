@@ -14,6 +14,15 @@
 //     browser never talks to Telegram. Only a picture address the feed itself
 //     named is fetched — the proxy does not go where a page asks it to.
 import { parseFeed, normalizeChannel } from './feed.js';
+import { demoPage, picture as demoPicture } from './demo.js';
+
+// The picture office (tools/lib/office.mjs, PICTURE_ENV) reads invented papers
+// instead of Telegram: a public screenshot of a real channel is a screenshot of
+// real people's posts, which the rule about invented data forbids, and v0.45.0
+// shipped its note with a photograph of an empty stand for exactly that reason.
+// The switch is an environment variable of the process — nothing arriving over
+// the network can set it — and with it on, no request leaves this machine.
+const invented = () => process.env.VALEY_PICTURE === '1';
 
 // How many papers fit on the stand. Not a technical ceiling: past a dozen the
 // stand stops being something you read in the morning.
@@ -53,6 +62,17 @@ const cursors = new Set();   // `${name}:${before}`
 const nofeed = () => Object.assign(new Error('no public feed'), { code: 'nofeed' });
 
 async function fetchPage(name, before) {
+  if (invented()) {
+    const html = demoPage(name, before);
+    // A name nobody invented is not dressed in an invented paper, and the
+    // office does not go to Telegram to find the real one either: the picture
+    // office reads its own two papers and nothing else.
+    if (!html) throw Object.assign(new Error('the picture office reads only its invented papers'), { code: 'invented' });
+    const feed = parseFeed(html);
+    for (const p of feed.posts) if (p.photo) pictures.add(p.photo);
+    if (feed.before) cursors.add(`${name}:${feed.before}`);
+    return feed;
+  }
   const url = `https://t.me/s/${name}` + (before ? `?before=${before}` : '');
   // A redirect is how t.me says «there is no public feed here»: a group, a
   // private name or no such name at all is sent on to t.me/<name>. Following it
@@ -86,7 +106,7 @@ export async function issue(name, before = 0) {
       pending.delete(key);
       // A network error is not remembered: the next poll should try again,
       // unlike «no public feed», which will still be true in a quarter of an hour.
-      if (entry.feed || entry.error === 'nofeed') {
+      if (entry.feed || entry.error === 'nofeed' || entry.error === 'invented') {
         pages.set(key, entry);
         if (pages.size > 80) pages.delete(pages.keys().next().value);
       }
@@ -108,6 +128,9 @@ async function channelsOnStand() {
 // never through a redirect, and never bigger than a picture needs to be.
 const CDN = /(^|\.)(telesco\.pe|cdn-telegram\.org|telegram-cdn\.org)$/;
 async function fetchImage(src) {
+  // Drawn rather than fetched, and only for an address an invented paper named:
+  // the `pictures` guard above is what lets it through, exactly as for a real one.
+  if (invented()) return demoPicture();
   const u = new URL(src);
   if (u.protocol !== 'https:' || !CDN.test(u.hostname)) throw new Error('unexpected picture host');
   const r = await fetch(u, { signal: AbortSignal.timeout(10_000), redirect: 'error' });
@@ -134,7 +157,10 @@ export async function route(url, req, res, send, rctx = {}) {
       // the ids of the newest issue: the page counts what it has not read yet
       return { name, title: e.feed.title || name, latest: e.feed.posts.length ? e.feed.posts[0].id : null, ids: e.feed.posts.map((p) => p.id) };
     }));
-    return reply(res, 200, { channels: list, fresh: FRESH_MS });
+    // `invented` rides out to the page: a paper that came from demo.js has no
+    // channel behind it, so the page must not offer to open its posts in
+    // Telegram — there is nothing there to open.
+    return reply(res, 200, { channels: list, fresh: FRESH_MS, invented: invented() || undefined });
   }
 
   // One issue of one paper. Only a paper that is on the stand: otherwise
@@ -150,6 +176,7 @@ export async function route(url, req, res, send, rctx = {}) {
     return reply(res, 200, {
       name, title: f.title || name, about: f.about, subscribers: f.subscribers,
       posts: f.posts.map(forPage), before: f.before, after: f.after, at: e.at,
+      invented: invented() || undefined,
     });
   }
 

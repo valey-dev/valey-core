@@ -114,6 +114,50 @@ export function drawLift(ctx, L, t, st) {
   }
 }
 
+// ------------------------------------------------------------------ breaker
+// The breaker: pull it and the office goes dark for everybody on the floor.
+// One per building, on an electrical panel bolted to the OUTSIDE of the control
+// room's bottom wall — the room itself opens only to a card, the panel does not,
+// and anyone walking the corridor below can reach it.
+//
+// It first hung on the lift shaft by the call button, as the first frame had
+// it; the owner tried it on the stand on 26 September 2026 and moved it here:
+// by the lift it crowded the reception and the doors, and a breaker belongs on
+// the building's service room anyway. Right of the middle, clear of the door
+// line above and of the meeting room's wall.
+export function breakerAt(L) {
+  const s = L && L.security;
+  if (!s) return null;
+  const x = Math.round(s.x + s.w - 96);
+  const y = s.y + s.h - 4;
+  // The spot is beside the panel, not in front of it: below there are only
+  // forty pixels of floor before the edge of the world, and a player standing
+  // under the panel hid it whole and pushed the hint off the screen.
+  return { x, y, w: 28, h: 20, spot: { x: x + 40, y: y + 22 } };
+}
+
+// A panel of grey metal, 28×20: a row of small fuses on the left, the big
+// breaker on the right — lever up with a green lamp is light, down with a red
+// one is dark — and the yellow sticker, so it does not read as a letterbox.
+export function drawBreaker(ctx, L, on) {
+  const b = breakerAt(L);
+  if (!b) return;
+  const { x, y, w, h } = b;
+  px(ctx, x, y, w, h, '#6d5a48');                    // edge
+  px(ctx, x + 1, y + 1, w - 2, h - 2, '#4b433c');    // body
+  px(ctx, x + 1, y + h - 2, w - 2, 1, '#2c1e15');    // shade
+  for (let i = 0; i < 3; i++) {                      // the fuses: always up
+    px(ctx, x + 3 + i * 4, y + 4, 2, 6, '#140d08');
+    px(ctx, x + 3 + i * 4, y + 4, 2, 2, '#b19f8c');
+  }
+  px(ctx, x + 3, y + 13, 3, 3, '#ffd166');           // sticker
+  const bx = x + 16;                                  // the breaker itself
+  px(ctx, bx + 3, y + 3, 3, 12, '#140d08');           // slot
+  px(ctx, bx + 1, on ? y + 2 : y + 11, 7, 3, '#c9b391');   // lever
+  px(ctx, bx + 4, on ? y + 5 : y + 9, 1, 2, '#b19f8c');    // rod
+  px(ctx, bx + 8, y + 2, 2, 2, on ? '#3f5c48' : '#c2795f');
+}
+
 // ------------------------------------------------------------ the reception desk
 // It stands opposite the lift on every inhabited floor. The receptionist is the only
 // resident of the office who is not from a live session, so his looks are his own
@@ -158,7 +202,82 @@ export function drawReception(ctx, L, t) {
     px(ctx, x + 5, y - 4, 10, 1, '#f0e7d2');
     px(ctx, x + w - 18, y - 7, 12, 7, '#3b4650');     // the monitor
     px(ctx, x + w - 17, y - 6, 10, 5, '#5f8ea8');
+    // «НАЙМ» on the front of the desk: this is where the office hires. On every
+    // floor and for everyone — a guest learns in the panel that it is the
+    // owner's; the plate is the desk's, not the owner's.
+    // [Reception · floor](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2122-2130)
+    px(ctx, x + 3, y + 3, 22, 7, '#ffd166');
+    px(ctx, x + 4, y + 4, 20, 5, '#2a1d15');
+    pxText(ctx, tr('sign.hire'), x + 6, y + 8, '#ffd166', 5);
   }
+}
+
+// ------------------------------------------------------------------ the portal
+// The door a hired agent comes in by. It follows the process, not a timer:
+// open while claude starts, the figure printing itself line by line until the
+// session exists, then closing behind the agent as it walks to its desk. A
+// run that failed to start leaves a red ring and nobody in it.
+// [Portal · storyboard](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2092-810)
+//
+// x, y are the feet of whoever stands in it — the room's doorPoint.
+// phase: { kind: 'open' | 'ready', age } | { kind: 'close' | 'fail', k: 0..1 }
+const RING = { edge: '#9fe0a8', fill: '#3f6a48', spark: '#d6f5d9' };
+const RING_BAD = { edge: '#ff9f8f', fill: '#7a3a2e', spark: '#ffd9c0' };
+
+function ring(ctx, cx, cy, rx, ry, c) {
+  if (rx < 1 || ry < 1) return;
+  for (let dy = -ry; dy <= ry; dy++) {
+    const half = Math.round(rx * Math.sqrt(Math.max(0, 1 - (dy / ry) ** 2)));
+    const cap = Math.abs(dy) === ry;
+    px(ctx, cx - half, cy + dy, half * 2, 1, cap ? c.edge : c.fill);
+    if (!cap) {
+      px(ctx, cx - half - 1, cy + dy, 2, 1, c.edge);
+      px(ctx, cx + half - 1, cy + dy, 2, 1, c.edge);
+    }
+  }
+}
+
+// The stranger inside: no clothes of its own yet, the same for everybody —
+// who it is becomes known when the session does.
+function stranger(ctx, x, y, rows) {
+  const top = y - 24;
+  ctx.save();
+  // only the rows printed so far
+  ctx.beginPath(); ctx.rect(x - 8, top, 16, rows); ctx.clip();
+  px(ctx, x - 4, top, 8, 8, '#c9ad88');                                   // head
+  px(ctx, x - 2, top + 3, 1, 1, '#1f150f'); px(ctx, x + 1, top + 3, 1, 1, '#1f150f');
+  px(ctx, x - 6, top + 8, 12, 1, '#a58a6a'); px(ctx, x - 6, top + 9, 12, 7, '#8fc8ff');   // shirt
+  px(ctx, x - 4, top + 16, 3, 8, '#3a2a20'); px(ctx, x + 1, top + 16, 3, 8, '#3a2a20');   // legs
+  ctx.restore();
+}
+
+export function drawPortal(ctx, x, y, phase, t) {
+  const cy = y - 12;
+  const bad = phase.kind === 'fail';
+  const c = bad ? RING_BAD : RING;
+  let s = 1;
+  if (phase.kind === 'open' || phase.kind === 'ready') s = Math.min(1, 0.35 + phase.age / 700);
+  if (phase.kind === 'close') s = 1 - phase.k;
+  if (bad && phase.k > 0.7) ctx.globalAlpha = Math.max(0, (1 - phase.k) / 0.3);
+  ring(ctx, x, cy, Math.round(9 * s), Math.round(14 * s), c);
+  if (!bad && phase.kind !== 'close') {
+    // sparks drift round the ring while it is open
+    for (let i = 0; i < 3; i++) {
+      const a = t / 500 + i * 2.1;
+      px(ctx, x + Math.cos(a) * 13 * s, cy + Math.sin(a) * 17 * s, 1, 1, c.spark);
+    }
+  }
+  if (phase.kind === 'open' && s >= 1) {
+    // printed a line at a time, and it holds at the shoulders until the
+    // session answers: the rest is not up to the office
+    const rows = Math.min(20, Math.floor((phase.age - 500) / 120));
+    if (rows > 0) {
+      stranger(ctx, x, y, rows);
+      if (Math.floor(t / 200) % 2) px(ctx, x - 7, y - 24 + rows, 14, 1, c.spark);
+    }
+  }
+  if (phase.kind === 'ready') stranger(ctx, x, y, 24);
+  ctx.globalAlpha = 1;
 }
 
 // The projects on the plaque: the forms come from the dictionary, because English
@@ -408,7 +527,23 @@ function drawCorridorProp(ctx, p, t) {
 // tuning scale and the equaliser, which breathes only when the music is really playing.
 
 // ---------------------------------------------------------------------- room
-export function drawRoom(ctx, r, t) {
+// The rug colourways, in the order SPACE walks them: border, field, medallion.
+// The first is the terracotta every room had before the rug could change, so an
+// office where nobody has pressed anything looks as it did.
+export const RUGS = [
+  { id: 'terracotta', tones: ['#8c4038', '#a54c40', '#c06a4a'] },
+  { id: 'indigo', tones: ['#34406e', '#45558c', '#6a7fb4'] },
+  { id: 'emerald', tones: ['#2f5a44', '#3d7456', '#5e9a6e'] },
+  { id: 'mustard', tones: ['#7a5a1e', '#a07a2a', '#c9a043'] },
+  { id: 'plum', tones: ['#5a3456', '#74446c', '#9a6490'] },
+  { id: 'graphite', tones: ['#3e3a38', '#524c48', '#78706a'] },
+];
+export const rugIndex = (id) => Math.max(0, RUGS.findIndex((c) => c.id === id));
+
+// Where the rug lies: one place for the brush and for "standing on it".
+export const rugRect = (r) => ({ x: r.x + r.w / 2 - 54, y: r.y + r.h - 46, w: 108, h: 26 });
+
+export function drawRoom(ctx, r, t, rug) {
   const T = r.tone;
   for (let y = r.y + WALL; y < r.y + r.h; y += 16) {
     for (let x = r.x; x < r.x + r.w; x += 16) {
@@ -419,10 +554,11 @@ export function drawRoom(ctx, r, t) {
     }
   }
   // rug in the middle of the room
-  const rx = r.x + r.w / 2 - 54, ry = r.y + r.h - 46;
-  px(ctx, rx, ry, 108, 26, '#8c4038');
-  px(ctx, rx + 5, ry + 4, 98, 18, '#a54c40');
-  px(ctx, rx + 18, ry + 9, 72, 8, '#c06a4a');
+  const { x: rx, y: ry } = rugRect(r);
+  const [border, field, medallion] = RUGS[rugIndex(rug)].tones;
+  px(ctx, rx, ry, 108, 26, border);
+  px(ctx, rx + 5, ry + 4, 98, 18, field);
+  px(ctx, rx + 18, ry + 9, 72, 8, medallion);
 
   // walls
   px(ctx, r.x, r.y, r.w, WALL, T.wall);
@@ -674,6 +810,95 @@ function drawFicus(ctx, x, y, seed, t) {
     px(ctx, x + rx + sway, y + ry, 5, 4, ring ? '#3f6633' : '#4d7a3e');
     if (i % 3 === 0) px(ctx, x + rx + sway, y + ry, 5, 1, '#6a9c54');
   }
+}
+
+// ------------------------------------------------------------------ blackout
+// The floor after the power cut, drawn in screen coordinates over everything
+// else: one radial gradient, transparent where the player stands and opaque
+// past the beam. A radial gradient keeps its last stop beyond the outer radius,
+// so a single fill of the whole screen darkens the office and leaves the pool
+// of light in it.
+//
+// The order matters and cost a redraw to find out. The first version put the
+// light on top of the darkness with `lighter`, the way the lamps are done above
+// — and a flashlight that adds light instead of taking away darkness reads as
+// fog: the beam whitened the screen and the floor under it stayed hidden. The
+// hole has to be in the darkness itself.
+//
+// `glows` are the phones in the hands of the agents: small, cold, and standing
+// still. They are drawn as their own holes rather than as light, for the same
+// reason — and because a phone that lit the room would say somebody is working.
+// In the breaker's darkness the same glows are the monitors of the agents who
+// are working: there somebody is, and the light says so.
+//
+// The darkness is laid on a canvas of its own and the holes are cut there.
+// Cutting them on the main canvas — the first version, shipped in v0.67.0 —
+// erased the floor along with the dark: `destination-out` does not know which
+// layer it is meant for, so a phone opened a window onto the page behind the
+// canvas instead of onto the agent holding it. That is why the first real
+// frame showed a lone blue dot, and why widening the hole only widened the void.
+let shade = null;
+function shadeFor(w, h) {
+  if (!shade) shade = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : document.createElement('canvas');
+  if (shade.width !== w) shade.width = w;
+  if (shade.height !== h) shade.height = h;
+  return shade;
+}
+
+// `others` are the torches of the other people on the floor. In a real outage
+// there are none — the only live thing is you — but the breaker is a joke with
+// everyone still in the room, and each of them keeps a light of their own.
+export function drawBlackout(ctx, w, h, beam, glows = [], others = []) {
+  const sh = shadeFor(w, h);
+  const s = sh.getContext('2d');
+  s.clearRect(0, 0, w, h);
+  const g0 = s.createRadialGradient(beam.x, beam.y, 10, beam.x, beam.y, 74);
+  g0.addColorStop(0, 'rgba(20,13,8,0)');
+  g0.addColorStop(0.55, 'rgba(20,13,8,0.56)');
+  g0.addColorStop(1, 'rgba(20,13,8,0.93)');
+  s.fillStyle = g0;
+  s.fillRect(0, 0, w, h);
+
+  // Every other light lifts its own patch out of the dark on this layer only.
+  const cut = (x, y, r, alpha) => {
+    const g = s.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(0,0,0,${alpha})`);
+    g.addColorStop(0.5, `rgba(0,0,0,${alpha * 0.5})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    s.fillStyle = g;
+    s.fillRect(x - r, y - r, r * 2, r * 2);
+  };
+  s.save();
+  s.globalCompositeOperation = 'destination-out';
+  for (const p of glows) cut(p.x, p.y, 20, 0.72);
+  for (const p of others) cut(p.x, p.y, 44, 0.9);
+  s.restore();
+  ctx.drawImage(sh, 0, 0);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const warmAt = (x, y, r) => {
+    const g = ctx.createRadialGradient(x, y, 4, x, y, r);
+    g.addColorStop(0, 'rgba(255,209,102,0.16)');
+    g.addColorStop(1, 'rgba(255,209,102,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  };
+  // The beam keeps a little warmth, so the lit patch is a torch rather than a
+  // window into daylight; the other torches get the same.
+  warmAt(beam.x, beam.y, 52);
+  for (const p of others) warmAt(p.x, p.y, 34);
+  // A screen in a hand, or on a desk: a cold sliver, not a candle.
+  for (const p of glows) {
+    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 9);
+    g.addColorStop(0, 'rgba(96,134,176,0.32)');
+    g.addColorStop(1, 'rgba(96,134,176,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(p.x - 9, p.y - 9, 18, 18);
+    ctx.fillStyle = 'rgba(143,200,255,0.55)';
+    ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 2, 2);
+  }
+  ctx.restore();
 }
 
 // --------------------------------------------------------------------- light

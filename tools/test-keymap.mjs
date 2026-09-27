@@ -43,7 +43,7 @@ ok('number from gamepad', codeOf({ key: '0' }) === 'Digit0', codeOf({ key: '0' }
 // Cyrillic without a code is deliberately not parsed: guessing a position from a
 // character is exactly what this file removes. A real event always brings a code.
 ok('Cyrillic alphabet can\'t be guessed without code', codeOf({ key: 'т' }) === null, codeOf({ key: 'т' }));
-ok('empty event doesn\'t crash', codeOf(null) === null && actionOf(null) === null, 'упало');
+ok('empty event doesn\'t crash', codeOf(null) === null && actionOf(null) === null, 'it crashed');
 ok('unfamiliar key - no action', actionOf({ code: 'F7' }) === null, actionOf({ code: 'F7' }));
 
 // ------------------------------------------------------------------ the scale
@@ -90,10 +90,10 @@ ok('the second latecomer key works', actionOf({ code: 'KeyQ' }) === 'other.toggl
 
 // ---------------------------------------------------------------- refusals
 const throws = (fn) => { try { fn(); return false; } catch { return true; } };
-ok('action without codes is rejected', throws(() => define([{ id: 'x.y', group: 'panel' }])), 'приняли');
-ok('empty codelist is rejected', throws(() => define([{ id: 'x.z', codes: [], group: 'panel' }])), 'приняли');
-ok('unfamiliar group is rejected', throws(() => define([{ id: 'x.w', codes: ['KeyY'], group: 'выдумка' }])), 'приняли');
-ok('repeated id is rejected', throws(() => define([{ id: 'plan.toggle', codes: ['KeyY'], group: 'panel' }])), 'приняли');
+ok('action without codes is rejected', throws(() => define([{ id: 'x.y', group: 'panel' }])), 'accepted');
+ok('empty codelist is rejected', throws(() => define([{ id: 'x.z', codes: [], group: 'panel' }])), 'accepted');
+ok('unfamiliar group is rejected', throws(() => define([{ id: 'x.w', codes: ['KeyY'], group: 'выдумка' }])), 'accepted');
+ok('repeated id is rejected', throws(() => define([{ id: 'plan.toggle', codes: ['KeyY'], group: 'panel' }])), 'accepted');
 
 // ------------------------------------------------------------------- reset
 reset();

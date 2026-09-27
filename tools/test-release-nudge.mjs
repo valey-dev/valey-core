@@ -16,9 +16,9 @@ const draft = (open, done = 0) => ({ exists: true, open, done, total: open + don
 
 // --- 1. silence where there is nothing to nudge about ---
 check('without tags is silent', nudgeFrom(null, now) === null, nudgeFrom(null, now));
-check('silent without version', nudgeFrom({ tag: '' }, now) === null, 'что-то вернул');
+check('silent without version', nudgeFrom({ tag: '' }, now) === null, 'it returned something');
 check('closed checklist is silent',
-  nudgeFrom({ tag: 'v0.2.0', taggedAt: now - 3 * DAY, draft: draft(0, 5) }, now) === null, 'пинает зря');
+  nudgeFrom({ tag: 'v0.2.0', taggedAt: now - 3 * DAY, draft: draft(0, 5) }, now) === null, 'it nudges for nothing');
 
 // --- 2. the nudge, when there is something ---
 // The path arrives with the info and is only echoed: since 5 September 2026 the
@@ -44,9 +44,9 @@ check('and says there is no draft', nd.hasDraft === false, nd.hasDraft);
 check('remaining items unknown', nd.open === null, nd.open);
 
 // --- 4. the day it went out ---
-check('on release day zero days, not minus', nudgeFrom({ tag: 'v0.5.0', taggedAt: now - 1000, draft: null }, now).days === 0, 'иначе');
-check('clocks ahead do not give negative', nudgeFrom({ tag: 'v0.5.0', taggedAt: now + DAY, draft: null }, now).days === 0, 'отрицательные дни');
-check('without date tag days unknown', nudgeFrom({ tag: 'v0.6.0', taggedAt: null, draft: null }, now).days === null, 'что-то насчитал');
+check('on release day zero days, not minus', nudgeFrom({ tag: 'v0.5.0', taggedAt: now - 1000, draft: null }, now).days === 0, 'otherwise');
+check('clocks ahead do not give negative', nudgeFrom({ tag: 'v0.5.0', taggedAt: now + DAY, draft: null }, now).days === 0, 'negative days');
+check('without date tag days unknown', nudgeFrom({ tag: 'v0.6.0', taggedAt: null, draft: null }, now).days === null, 'it counted something');
 
 // --- 5. parsing the checklist ---
 // A script is full of square brackets — count the list items, not every bracket.

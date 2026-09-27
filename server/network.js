@@ -49,6 +49,38 @@ export const proxied = (req) => PROXIED.some((h) => req.headers && req.headers[h
 // guesser.
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
+// The address an invitation link names. The link was built from the Host the
+// owner's page came in on, so an owner looking at http://localhost:5177 handed
+// out http://localhost:5177/#code=… — a link that opens the guest's own machine,
+// where no office runs. Found on the #guests stand, 26 September 2026; the
+// approved frame shows the office's address on the Wi-Fi. So a loopback Host is
+// swapped for the first LAN address, but only when the office answers the
+// network at all: a private office has no address a guest could reach, and a
+// LAN address in its link would fail just the same, only later.
+const LOOPBACK = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\])$/i;
+export function inviteHost(host, { external = false, lan = [] } = {}) {
+  const m = /^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/.exec(String(host || ''));
+  if (!m || !LOOPBACK.test(m[1]) || !external || !lan.length) return host;
+  return m[2] ? `${lan[0]}:${m[2]}` : lan[0];
+}
+
+// The whole invitation link. Seen from the Wi-Fi, the office answers nothing
+// without the network token (check() below), and the code rides after the #,
+// which never reaches the server: an invited phone was refused with «a token is
+// required» before its page could send the code. Found on the #guests stand,
+// 26 September 2026. So the link carries the network token, and check() moves
+// it from the address into a cookie on the first request, as it does for the
+// owner. The owner chose this knowing the cost: the token is a pass through the
+// door and nothing more — everything behind it still asks for an invitation
+// (measured that day: the page 200, every /api/* 403 «an invitation is
+// required») — but a guest who was shown out keeps that pass until the token
+// is changed.
+export function inviteUrl(host, code, { external = false, lan = [], token = '' } = {}) {
+  const at = inviteHost(host, { external, lan });
+  const pass = external && token ? `?token=${encodeURIComponent(token)}` : '';
+  return `http://${at}/${pass}#code=${code}`;
+}
+
 export function newToken() {
   let bits = 0, value = 0, out = '';
   for (const byte of crypto.randomBytes(20)) {

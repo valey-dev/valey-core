@@ -1,0 +1,13 @@
+{
+  "tag": "v0.73.0",
+  "shots": [
+    {
+      "file": "desk-notes-desk-notes.png",
+      "slug": "desk-notes",
+      "id": "desk-notes",
+      "url": "#room=tide-charts",
+      "setup": "(async()=>{const s=await (await fetch('/api/state')).json();for(const a of (s.agents||[]).slice(0,4)){await fetch('/api/task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({agentId:a.id,text:'Prices on the pricing page differ from pricing-q4.csv — fix them and show me'})});}await new Promise(r=>setTimeout(r,1200));})()",
+      "keys": "Enter,wait:4000,Space,wait:1500,3,wait:1000"
+    }
+  ]
+}

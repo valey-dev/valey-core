@@ -30,5 +30,5 @@ ok('the office calls renderTitle at start', title > 0, title);
 ok('the canvas is counted before the login menu is drawn', fit < title, { fit, title });
 ok('and the HUD is drawn before the canvas is considered', hud < fit, { hud, fit });
 
-console.log(bad ? `\n${bad} упало` : '\nall intact');
+console.log(bad ? `\n${bad} failed` : '\nall intact');
 process.exit(bad ? 1 : 0);

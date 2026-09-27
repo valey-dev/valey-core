@@ -61,14 +61,45 @@ const VER = /^v(\d+)\.(\d+)\.(\d+)$/;
 // The fields a fragment may carry. An unknown one is an error rather than a
 // field quietly ignored: a misspelled `keys:` is invisible in the rendered note,
 // and the whole point of the front matter is that it is machine-readable.
-const FIELDS = new Set(['title', 'scope', 'keys', 'shots']);
+//
+// `nopicture` is the other half of `shots`: a feature owes a picture unless it
+// says why it has none, in words that stay with the note. Until 13 September
+// 2026 nothing asked for either — the template came with a shot, deleting it was
+// the short way, and 13 of the 17 feature notes since v0.32.0 went out as bare
+// text, six of them for things that are plainly on the screen.
+//
+// `event` names the product event a feature is meant to move — "Stick Moved" —
+// so the Mixpanel panel can show, under a release mark, whether the feature is
+// used. The fragment is the one place a feature is described while it is fresh,
+// and it stays in the history with the version, so the event goes here rather
+// than into a setting nobody would keep up to date.
+const FIELDS = new Set(['title', 'scope', 'keys', 'shots', 'nopicture', 'event']);
 const LISTS = new Set(['keys', 'shots']);
 // `shots` is a list of recipes rather than of strings: an id to name the file by,
 // and how to get the office to the right place. The recipe, not the picture, is
 // what a fragment carries — a recipe can be replayed on an older tag, and that is
 // where a real before-and-after comes from. A picture can only be looked at.
 const MAPS = new Set(['shots']);
-const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport', 'touch']);
+// `setup` is script run in the page after it loads and before the keys: the
+// state a picture needs that no walk reaches — a request waiting in the pager, a
+// switch the owner flips. The page is the office's audience by then, which is
+// exactly what makes it hold what the script sends.
+//
+// `interrupt` names a member of the demo cast by its slot (a, b, c): before the
+// camera, the line the app writes when a turn is cut off is appended to that
+// agent's transcript, and after it the agent is handed a prompt and an answer,
+// so the next shot finds the floor as it was. `setup` cannot do this — it runs
+// in the page, and an agent's state is read off its transcript on the server.
+// Added 13 September 2026 for the «stopped» state, which only an interrupt makes.
+//
+// `picture` names a cast member the same way: before the camera that agent is
+// asked for a frame and answers with one — a real PNG on disk, copied from a
+// picture an earlier release already published, so it is invented at the
+// source — and with a second picture that is gone, so the fallback is in the
+// frame too. `setup` cannot do this either: whether the office serves the file
+// is decided on the server, from the transcript. Added 26 September 2026 for
+// #reply-image, whose first picture drew both files refused and showed nothing.
+const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport', 'touch', 'setup', 'interrupt', 'picture']);
 
 // A three-line parser instead of a YAML dependency. The project has none, and a
 // front matter of three keys is not a reason for the first one.
@@ -114,7 +145,8 @@ export function parseFragment(text, name) {
     if (seen.has(sh.id)) fail(`two shots share the id \`${sh.id}\`; one would overwrite the other`);
     seen.add(sh.id);
   }
-  return { title: front.title, scope: front.scope || '', keys: front.keys || [], shots, body };
+  if (front.nopicture && shots.length) fail('`nopicture` and `shots` both: a note either has a picture or says why not');
+  return { title: front.title, scope: front.scope || '', event: front.event || '', keys: front.keys || [], shots, nopicture: front.nopicture || '', body };
 }
 
 function shotField(shot, key, value, fail) {
@@ -142,12 +174,41 @@ export function readFragments(root) {
     });
 }
 
-export function renderNote(tag, date, fragments, section) {
+// Fixes as sections of the note. A patch release used to have no note at all:
+// notes were assembled from feature fragments only, and 24 of the 41 releases
+// from v0.50.0 to v0.67.0 were patches, silent everywhere except CHANGELOG.md
+// — including the release strip of the metrics board, which reads the note at
+// the tag (the owner, 26 September 2026). Nothing new has to be written for
+// them: by this project's rule a fix subject already states the outcome for a
+// person, «answering an agent's question leaves the card on …», so the subject
+// is the section.
+//
+// A scope that only touches the tooling of this repository is left out: «the
+// release takes its tag back» tells a person in the office nothing about the
+// office. The list was taken from the scopes of every fix since v0.3.0; install
+// and update stay visible, since those run on the person's own machine.
+export const SERVICE_SCOPES = new Set(['release', 'shot', 'notes', 'test', 'tests', 'stand', 'stands', 'tools',
+  'ci', 'build', 'land', 'promote', 'claim', 'demo', 'rulebook']);
+const capital = (s) => s.replace(/^[a-zа-яё]/, (c) => c.toUpperCase());
+export function fixSections(items) {
+  return (items || []).filter((it) => it && it.text && !SERVICE_SCOPES.has(it.scope || ''))
+    .map((it) => ({ title: capital(it.text.trim()), scope: it.scope || '' }));
+}
+
+export function renderNote(tag, date, fragments, section, fixes = []) {
   const out = [`# ${tag} — ${date}`, ''];
   for (const f of fragments) {
     out.push(`## ${f.title}`, '');
+    // The event rides in the assembled note as a comment: invisible on the
+    // release page, readable at the tag by whoever needs it — the metrics
+    // module reads it with `git show <tag>:notes/<tag>.md`. Without this line
+    // the field would die with the fragment the release deletes.
+    if (f.event) out.push(`<!-- event: ${f.event} -->`, '');
     if (f.scope) out.push(`*${f.scope}*`, '');
     out.push(f.body, '');
+    // The reason stays in the file and off the page: a reader of the release has
+    // no use for it, the next person wondering why there is no picture does.
+    if (f.nopicture) out.push(`<!-- no picture: ${f.nopicture.replace(/--/g, '—')} -->`, '');
     for (const sh of f.shots || []) {
       // Before first: it is the sentence «it used to look like this», and it
       // only reads that way when the reader meets it before the answer.
@@ -163,6 +224,13 @@ export function renderNote(tag, date, fragments, section) {
       for (const k of f.keys) out.push(`- ${k}`);
       out.push('');
     }
+  }
+  // A fix is its heading and its scope, and a comment that says it is one: the
+  // metrics board lists every `##` of the note under a release mark, and may
+  // one day want to tell a repair from a feature.
+  for (const x of fixes) {
+    out.push(`## ${x.title}`, '', '<!-- fix -->', '');
+    if (x.scope) out.push(`*${x.scope}*`, '');
   }
   // The changelog section verbatim, under the prose: the bullet list stays
   // generated from the commits, and this file never becomes a second source for it.
@@ -182,11 +250,25 @@ export function renderNote(tag, date, fragments, section) {
 // the tag — a note written after its release is not at that tag at all (every
 // backfilled one is like this), and a branch moves, so a picture renamed next
 // month would quietly break a page nobody re-reads.
+// A picture inside code is not a picture, it is the markdown a person types —
+// and a note about pictures is full of it. On 26 September 2026 v0.65.0 went out
+// to the public page with its own first sentence rewritten: the example it
+// quotes, `![подпись](/путь/кадр.png)`, came back as a raw URL under notes/ that
+// cannot exist. Code spans and fences are copied through untouched.
 export function releaseBody(md, { repo, sha }) {
   const base = `https://github.com/${repo}/raw/${sha}/${NOTES_DIR}/`;
-  return md
+  const CODE = /```[\s\S]*?```|`[^`\n]*`/g;
+  const pictures = (s) => s.replace(/!\[([^\]]*)\]\((?![a-z]+:)([^)\s]+)\)/gi,
+    (_, alt, rel) => `![${alt}](${base}${rel})`);
+  let body = '';
+  let last = 0;
+  for (let m = CODE.exec(md); m; m = CODE.exec(md)) {
+    body += pictures(md.slice(last, m.index)) + m[0];
+    last = m.index + m[0].length;
+  }
+  body += pictures(md.slice(last));
+  return body
     .replace(/^# .*\n+/, '')
-    .replace(/!\[([^\]]*)\]\((?![a-z]+:)([^)\s]+)\)/gi, (_, alt, rel) => `![${alt}](${base}${rel})`)
     .trim() + '\n';
 }
 
@@ -216,9 +298,15 @@ export function missingShots(root, fragments) {
   return out;
 }
 
-export function assemble(root, tag, date, fragments, section) {
+// A feature note owes a picture unless it says why it has none. Checked before
+// the tag, like the rendered shots: a note is not re-read after its release.
+export function unpictured(fragments) {
+  return fragments.filter((f) => !(f.shots || []).length && !f.nopicture).map((f) => f.slug);
+}
+
+export function assemble(root, tag, date, fragments, section, fixes = []) {
   const file = path.join(NOTES_DIR, `${tag}.md`);
-  writeFileSync(path.join(root, file), renderNote(tag, date, fragments, section));
+  writeFileSync(path.join(root, file), renderNote(tag, date, fragments, section, fixes));
 
   // The pictures move under the version, and the recipes move with them. The
   // recipe is the half that keeps working: replayed on an older tag it is what
@@ -281,6 +369,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (existsSync(file)) die(`${path.join(UNRELEASED, slug)}.md already exists`);
     writeFileSync(file, TEMPLATE(slug));
     console.log(path.join(UNRELEASED, slug + '.md'));
+    console.log('  A visible feature keeps its shot; one with nothing to photograph replaces\n' +
+      '  `shots:` with `nopicture: <why>` — the release refuses a note with neither.');
   } else if (argv[0] && !argv[0].startsWith('--')) {
     const [a, b] = argv[0].includes('..') ? argv[0].split('..') : [argv[0], argv[0]];
     if (!VER.test(a) || !VER.test(b)) die(`not a version or a version range: ${argv[0]}`);

@@ -1,0 +1,12 @@
+{
+  "tag": "v0.55.0",
+  "shots": [
+    {
+      "file": "office-update-office-update.png",
+      "slug": "office-update",
+      "id": "office-update",
+      "url": "",
+      "keys": "Enter,wait:3000,c,wait:900,tap:[data-tab=\"office\"],wait:1500"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "tag": "v0.53.0",
+  "shots": [
+    {
+      "file": "owner-devices-pairing-request.png",
+      "slug": "owner-devices",
+      "id": "pairing-request",
+      "setup": "fetch('/api/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'iPhone · Safari', ip: '192.168.1.23' }) })",
+      "keys": "Enter,wait:3000,i,wait:2500"
+    }
+  ]
+}

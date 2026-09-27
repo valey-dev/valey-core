@@ -110,7 +110,26 @@ function kickerFree(L, actors) {
 // the actors are placed. Found on 5 September 2026 during a two-machine test.
 const artifactsOf = (a) => (a.artifacts || []).length;
 
-export function syncActors(actors, agents, L) {
+// From the portal to the desk. The portal opens next to the owner, who may be
+// in the corridor at the reception, in the agent's own room, or in another
+// room entirely: out of that one first, then home the way agents come back
+// from the lounge.
+function pathFrom(L, from, room, desk) {
+  const inside = L.rooms.find((r) => from.x > r.x && from.x < r.x + r.w && from.y > r.y && from.y < r.y + r.h) || null;
+  if (inside === room) return pathTo(room, from, desk);
+  let start = from, head = [];
+  if (inside && inside.doorPoint && inside.bandY != null) {
+    const out = { x: inside.doorPoint.x, y: inside.bandY };
+    head = pathOut(L, inside, from, out);
+    start = out;
+  }
+  return [...head, ...pathHome(L, room, start, desk)];
+}
+
+// `arriving` answers where a new agent just hired from the office steps out
+// of its portal (web/office.js, drawPortal), or nothing for everyone else —
+// they appear at their desks, as they always have.
+export function syncActors(actors, agents, L, arriving = () => null) {
   const live = new Set();
   for (const a of agents) {
     const spot = L.byAgent.get(a.id);
@@ -124,6 +143,12 @@ export function syncActors(actors, agents, L) {
         dir: 0, frame: 0, artifacts: artifactsOf(a), showcase: 0, nextIdea: performance.now() + rnd(8000, 60000),
       };
       actors.set(a.id, act);
+      const from = arriving(a, spot.room);
+      if (from) {
+        act.x = from.x; act.y = from.y;
+        act.path = pathFrom(L, from, spot.room, spot.desk); act.state = 'walk';
+        act.portalAt = performance.now();
+      }
     } else if (act.room.key === spot.room.key && act.seat.i === spot.desk.i) {
       // The same desk in the same room — the plan has simply been rebuilt. A
       // comparison by reference counted this as a move and sent the person walking

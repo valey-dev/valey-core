@@ -4,32 +4,55 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { snapshot, fileOwners, conversation, PACK_IDS, namePool, nameSample, effectivePack, previewPack } from './agents.js';
 import { realWeather, forgetWeather, geocode } from './weather.js';
 import {
-  getSettings, patchSettings, publicSettings, ownerToken, warnIfSharedSettingsWorktree,
+  getSettings, patchSettings, updateSettings, publicSettings, ownerToken, warnIfSharedSettingsWorktree, PATHS,
 } from './settings.js';
-import { deliver, deliveryStatus, forgetCli, isBusy, MODES } from './deliver.js';
-import { ask as askPermit, answer as answerPermit, permits, forgetGone } from './permit.js';
+import { deliver, deliveryStatus, findCli, forgetCli, isBusy, MODES, adopt, releaseRuns } from './deliver.js';
+import { recordError, readErrors, cliVersion, environment } from './errors.js';
+import { queueToThread, codexDelivery } from './codex.js';
+import { saveFile, prune as pruneInbox, inboxDir, MAX_BYTES as INBOX_MAX, MAX_FILES } from './inbox.js';
+import { hire, release as releaseHire, hireList, hiredAt, hireCwd, resumeCommand, pruneHires } from './hire.js';
+import { repoRoot } from './stack.js';
+import { ask as askPermit, answer as answerPermit, permits, forgetGone, retryAll } from './permit.js';
 import { releaseNudge } from './release.js';
-import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleVisitors, moduleAll, setModuleOff, moduleAsset } from './modules.js';
-import { check as checkNetwork, newToken, isLocal, proxied } from './network.js';
-import { MIME, fileType, fileHeaders } from './files.js';
+import { loadModules, moduleList, moduleRoute, moduleErrors, moduleOnPatch, moduleObserve, moduleVisitors, moduleAll, setModuleOff, moduleAsset, modulesOff, setOwnerOff, setGuestChoice, moduleGuestRows } from './modules.js';
+import { check as checkNetwork, newToken, isLocal, proxied, inviteUrl } from './network.js';
+import { isLan, deviceOf, shownDevice, deviceName, Pairings, SEEN_EVERY } from './devices.js';
+import { deskFile, loadDesk, deskWriter } from './desk.js';
+import { MIME, MAX_VIEW, fileType, fileHeaders } from './files.js';
 import { listenFree } from './port.js';
 import { createExposure, lanAddresses } from './expose.js';
+import { isWorker, fixedAddress, gated, listenForSwap, upd, runCheck, runUpdate } from './swap.js';
+import { repos as updateRepos } from './update.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const WEB = path.join(ROOT, 'web');
 const MODS = path.join(ROOT, 'modules');
 const PORT = Number(process.env.PORT || 5177);
+// Which checkout «update» pulls. The office's own, except in the stand, which
+// updates a repository of its own rather than the branch it runs from.
+const UPDATE_ROOT = process.env.VALEY_UPDATE_ROOT || ROOT;
 const POLL_MS = 2500;
+
+// What the page is told about sending into chats: Claude's CLI as before, and
+// under `codex` whether the Codex CLI is there for Codex threads.
+const deliveryAll = async () => ({ ...(await deliveryStatus()), codex: await codexDelivery() });
 
 // The office version comes from its own package.json rather than a string in
 // the interface: the sign on the title screen shows it, and in a release video
 // it has to match the tag.
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
+// The version «update» compares against: the checkout it pulls, read when this
+// office started. The same as VERSION in a real office. A stand runs one tree
+// and updates another, and read from the running tree it stayed «behind» after
+// every swap — each press of «update» swapped again, for nothing.
+const UPDATE_VERSION = UPDATE_ROOT === ROOT ? VERSION
+  : JSON.parse(fs.readFileSync(path.join(UPDATE_ROOT, 'package.json'), 'utf8')).version;
 
 let last = { now: 0, agents: [], version: VERSION };
 // The switch that opens the running office to the network (expose.js). Set by
@@ -48,6 +71,7 @@ const PACK_LIST = PACK_IDS.map((id) => ({ id, size: namePool(id).length, sample:
 // disappears.
 process.on('unhandledRejection', (err) => {
   console.error('[unhandled]', (err && err.stack) || err);
+  recordError({ source: 'server', message: String((err && err.message) || err), stack: err && err.stack, version: VERSION });
 });
 // Room -> directory on disk. The only way to name a directory for /api/git: the
 // client sends the room key that the office already shows on the door.
@@ -59,6 +83,23 @@ const clients = new Set();
 // Notes the player left, plus whatever was actually sent into a live chat.
 const outbox = [];
 let taskSeq = 0;
+// Writes the desk to disk (desk.js). Set by start() once the port is known; an
+// office built only as a handler, as the stands build it, keeps its desk in
+// memory.
+let keepDesk = () => {};
+
+// A task that did not reach its chat goes into the error journal with what is
+// needed to explain it later: the CLI's answer, which CLI and which version.
+// Never the text of the task — that is the owner's message, not a symptom.
+async function journalFailure(task, agent) {
+  if (task.state !== 'failed') return;
+  const c = agent.provider === 'codex' ? null : await findCli().catch(() => null);
+  recordError({
+    source: 'deliver', message: task.error || 'failed', key: task.errorKey,
+    provider: agent.provider, agent: String(agent.id || '').slice(0, 8),
+    cli: c && c.path, cliVersion: c && c.path ? await cliVersion(c.path) : null, version: VERSION,
+  });
+}
 
 // ------------------------------------------------------------- the projection
 // What a guest sees about an agent. Exactly what is visible to anyone standing
@@ -78,7 +119,13 @@ let taskSeq = 0;
 const SHOWN = [
   'id', 'name', 'gender', 'project', 'seat', 'role', 'roleKey',
   'status', 'act', 'activity', 'mood', 'idleFor', 'startedAt',
-  'limited', 'version', 'stack', 'trinkets', 'visitor',
+  'limited', 'version', 'stack', 'trinkets', 'hired',
+  // What the agent answers with is a fact about the desk, like the trade — not
+  // about the work. Decided with the frame on 15 September 2026 (#model-card).
+  'model', 'effort',
+  // Whose office this agent actually sits in: set for the ones another
+  // participant's office sends over, absent for our own.
+  'visitor',
 ];
 
 // One agent cut down to the projection. Handed to modules as well: an office
@@ -131,7 +178,11 @@ function accessForGuest(guestId) {
 // What the owner sees: who is asking and who already has access. The guest's
 // name comes from presence — it is there anyway, and there is no point asking
 // for it twice.
-function accessForOwner() {
+// Pairing requests from devices in our own network: in memory, two minutes
+// each. See server/devices.js.
+const pairings = new Pairings();
+
+function accessForOwner(s) {
   const nameOf = (id) => (people.get(id) || {}).name || '';
   const open = [];
   for (const [guestId, set] of grants) {
@@ -142,6 +193,11 @@ function accessForOwner() {
       .filter((a) => a.state === 'pending')
       .map((a) => ({ ...a, who: nameOf(a.guestId) })),
     open,
+    // Owner devices: the list in the Invite panel and the requests waiting for a
+    // yes. The settings are passed in by callers that already read them; the
+    // hashes never leave this function.
+    devices: ((s && s.access && s.access.devices) || []).map((d) => shownDevice(d)),
+    pairings: pairings.pending(),
   };
 }
 
@@ -158,6 +214,9 @@ function project(snapshot, guestId) {
     // and all. The page hides it from anyone who is not the owner as well —
     // in private mode a viewer on the Wi-Fi is not projected at all.
     release: null,
+    // The portal is on the floor for everyone; why a hire failed is the
+    // owner's — the reason can quote a path or the CLI's own words.
+    hires: (snapshot.hires || []).map((h) => ({ id: h.id, project: h.project, state: h.state, sessionId: h.sessionId, source: h.source, spot: h.spot, at: h.at, changedAt: h.changedAt })),
     agents: (snapshot.agents || []).map((a) => {
       if (granted(guestId, a.id)) return a;
       const out = shown(a);
@@ -260,7 +319,10 @@ const safeInvite = (i) => ({
   id: i.id, name: i.name, from: i.from, at: i.at, usedAt: i.usedAt, used: !!i.usedAt,
 });
 
-async function isOwner(req) {
+// `devices: false` asks the narrower question «is this the owner's own machine
+// or token», which is what answering a pairing request needs: a paired device
+// must not let in the next one.
+async function isOwner(req, { devices = true } = {}) {
   const s = await getSettings();
   // A header for ordinary requests, a query parameter for the stream.
   // EventSource cannot set headers, and without this the owner in shared mode
@@ -274,6 +336,10 @@ async function isOwner(req) {
   const given = req.headers['x-valey-owner']
     || new URL(req.url, 'http://localhost').searchParams.get('owner');
   if (s.access.token && given && given === s.access.token) return true;
+  // A paired device is the owner in shared mode too: the yes was given for the
+  // device, not for a mode. It counts only from our own network — through a
+  // tunnel the token alone would be the key to the terminal.
+  if (devices && (await deviceFrom(req, s))) return true;
   if (s.access.mode === 'shared') return false;
   // Arrived through a middleman — so not "from this machine", whatever address
   // the socket shows. A tunnel (cloudflared, ngrok, any reverse proxy) connects
@@ -287,13 +353,49 @@ async function isOwner(req) {
   return isLocal(req);
 }
 
+// The paired device behind a request, or null. Seen from time to time: the
+// list says when each device was last here, and a device unused for 30 days
+// lapses (server/devices.js).
+async function deviceFrom(req, s) {
+  const token = req.headers['x-valey-device']
+    || new URL(req.url, 'http://localhost').searchParams.get('device');
+  if (!token || !isLan(req)) return null;
+  const d = deviceOf(s.access.devices, token);
+  if (d && Date.now() - (d.lastSeen || 0) > SEEN_EVERY) {
+    const devices = (s.access.devices || []).map((x) => (x.id === d.id ? { ...x, lastSeen: Date.now() } : x));
+    await patchSettings({ access: { ...s.access, devices } });
+  }
+  return d;
+}
+
 // A guest is whoever came in by an invitation and holds the token issued to
 // them. Different from the owner in everything: may watch, may not command.
+// The guest's pass as a cookie too. A module's code is loaded with import(),
+// which sends no headers of its own, and the module's own files follow by
+// relative path — so a guest page asked for /modules/<id>/client.js with no
+// pass at all and got 403 for every module the owner had left shown. Found on
+// the #guests stand, 26 September 2026: the guest's list said plan, polaroid,
+// radio and the page had loaded none of them. It had been so since guests came
+// in, v0.27.0; the stands send the header themselves and never saw it. The
+// cookie is set whenever a request names a real guest by header, and read here
+// alongside it; a guest shown out is not found in the invites, cookie or not.
+const GUEST_COOKIE = 'valey_guest';
+const guestCookie = (id) => `${GUEST_COOKIE}=${encodeURIComponent(id)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${60 * 60 * 24 * 30}`;
+function cookieGuest(req) {
+  for (const part of String(req.headers.cookie || '').split(';')) {
+    const [k, ...v] = part.trim().split('=');
+    if (k === GUEST_COOKIE) { try { return decodeURIComponent(v.join('=')); } catch { return ''; } }
+  }
+  return '';
+}
+
 async function guestOf(req) {
   // A header for ordinary requests, a parameter for the stream: EventSource
-  // cannot set headers, and the stream is the first thing a guest needs.
+  // cannot set headers, and the stream is the first thing a guest needs. The
+  // cookie for what can send neither: a module's code, see guestCookie.
   const given = req.headers['x-valey-guest']
-    || new URL(req.url, 'http://localhost').searchParams.get('guest');
+    || new URL(req.url, 'http://localhost').searchParams.get('guest')
+    || cookieGuest(req);
   if (!given) return null;
   const s = await getSettings();
   return (s.access.invites || []).find((i) => i.guest && i.guest === given) || null;
@@ -368,7 +470,11 @@ function peopleTick() {
 
 // Whether there is anybody worth asking. A guest does not count: the pager does
 // not reach him, and holding a question for him means holding it for nobody.
-const audience = () => [...clients].some((res) => !res.valeyGuest);
+// Right after an update the owner's pages are still reloading onto this office,
+// and a question the previous one sent back arrives before they do. For a short
+// while after the handover it is held as if they were already here.
+let audienceUntil = 0;
+const audience = () => [...clients].some((res) => !res.valeyGuest) || Date.now() < audienceUntil;
 
 // One event to one person's open streams. Presence broadcasts to everybody and
 // needs nothing like this; a module that introduces two browsers to each other
@@ -382,6 +488,21 @@ function toPerson(id, event, data) {
   return n;
 }
 
+// The breaker on the wall by the lift (web/office.js): a joke, and a joke for
+// everybody on the floor — the owner's call, 26 September 2026. So the light is
+// the office's state, not a page's: one breaker for the building, pulled by
+// anyone, a guest included, and every open tab goes dark together.
+//
+// It lives in memory and nowhere else. A restart turns the lights back on, on
+// purpose: a breaker left down must not leave an office dark for good, and
+// nobody should have to open settings.json to find out why.
+let lights = { on: true, by: '', at: 0 };
+
+function broadcastLights() {
+  const payload = `event: lights\ndata: ${JSON.stringify(lights)}\n\n`;
+  for (const res of clients) res.write(payload);
+}
+
 // The pager has to ring at once rather than on the snapshot tick: 2.5 seconds
 // is the difference between "I am being called" and "I was called". The event
 // goes to owners only, because a guest's projection holds no requests at all.
@@ -392,8 +513,86 @@ function broadcastPermits() {
   for (const res of clients) if (!res.valeyGuest) res.write(payload);
 }
 
-async function tick() {
-  try {
+// ------------------------------------------------------------- the handover
+// What moves to the office that replaces this one on an update (server/swap.js).
+// Everything that lives only in memory and that a person would miss: the notes
+// on the desks, what guests asked for and were granted, who is standing where,
+// the stand's module switches. A restart forgets all of it but the notes, which
+// are also kept on disk (desk.js); the rest it forgets on purpose. An update is
+// not a restart.
+function exportState() {
+  return {
+    v: 1,
+    from: VERSION,
+    outbox,
+    taskSeq,
+    grants: [...grants].map(([guest, set]) => [guest, [...set]]),
+    asks: [...asks],
+    people: [...people],
+    modulesOff: modulesOff(),
+  };
+}
+
+async function importState(state) {
+  if (!state || state.v !== 1) return;
+  outbox.push(...(state.outbox || []));
+  taskSeq = Math.max(taskSeq, Number(state.taskSeq) || 0);
+  for (const [guest, list] of state.grants || []) grants.set(guest, new Set(list));
+  for (const [k, a] of state.asks || []) asks.set(k, a);
+  const now = Date.now();
+  for (const [id, p] of state.people || []) people.set(id, { ...p, at: now });
+  for (const id of state.modulesOff || []) setModuleOff(id, true);
+  audienceUntil = now + 20_000;
+  // A note that was still being delivered: its run lives on in its own process
+  // group, and this office reads how it ended. These two lines sat after the
+  // return below and never ran, so a note in flight during an update stayed
+  // «sending» for good.
+  adoptSending();
+  console.log(`[update] took over from v${state.from}: ${outbox.length} notes, ${grants.size} guests with access`);
+  // The snapshot built at start knows nothing of this, and the next tick is
+  // 2.5 s away: the pages reloading onto this office would find the desks
+  // bare. The gate is still shut while this runs, so no page ever sees the
+  // snapshot without what came across. Not observed: nothing happened, the
+  // office only changed hands.
+  return rebuild({ observe: false }).catch((e) => console.error('[update] snapshot after the handover:', e.message));
+}
+
+function adoptSending() {
+  for (const t of outbox) if (t.state === 'sending') adopt(t).catch((e) => { t.state = 'failed'; t.error = e.message; });
+}
+
+// The desk as the previous run of this office left it on disk. Loaded only on a
+// cold start: an office taking over from an older one gets the notes in the
+// handover, fresher than the file by up to one tick.
+async function restoreDesk(port, { load = true } = {}) {
+  const file = deskFile({ settingsFile: PATHS.file, port });
+  keepDesk = deskWriter(file);
+  if (!load) return 0;
+  const kept = await loadDesk(file);
+  outbox.push(...kept.outbox);
+  taskSeq = Math.max(taskSeq, kept.taskSeq);
+  // A run sent before the restart may still be answering — it is in a process
+  // group of its own and outlived the office (deliver.js); its files are read
+  // the same way as after an update.
+  adoptSending();
+  return kept.outbox.length;
+}
+
+// Every page is told the office was updated, and to reload onto the new one.
+// Guests too: their page blinks as well, and they keep their access.
+function farewell(to) {
+  const payload = `event: update\ndata: ${JSON.stringify({ from: UPDATE_VERSION, to })}\n\n`;
+  for (const res of [...clients]) {
+    try { res.write(payload); res.end(); } catch { /* already gone */ }
+  }
+  clients.clear();
+}
+
+// Build the snapshot and make it `last`. The tick does this every POLL_MS and
+// also runs the modules' observers; an office that has just taken over from an
+// older one does it once more, before letting any request in, so that the
+// first page to arrive finds the notes and guests that came across.
+async function rebuild({ observe = true } = {}) {
     // Observers need the previous snapshot: an event is a difference, not a
     // state. The core does not compute it — it only hands over both sides.
     const prev = last;
@@ -410,12 +609,21 @@ async function tick() {
     // The owner can put the video nudge away (releaseNudge: false) while videos
     // are not what the work is about; the drafts keep being written at release.
     next.release = settings.releaseNudge === false ? null : await releaseNudge(ROOT);
-    for (const a of next.agents) a.outbox = outbox.filter((t) => t.agentId === a.id).slice(-5);
+    // A delivery changes its note's state on its own time; the tick is where
+    // that reaches the disk. Written only when something did change.
+    keepDesk(outbox, taskSeq);
+    for (const a of next.agents) {
+      a.outbox = outbox.filter((t) => t.agentId === a.id).slice(-5);
+      const hiredWhen = hiredAt(a.id);
+      if (hiredWhen) a.hired = hiredWhen;
+    }
+    pruneHires();
+    next.hires = hireList();
     next.weather = await realWeather();
     next.settings = publicSettings(settings);
-    next.delivery = await deliveryStatus();
+    next.delivery = await deliveryAll();
     next.people = livePeople();
-    next.access = accessForOwner();
+    next.access = accessForOwner(settings);
     // A question asked by a session the office no longer has is released: there
     // is nobody to answer it, and waiting nine minutes holds someone's terminal.
     forgetGone(next.agents.map((a) => a.id));
@@ -423,11 +631,17 @@ async function tick() {
     // Observers run before the broadcast: a module may add its own to the
     // snapshot, and the client should get it on this tick, not 2.5 seconds
     // later.
-    await moduleObserve(next, prev);
+    if (observe) await moduleObserve(next, prev);
     last = next;
+}
+
+async function tick() {
+  try {
+    await rebuild();
     const full = `data: ${JSON.stringify(last)}\n\n`;
     // A stream is only as invited as the settings say right now.
     const acc = (await getSettings()).access;
+    setGuestChoice(acc.guests);
     const invited = new Set((acc.invites || []).map((i) => i.guest).filter(Boolean));
     for (const res of [...clients]) {
       if (res.valeyGuest && (acc.mode !== 'shared' || !invited.has(res.valeyGuest))) dropGuest(res.valeyGuest);
@@ -450,6 +664,18 @@ function send(res, code, body, type = 'application/json; charset=utf-8', extra =
 // A body error is an answer, not a crash: the code and the key go to the client
 // from the handler wrapper, and it closes the connection so an unread body does
 // not hang in the socket.
+// The files a task may carry: the owner's, and only ones this office wrote
+// into its inbox. Everything else is dropped in silence — a task is not the
+// place to discover that somebody tried.
+function ownFiles(owner, list) {
+  if (!owner || !Array.isArray(list)) return [];
+  const root = inboxDir() + path.sep;
+  return list
+    .filter((f) => f && typeof f.path === 'string' && path.resolve(f.path).startsWith(root) && fs.existsSync(f.path))
+    .slice(0, MAX_FILES)
+    .map((f) => ({ path: path.resolve(f.path), name: String(f.name || path.basename(f.path)).slice(0, 80), size: Number(f.size) || 0 }));
+}
+
 class BodyError extends Error {
   constructor(code, key, message) { super(message); this.code = code; this.key = key; }
 }
@@ -476,6 +702,19 @@ async function readBody(req, max = BODY_MAX) {
 // browser will not send a request with that header from another site without a
 // preflight, and the office does not answer preflights. An empty body is an
 // empty object, as before.
+// The same ceiling, without the utf8: a dropped file is bytes, and decoding
+// them as text would corrupt every picture on the way in.
+async function readBuffer(req, max = BODY_MAX) {
+  const chunks = [];
+  let size = 0;
+  for await (const c of req) {
+    size += c.length;
+    if (size > max) throw new BodyError(413, 'err.tooBig', 'request body is too large');
+    chunks.push(c);
+  }
+  return Buffer.concat(chunks);
+}
+
 async function readJson(req, max = BODY_MAX) {
   const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
   if (type !== 'application/json') throw new BodyError(415, 'err.notJson', 'application/json is required');
@@ -529,7 +768,9 @@ function crossSite(req) {
 // at all. /api/stand is open alongside them: the stand sign has to be shown
 // before entry, or an empty screen leaves it unclear whose office this is and
 // what is being checked on it.
-const OPEN = new Set(['/api/enter', '/api/whoami', '/api/stand']);
+// /api/pair too: a phone in a shared office is nobody until the owner says yes,
+// and asking for that yes is the one thing it must be able to do.
+const OPEN = new Set(['/api/enter', '/api/whoami', '/api/stand', '/api/pair']);
 
 /**
  * The request handler, separate from the start-up.
@@ -558,6 +799,8 @@ export function createHandler() {
         return;
       }
       console.error('[http]', req.method, req.url, (e && e.stack) || e);
+      recordError({ source: 'server', message: String((e && e.message) || e), stack: e && e.stack,
+        where: `${req.method} ${String(req.url).split('?')[0]}`, version: VERSION });
       try {
         if (!res.headersSent) send(res, 500, { error: 'internal error', errorKey: 'err.internal' });
         else res.end();
@@ -624,7 +867,11 @@ async function handle(req, res) {
     });
     // The stream remembers who is listening: there is one snapshot, and it is
     // seen differently.
-    const guest = await guestOf(req);
+    // The page sends both passes it holds (web/owned.js, passQuery), so the
+    // owner wins here as he does on every other route: an owner who once
+    // tried his own invitation link in this browser still gets his office,
+    // not a guest's projection of it.
+    const guest = (await isOwner(req)) ? null : await guestOf(req);
     const who = guest ? guest.guest : null;
     res.valeyGuest = who;
     // Who is on the other end of this stream, by the same id `/api/here` uses.
@@ -635,6 +882,12 @@ async function handle(req, res) {
     res.write(`data: ${JSON.stringify(who ? project(last, who) : last)}\n\n`);
     // Whoever just came in sees who is already in the office at once, not a presence tick later.
     res.write(`event: people\ndata: ${JSON.stringify(livePeople())}\n\n`);
+    // And whether the breaker is down: somebody walking into a dark office walks
+    // into the dark, not into a lit floor that goes out a tick later.
+    res.write(`event: lights\ndata: ${JSON.stringify(lights)}\n\n`);
+    // A guest learns on every connect which modules are his, so a page that
+    // slept through the owner's switch catches up (web/modules.js, guestModules).
+    if (who) res.write(`event: modules\ndata: ${JSON.stringify(moduleList(false).map((m) => m.id))}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
     return;
@@ -731,7 +984,53 @@ async function handle(req, res) {
     } else {
       ask.state = 'refused';
     }
-    return send(res, 200, { ok: true, access: accessForOwner() });
+    return send(res, 200, { ok: true, access: accessForOwner(await getSettings()) });
+  }
+
+  // ------------------------------------------------------------ owner devices
+  // A device asks to become the owner. Only from our own network, and never
+  // from something that already is one — this machine has nothing to ask.
+  if (url.pathname === '/api/pair' && req.method === 'POST') {
+    if (!isLan(req)) return send(res, 403, { error: 'pairing is asked from the same network only', errorKey: 'err.pairLan' });
+    // The office raised for release pictures (tools/lib/office.mjs,
+    // PICTURE_ENV) is one machine with no second device, and its page is the
+    // owner; a pairing request is the one screen of this feature it could not
+    // show. There, and only there, this machine may ask, with an invented
+    // address for the card. The switch is an environment variable of the
+    // process — nothing that arrives over the network can set it.
+    const picture = process.env.VALEY_PICTURE === '1';
+    if (!picture && (await isOwner(req))) return send(res, 409, { error: 'this device is the owner already', errorKey: 'err.pairOwner' });
+    const b = await readJson(req);
+    const name = String(b.name || '').replace(/[^\p{L}\p{N} ·.\-]/gu, '').slice(0, 40) || deviceName(req.headers['user-agent']);
+    const ip = picture && b.ip ? String(b.ip).slice(0, 40) : ((req.socket && req.socket.remoteAddress) || '').replace(/^::ffff:/, '');
+    const p = pairings.ask({ ip, name });
+    return send(res, 200, { id: p.id, code: p.code, name: p.name, ttl: 120 });
+  }
+  // The device waits for the answer here, and collects its token once.
+  if (url.pathname === '/api/pair' && req.method === 'GET') {
+    if (!isLan(req)) return send(res, 403, { error: 'pairing is asked from the same network only', errorKey: 'err.pairLan' });
+    return send(res, 200, pairings.collect(String(url.searchParams.get('id') || '')));
+  }
+  // The yes or the no. This machine or the owner token only: a paired device
+  // may do everything the owner does except let in the next device.
+  if (url.pathname === '/api/pair/answer' && req.method === 'POST') {
+    if (!(await isOwner(req, { devices: false }))) return forbidden(res);
+    const b = await readJson(req);
+    const rec = pairings.answer(String(b.id || ''), !!b.yes);
+    if (rec) {
+      const s = await getSettings();
+      await patchSettings({ access: { ...s.access, devices: [...(s.access.devices || []), rec] } });
+    }
+    return send(res, 200, { ok: true, access: accessForOwner(await getSettings()) });
+  }
+  // One button, as with a guest: taking a device back must not cost more than
+  // letting it in.
+  if (url.pathname === '/api/devices/revoke' && req.method === 'POST') {
+    if (!(await isOwner(req, { devices: false }))) return forbidden(res);
+    const b = await readJson(req);
+    const s = await getSettings();
+    await patchSettings({ access: { ...s.access, devices: (s.access.devices || []).filter((d) => d.id !== String(b.id || '')) } });
+    return send(res, 200, { ok: true, access: accessForOwner(await getSettings()) });
   }
 
   // Close what was opened. One button, no confirmation: revoking must not take
@@ -740,7 +1039,7 @@ async function handle(req, res) {
     if (!(await isOwner(req))) return forbidden(res);
     const b = await readJson(req);
     grants.get(String(b.guestId || ''))?.delete(String(b.agentId || ''));
-    return send(res, 200, { ok: true, access: accessForOwner() });
+    return send(res, 200, { ok: true, access: accessForOwner(await getSettings()) });
   }
 
   // The owner invites a guest. The code is longer than on the frame: the
@@ -751,7 +1050,6 @@ async function handle(req, res) {
   if (url.pathname === '/api/invite' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
     const b = await readJson(req);
-    const s = await getSettings();
     const code = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
     const invite = {
       // the id lets the panel revoke an invitation without knowing the code:
@@ -767,10 +1065,11 @@ async function handle(req, res) {
     // from it too: somebody invited through a tunnel would come out as the
     // owner. Inviting without opening up is not possible, so this is not a
     // separate switch but a consequence.
-    await patchSettings({
+    await updateSettings((s) => ({
       access: { ...s.access, mode: 'shared', invites: [...(s.access.invites || []), invite] },
-    });
-    const host = req.headers.host || `localhost:${PORT}`;
+    }));
+    const net = (await getSettings()).network || {};
+    const link = inviteUrl(req.headers.host || `localhost:${PORT}`, code, { external: !!net.external, lan: lanAddresses(), token: net.token });
     // The owner token comes back together with the link — not a relaxation but
     // the condition for an invitation working at all. Going shared kills the
     // "came from this machine" shortcut, and a page that was the owner over
@@ -779,7 +1078,7 @@ async function handle(req, res) {
     // gets this far, so handing him his own token risks nothing.
     return send(res, 200, {
       ok: true, invite, owner: (await getSettings()).access.token,
-      url: `http://${host}/#code=${code}`,
+      url: link,
     });
   }
 
@@ -789,14 +1088,19 @@ async function handle(req, res) {
   if (url.pathname === '/api/invite/revoke' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
     const b = await readJson(req);
-    const s = await getSettings();
-    const left = (s.access.invites || []).filter((i) => i.id !== b.id);
-    await patchSettings({ access: { ...s.access, invites: left } });
+    let gone = [];
+    let left = [];
+    await updateSettings((s) => {
+      const invites = s.access.invites || [];
+      gone = invites.filter((i) => i.id === b.id);
+      left = invites.filter((i) => i.id !== b.id);
+      return { access: { ...s.access, invites: left } };
+    });
     // The token dies with the invitation, and so does everything that held it.
     // Until 12 September 2026 only the next request was refused: a stream
     // opened on the token kept receiving the projection — with the agent the
     // guest had been granted — after the invitation was gone.
-    for (const i of (s.access.invites || [])) if (i.id === b.id && i.guest) dropGuest(i.guest);
+    for (const i of gone) if (i.guest) dropGuest(i.guest);
     return send(res, 200, { ok: true, invites: left.map(safeInvite) });
   }
 
@@ -805,23 +1109,73 @@ async function handle(req, res) {
   if (url.pathname === '/api/invites') {
     if (!(await isOwner(req))) return forbidden(res);
     const s = await getSettings();
-    return send(res, 200, { invites: (s.access.invites || []).map(safeInvite) });
+    return send(res, 200, { invites: (s.access.invites || []).map(safeInvite), modules: moduleGuestRows() });
+  }
+
+  // The owner decides what a guest sees, module by module, over the manifest's
+  // default: {id, choice: 'shown' | 'hidden'}. Choosing the default again
+  // forgets the choice, so the row's «not the default» mark goes by itself. One
+  // choice for all guests, not per link — decided 11 September 2026. It takes
+  // effect at once: the routes stop answering (moduleRoute reads the same
+  // choice), and every guest with a page open is told to reload it, so the
+  // client of a hidden module leaves his page without his help.
+  if (url.pathname === '/api/invite/guests' && req.method === 'POST') {
+    if (!(await isOwner(req))) return forbidden(res);
+    const b = await readJson(req);
+    const row = moduleGuestRows().find((m) => m.id === String(b.id || ''));
+    if (!row) return send(res, 404, { error: 'no such module' });
+    const choice = b.choice === 'shown' || b.choice === 'hidden' ? b.choice : null;
+    const s = await getSettings();
+    const guests = { ...((s.access || {}).guests || {}) };
+    if (!choice || choice === row.default) delete guests[row.id]; else guests[row.id] = choice;
+    const saved = await patchSettings({ access: { ...s.access, guests } });
+    setGuestChoice((saved.access || {}).guests);
+    const shown = `event: modules\ndata: ${JSON.stringify(moduleList(false).map((m) => m.id))}\n\n`;
+    for (const res of [...clients]) if (res.valeyGuest) res.write(shown);
+    return send(res, 200, { ok: true, modules: moduleGuestRows() });
   }
 
   // Entry by code. One use: it worked, it is spent, and the same link does not
   // let anyone in twice. In exchange a guest token is issued, so a page reload
   // does not put the person back outside the door.
+  //
+  // The code is spent when the guest presses Enter at the door, not when the page
+  // opens: `peek` checks it and names the inviter without spending it. Until
+  // 13 September 2026 the first thing to run the page spent it — on
+  // 5 September a link forwarded in Telegram was burnt by the messenger's
+  // built-in browser, and the guest's laptop was told the invitation was not valid.
+  //
+  // A spent code still opens the door for the browser it was spent in: the
+  // request carries the pass that code gave out. That grants nothing new —
+  // whoever holds the pass is already in — and it keeps the link working for
+  // the person it was sent to. Any other browser is told the code is used.
   if (url.pathname === '/api/enter' && req.method === 'POST') {
     const b = await readJson(req);
-    const s = await getSettings();
-    const invites = s.access.invites || [];
-    const invite = invites.find((i) => i.code === String(b.code || ''));
-    if (!invite) return send(res, 403, { error: 'this invitation does not exist', errorKey: 'err.codeUnknown' });
-    if (invite.usedAt) return send(res, 403, { error: 'this code has already been used', errorKey: 'err.codeUsed' });
-    invite.usedAt = Date.now();
-    invite.guest = crypto.randomUUID();
-    await patchSettings({ access: { ...s.access, invites } });
-    return send(res, 200, { ok: true, guest: invite.guest, from: invite.from });
+    const code = String(b.code || '');
+    const peek = b.peek === true;
+    const presented = String(req.headers['x-valey-guest'] || '');
+    // Decided against the file as it is now, and again if another office wrote
+    // it meanwhile (see updateSettings): a pass that is handed out has to be
+    // the one on disk.
+    let answer = null;
+    await updateSettings((s) => {
+      const invites = s.access.invites || [];
+      const invite = invites.find((i) => i.code === code);
+      if (!invite) { answer = [403, { error: 'this invitation does not exist', errorKey: 'err.codeUnknown' }]; return null; }
+      if (invite.usedAt) {
+        answer = presented && presented === invite.guest
+          ? [200, { ok: true, guest: invite.guest, from: invite.from }]
+          : [403, { error: 'this code has already been used', errorKey: 'err.codeUsed' }];
+        return null;
+      }
+      if (peek) { answer = [200, { ok: true, peek: true, from: invite.from }]; return null; }
+      const guest = crypto.randomUUID();
+      answer = [200, { ok: true, guest, from: invite.from }];
+      return {
+        access: { ...s.access, invites: invites.map((i) => (i === invite ? { ...i, usedAt: Date.now(), guest } : i)) },
+      };
+    });
+    return send(res, ...answer);
   }
 
   // A person says they are here and where exactly. Only this goes out: the
@@ -846,6 +1200,27 @@ async function handle(req, res) {
     return send(res, 200, { ok: true, people: people.size });
   }
 
+  // The breaker. Anyone admitted may pull it, a guest included — that is the
+  // joke, and it was asked for in so many words. The name comes from the page,
+  // the same third-person name /api/here carries, because the toast says who.
+  if (url.pathname === '/api/lights' && req.method === 'POST') {
+    const raw = await readBody(req);
+    if (raw.length > 2000) return send(res, 413, { error: 'request body is too large' });
+    let b;
+    try { b = JSON.parse(raw); } catch { return send(res, 400, { error: 'invalid JSON' }); }
+    if (!b || typeof b.on !== 'boolean') return send(res, 400, { error: 'on must be true or false' });
+    const known = typeof b.id === 'string' ? people.get(b.id.slice(0, 64)) : null;
+    const by = String(b.name || (known && known.name) || '').slice(0, 24);
+    // A pull that changes nothing is not news: two people reaching for the
+    // breaker at once must not produce two toasts and two hums.
+    if (b.on !== lights.on) {
+      lights = { on: b.on, by, at: Date.now() };
+      console.log(`[lights] ${b.on ? 'on' : 'off'}${by ? ' — ' + by : ''}`);
+      broadcastLights();
+    }
+    return send(res, 200, lights);
+  }
+
   // Left properly rather than by timeout: the tab closes, the spot is freed at
   // once, without eight seconds of a ghost in the corridor.
   if (url.pathname === '/api/gone' && req.method === 'POST') {
@@ -868,7 +1243,7 @@ async function handle(req, res) {
     return send(res, 200, {
       ...seen,
       people: livePeople(),
-      access: guest ? accessForGuest(guest.guest) : accessForOwner(),
+      access: guest ? accessForGuest(guest.guest) : accessForOwner(await getSettings()),
       // For the same reason as presence and access: a permission request lives
       // seconds and arrives between ticks. A tab opened a moment ago has to see
       // the one hanging right now, not emptiness until the first tick.
@@ -891,15 +1266,45 @@ async function handle(req, res) {
     return send(res, 200, { agent: { id, name: agent.name, title: agent.title }, messages: conversation(id) });
   }
 
+  // An uncaught error of the page, sent by web/report.js. A guest's browser may
+  // report too — the journal is capped, and its lines are marked as a guest's.
+  if (url.pathname === '/api/error' && req.method === 'POST') {
+    let e = {};
+    try { e = await readJson(req, 16 * 1024); } catch (err) {
+      if (err instanceof BodyError) throw err;
+      return send(res, 400, { error: 'bad json' });
+    }
+    const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : undefined);
+    const message = str(e.message, 500);
+    if (!message) return send(res, 400, { error: 'message required' });
+    await recordError({
+      source: 'page', message, stack: str(e.stack, 2000), where: str(e.where, 200),
+      browser: str(e.browser, 200), guest: (await guestOf(req)) ? true : undefined, version: VERSION,
+    });
+    return send(res, 200, { ok: true });
+  }
+
+  // The journal with the machine it came from, for the owner to read and pass on.
+  if (url.pathname === '/api/errors') {
+    if (!(await isOwner(req))) return forbidden(res);
+    const c = await findCli().catch(() => null);
+    const cliPath = c && c.path;
+    return send(res, 200, {
+      env: environment({ version: VERSION, cliPath, cliVer: cliPath ? await cliVersion(cliPath) : null }),
+      errors: await readErrors(),
+    });
+  }
+
   // Leave a note on the desk, or actually send it into the agent's chat.
   if (url.pathname === '/api/task' && req.method === 'POST') {
     try {
-      const { agentId, text, deliver: wantsDelivery, mode: wantedMode, resend } = await readJson(req);
+      const { agentId, text, files: sent, deliver: wantsDelivery, mode: wantedMode, resend } = await readJson(req);
+      const owner = await isOwner(req);
       // Anyone may leave a note on the desk: the owner sees it when he comes
       // back and decides himself. Sending into the chat is another matter: it
       // starts claude --resume in a live session, and with bypassPermissions
       // that is the terminal. Watching is allowed, commanding is not.
-      if ((wantsDelivery || resend) && !(await isOwner(req))) return forbidden(res);
+      if ((wantsDelivery || resend) && !owner) return forbidden(res);
       // A visitor's desk is on the other machine. A note left here would lie
       // on a desk its agent never sits at, and sending into the chat would run
       // claude --resume on this machine against a session id it has never had.
@@ -911,35 +1316,89 @@ async function handle(req, res) {
         : null;
       if (resend && !lying) return send(res, 400, { error: 'this note is no longer on the desk', errorKey: 'err.noteGone' });
       const body = lying ? lying.text : text;
-      if (!agentId || !body) return send(res, 400, { error: 'agentId and text required' });
+      // Files are the owner's alone, and only the ones this office wrote down.
+      // A note may be left by a guest, and the owner hands notes to the chat
+      // later: a path named by somebody else would be read by the agent as the
+      // owner, out of any folder on the machine.
+      const files = lying ? (lying.files || []) : ownFiles(owner, sent);
+      // A file with no words is a message too — «here, look» — so the text
+      // may be empty when something is attached. Until 17 September 2026 only
+      // the browser knew that: the field let a lone screenshot through and the
+      // server answered «agentId and text required», which reads as if the
+      // agent were gone.
+      if (!agentId || (!body && !files.length)) return send(res, 400, { error: 'a task needs an agent and either words or a file', errorKey: 'err.taskEmpty' });
       if (lying) outbox.splice(outbox.indexOf(lying), 1);
       const task = {
-        id: ++taskSeq, agentId, text: String(body).slice(0, 4000),
+        id: ++taskSeq, agentId, text: String(body).slice(0, 4000), files,
         at: Date.now(), state: 'note', reply: null, error: null,
       };
       outbox.push(task);
 
       if (!wantsDelivery && !lying) {
         console.log(`[note] ${agentId}: ${task.text.slice(0, 80)}`);
-        return send(res, 200, { ok: true, task, delivery: await deliveryStatus() });
+        return send(res, 200, { ok: true, task, delivery: await deliveryAll() });
       }
 
       const agent = last.agents.find((a) => a.id === agentId);
       if (!agent) { task.state = 'failed'; task.error = 'the agent is no longer in the office'; task.errorKey = 'err.agentGone'; return send(res, 200, { ok: true, task }); }
+      // A Codex thread takes its task through Codex's own queue (server/codex.js),
+      // never through `claude --resume`, which given a Codex thread id would start
+      // a Claude session nobody asked for. No permission mode: that is Claude's.
+      if (agent.provider === 'codex') {
+        console.log(`[deliver] -> ${agent.name} (codex): ${task.text.slice(0, 80)}`);
+        await queueToThread(task, agent);
+        journalFailure(task, agent);
+        return send(res, 200, { ok: true, task, delivery: await deliveryAll() });
+      }
       const status = await deliveryStatus();
-      if (!status.available) { task.state = 'failed'; task.error = status.hint; task.errorKey = status.hintKey; return send(res, 200, { ok: true, task, delivery: status }); }
+      if (!status.available) {
+        task.state = 'failed'; task.error = status.hint; task.errorKey = status.hintKey;
+        journalFailure(task, agent);
+        return send(res, 200, { ok: true, task, delivery: status });
+      }
       if (isBusy(agentId)) { task.state = 'failed'; task.error = 'another message is already being sent to this agent'; task.errorKey = 'err.busy'; return send(res, 200, { ok: true, task }); }
 
       const { delivery } = await getSettings();
       const mode = MODES.has(wantedMode) ? wantedMode : delivery.mode;
       task.state = 'sending';
       console.log(`[deliver] -> ${agent.name}: ${task.text.slice(0, 80)}`);
-      deliver(task, agent, mode).catch((e) => { task.state = 'failed'; task.error = e.message; });
+      deliver(task, agent, mode)
+        .catch((e) => { task.state = 'failed'; task.error = e.message; })
+        .then(() => journalFailure(task, agent));
       return send(res, 200, { ok: true, task, delivery: status });
     } catch (e) {
       if (e instanceof BodyError) throw e;
       return send(res, 400, { error: e.message });
+    } finally {
+      // At once rather than on the tick: a note left a second before a restart
+      // is still a note, and one handed to the chat must not come back as lying
+      // on the desk, ready to be sent a second time.
+      keepDesk(outbox, taskSeq);
     }
+  }
+
+  // Hire an agent: a new session, started by the office in a project's folder.
+  // Owner only — it starts a process on the owner's machine. The page names a
+  // room, never a path: the folder is the one the room's live agents work in.
+  if (url.pathname === '/api/hire' && req.method === 'POST') {
+    if (!(await isOwner(req))) return forbidden(res);
+    const { project: room, task, files: sent, model, quote, source, spot } = await readJson(req);
+    const cwd = cwdOfProject(room);
+    if (!cwd) return send(res, 400, { error: 'there is no such room on the floor', errorKey: 'hire.errRoom' });
+    const status = await deliveryStatus();
+    if (!status.available) return send(res, 200, { ok: false, error: status.hint, errorKey: status.hintKey });
+    const h = await hire({ project: room, cwd: await repoRoot(cwd) || cwd, task, files: ownFiles(true, sent), model, quote, source, spot });
+    return send(res, 200, { ok: h.state !== 'failed', hire: h });
+  }
+  // Let a hired agent go before it is continued in a terminal: two processes
+  // must not write one transcript. The answer carries the command to copy.
+  if (url.pathname === '/api/hire/release' && req.method === 'POST') {
+    if (!(await isOwner(req))) return forbidden(res);
+    const { sessionId } = await readJson(req);
+    const h = hireList().find((x) => x.sessionId === sessionId);
+    if (!h) return send(res, 404, { error: 'this agent was not hired here', errorKey: 'hire.errNotHired' });
+    releaseHire(sessionId);
+    return send(res, 200, { ok: true, command: resumeCommand(hireCwd(sessionId), sessionId) });
   }
 
   // fresh=1 — forget the cached CLI answer and ask again. The cache lives a
@@ -947,20 +1406,54 @@ async function handle(req, res) {
   // to the terminal and pressed «check now» should not have to wait it out.
   if (url.pathname === '/api/delivery') {
     if (url.searchParams.get('fresh') === '1') forgetCli();
-    return send(res, 200, await deliveryStatus());
+    return send(res, 200, await deliveryAll());
   }
   // A permission request from Claude Code. It comes from the hook on this same
   // machine and HANGS here until the owner answers: while it hangs there is no
   // dialog in the terminal. Only the owner can answer, so only he is let in to
   // ask: somebody else's request here is a way to draw a fake command in the
   // office and collect a real "allow" for it.
+  // The version row in the office tab. The owner's alone: a guest cannot update
+  // somebody else's office. Checking and updating both reach outside — a git
+  // fetch — so they happen only on these requests, never on a timer.
+  // Which repositories «update» moves — the row says «core and Modules» only
+  // when there is a Modules checkout to move.
+  // Where the office came from is read off the directory every time rather
+  // than taken from the last check: the row says «from the archive» before
+  // anything has been pressed, and that is the state it is opened in.
+  const updView = async () => {
+    const list = await updateRepos(UPDATE_ROOT);
+    // Where the previous office will be left. The row promises it by name, so
+    // the path is computed here, where the office's own directory is known,
+    // and written the way a person writes it.
+    const aside = `${UPDATE_ROOT}.v${UPDATE_VERSION}`.replace(os.homedir(), '~');
+    // `root` is for install.sh: run with --update against a folder whose office
+    // is up, it has to know that the folder is that office's own before it
+    // decides to leave the replacing to it rather than doing it underneath.
+    return { ...upd, running: UPDATE_VERSION, repos: list.map((r) => r.key), source: list[0].from, aside, root: UPDATE_ROOT };
+  };
+  if (url.pathname === '/api/update' && req.method === 'GET') {
+    if (!(await isOwner(req))) return forbidden(res);
+    return send(res, 200, await updView());
+  }
+  if (url.pathname === '/api/update/check' && req.method === 'POST') {
+    if (!(await isOwner(req))) return forbidden(res);
+    runCheck(UPDATE_ROOT, UPDATE_VERSION).catch((e) => Object.assign(upd, { state: 'failed', reason: 'error', detail: e.message }));
+    return send(res, 200, await updView());
+  }
+  if (url.pathname === '/api/update/run' && req.method === 'POST') {
+    if (!(await isOwner(req))) return forbidden(res);
+    runUpdate(UPDATE_ROOT, UPDATE_VERSION).catch((e) => Object.assign(upd, { state: 'failed', reason: 'error', detail: e.message }));
+    return send(res, 200, await updView());
+  }
+
   if (url.pathname === '/api/permit' && req.method === 'POST') {
     if (!(await isOwner(req))) return forbidden(res);
     // tool_input for Write is a whole file, and 64 KB is not enough for it. A
     // limit is still needed: the body is read into memory, and there can be many
     // requests.
     const body = await readJson(req, SHOT_MAX);
-    const { held, verdict, entry } = askPermit(body, { audience: audience() });
+    const { held, verdict, entry } = askPermit(body, { audience: audience(), canRetry: req.headers['x-valey-hook'] === '2' });
     // Nobody is here — the office steps aside immediately. An empty answer
     // returns the hook to its normal path, and the person sees the native dialog
     // without waiting a second.
@@ -1000,8 +1493,10 @@ async function handle(req, res) {
       try {
         const patch = await readJson(req);
         const saved = await patchSettings(patch);
+        setOwnerOff(saved.modulesOff);
         forgetWeather();
         moduleOnPatch(patch);
+        if (patch.access) setGuestChoice((saved.access || {}).guests);
         last.weather = await realWeather({ force: true });
         return send(res, 200, { ok: true, settings: publicSettings(saved), weather: last.weather, packs: PACK_LIST });
       } catch (e) {
@@ -1023,6 +1518,24 @@ async function handle(req, res) {
     }
   }
 
+
+  // A file dropped onto a task for an agent. The browser has no path to give —
+  // only bytes — so the office writes them beside its settings and hands the
+  // agent «@<path>» in the text of the task.
+  if (url.pathname === '/api/inbox' && req.method === 'POST') {
+    // A guest may drag a file around his own screen; writing it to the owner's
+    // disk is not his to do, and neither is naming a path in a task — see
+    // ownFiles() below.
+    if (!(await isOwner(req))) return forbidden(res);
+    const buf = await readBuffer(req, INBOX_MAX);
+    try {
+      const file = await saveFile(buf, url.searchParams.get('name') || 'file');
+      console.log(`[inbox] ${file.name}, ${file.size} bytes`);
+      return send(res, 200, { ok: true, file });
+    } catch (e) {
+      return send(res, 400, { error: e.message, errorKey: e.key || 'inbox.failed' });
+    }
+  }
 
   // Dev helper: the game posts a rendered frame, we drop it on disk to look at.
   if (url.pathname === '/api/shot' && req.method === 'POST') {
@@ -1055,7 +1568,7 @@ async function handle(req, res) {
     }
     try {
       const st = await fsp.stat(p);
-      if (st.size > 8 * 1024 * 1024) return send(res, 413, { error: 'too big' });
+      if (st.size > MAX_VIEW) return send(res, 413, { error: 'too big' });
       // Show but do not run: html and svg go out as an attachment, see files.js.
       return send(res, 200, await fsp.readFile(p), fileType(p), fileHeaders(p));
     } catch {
@@ -1086,7 +1599,14 @@ async function handle(req, res) {
   // module that does not say `"guests": "shown"` is left out of a guest's list,
   // so its client never reaches the page: no key of its own gets registered, no
   // object of its own gets drawn, and its panel cannot be opened.
-  if (url.pathname === '/api/modules') return send(res, 200, moduleList(await isOwner(req)));
+  if (url.pathname === '/api/modules') {
+    const owner = await isOwner(req);
+    // The page asks for this list right before importing the modules, with the
+    // guest's header: the moment to hand it the cookie the imports will carry.
+    const g = owner ? null : await guestOf(req);
+    const extra = g && cookieGuest(req) !== g.guest ? { 'set-cookie': guestCookie(g.guest) } : {};
+    return send(res, 200, moduleList(owner), undefined, extra);
+  }
 
   // The test stand. An empty text means "this is an ordinary office" and the
   // client draws nothing. git is asked for the branch only here: in a normal run
@@ -1194,24 +1714,56 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
     people: livePeople, toPerson, settings: getSettings, patch: patchSettings, shown, guestOf,
   });
   let boot = await getSettings();
+  setOwnerOff(boot.modulesOff);
+  setGuestChoice((boot.access || {}).guests);
   const external = process.env.VALEY_EXTERNAL === '1' || !!(boot.network || {}).external;
   if (external && !(boot.network || {}).token) {
-    boot = await patchSettings({ network: { external: true, token: newToken() } });
+    // updateSettings: an office started beside this one may save a token first.
+    boot = await updateSettings((now) => ((now.network || {}).token ? null : { network: { external: true, token: newToken() } }));
     console.log('A network token was created and saved to the office settings');
   }
-  const HOST = host || (external ? '0.0.0.0' : '127.0.0.1');
-  const handler = createHandler();
+  // After an update the new office takes exactly the address the old one had.
+  const fixed = fixedAddress();
+  const HOST = fixed ? fixed.host : (host || (external ? '0.0.0.0' : '127.0.0.1'));
+  const handler = gated(createHandler());
   const server = http.createServer(handler);
 
   // A taken port is asked who it is before anything is concluded. Another
   // office there means this one has nothing to do; something else means the
   // next port up, said out loud — the canonical-port line below then explains
   // what that costs.
-  const bound = await listenFree(server, port, HOST, { log: console.log, own: VERSION });
+  const bound = fixed
+    ? await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(fixed.port, fixed.host, () => { server.off('error', reject); resolve(fixed.port); });
+    })
+    : await listenFree(server, port, HOST, { log: console.log, own: VERSION });
   if (bound === null) return null;
   port = bound;
+  // Before the first tick, so the first snapshot already carries the notes.
+  const notes = await restoreDesk(port, { load: !fixed });
   exposure = createExposure({ handler, port, host: HOST });
+  // Straight after binding: a message that arrives before anybody listens for
+  // it is lost, and the handover is exactly such a message. An office taking
+  // over starts its ticks only once the handover is in — a tick begun before
+  // it finished after it and put back a snapshot without the notes.
+  listenForSwap({
+    server, root: UPDATE_ROOT, releaseRuns, retryPermits: retryAll, farewell, exportState, importState,
+    closeExtra: () => exposure.close(),
+    onOpen: fixed ? () => { tick(); peopleTick(); } : null,
+  });
   if (external) await exposure.open();
+  if (isWorker) process.send({ valey: 'bound', port, host: HOST });
+  if (fixed) {
+    // The banner was printed by the office this one replaced; one line is enough.
+    console.log(`[update] v${VERSION} is serving http://localhost:${port}`);
+    return server;
+  }
+  // Dropped files outlive their task by a fortnight and no longer; the sweep
+  // runs here rather than on a timer — an office that is not running is not
+  // filling up.
+  pruneInbox().then((r) => { if (r.files) console.log(`[inbox] swept ${r.files} file(s)`); })
+    .catch(() => { /* no inbox yet, or it is not ours to clean */ });
   const token = await ownerToken();
   const s = await getSettings();
   console.log(`Valey office at http://localhost:${port}`);
@@ -1230,6 +1782,7 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
     console.log(`  http://<this-machine-address>:${port}/?token=${t || '<see settings>'}`);
   }
   if (mods.length) console.log(`  modules: ${mods.map(m => m.id).join(', ')}`);
+  if (notes) console.log(`  notes on the desks: ${notes}, kept from the last run`);
   // A module that failed to load must say so here: otherwise a missing feature
   // gets investigated by eye instead of by one line in the log.
   for (const e of moduleErrors()) console.log(`  module failed to start: ${e.id} — ${e.error}`);
@@ -1237,6 +1790,10 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   // and you stay the owner in this browser even after the office becomes shared.
   // Looking it up in the settings file later is an extra step at a bad moment.
   console.log(`  owner: http://localhost:${port}/#owner=${token}`);
+  // Every device that may command this office, every start: a phone paired a
+  // month ago is exactly what gets forgotten.
+  const owners = (s.access.devices || []).map((d) => shownDevice(d)).filter((d) => !d.lapsed);
+  if (owners.length) console.log(`  owner devices: ${owners.map((d) => d.name).join(', ')} — revoke under Invite (I)`);
   if (s.access.mode === 'private') {
     console.log('  mode: private — everything from this machine is treated as the owner.');
     console.log('  Switch to shared before exposing the office to the network.');

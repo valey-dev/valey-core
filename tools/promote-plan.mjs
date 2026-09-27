@@ -62,3 +62,23 @@ export function coreOf(pkg) {
   if (!c || !/^[0-9a-f]{40}$/.test(c.commit || '')) return null;
   return { commit: c.commit, described: c.described || c.commit.slice(0, 7) };
 }
+
+// The installer people paste from valey.dev is not served from this
+// repository: the site keeps its own copy of install.sh, and until 27 September
+// 2026 nothing carried the core's file there. Five installer fixes had been
+// published by then and none had reached `curl … | sh` — a tester hit the
+// ENOENT uv_cwd that v0.65.3 already warned about. So a publication of the core
+// now carries its install.sh to the site as well, byte for byte.
+export const installerDiffers = (core, site) => core != null && core !== site;
+
+// The site's branch and commit for one installer. A `fix` on purpose: the site
+// counts its own digit, and a new installer at the same address is a patch
+// there whatever it was in the core.
+export function installerChange(tag) {
+  return {
+    branch: `install-${tag}`,
+    message: `fix(install): valey.dev serves the installer of core ${tag}\n\n` +
+      `Carried by the core's promote: the file is the core's install.sh at ${tag},\n` +
+      'byte for byte. It is edited in the core, never here.\n',
+  };
+}

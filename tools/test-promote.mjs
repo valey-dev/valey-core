@@ -6,7 +6,7 @@
 // released to staging, a shop page that names one version while three went out,
 // modules on the shelf that need core the public does not have. Each is a rule
 // in promote-plan.mjs, and each is checked here without git or network.
-import { decide, carried, compare, newest, coreOf } from './promote-plan.mjs';
+import { decide, carried, compare, newest, coreOf, installerDiffers, installerChange } from './promote-plan.mjs';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -50,6 +50,15 @@ const sha = 'a'.repeat(40);
 ok('a modules release records the core it ran against', coreOf({ valey: { core: { commit: sha, described: 'v0.37.0-2-gabc' } } }).described === 'v0.37.0-2-gabc');
 ok('a release without that record has no core — promote refuses it', coreOf({ version: '0.7.1' }) === null);
 ok('a record that is not a full commit does not count', coreOf({ valey: { core: { commit: 'abc123' } } }) === null);
+
+ok('the site is updated when its installer is not the core\'s', installerDiffers('#!/bin/sh\nnew\n', '#!/bin/sh\nold\n'));
+ok('an identical installer is left alone', !installerDiffers('#!/bin/sh\n', '#!/bin/sh\n'));
+ok('a trailing newline is a difference too — the site serves bytes', installerDiffers('x\n', 'x'));
+ok('a tag without install.sh never touches the site', !installerDiffers(null, 'x'));
+ok('a site that could not be read is updated rather than trusted', installerDiffers('x', null));
+const change = installerChange('v0.73.0');
+ok('the site\'s commit is a fix — a patch in the site\'s own count', /^fix\(install\): .*v0\.73\.0\n/.test(change.message), change);
+ok('one branch per published version', change.branch === 'install-v0.73.0');
 
 console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

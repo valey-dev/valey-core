@@ -25,11 +25,11 @@ ok('text without prefix', plain.text === 'the pager rings in the corner', plain.
 ok('a normal commit that doesn\'t break', plain.breaking === false, plain);
 
 ok('exclamation point - breaking',
-  classify(c('feat(modules)!: the snapshot changed shape')).breaking === true, 'нет');
+  classify(c('feat(modules)!: the snapshot changed shape')).breaking === true, 'no');
 ok('BREAKING CHANGE in the body - breaking',
-  classify(c('refactor(modules): move the address', 'BREAKING CHANGE: modules read it')).breaking === true, 'нет');
+  classify(c('refactor(modules): move the address', 'BREAKING CHANGE: modules read it')).breaking === true, 'no');
 ok('not conventional - type null, text is integer',
-  classify(c('Merge the task line')).type === null, 'разобрался, а не должен');
+  classify(c('Merge the task line')).type === null, 'it parsed, and should not have');
 
 // --- the digit -----------------------------------------------------------
 const feat = pickKind([c('feat(a): one')], '0.7.0');

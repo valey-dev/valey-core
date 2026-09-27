@@ -69,6 +69,7 @@ msg() {
       bye)       echo "Ничего не менял." ;;
       updated)   echo "Офис обновлён: v$2 → v$3. Прежний лежит в $4" ;;
       kept)      echo "Перенёс модули: $2" ;;
+      stale_cwd) echo "Этот терминал остался в прежнем офисе, $2 — npm start отсюда запустит старую версию, а если эту папку удалить, упадёт с ENOENT uv_cwd. Перейди в новый: cd $3" ;;
       fetching)  echo "Качаю офис ($2)…" ;;
       no_archive) echo "Не скачалось: $2" ;;
       no_sum)    echo "Нет контрольной суммы рядом с архивом — установка остановлена." ;;
@@ -83,6 +84,8 @@ msg() {
       howto)     echo "Запустить:" ;;
       thencmd)   echo "  cd $2 && npm start" ;;
       thenopen)  echo "Потом открой http://localhost:$2" ;;
+      asked)     echo "Офис в $2 сейчас работает — попросил его обновиться самого, каталог не трогаю. Смотри строку версии во вкладке «офис»." ;;
+      asked_no)  echo "Офис в $2 работает, но обновиться сам не смог: $3. Останови его и повтори — тогда каталог переставлю я." ;;
       badflag)   echo "неизвестный ключ: $2" ;;
       usage)     echo "usage: install.sh [--run] [--update] [--dir=<путь>] [--version=<тег>] [--pack=<файл|url>]" ;;
     esac
@@ -104,6 +107,7 @@ msg() {
       bye)       echo "Nothing was changed." ;;
       updated)   echo "Office updated: v$2 → v$3. The previous one is in $4" ;;
       kept)      echo "Modules carried over: $2" ;;
+      stale_cwd) echo "This terminal is still in the previous office, $2 — npm start here runs the old version, and once that folder is deleted it fails with ENOENT uv_cwd. Move to the new one: cd $3" ;;
       fetching)  echo "Downloading the office ($2)…" ;;
       no_archive) echo "Download failed: $2" ;;
       no_sum)    echo "No checksum published beside the archive — stopping." ;;
@@ -118,6 +122,8 @@ msg() {
       howto)     echo "To start it:" ;;
       thencmd)   echo "  cd $2 && npm start" ;;
       thenopen)  echo "Then open http://localhost:$2" ;;
+      asked)     echo "The office in $2 is running — I asked it to update itself and left the folder alone. Watch the version row in the «office» tab." ;;
+      asked_no)  echo "The office in $2 is running but could not update itself: $3. Stop it and run this again — then I will replace the folder." ;;
       badflag)   echo "unknown flag: $2" ;;
       usage)     echo "usage: install.sh [--run] [--update] [--dir=<path>] [--version=<tag>] [--pack=<file|url>]" ;;
     esac
@@ -190,6 +196,64 @@ if taken "$DEST"; then
     [ -n "$OLDVER" ] || die "$(msg busy "$DEST")"
     [ "$UPDATE" -eq 1 ] || die "$(msg busy_office "$DEST" "$OLDVER")"
   fi
+fi
+
+# Where the office keeps its settings, and where the note about this
+# installation goes: the folder is replaced by an update, so anything that has
+# to survive one lives outside it.
+CONFIG_DIR=${VALEY_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/valey}
+
+# An office already running out of this very folder must not have the ground
+# taken from under it: install.sh would leave the pages new and the server old
+# until a Ctrl-C, and a Ctrl-C loses the guests. Since v0.62.0 the office can
+# do the whole update itself, so it is asked to — and this script stops.
+ask_office() {
+  node -e '
+    const fs = require("fs"), path = require("path"), http = require("http");
+    const [dir, configDir] = process.argv.slice(1);
+    let s = {}; try { s = JSON.parse(fs.readFileSync(path.join(configDir, "settings.json"), "utf8")); } catch { /* a fresh machine */ }
+    const port = (s.network && s.network.port) || 5177;
+    const token = (s.access && s.access.token) || "";
+    const ask = (p, method) => new Promise((done) => {
+      const req = http.request({ host: "127.0.0.1", port, path: p, method,
+        headers: { "content-type": "application/json", ...(token ? { "x-valey-owner": token } : {}) } },
+      (res) => { let b = ""; res.on("data", (d) => { b += d; }); res.on("end", () => done({ code: res.statusCode, body: b })); });
+      req.on("error", () => done(null));
+      req.end(method === "POST" ? "{}" : undefined);
+    });
+    (async () => {
+      const seen = await ask("/api/update", "GET");
+      if (!seen) process.exit(3);                       // nothing is listening: the folder is ours to replace
+      if (seen.code !== 200) { console.log("HTTP " + seen.code); process.exit(1); }
+      let view = {}; try { view = JSON.parse(seen.body); } catch { /* answered, but not with the row */ }
+      if (!view.root || fs.realpathSync(view.root) !== fs.realpathSync(dir)) process.exit(3);
+      const run = await ask("/api/update/run", "POST");
+      if (!run || run.code !== 200) { console.log(run ? "HTTP " + run.code : "no answer"); process.exit(1); }
+      process.exit(0);
+    })();
+  ' "$1" "$CONFIG_DIR" 2>/dev/null
+}
+
+# The note install.sh leaves for the office: where it lives, which version, and
+# that it came as an archive. The office reads it to know it can update itself.
+note_install() {
+  mkdir -p "$CONFIG_DIR"
+  node -e '
+    const fs = require("fs"), path = require("path");
+    const [dir, version, file] = process.argv.slice(1);
+    let was = {}; try { was = JSON.parse(fs.readFileSync(file, "utf8")); } catch { /* the first install */ }
+    const now = { ...was, dir, version, source: "archive", at: new Date().toISOString() };
+    fs.writeFileSync(file, JSON.stringify(now, null, 2) + "\n");
+  ' "$1" "$2" "$CONFIG_DIR/install.json"
+}
+
+if [ "$UPDATE" -eq 1 ] && [ -n "$OLDVER" ]; then
+  ASKED=$(ask_office "$DEST") && ASK_CODE=0 || ASK_CODE=$?
+  case "${ASK_CODE:-0}" in
+    0) say "$(msg asked "$(pretty "$DEST")")"; exit 0 ;;
+    1) die "$(msg asked_no "$(pretty "$DEST")" "$ASKED")" ;;
+    *) : ;;  # nothing of ours is listening there — carry on and replace the folder
+  esac
 fi
 
 TMP=$(mktemp -d)
@@ -266,13 +330,31 @@ case "$MODE" in
       cp -R "${d%/}" "$DEST/modules/"
       KEPT="$KEPT $name"
     done
+    note_install "$DEST" "$NEWVER"
     say "$(msg updated "$OLDVER" "$NEWVER" "$(pretty "$OLD")")"
     [ -z "$KEPT" ] || say "$(msg kept "${KEPT# }")"
+    # A terminal standing in the office goes with the folder, not the name: the
+    # shell still prints ~/valey, but it is in the old copy now. On 26 September
+    # 2026 a tester updated from inside the office, the old copy was deleted,
+    # and the next npm start died on ENOENT uv_cwd. A script cannot move the
+    # shell that ran it, so it says where to go. Physical paths on both sides:
+    # $PWD keeps the name, and only the folder itself is the old one.
+    #
+    # The path is asked of the kernel — the external pwd, which calls getcwd().
+    # A builtin answers out of $PWD, and by now that name belongs to the new
+    # office: `pwd -P` in dash printed the old name, so CI, where sh is dash,
+    # never warned and went red on every branch for a day; and `cd -P .` in
+    # bash walked into the NEW folder, which reads as «not inside» just the
+    # same. Checked in sh, dash, bash and zsh on 26 September 2026.
+    HERE=$(env pwd -P 2>/dev/null || pwd -P 2>/dev/null || true)
+    OLDP=$(CDPATH= cd "$OLD" 2>/dev/null && { env pwd -P 2>/dev/null || pwd -P; })
+    case "$HERE" in "$OLDP"|"$OLDP"/*) say "$(msg stale_cwd "$(pretty "$OLD")" "$(pretty "$DEST")")" ;; esac
     ;;
   *)
     mkdir -p "$(dirname "$DEST")"
     if [ -d "$DEST" ]; then rmdir "$DEST"; fi
     mv "$TMP/new" "$DEST"
+    note_install "$DEST" "$NEWVER"
     say "$(msg built "$DEST")"
     say "$(msg no_deps)"
     ;;

@@ -1,6 +1,7 @@
 {
   "id": "polaroid",
   "name": { "ru": "Полароид в курилке", "en": "The polaroid" },
+  "guestNote": { "ru": "инстаграм хозяина", "en": "the owner's Instagram" },
   "tier": "core",
   "client": "client.js"
 }

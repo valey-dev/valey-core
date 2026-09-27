@@ -41,7 +41,23 @@ const cases = [
   ['link', '[доска](https://example.com/a)', ['<a href="https://example.com/a"']],
   ['bare URL', 'смотри https://example.com/x дальше', ['<a href="https://example.com/x"']],
   ['a local link is not clickable', '[файл](../secret.md)', ['<span class="mdlink">файл</span>']],
-  ['an image is rendered as a marker', '![схема](a/b.png)', ['<span class="mdimg">']],
+  // A picture an agent sent is drawn, not named (#reply-image): the file goes
+  // through /api/file, which opens only what the agent touched in its work.
+  ['a picture from disk is drawn', '![кадр](/tmp/shot.png)',
+    ['<span class="mdpic" data-path="/tmp/shot.png">', 'src="/api/file?path=%2Ftmp%2Fshot.png"', 'alt="кадр"', '<span class="mdpicname">кадр</span>']],
+  // Codex writes the path in angle brackets, and that is also how markdown
+  // carries a path with a space in it.
+  ['angle brackets and a space in the path', '![кадр](</tmp/снимок экрана.png>)',
+    ['data-path="/tmp/снимок экрана.png"'], ['&lt;']],
+  // Not from disk: the office does not go out to the internet for a reply.
+  ['a picture from the internet stays a line', '![кот](https://x/cat.png)',
+    ['<span class="mdimg">🖼 кот</span>'], ['<img']],
+  ['a relative path stays a line too', '![схема](a/b.png)',
+    ['<span class="mdimg">'], ['<img']],
+  // A quote in the path cannot break out of the attribute: it is escaped, so
+  // the handler it tried to open stays inside the value as text.
+  ['a quote in the path is escaped, not trusted', '![x](/tmp/"onerror=alert(1).png)',
+    ['&quot;onerror'], ['\"onerror']],
   ['HTML is escaped', 'опасно <script>alert(1)</script>', ['&lt;script&gt;'], ['<script>']],
   ['HTML inside code is escaped', '`<b>не жирный</b>`', ['&lt;b&gt;не жирный&lt;/b&gt;'], ['<b>не жирный</b>']],
   ['quotes inside an attribute', '[x](https://e.com/"onload="alert(1))', [], ['onload="alert']],

@@ -36,6 +36,14 @@ try {
   const left = (await fsp.readdir(dir)).filter((f) => f.includes('.tmp-'));
   ok('no temporary files left', left.length === 0, left);
   ok('cache matches disk', (await getSettings()).lang === onDisk.lang, null);
+  // Different keys at once, as the tick saves names while a request saves the
+  // language. Until 13 September 2026 each save built on the snapshot it had
+  // awaited, so all of them started from the same one and only the last
+  // key survived.
+  await Promise.all(Array.from({ length: N }, (_, i) => patchSettings({ ['key' + i]: i })));
+  const allKeys = JSON.parse(await fsp.readFile(file, 'utf8'));
+  const missing = Array.from({ length: N }, (_, i) => 'key' + i).filter((k, i) => allKeys[k] !== i);
+  ok(`${N} simultaneous saves of different keys all reach the disk`, missing.length === 0, missing);
   // The file holds the owner token and the invitations: nobody else on the
   // machine reads it. Found world-readable by the audit of 12 September 2026.
   if (process.platform !== 'win32') {

@@ -15,6 +15,16 @@
 // a silent one.
 let owner = '';
 let guest = '';
+// A paired device's token (server/devices.js). It is read here, from the same
+// storage the feed writes it to: the feed and the office share an origin, so a
+// phone or an Xbox paired from the feed is the owner in the office too, with no
+// second pairing.
+const DEVICE = 'valey-device';
+let device = (() => { try { return localStorage.getItem(DEVICE) || ''; } catch { return ''; } })();
+export function setDevice(token) {
+  device = token || '';
+  try { if (device) localStorage.setItem(DEVICE, device); else localStorage.removeItem(DEVICE); } catch { /* private mode: this tab only */ }
+}
 
 export function setTokens(next = {}) {
   if ('owner' in next) owner = next.owner || '';
@@ -25,5 +35,25 @@ export function owned(extra = {}) {
   const h = { ...extra };
   if (owner) h['x-valey-owner'] = owner;
   if (guest) h['x-valey-guest'] = guest;
+  if (device) h['x-valey-device'] = device;
   return h;
+}
+
+// The same pass for the two roads that cannot carry headers: the stream
+// (EventSource) and the goodbye beacon (sendBeacon). Both tokens go, as they do
+// in the headers, and the server decides which one counts.
+//
+// Until 13 September 2026 these two sent the owner's token *instead of* the
+// guest's. localStorage is per origin, and a port on this machine is reused by
+// stand after stand, so a browser that had once been the owner of a stand on
+// 5192 still held that token when it walked into the next office on 5192 by an
+// invitation. The door worked — the headers carry both — and the stream went
+// out with the dead owner token alone, got 403 on every reconnect, and the
+// guest stood on an empty floor under «жду агентов…» for good.
+export function passQuery() {
+  const q = new URLSearchParams();
+  if (owner) q.set('owner', owner);
+  if (guest) q.set('guest', guest);
+  if (device) q.set('device', device);
+  return q.toString();
 }

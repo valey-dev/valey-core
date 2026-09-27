@@ -1,0 +1,12 @@
+{
+  "tag": "v0.49.0",
+  "shots": [
+    {
+      "file": "radio-stream-on-air.png",
+      "slug": "radio-stream",
+      "id": "on-air",
+      "setup": "(async()=>{localStorage.setItem('valey-radio',JSON.stringify({stations:[{name:'NTS 1',uri:'https://stream-relay-geo.ntslive.net/stream'},{name:'Rinse FM',uri:'https://admin.stream.rinse.fm/proxy/rinse_uk/stream'},{key:'sp.lofi',uri:'spotify:playlist:37i9dQZF1DWWQRwui0ExPn'}],current:0}));const {radio}=await import('/modules/radio/radio.js');radio.load();radio.playing=true;radio.streamSince=Date.now()-42*60000;radio.onAir={title:'Floating Points — Silurian Blue',format:'mp3',bitrate:128};radio.play=()=>{};radio.toggle=()=>true;})()",
+      "keys": "Enter,wait:2500,r,wait:1200"
+    }
+  ]
+}

@@ -21,6 +21,10 @@
   <div id="hud"></div>
   <div id="stage"><canvas id="game"></canvas></div>
   <div id="toasts"></div>
+  <!-- The plaque of a lost office. It is built and shown by link.js; an empty
+       div here rather than markup, so the only place the wording lives is the
+       dictionary. -->
+  <div id="offline" hidden></div>
   <div id="dialog" hidden></div>
   <div id="roster" hidden></div>
   <div id="bag" hidden></div>
@@ -29,6 +33,7 @@
   <div id="lift" hidden></div>
   <div id="lang" hidden></div>
   <div id="invite" hidden></div>
+  <div id="hire" hidden></div>
   <div id="viewer" hidden></div>
   <div id="title" hidden></div>
   <div id="notes" hidden></div>
@@ -41,6 +46,7 @@
        The first module exposed this on 1 September 2026, and only instruments
        caught it because the office looked functional. The map joins both paths
        into one module. -->
+  <script src="report.js"></script>
   <script type="importmap">{ "imports": { "/web/": "/" } }</script>
   <script type="module" src="main.js"></script>
 </body>

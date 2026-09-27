@@ -1,0 +1,12 @@
+{
+  "tag": "v0.58.0",
+  "shots": [
+    {
+      "file": "standup-projects-standup-projects.png",
+      "slug": "standup-projects",
+      "id": "standup-projects",
+      "url": "#room=standup",
+      "keys": "Enter,wait:2500,Tab,wait:1200,ArrowDown,wait:300,ArrowDown,wait:800"
+    }
+  ]
+}
