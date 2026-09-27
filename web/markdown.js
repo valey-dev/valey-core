@@ -46,12 +46,17 @@ function inline(s) {
       return `<span class="mdpic" data-path="${src}"><img src="${url}" alt="${alt || name}" loading="lazy">`
         + `<span class="mdpicname">${alt || name}</span></span>`;
     })
-    .replace(/\[([^\]]+)\]\(([^)\s]+)[^)]*\)/g, (_, text, href) =>
-      (SAFE_LINK.test(href)
-        // A link copies its address, not its text: nobody needs «the frame it
-        // was promoted to» in the clipboard, everybody needs the URL.
-        ? `<span class="mdcopyable">${copyBtn(href)}<a href="${href}" target="_blank" rel="noreferrer">${text}</a></span>`
-        : `<span class="mdlink">${text}</span>`))
+    .replace(/\[([^\]]+)\]\(\s*(?:&lt;([^)]*?)&gt;|([^)\s]+))[^)]*\)/g, (_, text, angled, bare) => {
+      const href = angled !== undefined ? angled : bare;
+      // A link copies its address, not its text: nobody needs «the frame it
+      // was promoted to» in the clipboard, everybody needs the URL.
+      if (SAFE_LINK.test(href)) return `<span class="mdcopyable">${copyBtn(href)}<a href="${href}" target="_blank" rel="noreferrer">${text}</a></span>`;
+      // Anything else is most likely a file the agent names — `[ui.js:1860](web/ui.js:1860)`.
+      // The renderer does not know whose folder it is relative to, so it only
+      // keeps the address; the conversation matches it against the files the
+      // server will hand out and brings the ones it knows to life (#reply-links).
+      return `<span class="mdlink" data-href="${href}">${text}</span>`;
+    })
     .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (_, pre, href) =>
       `${pre}<span class="mdcopyable">${copyBtn()}<a href="${href}" target="_blank" rel="noreferrer">${href}</a></span>`)
     // the contents can neither start nor end with a space, or «2 * 3 * 4» turns

@@ -6,7 +6,7 @@
 // released to staging, a shop page that names one version while three went out,
 // modules on the shelf that need core the public does not have. Each is a rule
 // in promote-plan.mjs, and each is checked here without git or network.
-import { decide, carried, compare, newest, coreOf, installerDiffers, installerChange } from './promote-plan.mjs';
+import { decide, carried, compare, newest, coreOf, installerDiffers, siteChange } from './promote-plan.mjs';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -56,9 +56,13 @@ ok('an identical installer is left alone', !installerDiffers('#!/bin/sh\n', '#!/
 ok('a trailing newline is a difference too — the site serves bytes', installerDiffers('x\n', 'x'));
 ok('a tag without install.sh never touches the site', !installerDiffers(null, 'x'));
 ok('a site that could not be read is updated rather than trusted', installerDiffers('x', null));
-const change = installerChange('v0.73.0');
-ok('the site\'s commit is a fix — a patch in the site\'s own count', /^fix\(install\): .*v0\.73\.0\n/.test(change.message), change);
-ok('one branch per published version', change.branch === 'install-v0.73.0');
+const both = siteChange('v0.73.0', { installer: true, core: true });
+ok('the site\'s commit is a fix — a patch in the site\'s own count', /^fix\(site\): .*v0\.73\.0/.test(both.message), both);
+ok('both halves are named when both move', /install\.sh is the core's at v0\.73\.0/.test(both.message) && /core\/ is pinned to v0\.73\.0/.test(both.message), both.message);
+ok('an installer alone is a fix(install)', /^fix\(install\): /.test(siteChange('v0.73.0', { installer: true }).message));
+ok('a pin alone is a fix(landing)', /^fix\(landing\): the demo floor runs on core v0\.73\.0/.test(siteChange('v0.73.0', { core: true }).message));
+ok('nothing to carry is no branch at all', siteChange('v0.73.0', {}) === null);
+ok('one branch per published version', both.branch === 'core-v0.73.0');
 
 console.log(bad ? `\nFAILED: ${bad}` : '\nall good');
 process.exit(bad ? 1 : 0);

@@ -1,0 +1,12 @@
+{
+  "tag": "v0.74.0",
+  "shots": [
+    {
+      "file": "send-confirm-task-tab.png",
+      "slug": "send-confirm",
+      "id": "task-tab",
+      "url": "#room=standup",
+      "keys": "Enter,wait:2500,Tab,wait:900,Enter,wait:1200,3,wait:1200"
+    }
+  ]
+}

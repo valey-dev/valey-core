@@ -11,6 +11,7 @@ import { projectInfo, repoRoot, repoRootCached } from './stack.js';
 import { present } from './files.js';
 import { trinketTier } from '../web/trinkets.js';
 import { liveCodexSessions, applyCodexLine } from './codex.js';
+import { namedPaths } from './links.js';
 
 // Where the office reads sessions from. The variable is for the stands: until
 // 4 September 2026 the directory was pinned to the home one, and transcript
@@ -694,7 +695,7 @@ function emptyState() {
     lastUserPrompt: '', acts: [], role: '', files: new Map(),
     ended: '',               // how the turn ended, if it did — see endOf()
     background: new Map(),   // tool_use id -> when that background job started
-    turns: 0, model: '', effort: '', turnEffort: '', branch: '', slug: '', title: '', aiTitle: '', task: null,
+    turns: 0, model: '', effort: '', turnEffort: '', ctx: 0, branch: '', slug: '', title: '', aiTitle: '', task: null,
     bornAt: 0,             // the first reply in the file, see born()
     skills: newSkills(),   // the grade counter: it grows and is never trimmed
     shift: newShift(),     // replies, characters and idle gaps, over the whole file
@@ -752,6 +753,11 @@ function applyLine(st, line) {
   // automatic one happens inside the model's turn and the model goes on.
   if (r.type === 'system' && r.subtype === 'compact_boundary'
     && r.compactMetadata && r.compactMetadata.trigger === 'manual' && !st.ended) st.ended = 'stopped';
+  // After a compaction the context is what it kept, and the record says so
+  // itself — postTokens — so the number drops the second /compact finishes,
+  // not with the next reply, which may be minutes away.
+  if (r.type === 'system' && r.subtype === 'compact_boundary' && !r.isSidechain
+    && r.compactMetadata && Number.isFinite(r.compactMetadata.postTokens)) st.ctx = r.compactMetadata.postTokens;
 
   if (r.type === 'assistant' && r.message) {
     born(st, r.timestamp);
@@ -768,6 +774,15 @@ function applyLine(st, line) {
       // changed mid-session in 22.
       st.effort = r.effort || '';
       st.turnEffort = r.perTurnEffort || '';
+      // How full the context is: what the last reply of the main thread was fed —
+      // fresh input, read from the cache and written to it. Output is not
+      // counted: it becomes input on the next turn, and that turn will say so.
+      // A subagent's reply is its own context, not this session's.
+      const u = r.message.usage;
+      if (u && !r.isSidechain) {
+        const n = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+        if (n > 0) st.ctx = n;
+      }
     }
     const content = r.message.content || [];
     const txt = textOf(content);
@@ -1249,6 +1264,9 @@ export async function snapshot() {
       repo: !!repo.git,
       branch: t.branch,
       model: t.model,
+      // Tokens in the context after the last reply or compaction; the window is
+      // the page's to know (web/model-name.js), as the model's name is.
+      ctx: t.ctx || 0,
       // A one-turn boost is the level only while that turn is open.
       effort: (status === 'working' && t.turnEffort) || t.effort,
       // A Codex thread carries the name the app shows on the session itself.
@@ -1301,9 +1319,13 @@ export function conversation(sessionId) {
 // Whose files these are: the ids of the agents in whose transcript the path
 // appeared. A file belongs to a conversation, and it may be opened for a guest
 // exactly when the conversation is.
+//
+// A file the agent named by a link in its own reply belongs to it as well
+// (#reply-links): server/links.js says which links count, and why so few.
 export function fileOwners(p, snap) {
   return (snap.agents || [])
-    .filter((a) => a.files.some((f) => f.path === p) || a.artifacts.some((f) => f.path === p))
+    .filter((a) => a.files.some((f) => f.path === p) || a.artifacts.some((f) => f.path === p)
+      || namedPaths(conversation(a.id), a.cwd).has(p))
     .map((a) => a.id);
 }
 

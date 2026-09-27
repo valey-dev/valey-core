@@ -4,6 +4,49 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.77.0 — 27 September 2026
+
+### Added
+
+- **office:** the web links an agent gives in a conversation open from the keyboard — L lists them, a digit opens one (8d681fe)
+
+### Other
+
+- chore(notes): the demo agent with real files also gives three web links (0b431f8)
+## v0.76.1 — 27 September 2026
+
+### Fixed
+
+- **standup:** portraits on standup cards lose the thick frame the office floor's canvas rule gave them (f7d6866)
+- **standup:** an agent's trade on a standup card is the coloured badge with its pixel icon, as on the agent card (3a7a7fd)
+## v0.76.0 — 27 September 2026
+
+### Added
+
+- **office:** a file an agent names in its reply opens from the conversation — F lists them, a digit opens one on its line (5c97467)
+
+### Other
+
+- chore(notes): a picture recipe can bring in an agent whose reply names real files (101d238)
+## v0.75.0 — 27 September 2026
+
+### Added
+
+- **office:** how full an agent's context is — on its card's model line, and over its head from 80% (4fa1a5b)
+
+### Fixed
+
+- **office:** the provider badge on the agent card wears its frame again (57275b8)
+## v0.74.0 — 27 September 2026
+
+### Added
+
+- **office:** Ctrl+Enter sends a task into the chat at once — asking first is a choice in the send row (fbe529b)
+## v0.73.1 — 27 September 2026
+
+### Fixed
+
+- **install:** a publication of the core moves valey.dev's demo floor onto it, not only its installer (918dff4)
 ## v0.73.0 — 27 September 2026
 
 ### Added

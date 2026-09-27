@@ -203,5 +203,57 @@ check('numbers lit up before ESC check', UI.pickOn() === true, 'they did not lig
 check('ESC extinguishes numbers', (UI.viewerKey('Escape'), UI.pickOn()) === false, 'they are lit');
 check('and does not close the conversation', viewer.hidden === false, 'it closed');
 
+// --- F: the files the agent named by link (#reply-links) ---
+const fileA = { path: '/work/seedbank/docs/score-words.md', name: 'score-words.md', dir: 'docs/', line: null, ts: 1, hrefs: ['docs/score-words.md'] };
+const fileB = { path: '/work/seedbank/web/ui.js', name: 'ui.js', dir: 'web/', line: 1860, ts: 2, hrefs: ['web/ui.js:1860'] };
+// The conversation was closed further up; open it again, first with no files.
+logPresent = true;
+served = { messages: [msg('assistant', 'без ссылок')], files: { files: [], refused: {} } };
+await UI.openTranscript(agent);
+UI.viewerKey('f');
+check('F with no named files raises nothing', UI.filesOn() === false, 'a list came up');
+served = { messages: [...served.messages, msg('assistant', 'см. [ui.js:1860](web/ui.js:1860)')], files: { files: [fileB, fileA], refused: { hidden: 1 } } };
+await UI.openTranscript(agent);
+UI.viewerKey('f');
+check('F raises the files list', UI.filesOn() === true, 'nothing came up');
+check('the Russian layout reaches it too', (UI.viewerKey('Escape'), UI.viewerKey('а'), UI.filesOn()) === true, 'the Russian F did nothing');
+check('ESC puts the list away', (UI.viewerKey('Escape'), UI.filesOn()) === false, 'still up');
+check('and leaves the conversation open', viewer.hidden === false, 'it closed');
+UI.viewerKey('f');
+UI.viewerKey('c');
+check('C takes the digits back: the list goes down', UI.filesOn() === false, 'both lists up');
+UI.pickClose();
+const asked = [];
+const fetchBefore = globalThis.fetch;
+globalThis.fetch = async (url) => { asked.push(String(url)); return { ok: false, status: 404, json: async () => ({}), text: async () => '' }; };
+UI.viewerKey('f');
+UI.viewerKey('1');
+await new Promise((r) => setTimeout(r, 0));
+globalThis.fetch = fetchBefore;
+check('a digit opens the file under that number — the newest first', asked.some((u) => u.includes(encodeURIComponent(fileB.path))), asked);
+check('and the list is down after it', UI.filesOn() === false, 'still up');
+
+// --- L: the web links the agent gave (#reply-weblinks) ---
+const opened = [];
+globalThis.window = Object.assign(globalThis.window || {}, { open: (url, target, features) => { opened.push({ url, target, features }); return null; } });
+served = { messages: [msg('assistant', 'без ссылок')], files: { files: [], refused: {} } };
+await UI.openTranscript(agent);
+UI.viewerKey('l');
+check('L with no links raises nothing', UI.linksOn() === false, 'a list came up');
+served = { messages: [msg('assistant', 'PR — [PR #48](https://github.com/kolya/seed-bank/pull/48), кадр — https://www.figma.com/design/abc.')], files: { files: [fileB], refused: {} } };
+await UI.openTranscript(agent);
+UI.viewerKey('l');
+check('L raises the links list', UI.linksOn() === true, 'nothing came up');
+check('ESC puts it away and leaves the conversation', (UI.viewerKey('Escape'), UI.linksOn() === false && viewer.hidden === false), 'wrong');
+check('the Russian layout reaches it too', (UI.viewerKey('д'), UI.linksOn()) === true, 'the Russian L did nothing');
+UI.viewerKey('f');
+check('F takes the digits: the links list goes down', UI.linksOn() === false && UI.filesOn() === true, [UI.linksOn(), UI.filesOn()]);
+UI.viewerKey('l');
+check('and L takes them back from F', UI.linksOn() === true && UI.filesOn() === false, [UI.linksOn(), UI.filesOn()]);
+UI.viewerKey('2');
+check('a digit opens that link in a new tab', opened.length === 1 && opened[0].url === 'https://www.figma.com/design/abc' && opened[0].target === '_blank', opened);
+check('without telling it where it came from', opened.length === 1 && /noreferrer/.test(opened[0].features), opened);
+check('and the list is down after it, the conversation still open', UI.linksOn() === false && viewer.hidden === false, 'wrong');
+
 console.log(failed ? `\nfailed: ${failed}` : '\nall matched');
 process.exit(failed ? 1 : 0);

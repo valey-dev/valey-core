@@ -107,7 +107,7 @@ const MAPS = new Set(['shots']);
 // back as the entrance screen. Written on 27 September 2026 for the shared
 // floor, whose whole subject is an office somebody was invited into: without an
 // invitation in the settings there is nothing to photograph.
-const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport', 'touch', 'setup', 'interrupt', 'picture', 'settings']);
+const SHOT_FIELDS = new Set(['id', 'url', 'keys', 'viewport', 'touch', 'setup', 'interrupt', 'picture', 'links', 'settings']);
 
 // A three-line parser instead of a YAML dependency. The project has none, and a
 // front matter of three keys is not a reason for the first one.

@@ -81,7 +81,7 @@ const CAST = [
   { slot: 'a', sessionId: 'aaaaaaaa-0000-4000-8000-00000000000a', cwd: '/Users/kolya/Projects/rocket-shop',
     branch: 'feature/cart-discount', asked: 'Calculate the discount in the cart',
     said: 'Done: the cart calculates the discount and its test is green.',
-    file: '/Users/kolya/Projects/rocket-shop/src/cart.js' },
+    file: '/Users/kolya/Projects/rocket-shop/src/cart.js', ctx: 310_000 },
   { slot: 'b', sessionId: 'aaaaaaaa-0000-4000-8000-00000000000b', cwd: '/Users/kolya/Projects/tide-charts',
     branch: 'fix/timezone-drift', asked: 'The chart is an hour off after the clocks change',
     said: 'Found it: the chart was drawn in local time and the data comes in UTC.',
@@ -89,7 +89,8 @@ const CAST = [
   { slot: 'c', sessionId: 'aaaaaaaa-0000-4000-8000-00000000000c', cwd: '/Users/kolya/Projects/paper-radio',
     branch: 'feature/sleep-timer', asked: 'Add a sleep timer',
     said: 'The timer is in. It fades the volume out over the last minute.',
-    file: '/Users/kolya/Projects/paper-radio/src/timer.js' },
+    // Past 80%: the card's tail is yellow and the bubble carries its meter.
+    file: '/Users/kolya/Projects/paper-radio/src/timer.js', ctx: 860_000 },
   // Three more in rocket-shop, since 13 September 2026: the standup gives a project
   // the whole width, and with one person a project nothing in the picture showed
   // it — a row of three and one below does.
@@ -161,6 +162,37 @@ async function picture(slot) {
   return who;
 }
 
+// `links: <slot>` — see SHOT_FIELDS in notes.mjs. A reply that names files by
+// link (#reply-links) needs the files to exist inside the agent's folder, and
+// the cast's folders are invented paths that are on nobody's disk. So this
+// brings one more person in, whose project is a real folder under the temporary
+// directory: three files named in the reply, one link into .env and one out of
+// the folder, so the list shows what it refuses as well. Invented at the source.
+async function links(slot) {
+  const cwd = path.join(tmp, 'Projects', 'seed-bank');
+  const put = async (rel, text) => { await fsp.mkdir(path.dirname(path.join(cwd, rel)), { recursive: true }); await fsp.writeFile(path.join(cwd, rel), text); };
+  await put('docs/score-words.md', '# Score words\n\nOne word for every colour band of every scale.\n');
+  await put('web/legend.js', 'export const LEGEND = [];\n');
+  await put('web/ui.js', Array.from({ length: 1859 }, (_, i) => `// line ${i + 1}`).join('\n')
+    + "\nexport const DIRECTION = {\n  mood: 'up', sleepiness: 'down', workload: 'neutral',\n};\n");
+  await put('.env', 'SEED_KEY=not-a-real-key\n');
+  const said = 'The dictionary is [docs/score-words.md](docs/score-words.md): one word for every colour band. '
+    + 'The direction of each scale lives in one table, [ui.js:1860](web/ui.js:1860), and the legend reads it — '
+    + '[legend.js:1](web/legend.js:1). The key it needs is in [.env](.env), and the old notes are in [../archive.md](../archive.md).'
+    // Web links too, for L (#reply-weblinks): invented places, never opened by the shot.
+    + '\n\nThe pull request is [PR #48 · score words](https://github.com/kolya/seed-bank/pull/48), the frame to check it against is '
+    + '[Score words · v2](https://www.figma.com/design/seedbank/Seed-Bank), and the colours pass https://webaim.org/resources/contrastchecker/.';
+  // Its own session id: one borrowed from the cast replaces that person's transcript.
+  const made = await fakeClaudeDir(tmp, { slot, sessionId: 'aaaaaaaa-0000-4000-8000-0000000001a0',
+    cwd, branch: 'feature/score-words', asked: 'Where do the score words live?', said, file: path.join(cwd, 'docs/score-words.md') });
+  for (let i = 0; i < 40; i++) {
+    if ((await statusOf(made.sessionId)) !== undefined) break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  await new Promise((r) => setTimeout(r, 1500));
+  return made;
+}
+
 // The old office is a detached worktree of the tag — its own server, its own
 // web/. It goes outside the checkout: a worktree under it gets walked by every
 // file watcher in the project.
@@ -209,6 +241,7 @@ for (const f of wanted) {
     if (sh.setup) args.push('--setup', sh.setup);
     const cut = sh.interrupt ? await interrupt(sh.interrupt) : null;
     const drew = sh.picture ? await picture(sh.picture) : null;
+    if (sh.links) await links(sh.links);
     const r = spawnSync(process.execPath, [shotTool, ...args], { cwd: ROOT, stdio: 'inherit' });
     if (cut) await resume(cut);
     if (drew) await resume(drew);

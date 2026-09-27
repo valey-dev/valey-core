@@ -77,6 +77,14 @@ const check = (name, ok, got) => {
   else { failed++; console.log('FAIL  |', name, '→', got); }
 };
 
+// --- 0. sending into a chat asks first only when the owner said so ---
+// The first outside feedback, 27 September 2026: a second press on every send
+// was in the way. Off unless delivery.confirm is set; an office whose settings
+// predate the switch has no such field and sends at once too.
+check('a send goes at once by default, and with settings that predate the switch',
+  UI.asksFirst({ delivery: { mode: 'acceptEdits', confirm: false } }) === false && UI.asksFirst({ delivery: { mode: 'acceptEdits' } }) === false && UI.asksFirst({}) === false && UI.asksFirst(null) === false);
+check('a send asks «really send?» first when the owner turned it on', UI.asksFirst({ delivery: { confirm: true } }) === true);
+
 // --- 1. a fresh card with a reply still coming in: up leads to the link ---
 current = makeDialog();
 UI.closeDialog();

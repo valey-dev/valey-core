@@ -45,11 +45,21 @@ button.chip:focus-visible{outline:2px solid var(--warn); outline-offset:2px}
    icon is inline SVG, so it stands on that baseline by itself (web/roleicon.js). */
 .role{font-size:10px; margin-left:6px; color:var(--ink-dim); white-space:nowrap}
 .role .ricon{fill:currentColor; shape-rendering:crispEdges; margin-right:4px}
+/* The provider keeps the frame the trade gave up. It rode on .role, and when the
+   trade traded its border for a pixel icon (cf77577, 15 September 2026) the
+   provider lost the border with it, while the Provider badge component kept
+   it: 1 px frame-dim, 1 px by 6 px of padding, dim ink. */
+.role.prov{border:1px solid var(--frame-dim); padding:1px 6px}
 .role.r-design{color:var(--lilac)} .role.r-research{color:var(--info)} .role.r-plan{color:var(--warn)}
 .role.r-code{color:var(--accent)} .role.r-qa{color:var(--role-qa)} .role.r-release{color:var(--role-rel)}
 /* The model beside the trade, as dim as the meta line: who is answering, not where. */
 .who .model{font-size:11px; color:var(--muted); margin-left:6px}
 .who .model:empty{display:none}
+/* The context tail sits on the model's line in the model's colour, and turns
+   warn from 80% — time to compact. */
+.who .ctx{font-size:11px; color:var(--muted)}
+.who .ctx.hot{color:var(--warn)}
+.who .ctx:empty{display:none}
 .meta{display:block; color:var(--muted); font-size:11px; margin-top:2px}
 .act{color:var(--ink-dim); font-size:12px; margin:6px 0 4px; border-left:3px solid var(--frame); padding-left:8px}
 .body{min-height:64px; max-height:min(300px,40vh); overflow:auto; padding-right:6px}
@@ -401,13 +411,20 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .pcard.wait{border-left-color:var(--warn)}
 .pcard.stop{border-left-color:var(--off)}
 :where(body:not(.bykeys)) .pcard:hover{border-color:var(--frame-dim)}
-.pface{grid-area:face; align-self:start; image-rendering:pixelated}
+/* No frame: the general canvas rule at the top of this file draws a 3 px
+   border and a 3 px shadow ring meant for the office floor, and both caught the
+   standup portraits too. The Person card frame has neither. */
+.pface{grid-area:face; align-self:start; image-rendering:pixelated; border:0; box-shadow:none}
 .pname{grid-area:name; color:var(--warn); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .ptok{grid-area:tok; font-size:10px; color:var(--muted); white-space:nowrap}
 .pcard.work .ptok{color:var(--accent)}
 .pcard.wait .ptok{color:var(--warn)}
 .pcard.stop .ptok{color:var(--off)}
 .pmeta{grid-area:meta; font-size:10px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+/* The trade on a standup card is the same coloured badge with its pixel icon as
+   on the agent card; the branch stays beside it in the line's own colour.
+   Frames: [Standup: the trade as a coloured badge](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2527-1256) */
+.pmeta .role{margin-left:0}
 /* A task gets two lines: one cuts a sentence mid-thought, while three turns the
    column into prose. A cold task or substitute text dims in full. */
 .ptask{grid-area:task; margin-top:4px; color:var(--ink); line-height:1.35;
@@ -670,6 +687,9 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .sendrow button:disabled{opacity:.45; cursor:not-allowed}
 .sendrow button.arm{background:var(--arm); border-color:var(--arm-edge); color:var(--arm-ink)}
 .modepick{font-size:11px; color:var(--muted); margin-left:auto}
+/* The second picker (sending) sits right after the first, not halfway along:
+   two auto margins would split the free space between them. */
+.modepick + .modepick{margin-left:0}
 .modepick select{background:var(--field); color:var(--ink); border:2px solid var(--frame);
   font:11px "JetBrains Mono", "Courier New",monospace; padding:2px 4px; margin-left:4px}
 .notes li{display:flex; gap:6px; align-items:baseline; flex-wrap:wrap}
@@ -1449,3 +1469,26 @@ body.touch .tmeta.center{visibility:hidden}
 .fchip.bad{border-color:var(--bad); color:var(--bad)}
 .fchip.bad .csize{color:var(--bad)}
 .notes .nclip{color:var(--muted)}
+
+/* F in a conversation: the files the agent named, docked above the key line
+   (#reply-links). Rows are numbered like the links in the text above. */
+.chatfiles{border-top:2px solid var(--frame); background:var(--bg-deep); padding:10px 14px 8px;
+  font-size:11px; display:flex; flex-direction:column; gap:5px}
+.chatfiles .fhead{color:var(--muted); font-weight:bold; font-size:10px; letter-spacing:.04em}
+.chatfiles .frow{display:flex; align-items:baseline; gap:8px; white-space:nowrap; overflow:hidden}
+.chatfiles .fnum{background:var(--info); color:var(--bg-deep); width:15px; text-align:center; font-size:10px}
+.chatfiles .fname{color:var(--ink)}
+.chatfiles .fline{color:var(--warn)}
+.chatfiles .fdir{color:var(--ink-dim)}
+.chatfiles .frow i{color:var(--muted); font-style:normal; font-size:10px; overflow:hidden; text-overflow:ellipsis}
+.chatfiles .fmore{color:var(--muted); font-size:10px}
+.chatfiles .fhint{color:var(--info); font-size:10px}
+.pickhint.files{color:var(--info)}
+/* The line a link named: a band laid over the code, not cut into it. */
+.single.haslines{position:relative}
+.lineband{position:absolute; left:0; right:0; pointer-events:none;
+  background:rgba(255, 209, 102, .14); border-left:4px solid var(--warn)}
+/* L: the same docked list as F, in L's lilac (#reply-weblinks). */
+.chatlinks .fnum{background:var(--lilac)}
+.chatlinks .fhint, .pickhint.links{color:var(--lilac)}
+.chatlinks .fdir{overflow:hidden; text-overflow:ellipsis}

@@ -1,0 +1,13 @@
+{
+  "tag": "v0.77.0",
+  "shots": [
+    {
+      "file": "reply-weblinks-reply-weblinks.png",
+      "slug": "reply-weblinks",
+      "id": "reply-weblinks",
+      "url": "#room=standup",
+      "links": "g",
+      "keys": "Enter,wait:2500,Tab,wait:900,tap:.pcard[data-project=seed-bank],wait:1200,tap:#readAll,wait:2500,l,wait:800"
+    }
+  ]
+}

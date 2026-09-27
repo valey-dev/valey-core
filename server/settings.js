@@ -114,7 +114,10 @@ const DEFAULTS = {
   // never rename or rename on every snapshot.
   namesPack: '',
   // how much a delivered task is allowed to do on its own
-  delivery: { mode: 'acceptEdits' },
+  // `confirm` — whether sending into a chat asks «really send?» first. Off:
+  // the first people to try the office found the second press on every send in
+  // the way (27 September 2026), and Ctrl+Enter is already a deliberate chord.
+  delivery: { mode: 'acceptEdits', confirm: false },
   // Who owns the office and whether it is open to the outside.
   //
   // token is the real secret of this file: it IS the right to hand out tasks.

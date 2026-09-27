@@ -5,7 +5,7 @@
 //   npm run promote -- v0.40.0 --dry       # what would go out, and the checks
 //   npm run promote -- v0.40.0             # the core: public main + tag + page
 //   cd modules && npm run promote -- v0.8.0  # the Modules: the buyers' shop front
-//   npm run promote -- --installer          # valey.dev's install.sh caught up with the public core
+//   npm run promote -- --site               # valey.dev caught up with the public core (--installer too)
 //
 // `ship` stops at the private origins; this is the only step that reaches the
 // public repository and the shop, and it is the owner's word every time. See
@@ -18,13 +18,15 @@
 // A core publication also carries install.sh to valey.dev. The site keeps its
 // own copy of the file, and a copy nobody is obliged to refresh is a copy that
 // goes stale: it stood on 14 September until 27 September 2026, five fixes
-// behind. The owner's word on promote is the word on the installer too.
+// behind. The owner's word on promote is the word on the installer too. The
+// site's `core` submodule — the engine of its demo floor — follows the same
+// way: it stood on v0.55.0 while v0.72.0 was public.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { decide, carried, newest, coreOf, versions, installerDiffers, installerChange } from './promote-plan.mjs';
+import { decide, carried, newest, coreOf, versions, installerDiffers, siteChange } from './promote-plan.mjs';
 
 const TOOL_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const ROOT = process.env.VALEY_REPO ? path.resolve(process.env.VALEY_REPO) : TOOL_ROOT;
@@ -40,7 +42,7 @@ const die = (m) => { console.error('promote: ' + m); process.exit(1); };
 const args = process.argv.slice(2);
 const dry = args.includes('--dry');
 const status = args.includes('--status');
-const installerOnly = args.includes('--installer');
+const siteOnly = args.includes('--site') || args.includes('--installer');
 const tag = args.find((a) => !a.startsWith('--'));
 
 // The Modules are recognised by their shop tool, the same way release.mjs
@@ -106,37 +108,56 @@ function report(dir, label) {
   console.log(`  to publish: ${w.shop ? 'cd modules && ' : ''}npm run promote -- ${top}`);
 }
 
-// ------------------------------------------------------------- the installer
+// ------------------------------------------------------------------ the site
 // Exact bytes on both sides: the comparison is about what `curl` receives.
 const raw = (dir, spec) => { try { return execFileSync('git', ['-C', dir, 'show', spec], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return null; } };
 
-// The install.sh on the site's main, fetched into a ref of its own rather than
-// FETCH_HEAD, which corePublic() uses for the public core.
-function siteInstaller() {
+// The site's main, fetched into a ref of its own rather than FETCH_HEAD, which
+// corePublic() uses for the public core: its install.sh and the commit its
+// `core` submodule is pinned to.
+function siteNow() {
   try { run(TOOL_ROOT, 'fetch', '--quiet', '--no-tags', SITE, `+refs/heads/main:${SITE_REF}`); } catch (e) {
     return { error: `could not fetch the site (${SITE}): ${String(e.stderr || e.message).trim().split('\n')[0]}` };
   }
-  return { text: raw(TOOL_ROOT, `${SITE_REF}:install.sh`) };
+  const pin = (quiet(TOOL_ROOT, 'ls-tree', SITE_REF, 'core').match(/^160000 commit ([0-9a-f]{40})/) || [])[1] || null;
+  return { text: raw(TOOL_ROOT, `${SITE_REF}:install.sh`), pin };
 }
 
-// Put the core's install.sh at `t` on valey.dev, through the site's own land:
-// its stands, its release, its deploy. A fresh clone rather than a checkout on
-// this machine, which may be on another branch or have work in it.
-function syncInstaller(t, { dryRun = false } = {}) {
+// What the site lacks against a core version: its installer, its pin, or both.
+// The pin only moves forward — a site pinned past the tag keeps its pin.
+function siteGap(t, now) {
   const want = raw(ROOT, `${t}:install.sh`);
-  if (want == null) { console.log(`\ninstaller: ${t} has no install.sh; the site is left as it is`); return true; }
-  const site = siteInstaller();
-  if (site.error) { console.log(`\ninstaller: ${site.error}`); return false; }
-  if (!installerDiffers(want, site.text)) { console.log(`\ninstaller: valey.dev already serves the install.sh of ${t}`); return true; }
-  const c = installerChange(t);
-  if (dryRun) { console.log(`\ninstaller: valey.dev serves a different install.sh; a real run lands ${c.branch} into the site, and its deploy updates valey.dev`); return true; }
-  console.log(`\ninstaller: valey.dev serves a different install.sh — carrying ${t}'s to the site:`);
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'valey-site-installer-'));
-  const finish = `  cd ${dir} && npm run land -- ${c.branch}\n  or, from the core: npm run promote -- --installer`;
+  const commit = quiet(ROOT, 'rev-parse', `${t}^{commit}`);
+  const installer = installerDiffers(want, now.text);
+  let core = false;
+  if (commit && now.pin !== commit) {
+    core = !now.pin || spawnSync('git', ['-C', ROOT, 'merge-base', '--is-ancestor', now.pin, commit], { stdio: 'ignore' }).status === 0;
+  }
+  const pinned = now.pin ? (quiet(ROOT, 'describe', '--tags', '--always', now.pin) || now.pin.slice(0, 7)) : 'nothing';
+  return { want, commit, installer, core, pinned };
+}
+
+// Put the core at `t` on valey.dev — its install.sh and the pin of the demo's
+// engine — through the site's own land: its stands, its release, its deploy.
+// A fresh clone rather than a checkout on this machine, which may be on another
+// branch or have work in it. The stands are the gate: a core the demo cannot
+// run on stops there, and the site stays on the engine it had.
+function syncSite(t, { dryRun = false } = {}) {
+  const now = siteNow();
+  if (now.error) { console.log(`\nsite: ${now.error}`); return false; }
+  const gap = siteGap(t, now);
+  const c = siteChange(t, gap);
+  if (!c) { console.log(`\nsite: valey.dev already follows ${t} — its install.sh, and its demo on core ${gap.pinned}`); return true; }
+  const what = [gap.installer && 'install.sh', gap.core && `the demo's core ${gap.pinned} → ${t}`].filter(Boolean).join(' and ');
+  if (dryRun) { console.log(`\nsite: a real run lands ${c.branch} into the site — ${what} — and its deploy updates valey.dev`); return true; }
+  console.log(`\nsite: carrying ${what} to the site:`);
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'valey-site-core-'));
   try {
     execFileSync('git', ['clone', '--quiet', SITE, dir], { stdio: ['ignore', 'pipe', 'pipe'] });
     run(dir, 'switch', '--quiet', '-c', c.branch);
-    writeFileSync(path.join(dir, 'install.sh'), want);
+    if (gap.installer) writeFileSync(path.join(dir, 'install.sh'), gap.want);
+    // The gitlink alone: the site's land checks the submodule out on its merge.
+    if (gap.core) run(dir, 'update-index', '--cacheinfo', `160000,${gap.commit},core`);
     run(dir, 'commit', '--quiet', '-am', c.message);
     run(dir, 'push', '--quiet', '-u', 'origin', c.branch);
     // Off the branch, so the site's land can delete it once merged.
@@ -152,23 +173,28 @@ function syncInstaller(t, { dryRun = false } = {}) {
   const r = spawnSync(process.execPath, [path.join(dir, 'tools/land.mjs'), c.branch], { cwd: dir, stdio: 'inherit', env });
   if (r.status !== 0) {
     // The land can fail after its push — at the release page — and then the
-    // installer is already on the site's main and on its way to valey.dev.
-    const now = siteInstaller();
-    if (!now.error && !installerDiffers(want, now.text)) {
-      console.log(`\ninstaller: ${t}'s install.sh is on the site's main, and its deploy takes it to valey.dev;\n  the site's land stopped after that — what is left is printed above, to be run in ${dir}`);
-    } else console.log(`\ninstaller: the site's land failed; branch ${c.branch} is on the site's origin. Finish with:\n${finish}`);
+    // site already has it on main and on its way to valey.dev.
+    const after = siteNow();
+    const left = !after.error && siteChange(t, siteGap(t, after));
+    if (!after.error && !left) {
+      console.log(`\nsite: ${t} is on the site's main, and its deploy takes it to valey.dev;\n  the site's land stopped after that — what is left is printed above, to be run in ${dir}`);
+    } else {
+      console.log(`\nsite: the site's land refused; valey.dev stays as it was. Branch ${c.branch} is on the site's origin.\n` +
+        '  If its stands failed, the site does not run on this core yet: adapt it on that branch, then\n' +
+        `  cd ${dir} && npm run land -- ${c.branch}\n  or, once the site is ready, from the core: npm run promote -- --site`);
+    }
     return false;
   }
   rmSync(dir, { recursive: true, force: true });
   return true;
 }
 
-if (installerOnly) {
-  if (isShop(ROOT)) die('the installer is the core\'s; run this from the core');
+if (siteOnly) {
+  if (isShop(ROOT)) die('the site follows the core; run this from the core');
   const last = newest(remoteTags(ROOT, PUBLIC));
   if (!last) die(`nothing is published on ${PUBLIC} yet`);
   quiet(ROOT, 'fetch', '--quiet', 'origin', `refs/tags/${last}:refs/tags/${last}`);
-  process.exit(syncInstaller(last, { dryRun: dry }) ? 0 : 1);
+  process.exit(syncSite(last, { dryRun: dry }) ? 0 : 1);
 }
 
 if (status) {
@@ -179,12 +205,13 @@ if (status) {
   if (!isShop(ROOT) && isShop(mods)) report(mods, 'Modules');
   if (!isShop(ROOT)) {
     const last = newest(remoteTags(ROOT, PUBLIC));
-    const want = last && raw(ROOT, `${last}:install.sh`);
-    const site = want ? siteInstaller() : null;
-    if (site && site.error) console.log(`installer: ${site.error}`);
-    else if (site) console.log(installerDiffers(want, site.text)
-      ? `installer: valey.dev serves a different install.sh than the public ${last}\n  to catch it up: npm run promote -- --installer`
-      : `installer: valey.dev serves the install.sh of the public ${last}`);
+    const now = last ? siteNow() : null;
+    if (now && now.error) console.log(`site: ${now.error}`);
+    else if (now) {
+      const gap = siteGap(last, now);
+      console.log(`site: install.sh ${gap.installer ? `differs from the public ${last}` : `is the public ${last}'s`}, demo on core ${gap.pinned}`);
+      if (gap.installer || gap.core) console.log('  to catch it up: npm run promote -- --site');
+    }
   }
   process.exit(0);
 }
@@ -235,7 +262,7 @@ if (w.shop) {
   process.exit(r.status || 0);
 }
 
-if (dry) { syncInstaller(tag, { dryRun: true }); console.log('\n--dry: nothing was pushed'); process.exit(0); }
+if (dry) { syncSite(tag, { dryRun: true }); console.log('\n--dry: nothing was pushed'); process.exit(0); }
 
 console.log(`\npushing to ${PUBLIC}:`);
 // Atomic for the reason release.mjs gives: without it a public main that
@@ -258,7 +285,7 @@ if (r.status !== 0) {
   process.exit(1);
 }
 
-if (!syncInstaller(tag)) {
-  console.log(`\n${tag} is public; only valey.dev's installer is behind.`);
+if (!syncSite(tag)) {
+  console.log(`\n${tag} is public; only valey.dev is behind.`);
   process.exit(1);
 }
