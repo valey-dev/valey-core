@@ -1,0 +1,12 @@
+{
+  "tag": "v0.71.0",
+  "shots": [
+    {
+      "file": "wall-breaker-dark.png",
+      "slug": "wall-breaker",
+      "id": "dark",
+      "setup": "setTimeout(()=>{const g=__game,s=g.layout.security;g.player.x=s.x+s.w-56;g.player.y=s.y+s.h+18;},3200)",
+      "keys": "Enter,wait:4200,Space,wait:2500"
+    }
+  ]
+}

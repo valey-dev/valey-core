@@ -18,7 +18,7 @@ let langPanel = null;
 // `per` columns, projects one under another. The arrows walk by where the cards
 // stand, so the stand-in gives every card a box: that is the whole difference
 // from a flat ring, and the only thing worth checking here.
-function makeRoster(teams, per = 3) {
+function makeRoster(teams, per = 3, names = ['team-a', 'team-b']) {
   const cards = [];
   let top = 0;
   [].concat(teams).forEach((n, ti) => {
@@ -26,6 +26,7 @@ function makeRoster(teams, per = 3) {
     for (let i = 0; i < n; i++) {
       const c = node('pcard');
       c.dataset.id = `t${ti}-${i}`;
+      c.dataset.project = names[ti];
       const left = (i % per) * 328, y = top + Math.floor(i / per) * 110;
       c.getBoundingClientRect = () => ({ left, right: left + 316, top: y, bottom: y + 100, width: 316, height: 100 });
       cards.push(c);
@@ -34,9 +35,10 @@ function makeRoster(teams, per = 3) {
   });
   return {
     hidden: false, innerHTML: '', cards,
+    // A folded team (.pfold) is a step of the ring too; these rosters have none.
     querySelector: (sel) => (sel === '.rbody' ? node('rbody')
-      : sel === '.pcard.focus' ? (cards.find((c) => c.has('focus')) || null) : null),
-    querySelectorAll: (sel) => (sel === '.pcard' ? cards : []),
+      : sel === '.pcard.focus' || sel === '.pcard.focus, .pfold.focus' ? (cards.find((c) => c.has('focus')) || null) : null),
+    querySelectorAll: (sel) => (sel === '.pcard' || sel === '.pcard, .pfold' ? cards : []),
   };
 }
 
@@ -334,6 +336,30 @@ led = null;
 check('G processed', UI.rosterKey({ key: 'п', code: 'KeyG' }) === true, 'not handled');
 check('and leads to the one on whom the focus was', led === 't0-0', led);
 check('the panel then closed', UI.rosterOpen() === false, 'stayed open');
+
+// The floor is not heard from the standup (26 September 2026): R used to start
+// the radio and B the skateboard from under it, and 0 − + zoomed the office.
+// Left through: closing, the sound, the shot and «?».
+roster.hidden = false;
+UI.closeRoster(); roster.hidden = false; UI.renderRoster();
+const code = (c, key = '', shiftKey = false) => ({ code: c, key, shiftKey });
+check('R is swallowed, not the radio', UI.rosterKey(code('KeyR', 'r')) === true, 'let through');
+check('B is swallowed, not the skateboard', UI.rosterKey(code('KeyB', 'b')) === true, 'let through');
+check('the zoom is swallowed too',
+  ['Digit0', 'Minus', 'Equal'].every((c) => UI.rosterKey(code(c, c === 'Digit0' ? '0' : c === 'Minus' ? '-' : '=')) === true), 'let through');
+check('the sound, the shot, «?» and Tab go through',
+  ['KeyM', 'F9', 'Slash', 'Tab'].every((c) => UI.rosterKey(code(c, c === 'KeyM' ? 'm' : c === 'Slash' ? '/' : c)) === false), 'swallowed');
+// Shift+↑ pins the focused card's team, and the owner's setting says so.
+savedPatch = null;
+check('Shift+↑ is taken', UI.rosterKey(code('ArrowUp', 'ArrowUp', true)) === true, 'not handled');
+check('and pins the team of the focused card',
+  !!savedPatch && savedPatch.standup && savedPatch.standup['team-a'] === 'pin', JSON.stringify(savedPatch));
+check('the setting in the page follows at once', state.settings.standup && state.settings.standup['team-a'] === 'pin',
+  JSON.stringify(state.settings.standup));
+UI.rosterKey(code('ArrowDown', 'ArrowDown', true));
+check('Shift+↓ brings it back to normal: the mark is gone',
+  savedPatch.standup['team-a'] === 'normal' && !('team-a' in (state.settings.standup || {})), JSON.stringify([savedPatch, state.settings.standup]));
+UI.closeRoster();
 
 roster.hidden = false;
 UI.renderRoster();

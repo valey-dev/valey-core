@@ -4,6 +4,61 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.72.0 — 26 September 2026
+
+### Added
+
+- **office:** the standup puts first the teams that need you, and Shift+↑↓ pins or puts one away (d0c2e0f)
+## v0.71.0 — 26 September 2026
+
+### Added
+
+- **office:** a breaker by the lift puts the whole office in the dark, for everyone (905cdfa)
+
+### Fixed
+
+- **office:** in a lost office the phones light the agents holding them, instead of punching holes through the floor (203aac1)
+
+### Other
+
+- docs(notes): the picture of the breaker's dark, rendered from the demo office (2324a76)
+- chore(office): the breaker moves to a panel under the security room, reachable by anyone (a9527b0)
+## v0.70.0 — 26 September 2026
+
+### Added
+
+- **access:** the owner decides what a guest sees, module by module (623f4ee)
+
+### Fixed
+
+- **access:** a guest's page loads the modules shown to him, not none of them (1464f0a)
+- **access:** a guest whose phone slept through the owner's switch still gets the module (cb39571)
+- **access:** a guest invited over the Wi-Fi gets in, instead of «a token is required» (0be5799)
+- **access:** an invitation made from localhost names the office's address on the Wi-Fi (96178d7)
+
+### Other
+
+- test(access): the guest stand listens for the set of modules, not for «reload» (3ccbe68)
+## v0.69.5 — 26 September 2026
+
+### Fixed
+
+- **test:** the Codex stand writes its recording script as CommonJS, so Node 18 and 20 can run it (7c31fd1)
+## v0.69.4 — 26 September 2026
+
+### Fixed
+
+- **test:** the branch-cleanup stand builds its bare repository on main, so a machine that still defaults to master can run it (5d03f48)
+## v0.69.3 — 26 September 2026
+
+### Fixed
+
+- **test:** the archive-update stand runs on Node 18, and a copy of the tree without git skips the manifest instead of throwing (9af8ce9)
+## v0.69.2 — 26 September 2026
+
+### Fixed
+
+- **release:** land stops reporting «branch cleanup failed» for a branch that is fully merged (e7a98d0)
 ## v0.69.1 — 26 September 2026
 
 ### Fixed

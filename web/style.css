@@ -372,6 +372,17 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
   color:var(--lilac); font-size:12px; letter-spacing:.08em; font-weight:normal}
 .pteam:first-child h4{margin-top:-10px}
 .pteam h4 i{flex:none; font-style:normal; font-size:10px; letter-spacing:0; color:var(--muted)}
+/* The team's step on the standup, beside its count. Pinned and put away are a
+   state and read quiet; a question — new since opening, or in a team put away —
+   is an event and takes the waiting colour. A folded team is one line and a step
+   of the focus ring, so it can be reached to bring it back.
+   Frames: WIP «Standup order · Ready for Dev». */
+.pteam h4 .pmark{flex:none; margin-left:auto; font-weight:normal; font-size:10px; letter-spacing:0; color:var(--muted)}
+.pteam h4 .pmark.fresh, .pteam h4 .pmark.sunkWaits{color:var(--warn)}
+/* --muted, not --muted-dim: that one fails AA and is kept for rules (test-muted-contrast). */
+.pteam.sunk h4, .pteam.sunk h4 i, .pteam.sunk h4 .pmark{color:var(--muted)}
+.pteam .pfold{cursor:pointer}
+.pteam .pfold.focus{outline:2px solid var(--warn); outline-offset:-2px}
 .pgrid{display:grid; grid-template-columns:repeat(auto-fill, minmax(290px, 1fr)); gap:8px 12px; align-items:start}
 .pgrid .pcard{margin-bottom:0}
 /* scrollIntoView parks a card on the top edge, and the pinned name sits there:
@@ -844,6 +855,20 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .pairreq .say{margin:0}
 .pairreq .paircode{color:var(--ink); letter-spacing:.1em}
 .pairreq .prow{display:flex; gap:8px; margin-top:4px}
+/* "What a guest sees": a row per module — name, what a guest gets from it, the
+   mark for a choice that departs from the manifest, and shown | hidden. Off the
+   frame "Panel · Invite · 100% · v2" (WIP #guests), 12 September 2026. The body scrolls
+   for the sake of 175%: the same 560 px hold 352 of height there. */
+.invbody{overflow-y:auto; min-height:0}
+.gmlist{display:flex; flex-direction:column; gap:4px}
+.gmrow{display:grid; grid-template-columns:180px 1fr auto auto; align-items:center; gap:10px; min-height:24px}
+.gmrow b{font-weight:normal; color:var(--ink)}
+.gmnote{color:var(--ink-dim); font-size:11px}
+.gmmark{color:var(--warn); font-size:11px; font-style:normal}
+.seg{display:inline-flex; border:1px solid var(--frame); border-radius:3px; overflow:hidden}
+.seg .segbtn{font:inherit; font-size:11px; padding:3px 8px; border:0; background:transparent; color:var(--muted); cursor:pointer}
+.seg .segbtn.on{background:var(--wood); color:var(--ink)}
+.seg .segbtn.focus{outline:2px solid var(--warn); outline-offset:-2px; color:var(--warn)}
 .liftbtn{display:flex; align-items:baseline; gap:10px; text-align:left;
   background:var(--wood); color:var(--ink); border:2px solid var(--frame);
   font:12px "JetBrains Mono", "Courier New",monospace; padding:6px 10px; cursor:pointer}

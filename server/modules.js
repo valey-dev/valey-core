@@ -109,7 +109,31 @@ export async function moduleAsset(id, rel, forOwner = false) {
 // designs, the git tree with branch names and the personnel files. A module that
 // forgets the line must not add itself to that list — the same reasoning that
 // makes the lists in .gitignore named rather than «everything not ours».
-const shownToGuests = (m) => m.manifest.guests === 'shown';
+// The manifest is the author's default; the owner's choice lies over it, in
+// access.guests of the settings — { id: 'shown' | 'hidden' } — and is handed
+// in here by the office whenever the settings are read or saved. Decided by
+// Sergey on 11 September 2026: one choice for all guests, not one per link.
+let guestChoice = {};
+export function setGuestChoice(map) { guestChoice = (map && typeof map === 'object') ? map : {}; }
+const chosen = (m) => (guestChoice[m.id] === 'shown' || guestChoice[m.id] === 'hidden' ? guestChoice[m.id] : null);
+const shownToGuests = (m) => (chosen(m) ? chosen(m) === 'shown' : m.manifest.guests === 'shown');
+
+// The rows of "what a guest sees" in the invite panel: every live module, what its
+// manifest says a guest gets from it, the author's default and the owner's
+// choice — so the panel can mark a row that departs from the default.
+export function moduleGuestRows() {
+  // Shown by default first, hidden after, as the frame lays them out: what a
+  // guest gets reads before what he does not.
+  const order = (m) => (m.manifest.guests === 'shown' ? 0 : 1);
+  return [...live()].sort((a, b) => order(a) - order(b) || a.id.localeCompare(b.id)).map((m) => ({
+    id: m.id,
+    name: m.manifest.name || {},
+    note: m.manifest.guestNote || {},
+    default: m.manifest.guests === 'shown' ? 'shown' : 'hidden',
+    choice: chosen(m),
+    shown: shownToGuests(m),
+  }));
+}
 
 // Everything on disk, with its state — for the stand card. `guests` rides along
 // so the office can say what an invited person sees without asking twice; a rule

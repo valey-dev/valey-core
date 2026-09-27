@@ -1635,13 +1635,23 @@ const CARD_STATE = (a) => (a.status === 'awaiting' ? 'wait' : a.status === 'stop
 const CARD_ORDER = { wait: 0, stop: 1, work: 2, idle: 3 };
 
 /**
- * The teams in the order their rooms stand on the floor. The order is held by
- * the layout — a slot belongs to a project for as long as the project lives —
- * and it is held there for the very reason it is wanted here: a board that
- * reshuffles every two seconds cannot be read. A project whose room has not
- * been built yet goes last, alphabetically, rather than disappearing.
+ * The teams in the order that matters: pinned first, then those where somebody
+ * waits for you or stopped, then those at work, then those resting, and the ones
+ * the owner put away last, folded to one line. Inside a group the floor decides —
+ * the order the rooms stand in, which a slot holds for as long as the project
+ * lives. A project whose room has not been built yet goes last in its group,
+ * alphabetically, rather than disappearing.
+ *
+ * Until 26 September 2026 the floor was the whole order, so the standup read in
+ * the order sessions happened to be opened, and the project you were working on
+ * was a scroll away. A question beats «put away»: a sunk team where somebody
+ * waits rises with the askers, unfolded, and says why it is there.
+ *
+ * `prefs` is `settings.standup`: project -> 'pin' | 'sink'. The order is still
+ * not live — renderRoster freezes it when the panel opens (see rosterOrder).
  */
-export function standupTeams(agents, rooms = []) {
+export const TEAM_GROUP = { pin: 0, ask: 1, work: 2, idle: 3, sink: 4 };
+export function standupTeams(agents, rooms = [], prefs = {}) {
   const by = new Map();
   for (const a of agents) {
     if (!by.has(a.project)) by.set(a.project, []);
@@ -1649,19 +1659,51 @@ export function standupTeams(agents, rooms = []) {
   }
   const order = (rooms || []).map((r) => r.key);
   const place = (p) => { const i = order.indexOf(p); return i < 0 ? order.length : i; };
-  return [...by.keys()]
-    .sort((x, y) => place(x) - place(y) || String(x).localeCompare(String(y)))
-    .map((project) => ({
+  const teams = [...by.keys()].map((project) => {
+    const list = by.get(project);
+    const tier = (prefs || {})[project] === 'pin' ? 'pin' : (prefs || {})[project] === 'sink' ? 'sink' : 'normal';
+    const asks = list.some((a) => a.status === 'awaiting' || a.status === 'stopped');
+    const busy = list.some((a) => a.status === 'working');
+    const group = tier === 'pin' ? 'pin' : asks ? 'ask' : tier === 'sink' ? 'sink' : busy ? 'work' : 'idle';
+    return {
       project,
+      tier,
+      group,
+      // A sunk team with nobody asking is one line; asking, it unfolds.
+      folded: group === 'sink',
+      mark: tier === 'pin' ? 'pinned' : tier === 'sink' ? (asks ? 'sunkWaits' : 'sunk') : null,
       // Those waiting rise to the top — the only reordering inside a team, and
       // it is about the work. Below them the desk seat decides: a seat belongs
       // to a session, so the order holds by itself.
-      list: by.get(project).slice().sort((p, q) =>
+      list: list.slice().sort((p, q) =>
         CARD_ORDER[CARD_STATE(p)] - CARD_ORDER[CARD_STATE(q)]
         || (p.seat || 0) - (q.seat || 0)
         || String(p.name).localeCompare(String(q.name))),
-      waiting: by.get(project).filter((a) => a.status === 'awaiting').length,
-    }));
+      waiting: list.filter((a) => a.status === 'awaiting').length,
+    };
+  });
+  return teams.sort((x, y) => TEAM_GROUP[x.group] - TEAM_GROUP[y.group]
+    || place(x.project) - place(y.project) || String(x.project).localeCompare(String(y.project)));
+}
+
+/**
+ * Hold the order the panel opened with. The snapshot comes every two seconds and
+ * a status changes in minutes, so a live order would move the list from under a
+ * reading person. `frozen` is the project order at opening; a team that was not
+ * among the askers then and asks now keeps its place and gets the «new question»
+ * mark instead. A project that appeared since goes to the end.
+ */
+export function holdOrder(teams, frozen) {
+  if (!frozen) return teams;
+  const at = new Map(frozen.order.map((p, i) => [p, i]));
+  const idx = (t) => (at.has(t.project) ? at.get(t.project) : frozen.order.length);
+  return teams.slice().sort((x, y) => idx(x) - idx(y)).map((t) => {
+    const was = frozen.groups[t.project];
+    const fresh = t.group === 'ask' && was !== undefined && was !== 'ask' && was !== 'pin';
+    // Where it stands is the order at opening; whether it is folded is not — a
+    // sunk team that starts asking unfolds in place, it does not wait to be reopened.
+    return fresh && !t.mark ? { ...t, mark: 'fresh' } : t;
+  });
 }
 
 /**
@@ -1717,7 +1759,7 @@ const cardSig = (a) => {
 const cardHtml = (a) => {
   const c = standupCard(a);
   const foot = cardFoot(c);
-  return `<div class="pcard ${c.state}" role="button" data-id="${esc(a.id)}">
+  return `<div class="pcard ${c.state}" role="button" data-id="${esc(a.id)}" data-project="${esc(a.project)}">
     <canvas class="pface" width="28" height="30" data-face="${esc(a.id)}"></canvas>
     <span class="pname">${S.visited.has(a.id) ? '✓ ' : ''}${esc(a.name)}</span>
     <span class="ptok">${esc(cardToken(a))}</span>
@@ -1730,12 +1772,31 @@ const cardHtml = (a) => {
   </div>`;
 };
 
+const standupPrefs = () => (S.settings && S.settings.standup) || {};
+// The order the panel opened with; null while it is closed. See holdOrder().
+let rosterOrder = null;
+const freeze = (teams) => ({
+  order: teams.map((t) => t.project),
+  groups: Object.fromEntries(teams.map((t) => [t.project, t.group])),
+});
+
+const teamMark = (t) => (t.mark ? `<b class="pmark ${t.mark}">${tr('standup.mark.' + t.mark)}</b>` : '');
+const teamCount = (t) => `<i>${t.list.length}${t.waiting ? ' · ⚑' + t.waiting : ''}</i>`;
+// A folded team is a step of the focus ring like a card: otherwise a team put
+// away could never be reached again to bring it back.
+const teamHtml = (t) => (t.folded
+  ? `<section class="pteam sunk"><h4 class="pfold" role="button" data-project="${esc(t.project)}">▣ ${esc(t.project)}${teamMark(t)}${teamCount(t)}</h4></section>`
+  : `<section class="pteam${t.tier === 'pin' ? ' pinned' : ''}"><h4>▣ ${esc(t.project)}${teamMark(t)}${teamCount(t)}</h4>
+        <div class="pgrid">${t.list.map(cardHtml).join('')}</div></section>`);
+
 export function renderRoster() {
-  const teams = standupTeams(S.agents, S.layout && S.layout.projectRooms);
+  const live = standupTeams(S.agents, S.layout && S.layout.projectRooms, standupPrefs());
+  if (!rosterOrder) rosterOrder = freeze(live);
+  const teams = holdOrder(live, rosterOrder);
   const waiting = S.agents.filter((a) => a.status === 'awaiting').length;
   el.roster.hidden = false;
 
-  const key = teams.map((t) => t.project + ':' + t.list.map(cardSig).join(',')).join('|');
+  const key = teams.map((t) => t.project + ':' + (t.mark || '') + (t.folded ? '_' : '') + ':' + t.list.map(cardSig).join(',')).join('|');
   if (key === rosterSig && el.roster.querySelector('.rbody')) { patchRoster(teams, waiting); return; }
   rosterSig = key;
 
@@ -1744,9 +1805,7 @@ export function renderRoster() {
 
   el.roster.innerHTML = `<div class="rwrap pwrap">
     <div class="vhead"><span id="rcount">${headLine(teams.length, S.agents.length, waiting)}</span><button id="rx">✕</button></div>
-    <div class="rbody">${teams.length ? `<div class="pteams">${teams.map((t) => `
-      <section class="pteam"><h4>▣ ${esc(t.project)}<i>${t.list.length}${t.waiting ? ' · ⚑' + t.waiting : ''}</i></h4>
-        <div class="pgrid">${t.list.map(cardHtml).join('')}</div></section>`).join('')}</div>`
+    <div class="rbody">${teams.length ? `<div class="pteams">${teams.map(teamHtml).join('')}</div>`
     : `<p class="empty">${tr('standup.nobody')}<span>${tr('standup.nobodyWhy')}</span></p>`}</div>
     <p class="pkeys">${tr('standup.keys')}</p>
   </div>`;
@@ -1756,6 +1815,8 @@ export function renderRoster() {
 
   $('#rx').onclick = closeRoster;
   el.roster.querySelectorAll('.pcard').forEach((c) => c.onclick = () => openFromStandup(c.dataset.id));
+  // ENTER or a click on a folded team brings it back among the others.
+  el.roster.querySelectorAll('.pfold').forEach((h) => h.onclick = () => moveTeam(h.dataset.project, 1));
   el.roster.querySelectorAll('.plead').forEach((b) => b.onclick = (e) => {
     e.stopPropagation();                    // a button inside a card: lead me, not open
     api.guideTo(b.dataset.go);
@@ -1821,13 +1882,49 @@ function openFromStandup(id) {
 // column and the arrows stayed inside it — and a project of seven was a column
 // of seven with the rest of the width empty. A card is one thing rather than a
 // row of buttons, so in the ring it is one thing too.
-const rosterRing = focusRing(() => el.roster, '.pcard', { grid: true, noWrap: true });
-export function closeRoster() { el.roster.hidden = true; rosterSig = ''; rosterRing.reset(); }
+const rosterRing = focusRing(() => el.roster, '.pcard, .pfold', { grid: true, noWrap: true });
+export function closeRoster() { el.roster.hidden = true; rosterSig = ''; rosterOrder = null; rosterRing.reset(); }
 export function rosterOpen() { return !!(el.roster && !el.roster.hidden); }
+
+// The three steps a team stands on. Shift+↑ climbs one, Shift+↓ goes down one;
+// normal is the absence of a mark, so the setting holds only the two others.
+const TIERS_UP = ['sink', 'normal', 'pin'];
+export function nextTier(tier, dir) {
+  const i = TIERS_UP.indexOf(tier || 'normal');
+  return TIERS_UP[Math.max(0, Math.min(TIERS_UP.length - 1, (i < 0 ? 1 : i) + dir))];
+}
+
+// The owner's own move is the one reordering that happens at once: he asked for
+// it, so the list is frozen again from the new order, and the focus stays on the
+// team he moved.
+function moveTeam(project, dir) {
+  // The order is the owner's setting; a guest's page would only reorder itself
+  // until the server said no.
+  if (!project || isGuest()) return;
+  const was = standupPrefs()[project] || 'normal';
+  const now = nextTier(was, dir);
+  if (now === was) return;
+  const next = { ...standupPrefs() };
+  if (now === 'normal') delete next[project]; else next[project] = now;
+  S.settings = { ...(S.settings || {}), standup: next };
+  api.saveSettings({ standup: { [project]: now } });
+  rosterOrder = null;
+  rosterSig = '';
+  renderRoster();
+  const moved = [...el.roster.querySelectorAll('.pcard, .pfold')].find((n) => n.dataset.project === project);
+  if (moved) rosterRing.on(moved);
+}
+
+// What still answers with the standup open. The standup is a place for reading,
+// so the floor's letters are dead here — R used to start the radio and B the
+// skateboard from under it — and so is the zoom. Left alive: closing (Esc, Tab),
+// the sound, the shot and «?». Frames: WIP «Standup order», «Контекст · планёрка».
+const STANDUP_PASS = new Set(['Escape', 'Tab', 'KeyM', 'F9', 'Slash']);
 
 /**
  * The standup's keys. Arrows, ENTER and ESC are the shared panel machinery;
- * one is its own: G leads you to whoever you are standing on.
+ * its own are G, which leads you to whoever you are standing on, and Shift
+ * with ↑ or ↓, which moves the team of the focused card a step up or down.
  *
  * The event arrives whole rather than as a single letter, because it carries
  * the physical key code and that is what «вести» is caught by. Otherwise on
@@ -1839,14 +1936,23 @@ export function rosterKey(raw) {
   if (!rosterOpen()) return false;
   const code = raw && typeof raw === 'object' ? codeOf(raw) : null;
   const key = String(raw && typeof raw === 'object' ? (raw.key || '') : raw).toLowerCase();
+  const shift = !!(raw && typeof raw === 'object' && raw.shiftKey);
+  const cur = el.roster.querySelector('.pcard.focus, .pfold.focus');
+  if (shift && (key === 'arrowup' || key === 'arrowdown')) {
+    // A card and a folded team both carry their project.
+    moveTeam(cur && cur.dataset.project, key === 'arrowup' ? 1 : -1);
+    return true;
+  }
   if (code === 'KeyG' || (!code && key === 'g')) {
-    const cur = el.roster.querySelector('.pcard.focus');
-    if (!cur) return true;
+    if (!cur || !cur.dataset.id) return true;
     api.guideTo(cur.dataset.id);
     closeRoster();
     return true;
   }
-  return rosterRing.key(key, true);
+  if (rosterRing.key(key, true)) return true;
+  // Everything else is swallowed, except the few that answer everywhere. A key
+  // with no code (the gamepad, the stands) is let through as before.
+  return !!code && !STANDUP_PASS.has(code);
 }
 
 // -------------------------------------------------------------------- inventory
@@ -3662,7 +3768,30 @@ function devicesHtml() {
 }
 
 export function inviteOpen() { return el.invite && !el.invite.hidden; }
-export function closeInvite() { if (el.invite) el.invite.hidden = true; }
+
+// The keys of the invite panel: ↑↓ walk the rows of "what a guest sees" keeping
+// the column, ←→ move between shown and hidden, Enter presses; the other buttons
+// of the panel are reached the same way, one after another.
+const inviteRing = focusRing(() => el.invite, '.segbtn, #invMake, #invCopy, [data-yes], [data-no], [data-shut], [data-douse]', { rows: '.gmrow' });
+export function inviteKey(raw) { return inviteRing.key(raw, el.invite && !el.invite.hidden); }
+
+// "What a guest sees": the owner's choice per module over the manifest's
+// default, one choice for all guests. A row whose choice departs from the
+// default is marked; choosing the default again clears both. The frame: WIP
+// #guests, "the owner picks modules", v2, approved 11 September 2026.
+const guestsHtml = (mods) => {
+  if (!Array.isArray(mods) || !mods.length) return '';
+  const word = (o) => esc((o && (o[lang()] || o.ru || o.en)) || '');
+  return `<p class="hint gmhead">${tr('inv.guests')}</p>
+    <div class="gmlist">${mods.map((m) => `<div class="gmrow" data-gm="${esc(m.id)}">
+      <b>${word(m.name) || esc(m.id)}</b><span class="gmnote">${word(m.note)}</span>
+      <i class="gmmark">${m.choice && m.choice !== m.default ? tr('inv.notDefault') : ''}</i>
+      <span class="seg">
+        <button class="segbtn${m.shown ? ' on' : ''}" data-gm-set="${esc(m.id)}|shown">${tr('inv.shown')}</button>
+        <button class="segbtn${m.shown ? '' : ' on'}" data-gm-set="${esc(m.id)}|hidden">${tr('inv.hidden')}</button>
+      </span></div>`).join('')}</div>`;
+};
+export function closeInvite() { if (el.invite) el.invite.hidden = true; inviteRing.reset(); }
 
 export async function openInvite() {
   el.invite.hidden = false;
@@ -3725,6 +3854,7 @@ async function renderInvite() {
       </div>` : ''}
       ${(S.settings && S.settings.access && S.settings.access.mode === 'shared')
         ? `<p class="hint warn">${tr('inv.shared')}</p>` : ''}
+      ${guestsHtml(list.modules)}
       ${requestsHtml()}
       ${openHtml()}
       <p class="hint">${tr('inv.given')}</p>
@@ -3780,6 +3910,14 @@ async function renderInvite() {
   el.invite.querySelectorAll('[data-douse]').forEach((b) => {
     b.onclick = async () => { await api.revokeInvite(b.dataset.douse); await renderInvite(); };
   });
+  el.invite.querySelectorAll('[data-gm-set]').forEach((b) => {
+    b.onclick = async () => {
+      const [id, choice] = b.dataset.gmSet.split('|');
+      await api.guestModule(id, choice);
+      await renderInvite();
+    };
+  });
+  inviteRing.paint();
 }
 
 export function openLift(lift, floorNow, pick) {

@@ -125,5 +125,49 @@ ok('card status - waiting, working, gone',
 const cutOff = { ...agent({ id: 'w', status: 'stopped' }), act: { key: 'stoppedAt', arg: 'web/ui.js' } };
 ok('a stopped card says where it stopped', UI.standupCard(cutOff).now.includes('web/ui.js'), UI.standupCard(cutOff).now);
 
+// ------------------------------------------------ the order by what matters
+// Since 26 September 2026 the floor decides only inside a group: asking or
+// stopped first, then at work, then resting; pinned above all, put away below.
+// Frames: WIP «Standup order · Ready for Dev».
+const rooms = [{ key: 'bakery' }, { key: 'lighthouse' }, { key: 'greenhouse' }, { key: 'store' }];
+const crew = [
+  agent({ id: 'b1', project: 'bakery', status: 'working' }),
+  agent({ id: 'l1', project: 'lighthouse', status: 'awaiting' }),
+  agent({ id: 'g1', project: 'greenhouse', status: 'idle' }),
+  agent({ id: 's1', project: 'store', status: 'idle' }),
+];
+const order = (teams) => teams.map((t) => t.project).join(',');
+ok('asking first, then at work, then resting — not the floor order',
+  order(UI.standupTeams(crew, rooms)) === 'lighthouse,bakery,greenhouse,store', order(UI.standupTeams(crew, rooms)));
+ok('a stopped agent lifts the team with the askers',
+  order(UI.standupTeams([...crew.slice(0, 3), agent({ id: 's1', project: 'store', status: 'stopped' })], rooms))
+    === 'lighthouse,store,bakery,greenhouse');
+const put = UI.standupTeams(crew, rooms, { store: 'sink', bakery: 'pin' });
+ok('pinned above the askers, put away below everything', order(put) === 'bakery,lighthouse,greenhouse,store', order(put));
+ok('the pinned one says so', put[0].mark === 'pinned' && !put[0].folded, put[0]);
+ok('the put-away one is one folded line', put[3].mark === 'sunk' && put[3].folded === true, put[3]);
+const asksAway = UI.standupTeams([...crew.slice(0, 3), agent({ id: 's1', project: 'store', status: 'awaiting' })], rooms, { store: 'sink' });
+ok('a question beats «put away»: it rises with the askers, unfolded',
+  order(asksAway) === 'lighthouse,store,bakery,greenhouse' && asksAway[1].folded === false && asksAway[1].mark === 'sunkWaits',
+  [order(asksAway), asksAway[1]]);
+ok('anything but pin and sink is the normal step', UI.standupTeams(crew, rooms, { bakery: 'sideways' })[1].tier === 'normal');
+
+// Frozen: the list does not move under a reading person.
+const opened = UI.standupTeams(crew, rooms);
+const frozen = { order: opened.map((t) => t.project), groups: Object.fromEntries(opened.map((t) => [t.project, t.group])) };
+const later = UI.standupTeams([...crew.slice(0, 2), agent({ id: 'g1', project: 'greenhouse', status: 'awaiting' }), crew[3]], rooms);
+const held = UI.holdOrder(later, frozen);
+ok('a question while open does not move the team', order(held) === order(opened), order(held));
+ok('it gets the «new question» mark instead', held.find((t) => t.project === 'greenhouse').mark === 'fresh');
+ok('the askers from before get no such mark', !held.find((t) => t.project === 'lighthouse').mark);
+ok('a project that appeared while open goes to the end',
+  order(UI.holdOrder(UI.standupTeams([...crew, agent({ id: 'n1', project: 'new' , status: 'awaiting' })], rooms), frozen)).endsWith(',new'));
+ok('nothing frozen — nothing held', order(UI.holdOrder(later, null)) === order(later));
+
+// Shift+↑ and Shift+↓ walk three steps and stop at the ends.
+ok('steps: up from normal is pinned, down is put away',
+  UI.nextTier('normal', 1) === 'pin' && UI.nextTier('normal', -1) === 'sink' && UI.nextTier(undefined, 1) === 'pin');
+ok('and the ends are walls', UI.nextTier('pin', 1) === 'pin' && UI.nextTier('sink', -1) === 'sink');
+
 console.log(bad ? `\nFAILED: ${bad}` : '\nall matched');
 process.exit(bad ? 1 : 0);

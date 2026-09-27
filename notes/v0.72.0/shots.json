@@ -1,0 +1,13 @@
+{
+  "tag": "v0.72.0",
+  "shots": [
+    {
+      "file": "standup-order-standup-order.png",
+      "slug": "standup-order",
+      "id": "standup-order",
+      "url": "",
+      "setup": "void fetch('/api/settings',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({standup:{'tide-charts':'pin','paper-radio':'sink'}})}); new Promise(r=>setTimeout(r,2500))",
+      "keys": "Enter,wait:3000,Tab,wait:1200"
+    }
+  ]
+}

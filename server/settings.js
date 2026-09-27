@@ -131,7 +131,8 @@ const DEFAULTS = {
   // opened later: an invitation that dies with a server restart is useless.
   // devices — owner devices paired with a code: { id, name, hash, pairedAt,
   // lastSeen }. Only the hash of each token is kept; see server/devices.js.
-  access: { mode: 'private', token: '', invites: [], devices: [] },
+  // guests — the owner's choice per module over its manifest: { id: 'shown' | 'hidden' }.
+  access: { mode: 'private', token: '', invites: [], devices: [], guests: {} },
   // Which addresses the office answers at all. Off means loopback is listened
   // to, and that is not caution for its own sake: the office serves every
   // session transcript in full, so an open port equals an open correspondence.
@@ -152,6 +153,9 @@ const DEFAULTS = {
   // project -> rug colourway id ('indigo'). Missing is the terracotta every room
   // had before; the owner recolours a rug by standing on it and pressing SPACE.
   rugs: {},
+  // project -> 'pin' | 'sink': where the owner put a team on the standup. A
+  // team with no entry stands where its work puts it; see standupTeams().
+  standup: {},
   // The greenhouse. Shared across the office, like the names and the seating:
   // you water it, everyone sees. pots: pot index -> { wateredAt, streak }. Four
   // waterings in the can — the same as CAN_FULL in web/garden.js; it cannot be
@@ -412,6 +416,11 @@ export async function patchSettings(patch) {
       ...Object.fromEntries(Object.entries(patch.rugs || {})
         .filter(([, v]) => typeof v === 'string' && v.length <= 24)),
     },
+    // Key-wise as well, and one value more than the rugs need: 'normal' takes
+    // the entry away, because a team brought back from pinned or sunk has no
+    // mark at all. Anything but the three words is dropped.
+    standup: Object.fromEntries(Object.entries({ ...(s.standup || {}), ...(patch.standup || {}) })
+      .filter(([k, v]) => k.length <= 200 && (v === 'pin' || v === 'sink'))),
     // The pack mark travels beside the names and is replaced the same way: it
     // describes them. An empty string is a legal value here ("nobody has been
     // handed a name yet"), so || will not do.
