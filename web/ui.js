@@ -1828,7 +1828,7 @@ const cardHtml = (a) => {
     <canvas class="pface" width="28" height="30" data-face="${esc(a.id)}"></canvas>
     <span class="pname">${S.visited.has(a.id) ? '✓ ' : ''}${esc(a.name)}</span>
     <span class="ptok">${esc(cardToken(a))}</span>
-    <span class="pmeta">${esc(roleText(a))}${a.branch ? ' · ' + esc(a.branch) : ''}</span>
+    <span class="pmeta"><span class="role r-${esc(a.roleKey)}">${roleIcon(a.roleKey)}${esc(roleText(a))}</span>${a.branch ? ' · ' + esc(a.branch) : ''}</span>
     <span class="ptask${c.cold ? ' cold' : ''}">${esc(c.task || tr('standup.untitled'))}${
       c.reported ? '' : ` <i>· ${tr('standup.noReport')}</i>`}</span>
     <span class="pfoot${c.now && c.state === 'work' ? ' now' : ''}">${esc(foot)}</span>
