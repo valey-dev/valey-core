@@ -52,6 +52,9 @@ export async function fakeClaudeDir(dir, {
   said = 'Done: the cart calculates the discount and its test is green.',
   asked = 'Calculate the discount in the cart',
   file = '/Users/kolya/Projects/rocket-shop/src/cart.js',
+  // Tokens the last reply was fed, written as the app writes usage; 0 writes
+  // none, and the card and the bubble show no context at all (#context-size).
+  ctx = 0,
 } = {}) {
   const claude = path.join(dir, 'claude');
   const sessions = path.join(claude, 'sessions');
@@ -69,6 +72,7 @@ export async function fakeClaudeDir(dir, {
     { type: 'assistant', timestamp: ts(40_000), effort: 'high', message: { role: 'assistant', model: 'claude-fable-5', stop_reason: 'tool_use',
       content: [{ type: 'tool_use', name: 'Edit', input: { file_path: file } }] } },
     { type: 'assistant', timestamp: ts(30_000), effort: 'high', message: { role: 'assistant', model: 'claude-fable-5', stop_reason: 'end_turn',
+      ...(ctx ? { usage: { input_tokens: 3, cache_read_input_tokens: ctx - 3, cache_creation_input_tokens: 0, output_tokens: 400 } } : {}),
       content: [{ type: 'text', text: said }] } },
   ];
   await fsp.writeFile(path.join(project, `${sessionId}.jsonl`), lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
