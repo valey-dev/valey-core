@@ -1,0 +1,13 @@
+{
+  "tag": "v0.77.2",
+  "shots": [
+    {
+      "file": "codex-context-codex-context-card.png",
+      "slug": "codex-context",
+      "id": "codex-context-card",
+      "url": "#room=tide-charts",
+      "setup": "(() => { let n = 0; const t = setInterval(() => { const g = window.__game; const a = g && g.actors && g.actors.get('01a0aaaa-0000-7000-8000-00000000c0de'); if (a && g.player && g.currentRoom) { if (++n < 6) return; g.player.x = a.x; g.player.y = a.y + 22; clearInterval(t); } }, 250); return 'armed'; })()",
+      "keys": "Enter,wait:4000,Space,wait:1500"
+    }
+  ]
+}
