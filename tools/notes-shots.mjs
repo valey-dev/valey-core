@@ -193,7 +193,16 @@ for (const f of wanted) {
   for (const sh of f.shots) {
     const rel = before ? beforeSource(f.slug, sh.id, before) : shotSource(f.slug, sh.id);
     const out = path.join(ROOT, rel);
-    const args = ['--url', office.base + '/' + (sh.url || ''), '--out', out];
+    // A shot that needs the office itself set up — shared mode, an invitation
+    // waiting in the settings — gets an office of its own, with the same
+    // invented cast. It cannot be done to the shared one: the rest of the
+    // pictures are taken in a private office, and the page that switched it
+    // would be a stranger in it by the next request.
+    const own = sh.settings
+      ? await startOffice({ settings: sh.settings, claudeDir, codexDir: codex.dir, root: worktree || ROOT, env: PICTURE_ENV })
+      : null;
+    const base = own ? own.base : office.base;
+    const args = ['--url', base + '/' + (sh.url || ''), '--out', out];
     if (sh.keys) args.push('--keys', sh.keys);
     if (sh.viewport) args.push('--viewport', sh.viewport);
     if (sh.touch) args.push('--touch');
@@ -203,6 +212,7 @@ for (const f of wanted) {
     const r = spawnSync(process.execPath, [shotTool, ...args], { cwd: ROOT, stdio: 'inherit' });
     if (cut) await resume(cut);
     if (drew) await resume(drew);
+    if (own) await own.stop();
     if (r.status !== 0) {
       if (!keep) await office.stop();
       die(`${f.slug}/${sh.id} was not taken`);
