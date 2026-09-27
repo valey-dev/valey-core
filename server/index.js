@@ -389,6 +389,38 @@ function cookieGuest(req) {
   return '';
 }
 
+// An invitation code traded for a guest token: the whole of /api/enter, as a
+// function. It is handed to modules as well, because the shared floor can be
+// reached through a hub, and then the participant's office cannot knock on
+// this door over HTTP — the hub carries its knock, and the floor answers it
+// with this same function rather than a copy that would drift from it.
+// `presented` is the token the knocker already holds: a code that was spent
+// by this very guest answers again, one spent by somebody else does not.
+async function redeem(code, presented = '', peek = false) {
+  // Decided against the file as it is now, and again if another office wrote
+  // it meanwhile (see updateSettings): a pass that is handed out has to be
+  // the one on disk.
+  let answer = null;
+  await updateSettings((s) => {
+    const invites = s.access.invites || [];
+    const invite = invites.find((i) => i.code === code);
+    if (!invite) { answer = [403, { error: 'this invitation does not exist', errorKey: 'err.codeUnknown' }]; return null; }
+    if (invite.usedAt) {
+      answer = presented && presented === invite.guest
+        ? [200, { ok: true, guest: invite.guest, from: invite.from }]
+        : [403, { error: 'this code has already been used', errorKey: 'err.codeUsed' }];
+      return null;
+    }
+    if (peek) { answer = [200, { ok: true, peek: true, from: invite.from }]; return null; }
+    const guest = crypto.randomUUID();
+    answer = [200, { ok: true, guest, from: invite.from }];
+    return {
+      access: { ...s.access, invites: invites.map((i) => (i === invite ? { ...i, usedAt: Date.now(), guest } : i)) },
+    };
+  });
+  return answer;
+}
+
 async function guestOf(req) {
   // A header for ordinary requests, a parameter for the stream: EventSource
   // cannot set headers, and the stream is the first thing a guest needs. The
@@ -1151,31 +1183,7 @@ async function handle(req, res) {
   // the person it was sent to. Any other browser is told the code is used.
   if (url.pathname === '/api/enter' && req.method === 'POST') {
     const b = await readJson(req);
-    const code = String(b.code || '');
-    const peek = b.peek === true;
-    const presented = String(req.headers['x-valey-guest'] || '');
-    // Decided against the file as it is now, and again if another office wrote
-    // it meanwhile (see updateSettings): a pass that is handed out has to be
-    // the one on disk.
-    let answer = null;
-    await updateSettings((s) => {
-      const invites = s.access.invites || [];
-      const invite = invites.find((i) => i.code === code);
-      if (!invite) { answer = [403, { error: 'this invitation does not exist', errorKey: 'err.codeUnknown' }]; return null; }
-      if (invite.usedAt) {
-        answer = presented && presented === invite.guest
-          ? [200, { ok: true, guest: invite.guest, from: invite.from }]
-          : [403, { error: 'this code has already been used', errorKey: 'err.codeUsed' }];
-        return null;
-      }
-      if (peek) { answer = [200, { ok: true, peek: true, from: invite.from }]; return null; }
-      const guest = crypto.randomUUID();
-      answer = [200, { ok: true, guest, from: invite.from }];
-      return {
-        access: { ...s.access, invites: invites.map((i) => (i === invite ? { ...i, usedAt: Date.now(), guest } : i)) },
-      };
-    });
-    return send(res, ...answer);
+    return send(res, ...(await redeem(String(b.code || ''), String(req.headers['x-valey-guest'] || ''), b.peek === true)));
   }
 
   // A person says they are here and where exactly. Only this goes out: the
@@ -1710,8 +1718,10 @@ export async function start({ port = PORT, host = process.env.HOST } = {}) {
   // `patch` is the floor's too: joining somebody's floor trades their code for
   // a guest token, and the token has to live where the office's other secrets
   // do — in the settings, cut out of the page by the module's publicView.
+  // `redeem` is that trade itself, for a floor reached through a hub: the
+  // participant cannot reach /api/enter then, and the hub carries the knock.
   const mods = await loadModules(ROOT, {
-    people: livePeople, toPerson, settings: getSettings, patch: patchSettings, shown, guestOf,
+    people: livePeople, toPerson, settings: getSettings, patch: patchSettings, shown, guestOf, redeem,
   });
   let boot = await getSettings();
   setOwnerOff(boot.modulesOff);
