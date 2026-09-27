@@ -243,7 +243,7 @@ const noteList = (a) => (a.outbox || []).map((t) => {
   const retry = t.blocked
     ? `<button class="retry" data-retry="${esc(t.text)}">${tr('note.retry')}</button>`
     : '';
-  const armed = armedNote === t.id;
+  const armed = armedNote === t.id && asksFirst(S.settings);
   const toChat = t.state === 'note'
     ? `<button class="tochat${armed ? ' arm' : ''}" data-send="${t.id}">${armed ? tr('note.confirm') : tr('note.toChat')}</button>`
     : '';
@@ -257,6 +257,14 @@ const noteList = (a) => (a.outbox || []).map((t) => {
 const fileList = (a) => (a.files || []).map((f) =>
   `<li data-path="${encodeURIComponent(f.path)}"><span class="ic">${f.image ? '▨' : '▤'}</span>${esc(f.name)}</li>`).join('');
 const MODE_KEY = { default: 'default', acceptEdits: 'acceptEdits', bypassPermissions: 'bypass' };
+// Whether sending into a chat asks «really send?» before it goes. Off unless the
+// owner turns it on in the send row: the first outside feedback, 27 September
+// 2026, found the second press on every send in the way, and Ctrl+Enter is a
+// deliberate chord that nobody hits by accident. One switch for the task field
+// and for a note's «→ to chat», so the two cannot disagree.
+// Frames: [Send without asking](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2485-1357)
+export const asksFirst = (settings) => !!(settings && settings.delivery && settings.delivery.confirm);
+const enterHintKey = (guest) => (guest ? 'dlg.enterHintGuest' : asksFirst(S.settings) ? 'dlg.enterHintAsk' : 'dlg.enterHint');
 const MODE_LABEL = () => ({
   default: tr('mode.default'), acceptEdits: tr('mode.acceptEdits'), bypassPermissions: tr('mode.bypass'),
 });
@@ -600,7 +608,7 @@ function buildDialog(a) {
     const codex = codexOf(a);
     const canSend = codex ? !!(d.codex && d.codex.available) : !!d.available;
     body = `<p class="q">${tr('dlg.whatToDo')}</p>
-      <textarea id="taskInput" rows="3" placeholder="${tr(guest ? 'dlg.enterHintGuest' : 'dlg.enterHint')}"></textarea>
+      <textarea id="taskInput" rows="3" placeholder="${tr(enterHintKey(guest))}"></textarea>
       <div class="fchips" id="taskChips">${chipRow(taskFiles)}</div>
       <div class="sendrow">
         <button id="asNote">${tr('dlg.onDesk')}</button>
@@ -609,7 +617,13 @@ function buildDialog(a) {
           <select id="sendMode" ${d.available ? '' : 'disabled'}>
             ${Object.entries(MODE_LABEL()).map(([k, v]) => `<option value="${k}" ${k === mode ? 'selected' : ''}>${v}</option>`).join('')}
           </select>
-        </label>`}`}
+        </label>`}
+        <label class="modepick">${tr('dlg.confirm')}
+          <select id="sendConfirm">
+            <option value="now" ${asksFirst(S.settings) ? '' : 'selected'}>${tr('dlg.confirmNow')}</option>
+            <option value="ask" ${asksFirst(S.settings) ? 'selected' : ''}>${tr('dlg.confirmAsk')}</option>
+          </select>
+        </label>`}
       </div>
       <p class="hint">${taskHint(a)}</p>
       ${(a.outbox || []).length ? `<ul class="notes">${noteList(a)}</ul>` : ''}
@@ -739,7 +753,7 @@ function buildDialog(a) {
       const text = ta.value.trim();
       // A file with no words is still a message; only nothing at all is not.
       if (!text && !readyFiles(taskFiles).length) return;
-      if (deliver && armed !== 'yes') { armed = 'yes'; renderArm(); return; }
+      if (deliver && asksFirst(S.settings) && armed !== 'yes') { armed = 'yes'; renderArm(); return; }
       armed = '';
       ta.disabled = true;
       const r = await api.sendTask(a.id, text, deliver, null, null, readyFiles(taskFiles));
@@ -774,6 +788,12 @@ function buildDialog(a) {
     bindNotes(a);
     const sel = $('#sendMode');
     if (sel) sel.onchange = () => api.saveSettings({ delivery: { mode: sel.value } });
+    const conf = $('#sendConfirm');
+    if (conf) conf.onchange = async () => {
+      await api.saveSettings({ delivery: { confirm: conf.value === 'ask' } });
+      armed = ''; renderArm();
+      ta.placeholder = tr(enterHintKey(isGuest()));
+    };
   }
 
   if (S.page === 'talk') { S.sayText = clean(a.lastSaid) || tr('dlg.silent'); S.typed = 0; typewriter(); }
@@ -861,7 +881,7 @@ function bindNotes(a) {
   });
   el.dialog.querySelectorAll('[data-send]').forEach((b) => b.onclick = async () => {
     const id = Number(b.dataset.send);
-    if (armedNote !== id) { armedNote = id; return renderDialog(); }   // asks twice, like the big button
+    if (asksFirst(S.settings) && armedNote !== id) { armedNote = id; return renderDialog(); }   // asks twice, like the big button
     armedNote = 0;
     b.disabled = true; b.textContent = tr('note.sending');
     const sel = $('#sendMode');

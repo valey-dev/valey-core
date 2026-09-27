@@ -670,6 +670,9 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .sendrow button:disabled{opacity:.45; cursor:not-allowed}
 .sendrow button.arm{background:var(--arm); border-color:var(--arm-edge); color:var(--arm-ink)}
 .modepick{font-size:11px; color:var(--muted); margin-left:auto}
+/* The second picker (sending) sits right after the first, not halfway along:
+   two auto margins would split the free space between them. */
+.modepick + .modepick{margin-left:0}
 .modepick select{background:var(--field); color:var(--ink); border:2px solid var(--frame);
   font:11px "JetBrains Mono", "Courier New",monospace; padding:2px 4px; margin-left:4px}
 .notes li{display:flex; gap:6px; align-items:baseline; flex-wrap:wrap}
