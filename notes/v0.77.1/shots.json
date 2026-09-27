@@ -1,0 +1,30 @@
+{
+  "tag": "v0.77.1",
+  "shots": [
+    {
+      "file": "shared-floor-visitor-card.png",
+      "slug": "shared-floor",
+      "id": "visitor-card",
+      "settings": {
+        "access": {
+          "mode": "shared",
+          "token": "demo-owner-0001",
+          "invites": [
+            {
+              "id": "inv00001",
+              "code": "code00000001",
+              "name": "Аня",
+              "from": "Коля",
+              "at": 0,
+              "usedAt": null,
+              "guest": null
+            }
+          ]
+        }
+      },
+      "url": "#owner=demo-owner-0001&room=storefront",
+      "setup": "(async()=>{const e=await (await fetch('/api/enter',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:'code00000001'})})).json();const agents=[{id:'bbbbbbbb-0000-4000-8000-00000000000c',name:'Rex',gender:'m',project:'storefront',role:'Developer',roleKey:'code',mood:'code',status:'working',act:{key:'edit',arg:'src/grid.js'},activity:'',idleFor:40,startedAt:Date.now()-900000,version:'2.1.260',model:'claude-fable-5',effort:'high'}];const post=()=>fetch('/api/floor/visit',{method:'POST',headers:{'content-type':'application/json','x-valey-guest':e.guest},body:JSON.stringify({agents})});await post();setInterval(post,3000);setInterval(()=>{const g=window.__game;if(!g||!g.actors||!g.player)return;const v=(g.agents||[]).find(a=>a.visitor);if(!v)return;const act=g.actors.get(v.id);if(!act)return;g.player.x=act.x;g.player.y=act.y+24;},300);await new Promise(r=>setTimeout(r,1500));})()",
+      "keys": "Enter,wait:5000,Space,wait:1800"
+    }
+  ]
+}

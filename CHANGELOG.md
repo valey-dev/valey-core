@@ -4,6 +4,18 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.77.1 — 28 September 2026
+
+### Fixed
+
+- **office:** a teammate's agent no longer counts as waiting for you (9ce10ba)
+
+### Other
+
+- docs(notes): the release note for the shared floor, and an office raised for its picture (77d72fe)
+- refactor(modules): the invitation trade is a function a module can call (1332ad6)
+- chore(office): the card of an agent from another machine, and a module's own settings save (0e7d875)
+- chore(modules): a seam for agents from another machine, sieved by the guest projection (18835d1)
 ## v0.77.0 — 27 September 2026
 
 ### Added
