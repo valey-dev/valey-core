@@ -418,6 +418,10 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .pcard.wait .ptok{color:var(--warn)}
 .pcard.stop .ptok{color:var(--off)}
 .pmeta{grid-area:meta; font-size:10px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+/* The trade on a standup card is the same coloured badge with its pixel icon as
+   on the agent card; the branch stays beside it in the line's own colour.
+   Frames: [Standup: the trade as a coloured badge](https://www.figma.com/design/izt4d17qotvyIv7r6BJdSY/AI-Valey?node-id=2527-1256) */
+.pmeta .role{margin-left:0}
 /* A task gets two lines: one cuts a sentence mid-thought, while three turns the
    column into prose. A cold task or substitute text dims in full. */
 .ptask{grid-area:task; margin-top:4px; color:var(--ink); line-height:1.35;
