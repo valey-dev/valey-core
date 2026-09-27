@@ -411,7 +411,10 @@ body.touch .tmeta, body.touch .tnote{pointer-events:none}
 .pcard.wait{border-left-color:var(--warn)}
 .pcard.stop{border-left-color:var(--off)}
 :where(body:not(.bykeys)) .pcard:hover{border-color:var(--frame-dim)}
-.pface{grid-area:face; align-self:start; image-rendering:pixelated}
+/* No frame: the general canvas rule at the top of this file draws a 3 px
+   border and a 3 px shadow ring meant for the office floor, and both caught the
+   standup portraits too. The Person card frame has neither. */
+.pface{grid-area:face; align-self:start; image-rendering:pixelated; border:0; box-shadow:none}
 .pname{grid-area:name; color:var(--warn); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .ptok{grid-area:tok; font-size:10px; color:var(--muted); white-space:nowrap}
 .pcard.work .ptok{color:var(--accent)}
