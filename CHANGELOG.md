@@ -4,6 +4,15 @@ What changed from release to release, newest first. The sections are assembled f
 
 Three things, so the file does not mislead. **The hashes lead into the project's own history, not this repository**: it starts at a single commit, and nothing here can be found by them. **Some entries describe modules that are not here** — the office is a core plus a `modules/` folder, and not every module sits next to the core. And **entries about internal documents were cut**: they pointed at files this repository does not contain, and said nothing to a reader of it.
 
+## v0.73.0 — 27 September 2026
+
+### Added
+
+- **office:** notes left on a desk survive a restart, and counted things are said in the right number (f359958)
+
+### Other
+
+- docs(notes): the release note for the desk kept on disk, with a picture of a note lying on one (83a4e2d)
 ## v0.72.1 — 27 September 2026
 
 ### Fixed
