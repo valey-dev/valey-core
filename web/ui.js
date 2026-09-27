@@ -94,6 +94,7 @@ export function toast(text, kind = '') {
 // tr, not t: in ui.js `t` is already taken by local variables in several
 // functions, and the import there was silently shadowed
 import { t as tr, lang, onLang, fmtStamp, fmtClock } from './i18n.js';
+import { webLinks } from './weblinks.js';
 import { cardClosed } from './pager.js';
 
 const WEATHER_ICON = { clear: '☀', clouds: '☁', rain: '☂', storm: '⚡', snow: '❄', fog: '≋' };
@@ -1286,6 +1287,7 @@ function pickNothing() {
 export function pickOpen() {
   pickClose();
   filesClose();
+  linksClose();
   picked = pickTargets();
   if (!picked.length) { pickNothing(); return false; }
   picked.forEach((n, i) => { n.classList.add('picked'); n.dataset.pick = String(i + 1); });
@@ -1606,6 +1608,7 @@ export function viewerKey(raw, big = false) {
   // the page to the digits instead.
   if (key === 'c' || key === 'с') {
     filesClose();
+    linksClose();
     if (!copiedByC && el.viewer.querySelector('.mdblock') && copyTopBlock()) {
       copiedByC = true;
       return true;
@@ -4371,7 +4374,7 @@ function paintChat(msgs, fresh = 0, force = false) {
   // badges vanish under the hand that was choosing. Found on 5 September 2026 —
   // the numbers appeared and were gone a second later, and it read as the key
   // not working at all.
-  if ((pickOn() || filesOn()) && !force) { chatView.pending = { msgs, fresh }; return; }
+  if ((pickOn() || filesOn() || linksOn()) && !force) { chatView.pending = { msgs, fresh }; return; }
   const a = chatView.agent;
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
   const keep = box.scrollTop;
@@ -4573,7 +4576,13 @@ export function transcriptKey(key, big) {
     if (key === 'escape' || key === 'f' || key === 'а') { filesClose(); return true; }
     filesClose();
   }
+  if (linksOn()) {
+    if (/^[1-9]$/.test(key)) { const l = listedLinks()[Number(key) - 1]; linksClose(); if (l) openWebLink(l); return true; }
+    if (key === 'escape' || key === 'l' || key === 'д') { linksClose(); return true; }
+    linksClose();
+  }
   if (key === 'f' || key === 'а') { filesOpen(); return true; }
+  if (key === 'l' || key === 'д') { linksOpen(); return true; }
   if (key === 'n' || key === 'т') { openNoteEditor(topMessageTs(), null); return true; }
   if (key === 'arrowup') { scrollChat(-1, big); return true; }
   if (key === 'arrowdown') { scrollChat(1, big); return true; }
@@ -4620,6 +4629,7 @@ function bindFileLinks(box) {
 function filesOpen() {
   if (!chatView) return;
   pickClose();
+  linksClose();
   const list = listedFiles();
   if (!list.length) {
     const head = el.viewer.querySelector('.vhead');
@@ -4670,6 +4680,80 @@ function filesClose() {
   const panel = el.viewer.querySelector('.chatfiles');
   if (panel) panel.remove();
   for (const n of el.viewer.querySelectorAll('.fpicked')) { n.classList.remove('fpicked'); delete n.dataset.fnum; }
+  const hint = el.viewer.querySelector('.pickhint');
+  if (hint) hint.remove();
+  if (chatView.pending) {
+    const waiting = chatView.pending;
+    chatView.pending = null;
+    paintChat(waiting.msgs, waiting.fresh, true);
+  }
+}
+
+// ------------------------------------------------------ links of a conversation
+// L raises the web links the agent gave in its replies (#reply-weblinks): newest
+// first, one per digit, and the same numbers — lilac, so C's green and F's blue
+// never read as the same list — go onto the links in the text. A digit opens the
+// link in a new tab; the office stays where it is. No server here: the links are
+// already in the conversation the page holds (web/weblinks.js).
+const listedLinks = () => webLinks((chatView && chatView.msgs) || []).slice(0, LIST_MAX);
+export const linksOn = () => !!(chatView && chatView.linksUp);
+const bareHref = (h) => String(h || '').replace(/[.,;:!?]+$/, '');
+
+function openWebLink(l) {
+  window.open(l.url, '_blank', 'noopener,noreferrer');
+}
+
+function linksOpen() {
+  if (!chatView) return;
+  pickClose();
+  filesClose();
+  const all = webLinks(chatView.msgs || []);
+  const list = all.slice(0, LIST_MAX);
+  const head = el.viewer.querySelector('.vhead');
+  if (!list.length) {
+    if (head && !el.viewer.querySelector('.pickhint')) {
+      const hint = document.createElement('span');
+      hint.className = 'pickhint';
+      hint.textContent = tr('links.none');
+      head.appendChild(hint);
+      setTimeout(() => hint.remove(), 1800);
+    }
+    return;
+  }
+  chatView.linksUp = true;
+  const who = esc(chatView.agent.name);
+  const rows = list.map((l, i) => `<div class="frow"><b class="fnum">${i + 1}</b>`
+    + (l.text ? `<span class="fname">${esc(l.text)}</span>` : '')
+    + `<span class="fdir">${esc(l.address)}</span><i>${who}${l.ts ? ' · ' + fmtStamp(l.ts) : ''}</i></div>`).join('');
+  const panel = document.createElement('div');
+  panel.className = 'chatfiles chatlinks';
+  panel.innerHTML = `<div class="fhead">${tr('links.title', { n: list.length })}</div>${rows}`
+    + (all.length > list.length ? `<div class="fmore">${tr('links.more', { n: all.length - list.length })}</div>` : '')
+    + `<div class="fhint">${tr('links.hint')}</div>`;
+  const wrap = el.viewer.querySelector('.vwrap');
+  const path = wrap && wrap.querySelector('.vpath');
+  if (wrap) wrap.insertBefore(panel, path || null);
+  const number = new Map(list.map((l, i) => [l.url, i + 1]));
+  for (const a of el.viewer.querySelectorAll('#chatlog .md a[href]')) {
+    const n = number.get(bareHref(a.getAttribute('href')));
+    if (!n) continue;
+    a.classList.add('lpicked');
+    a.dataset.lnum = String(n);
+  }
+  if (head && !el.viewer.querySelector('.pickhint')) {
+    const hint = document.createElement('span');
+    hint.className = 'pickhint links';
+    hint.textContent = tr('links.pick');
+    head.appendChild(hint);
+  }
+}
+
+function linksClose() {
+  if (!linksOn()) return;
+  chatView.linksUp = false;
+  const panel = el.viewer.querySelector('.chatlinks');
+  if (panel) panel.remove();
+  for (const n of el.viewer.querySelectorAll('.lpicked')) { n.classList.remove('lpicked'); delete n.dataset.lnum; }
   const hint = el.viewer.querySelector('.pickhint');
   if (hint) hint.remove();
   if (chatView.pending) {

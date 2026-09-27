@@ -233,5 +233,27 @@ globalThis.fetch = fetchBefore;
 check('a digit opens the file under that number — the newest first', asked.some((u) => u.includes(encodeURIComponent(fileB.path))), asked);
 check('and the list is down after it', UI.filesOn() === false, 'still up');
 
+// --- L: the web links the agent gave (#reply-weblinks) ---
+const opened = [];
+globalThis.window = Object.assign(globalThis.window || {}, { open: (url, target, features) => { opened.push({ url, target, features }); return null; } });
+served = { messages: [msg('assistant', 'без ссылок')], files: { files: [], refused: {} } };
+await UI.openTranscript(agent);
+UI.viewerKey('l');
+check('L with no links raises nothing', UI.linksOn() === false, 'a list came up');
+served = { messages: [msg('assistant', 'PR — [PR #48](https://github.com/kolya/seed-bank/pull/48), кадр — https://www.figma.com/design/abc.')], files: { files: [fileB], refused: {} } };
+await UI.openTranscript(agent);
+UI.viewerKey('l');
+check('L raises the links list', UI.linksOn() === true, 'nothing came up');
+check('ESC puts it away and leaves the conversation', (UI.viewerKey('Escape'), UI.linksOn() === false && viewer.hidden === false), 'wrong');
+check('the Russian layout reaches it too', (UI.viewerKey('д'), UI.linksOn()) === true, 'the Russian L did nothing');
+UI.viewerKey('f');
+check('F takes the digits: the links list goes down', UI.linksOn() === false && UI.filesOn() === true, [UI.linksOn(), UI.filesOn()]);
+UI.viewerKey('l');
+check('and L takes them back from F', UI.linksOn() === true && UI.filesOn() === false, [UI.linksOn(), UI.filesOn()]);
+UI.viewerKey('2');
+check('a digit opens that link in a new tab', opened.length === 1 && opened[0].url === 'https://www.figma.com/design/abc' && opened[0].target === '_blank', opened);
+check('without telling it where it came from', opened.length === 1 && /noreferrer/.test(opened[0].features), opened);
+check('and the list is down after it, the conversation still open', UI.linksOn() === false && viewer.hidden === false, 'wrong');
+
 console.log(failed ? `\nfailed: ${failed}` : '\nall matched');
 process.exit(failed ? 1 : 0);
