@@ -12,8 +12,12 @@
 //     that already has a room on the floor; the path is taken from the live
 //     agents of that room. A path in a request would let whoever can reach the
 //     owner's page start a shell in any folder.
-//   - The permission mode is the default one, always. Nothing here passes
-//     --permission-mode: what the agent wants to run is asked on the pager.
+//   - The permission mode is the owner's, from settings (`hire.mode`), and
+//     'auto' unless changed: the CLI's classifier lets the routine through and
+//     sends the risky to the pager. Until 1 October 2026 it was the default
+//     mode, always — and a hired agent asked the pager about every `ls`, which
+//     made it hard to use at all. 'bypassPermissions' is not on the list: an
+//     agent started from a page does not get the terminal unasked.
 //   - Quoted material (a letter, for the mail) goes in as a quotation marked as
 //     somebody else's text, after the task, never as part of it.
 //
@@ -39,6 +43,10 @@ import { findCli } from './deliver.js';
 import { agentEnv } from './agent-env.js';
 
 export const MODELS = new Set(['opus', 'sonnet']);
+// What `hire.mode` may say. 'default' passes no flag: every action is asked.
+export const HIRE_MODES = new Set(['default', 'acceptEdits', 'auto']);
+// Anything else in the file falls back to asking, not to the most permissive.
+export const hireMode = (m) => (HIRE_MODES.has(m) ? m : 'default');
 const TASK_MAX = 4000;
 const QUOTE_MAX = 12_000;
 // No session id within this long means the run never started: the CLI is
@@ -139,7 +147,7 @@ function tail(h) {
 const readErr = (h) => { try { return fs.readFileSync(h.err, 'utf8').slice(-20_000); } catch { return ''; } };
 
 // `spawn` and `cli` are for the stand: the real ones start a real agent.
-export async function hire({ project, cwd, task, files = [], model = 'opus', quote = null, source = null, spot = null }, { spawn = nodeSpawn, cli = findCli } = {}) {
+export async function hire({ project, cwd, task, files = [], model = 'opus', mode = 'default', quote = null, source = null, spot = null }, { spawn = nodeSpawn, cli = findCli } = {}) {
   // Dropped files ride in the first message the same way they ride in a task.
   const text = withMentions(String(task || '').trim(), files);
   const h = {
@@ -155,6 +163,8 @@ export async function hire({ project, cwd, task, files = [], model = 'opus', quo
   if (!c.path) { set(h, 'failed', { error: 'claude CLI is not installed', errorKey: 'err.notInstalled' }); return view(h); }
 
   const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--model', model];
+  const perm = hireMode(mode);
+  if (perm !== 'default') args.push('--permission-mode', perm);
   let child, outFd, errFd;
   try {
     fs.mkdirSync(OUT_DIR, { recursive: true, mode: 0o700 });
@@ -203,7 +213,7 @@ export async function hire({ project, cwd, task, files = [], model = 'opus', quo
   });
 
   child.stdin.write(firstMessage(text, quote));
-  console.log(`[hire] ${project}: ${model}, ${text.slice(0, 60)}`);
+  console.log(`[hire] ${project}: ${model}, ${perm}, ${text.slice(0, 60)}`);
   return view(h);
 }
 

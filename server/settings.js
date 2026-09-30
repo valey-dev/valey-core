@@ -118,6 +118,9 @@ const DEFAULTS = {
   // the first people to try the office found the second press on every send in
   // the way (27 September 2026), and Ctrl+Enter is already a deliberate chord.
   delivery: { mode: 'acceptEdits', confirm: false },
+  // How much an agent hired from the office may do without asking: 'auto',
+  // 'acceptEdits' or 'default' (asks about everything). See server/hire.js.
+  hire: { mode: 'auto' },
   // Who owns the office and whether it is open to the outside.
   //
   // token is the real secret of this file: it IS the right to hand out tasks.

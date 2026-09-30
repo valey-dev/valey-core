@@ -1401,7 +1401,8 @@ async function handle(req, res) {
     if (!cwd) return send(res, 400, { error: 'there is no such room on the floor', errorKey: 'hire.errRoom' });
     const status = await deliveryStatus();
     if (!status.available) return send(res, 200, { ok: false, error: status.hint, errorKey: status.hintKey });
-    const h = await hire({ project: room, cwd: await repoRoot(cwd) || cwd, task, files: ownFiles(true, sent), model, quote, source, spot });
+    const mode = ((await getSettings()).hire || {}).mode;
+    const h = await hire({ project: room, cwd: await repoRoot(cwd) || cwd, task, files: ownFiles(true, sent), model, mode, quote, source, spot });
     return send(res, 200, { ok: h.state !== 'failed', hire: h });
   }
   // Let a hired agent go before it is continued in a terminal: two processes
