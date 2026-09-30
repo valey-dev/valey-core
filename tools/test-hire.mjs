@@ -6,7 +6,7 @@
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { hire, release, hireList, hiredAt, hireCwd, resumeCommand, firstMessage, pruneHires, spotOf, _resetHires } from '../server/hire.js';
+import { hire, release, hireList, hiredAt, hireCwd, resumeCommand, firstMessage, pruneHires, spotOf, hireMode, _resetHires } from '../server/hire.js';
 
 let bad = 0;
 const ok = (name, cond, got) => {
@@ -77,7 +77,7 @@ ok('the result marks it done, and the process stays', await until(() => hireList
 const seen = JSON.parse(await fsp.readFile(log, 'utf8'));
 ok('it runs in the folder the server chose', (await fsp.realpath(seen.cwd)) === (await fsp.realpath(dir)), seen.cwd);
 ok('with stream-json in and out and the chosen model', ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--model', 'sonnet'].every((a) => seen.argv.includes(a)), seen.argv);
-ok('never with a permission mode', !seen.argv.some((a) => /permission|dangerously/i.test(a)), seen.argv);
+ok('no mode asked for, no permission flag', !seen.argv.some((a) => /permission|dangerously/i.test(a)), seen.argv);
 ok('the task reached it as the first message', JSON.parse(seen.input).message.content[0].text === 'check the prices', seen.input);
 ok('the floor knows the session was hired, and when', hiredAt('sess-1') === h.at && hiredAt('nobody') === null);
 ok('no task text in what the floor is told', !JSON.stringify(hireList()).includes('check the prices'), hireList());
@@ -94,6 +94,21 @@ ok('releasing again finds nothing to close', release('sess-1') === false);
 ok('a stranger session is not released', release('sess-x') === false);
 pruneHires(Date.now() + 11 * 60_000);
 ok('a gone record is dropped after ten minutes', hireList().length === 0, hireList());
+
+// --- the permission mode comes from settings --------------------------------
+ok('the modes the settings may name pass as they are', ['default', 'acceptEdits', 'auto'].every((m) => hireMode(m) === m));
+ok('anything else asks about everything', ['bypassPermissions', 'dontAsk', 'plan', '', undefined, 'AUTO'].every((m) => hireMode(m) === 'default'));
+for (const [mode, want] of [['auto', 'auto'], ['acceptEdits', 'acceptEdits'], ['bypassPermissions', null], ['default', null]]) {
+  _resetHires();
+  await fsp.rm(log, { force: true });
+  await hire({ project: 'p', cwd: dir, task: 't', mode }, { cli: cliAt(good) });
+  await until(() => hireList()[0].state === 'done');
+  const argv = JSON.parse(await fsp.readFile(log, 'utf8')).argv;
+  const i = argv.indexOf('--permission-mode');
+  ok(`hire.mode ${mode} → ${want || 'no flag'}`, want ? argv[i + 1] === want : i === -1 && !argv.some((a) => /dangerously/i.test(a)), argv);
+  release('sess-1');
+  await until(() => hireList()[0].state === 'gone');
+}
 
 // --- a hire that fails -----------------------------------------------------
 _resetHires();
